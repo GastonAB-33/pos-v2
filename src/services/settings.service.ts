@@ -1,8 +1,10 @@
 import { dbTables } from "@/lib/database/tables";
+import { supabase } from "@/lib/supabase/client";
 import {
   TenantCrudService,
   type CreateEntityInput,
 } from "@/services/base/tenant-crud.service";
+import { nowIso } from "@/services/base/entity-factory";
 import { dataProvider } from "@/services/config/data-provider";
 import type {
   AppearanceSettings,
@@ -275,12 +277,39 @@ const mergeSettingsPayload = (
   },
 });
 
+const upsertTenantSettings = async (
+  tenantId: string,
+  input: CreateEntityInput<TenantSettings>
+): Promise<TenantSettings> => {
+  if (dataProvider === "mock") {
+    return crud.create(tenantId, input);
+  }
+
+  const timestamp = nowIso();
+  const row = {
+    id: `settings-${tenantId}`,
+    tenant_id: tenantId,
+    ...input,
+    created_at: timestamp,
+    updated_at: timestamp,
+  };
+
+  const { data, error } = await supabase
+    .from(dbTables.tenant_settings)
+    .upsert(row, { onConflict: "id" })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data as TenantSettings;
+};
+
 const readOrCreateTenantSettings = async (tenantId: string): Promise<TenantSettings> => {
   const allRows = await crud.getAllByTenant(tenantId);
   const existing = allRows[0] ?? null;
   if (existing) return normalizeTenantSettings(existing);
 
-  const created = await crud.create(tenantId, createDefaultSettingsInput());
+  const created = await upsertTenantSettings(tenantId, createDefaultSettingsInput());
   return normalizeTenantSettings(created);
 };
 
@@ -298,7 +327,7 @@ export const settingsService = {
 
     const updated = await crud.update(tenantId, current.id, merged);
     if (!updated) {
-      const created = await crud.create(tenantId, merged);
+      const created = await upsertTenantSettings(tenantId, merged);
       return normalizeTenantSettings(created);
     }
 
