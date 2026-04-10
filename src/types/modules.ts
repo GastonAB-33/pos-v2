@@ -1,0 +1,43 @@
+export const appModules = [
+  "dashboard",
+  "pos",
+  "productos",
+  "clientes",
+  "cuentas_corrientes",
+  "stock",
+  "caja",
+  "compras",
+  "proveedores",
+  "listas_precios",
+  "promociones",
+  "medios_pago",
+  "facturacion",
+  "comprobantes",
+  "reportes",
+  "auditoria",
+  "configuracion",
+  "usuarios",
+] as const;
+
+export type AppModule = (typeof appModules)[number];
+
+export const appModuleLabels: Record<AppModule, string> = {
+  dashboard: "Estadisticas",
+  pos: "POS",
+  productos: "Productos",
+  clientes: "Clientes",
+  cuentas_corrientes: "Cuentas corrientes",
+  stock: "Stock",
+  caja: "Caja",
+  compras: "Compras",
+  proveedores: "Proveedores",
+  listas_precios: "Listas de precios",
+  promociones: "Promociones",
+  medios_pago: "Medios de pago",
+  facturacion: "Facturacion",
+  comprobantes: "Comprobantes",
+  reportes: "Reportes",
+  auditoria: "Auditoria",
+  configuracion: "Configuracion",
+  usuarios: "Usuarios",
+};

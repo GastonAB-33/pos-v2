@@ -1,0 +1,231 @@
+import { Link, Navigate, useLocation } from "react-router-dom";
+import { routePaths } from "@/config/routes";
+import { isDevAuthBypassEnabled } from "@/features/auth/config/dev-auth";
+import { useLandingPath } from "@/features/auth/hooks/useLandingPath";
+import { useAuthStore } from "@/features/auth/store/auth.store";
+import { useMockLogin } from "@/modules/usuarios/hooks/useMockLogin";
+
+export const LoginPage = () => {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const user = useAuthStore((state) => state.user);
+  const sessionTenantId = useAuthStore((state) => state.tenantId);
+  const location = useLocation();
+  const landingPath = useLandingPath();
+  const {
+    tenantId,
+    setTenantId,
+    userId,
+    setUserId,
+    userSearch,
+    setUserSearch,
+    tenantInput,
+    setTenantInput,
+    usernameInput,
+    setUsernameInput,
+    passwordInput,
+    setPasswordInput,
+    tenantOptions,
+    userOptions,
+    selectedTenant,
+    selectedUser,
+    isLoading,
+    isSubmitting,
+    error,
+    clearError,
+    reload,
+    login,
+    loginAsDemoAdmin,
+    demoCredentials,
+    canSubmit,
+    hasTenants,
+    hasUsers,
+  } = useMockLogin();
+
+  const hasValidSession = Boolean(isAuthenticated && user && user.isActive && sessionTenantId);
+
+  if (hasValidSession && landingPath !== routePaths.login && location.pathname !== landingPath) {
+    return <Navigate to={landingPath} replace />;
+  }
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
+      <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-panel">
+        <h1 className="text-2xl font-semibold text-slate-900">Ingresar a POS V2</h1>
+        <p className="mt-1 text-sm text-slate-600">Acceso de desarrollo</p>
+
+        <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
+          <p className="font-semibold">Acceso de desarrollo</p>
+          <p className="mt-1">Tenant: <span className="font-kpi">{demoCredentials.tenant}</span></p>
+          <p>Usuario: <span className="font-kpi">{demoCredentials.username}</span></p>
+          <p>Contrasena: <span className="font-kpi">{demoCredentials.password}</span></p>
+          <button
+            type="button"
+            className="ui-btn-primary mt-4 w-full"
+            onClick={() => {
+              clearError();
+              void loginAsDemoAdmin();
+            }}
+            disabled={isLoading || isSubmitting}
+          >
+            Ingresar como Admin Demo
+          </button>
+        </div>
+
+        {isDevAuthBypassEnabled ? (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            Bypass de auth en desarrollo activo (VITE_DEV_AUTH_BYPASS=true).
+          </div>
+        ) : null}
+
+        {error ? (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
+        ) : null}
+
+        <form
+          className="mt-5 space-y-3"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            await login();
+          }}
+        >
+          <section className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <h2 className="text-sm font-semibold text-slate-900">Ingreso manual</h2>
+            <input
+              id="tenantInput"
+              value={tenantInput}
+              onChange={(event) => {
+                clearError();
+                setTenantInput(event.target.value);
+              }}
+              className="ui-input"
+              disabled={isLoading || isSubmitting}
+              placeholder="Tenant"
+            />
+            <input
+              id="usernameInput"
+              value={usernameInput}
+              onChange={(event) => {
+                clearError();
+                setUsernameInput(event.target.value);
+              }}
+              className="ui-input"
+              disabled={isLoading || isSubmitting}
+              placeholder="Usuario"
+            />
+            <input
+              id="passwordInput"
+              type="password"
+              value={passwordInput}
+              onChange={(event) => {
+                clearError();
+                setPasswordInput(event.target.value);
+              }}
+              className="ui-input"
+              disabled={isLoading || isSubmitting}
+              placeholder="Contrasena"
+            />
+            <button
+              type="submit"
+              className="ui-btn-primary w-full"
+              disabled={!canSubmit || isLoading || isSubmitting}
+            >
+              {isSubmitting ? "Ingresando..." : "Ingresar"}
+            </button>
+          </section>
+
+          <details className="rounded-lg border border-slate-200 p-3">
+            <summary className="cursor-pointer text-sm font-medium text-slate-700">
+              Opciones avanzadas (tenant/usuario)
+            </summary>
+            <div className="mt-3 space-y-3">
+              <select
+                id="tenantId"
+                value={tenantId}
+                onChange={(event) => {
+                  clearError();
+                  setTenantId(event.target.value);
+                }}
+                className="ui-input"
+                disabled={isLoading || isSubmitting || !hasTenants}
+              >
+                <option value="">Seleccionar tenant</option>
+                {tenantOptions.map((tenant) => (
+                  <option key={tenant.value} value={tenant.value}>
+                    {tenant.label}
+                  </option>
+                ))}
+              </select>
+              <input
+                id="userSearch"
+                value={userSearch}
+                onChange={(event) => {
+                  clearError();
+                  setUserSearch(event.target.value);
+                }}
+                placeholder="Buscar usuario"
+                className="ui-input"
+                disabled={isLoading || isSubmitting || !hasUsers}
+              />
+              <select
+                id="userId"
+                value={userId}
+                onChange={(event) => {
+                  clearError();
+                  setUserId(event.target.value);
+                }}
+                className="ui-input"
+                disabled={isLoading || isSubmitting || !hasUsers}
+              >
+                <option value="">Seleccionar usuario</option>
+                {userOptions.map((user) => (
+                  <option key={user.value} value={user.value}>
+                    {user.label}
+                  </option>
+                ))}
+              </select>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                <p>Tenant: {selectedTenant ? selectedTenant.trade_name : "-"}</p>
+                <p>Usuario: {selectedUser ? selectedUser.full_name : "-"}</p>
+              </div>
+            </div>
+          </details>
+
+          <div className="flex items-center">
+            <button
+              type="button"
+              onClick={() => {
+                clearError();
+                void reload();
+              }}
+              className="ui-btn-ghost"
+              disabled={isLoading || isSubmitting}
+            >
+              Recargar datos
+            </button>
+          </div>
+        </form>
+
+        {!hasTenants ? (
+          <p className="mt-4 text-xs text-slate-500">
+            No hay tenants cargados. En mock se bootstrappea automaticamente el tenant demo.
+          </p>
+        ) : null}
+
+        {!hasUsers && tenantId ? (
+          <p className="mt-2 text-xs text-slate-500">
+            No hay usuarios para el tenant seleccionado.
+          </p>
+        ) : null}
+
+        <p className="mt-4 text-xs text-slate-500">
+          Ruta protegida de ejemplo:{" "}
+          <Link to={routePaths.dashboard} className="text-brand-700">
+            Estadisticas
+          </Link>
+        </p>
+      </section>
+    </main>
+  );
+};
