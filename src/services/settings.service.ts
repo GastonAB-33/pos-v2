@@ -295,9 +295,9 @@ const upsertTenantSettings = async (
   };
 
   const { data, error } = await supabase
-    .from(dbTables.tenant_settings)
+    .from("tenant_settings")
     .upsert(row, { onConflict: "id" })
-    .select("*")
+    .select()
     .single();
 
   if (error) throw error;
