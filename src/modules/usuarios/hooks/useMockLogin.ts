@@ -132,6 +132,18 @@ const resolveProfileOrError = (
   return { ok: true, profile };
 };
 
+const matchesTenantInput = (tenant: TenantRecord, rawTenant: string): boolean => {
+  const normalized = rawTenant.trim().toLowerCase();
+  if (!normalized) return false;
+
+  return (
+    tenant.id.trim().toLowerCase() === normalized ||
+    tenant.trade_name.trim().toLowerCase() === normalized ||
+    tenant.legal_name.trim().toLowerCase() === normalized ||
+    tenant.cuit.trim().toLowerCase() === normalized
+  );
+};
+
 export const useMockLogin = () => {
   const setSession = useAuthStore((state) => state.setSession);
 
@@ -338,14 +350,72 @@ export const useMockLogin = () => {
   };
 
   const loginWithCredentials = async (): Promise<boolean> => {
-    if (dataProvider !== "mock") {
-      setError("El login por credenciales demo solo esta disponible en modo mock");
-      return false;
-    }
-
     const normalizedTenant = tenantInput.trim().toLowerCase();
     const normalizedUsername = usernameInput.trim().toLowerCase();
     const password = passwordInput;
+
+    if (dataProvider !== "mock") {
+      if (!normalizedTenant || !normalizedUsername) {
+        setError("Completa tenant y usuario para iniciar sesion");
+        return false;
+      }
+
+      // El proyecto no usa Supabase Auth para este login; se valida contra tablas propias.
+      const allTenants = await tenantsService.getAll();
+      const targetTenant = allTenants.find((tenant) => matchesTenantInput(tenant, normalizedTenant)) ?? null;
+
+      if (!targetTenant) {
+        setError("Tenant no encontrado");
+        return false;
+      }
+
+      if (!targetTenant.is_active) {
+        setError("El tenant seleccionado esta inactivo");
+        return false;
+      }
+
+      const [tenantUsers, tenantProfiles] = await Promise.all([
+        usersService.getAllByTenant(targetTenant.id),
+        permissionProfilesService.getAllByTenant(targetTenant.id),
+      ]);
+
+      const localProfilesById = new Map(tenantProfiles.map((profile) => [profile.id, profile]));
+      const targetUser =
+        tenantUsers.find(
+          (user) =>
+            user.username?.trim().toLowerCase() === normalizedUsername ||
+            user.email?.trim().toLowerCase() === normalizedUsername
+        ) ?? null;
+
+      if (!targetUser) {
+        setError("Usuario no encontrado en el tenant");
+        return false;
+      }
+
+      if (!targetUser.is_active) {
+        setError("El usuario esta inactivo");
+        return false;
+      }
+
+      const profileValidation = resolveProfileOrError(localProfilesById, targetUser);
+      if (!profileValidation.ok || !profileValidation.profile) {
+        setError(profileValidation.message ?? "Perfil de permisos invalido");
+        return false;
+      }
+
+      if (!password.trim()) {
+        setError("Completa la contrasena para iniciar sesion");
+        return false;
+      }
+
+      setTenantId(targetTenant.id);
+      setUserId(targetUser.id);
+      setUsers(tenantUsers.sort((a, b) => a.full_name.localeCompare(b.full_name)));
+      setProfilesById(localProfilesById);
+
+      applySession(targetTenant, targetUser, profileValidation.profile);
+      return true;
+    }
 
     if (
       normalizedTenant !== DEV_TENANT_LOGIN ||
