@@ -23,7 +23,22 @@ export const createDefaultPermissionProfile = (): PermissionProfile => {
   return profile;
 };
 
+const createFullPermissionProfile = (): PermissionProfile => {
+  const profile = createDefaultPermissionProfile();
+
+  for (const module of appModules) {
+    profile[module] = { read: true, write: true };
+  }
+
+  return profile;
+};
+
 export const normalizePermissionProfile = (profile: PermissionProfile): PermissionProfile => {
+  const maybeWildcard = profile as unknown as { all?: unknown };
+  if (maybeWildcard?.all === true) {
+    return createFullPermissionProfile();
+  }
+
   const base = createDefaultPermissionProfile();
 
   for (const module of appModules) {
