@@ -29,6 +29,20 @@ const resolveProfitPercent = (product: ProductEntity, precioSinIva: number): num
   return roundPercent(gain);
 };
 
+const PRODUCT_AUDIT_ACTION_LABELS: Record<string, string> = {
+  create: "Alta de producto",
+  update: "Actualizacion de producto",
+  bulk_import: "Carga masiva",
+  toggle_active: "Cambio de estado",
+  toggle_favorite: "Cambio de favorito",
+};
+
+const PRODUCT_AUDIT_ALLOWED_ACTIONS = new Set(Object.keys(PRODUCT_AUDIT_ACTION_LABELS));
+
+export const getProductAuditActionLabel = (action: string): string => {
+  return PRODUCT_AUDIT_ACTION_LABELS[action] ?? action.replace(/_/g, " ");
+};
+
 export const mapEntityToProductViewModel = (
   product: ProductEntity,
   barcode: string | null | undefined
@@ -92,13 +106,16 @@ export const getProductAuditLog = async (tenantId: string, limit = 24): Promise<
 
   const userById = new Map(users.map((user) => [user.id, normalizeText(user.full_name) || normalizeText(user.username) || normalizeText(user.email)]));
 
-  return logs.slice(0, limit).map((row) => ({
-    id: row.id,
-    date: row.created_at,
-    user: userById.get(row.user_id ?? "") || "Sistema",
-    action: row.action,
-    description: row.description,
-  }));
+  return logs
+    .filter((row) => PRODUCT_AUDIT_ALLOWED_ACTIONS.has(row.action))
+    .slice(0, limit)
+    .map((row) => ({
+      id: row.id,
+      date: row.created_at,
+      user: userById.get(row.user_id ?? "") || "Sistema",
+      action: getProductAuditActionLabel(row.action),
+      description: row.description,
+    }));
 };
 
 export const productsModuleService = {

@@ -95,7 +95,7 @@ export const ProductImportModal = ({
               disabled={busy || !canWrite}
             >
               <option value="create_only">Modo: crear solo nuevos</option>
-              <option value="upsert">Modo: crear y actualizar por code/barcode</option>
+              <option value="upsert">Modo: crear y actualizar por codigo / codigo de barras</option>
             </select>
 
             <button

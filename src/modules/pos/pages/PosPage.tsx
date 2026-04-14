@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { useToast } from "@/components/ui/useToast";
 import { routePaths } from "@/config/routes";
@@ -150,6 +151,7 @@ export const PosPage = () => {
   const [receiptModal, setReceiptModal] = useState<PosReceiptModalState | null>(null);
   const [printMenuReceiptId, setPrintMenuReceiptId] = useState<string | null>(null);
   const [customerModalState, setCustomerModalState] = useState<PosCustomerModalState | null>(null);
+  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   const [isCustomerModalSubmitting, setIsCustomerModalSubmitting] = useState(false);
   const [clientLogoUrl, setClientLogoUrl] = useState<string | null>(null);
   const [clientDisplayName, setClientDisplayName] = useState("POS");
@@ -321,7 +323,13 @@ export const PosPage = () => {
 
   useBarcodeScanner({
     enabled: Boolean(
-      tenantId && canReadPos && canWritePos && !isSubmitting && !customerModalState && !receiptModal
+      tenantId &&
+        canReadPos &&
+        canWritePos &&
+        !isSubmitting &&
+        !customerModalState &&
+        !receiptModal &&
+        !isCameraScannerOpen
     ),
     onScan: onBarcodeScannerScan,
   });
@@ -329,15 +337,17 @@ export const PosPage = () => {
   useEffect(() => {
     if (isSubmitting) return;
     if (customerModalState || receiptModal) return;
+    if (isCameraScannerOpen) return;
     focusScannerCapture();
-  }, [customerModalState, focusScannerCapture, isSubmitting, receiptModal]);
+  }, [customerModalState, focusScannerCapture, isCameraScannerOpen, isSubmitting, receiptModal]);
 
   useEffect(() => {
     if (rightPanelTab !== "cart") return;
     if (isSubmitting) return;
     if (customerModalState || receiptModal) return;
+    if (isCameraScannerOpen) return;
     focusScannerCapture();
-  }, [customerModalState, focusScannerCapture, isSubmitting, receiptModal, rightPanelTab]);
+  }, [customerModalState, focusScannerCapture, isCameraScannerOpen, isSubmitting, receiptModal, rightPanelTab]);
 
   useEffect(() => {
     if (!generatedReceipt) return;
@@ -859,6 +869,14 @@ export const PosPage = () => {
             >
               {isManualSyncing || isSyncing ? "Sincronizando..." : "Sincronizar"}
             </button>
+            <button
+              type="button"
+              className="ui-btn-ghost"
+              onClick={() => setIsCameraScannerOpen(true)}
+              disabled={isSubmitting || !canWritePos}
+            >
+              Escanear camara
+            </button>
             {isInstallSupported && canInstall ? (
               <button
                 type="button"
@@ -1168,6 +1186,22 @@ export const PosPage = () => {
           </a>
         </div>
       ) : null}
+
+      <BarcodeScannerModal
+        open={isCameraScannerOpen}
+        title="Escanear producto con camara"
+        description="Escanea un codigo para agregar el producto al carrito."
+        onClose={() => {
+          setIsCameraScannerOpen(false);
+          window.setTimeout(() => {
+            focusScannerCapture();
+          }, 0);
+        }}
+        onDetected={(barcode) => {
+          setIsCameraScannerOpen(false);
+          void handleBarcodeScan(barcode);
+        }}
+      />
 
       {receiptModal ? (
         <section className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">

@@ -1,5 +1,4 @@
 ﻿import { useMemo, useState } from "react";
-import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -38,11 +37,11 @@ export const ProductsPage = () => {
   );
 
   if (!tenantId) {
-    return <PagePlaceholder title="Productos" description="No hay tenant activo para operar el módulo." />;
+    return <section className="ui-panel">No hay tenant activo para operar el módulo.</section>;
   }
 
   if (!canReadProductos) {
-    return <PagePlaceholder title="Productos" description="No tenés permisos para ver este módulo." />;
+    return <section className="ui-panel">No tenés permisos para ver este módulo.</section>;
   }
 
   const handleSaveProduct = async (values: ProductFormModalValues) => {
@@ -113,9 +112,17 @@ export const ProductsPage = () => {
         />
       )}
 
-      <ProductAuditLog loading={products.isLoadingAudit} entries={sortedAudit} />
+      <ProductAuditLog
+        loading={products.isLoadingAudit}
+        entries={sortedAudit}
+        onExportXlsx={() => {
+          void products.exportAuditXlsx();
+        }}
+        exportDisabled={products.isLoadingAudit || products.isSubmitting}
+      />
 
       <ProductFormModal
+        key={`${formModal?.mode ?? "create"}-${formModal?.product?.entity.id ?? "new"}`}
         open={Boolean(formModal)}
         mode={formModal?.mode ?? "create"}
         product={formModal?.product ?? null}

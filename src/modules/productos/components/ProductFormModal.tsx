@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import {
   computePricingBackward,
   computePricingForward,
@@ -71,6 +72,7 @@ export const ProductFormModal = ({
   });
 
   const [calcMode, setCalcMode] = useState<CalcMode>("forward");
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -140,6 +142,30 @@ export const ProductFormModal = ({
     [mode]
   );
 
+  const handleFormSubmit = async (values: ProductFormModalValues) => {
+    const pricing =
+      calcMode === "backward"
+        ? computePricingBackward({
+            precioCosto: values.precioCosto,
+            precioFinal: values.precioFinal,
+            porcentajeIva: values.porcentajeIva,
+          })
+        : computePricingForward({
+            precioCosto: values.precioCosto,
+            porcentajeGanancia: values.porcentajeGanancia,
+            porcentajeIva: values.porcentajeIva,
+          });
+
+    await onSubmit({
+      ...values,
+      codigoBarras: values.codigoBarras?.trim() ?? "",
+      codigoProducto: values.codigoProducto?.trim() ?? "",
+      precioSinIva: pricing.precioSinIva,
+      precioFinal: pricing.precioFinal,
+      porcentajeGanancia: pricing.porcentajeGanancia,
+    });
+  };
+
   if (!open) return null;
 
   return (
@@ -157,7 +183,7 @@ export const ProductFormModal = ({
           </button>
         </div>
 
-        <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
+        <form className="space-y-4" onSubmit={handleSubmit(handleFormSubmit)}>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <div className="xl:col-span-2">
               <label className="mb-1 block text-sm font-medium text-slate-700">Nombre</label>
@@ -180,7 +206,17 @@ export const ProductFormModal = ({
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Código de barras</label>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <label className="block text-sm font-medium text-slate-700">Código de barras</label>
+                <button
+                  type="button"
+                  className="ui-btn-ghost px-2 py-1 text-xs"
+                  onClick={() => setScannerOpen(true)}
+                  disabled={disabled}
+                >
+                  Escanear cámara
+                </button>
+              </div>
               <input {...register("codigoBarras")} className="ui-input" disabled={disabled} />
               {errors.codigoBarras ? (
                 <p className="mt-1 text-xs text-red-600">{errors.codigoBarras.message}</p>
@@ -321,6 +357,16 @@ export const ProductFormModal = ({
           </div>
         </form>
       </div>
+
+      <BarcodeScannerModal
+        open={scannerOpen}
+        title="Escanear código de barras del producto"
+        onClose={() => setScannerOpen(false)}
+        onDetected={(barcode) => {
+          setValue("codigoBarras", barcode, { shouldDirty: true, shouldValidate: true });
+          setScannerOpen(false);
+        }}
+      />
     </section>
   );
 };

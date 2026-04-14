@@ -36,6 +36,7 @@ export interface ProductImportParsedRow {
   profit_percent: number;
   vat_percent: number;
   stock_current: number;
+  is_favorite: boolean | null;
   is_active: boolean;
 }
 
@@ -148,6 +149,30 @@ const parseBoolean = (value: unknown): boolean | null => {
   return null;
 };
 
+const getRowValueByAlias = (row: XlsxRow, aliases: string[]): unknown => {
+  for (const alias of aliases) {
+    const normalizedAlias = alias.toLowerCase().trim();
+    if (normalizedAlias in row) return row[normalizedAlias];
+  }
+  return undefined;
+};
+
+const importFieldAliases = {
+  code: ["code", "codigo", "código", "codigo_producto", "codigo de producto", "código de producto"],
+  name: ["name", "nombre"],
+  category: ["category", "categoria", "categoría"],
+  subcategory: ["subcategory", "subcategoria", "subcategoría"],
+  barcode: ["barcode", "codigo_barras", "codigo de barras", "código de barras"],
+  stock_current: ["stock_current", "stock"],
+  cost_price: ["cost_price", "precio_costo", "precio costo", "precio de costo"],
+  profit_percent: ["profit_percent", "porcentaje_ganancia", "% ganancia", "ganancia", "porcentaje de ganancia"],
+  price_without_vat: ["price_without_vat", "precio_sin_iva", "precio sin iva", "precio sin iva"],
+  vat_percent: ["vat_percent", "porcentaje_iva", "% iva", "iva", "porcentaje de iva"],
+  price_final: ["price_final", "precio_final", "precio final"],
+  is_active: ["is_active", "activo", "estado_activo"],
+  is_favorite: ["is_favorite", "favorito"],
+} as const;
+
 const rowSchema = z
   .object({
     code: z.string().max(80),
@@ -157,7 +182,7 @@ const rowSchema = z
     barcode: z
       .string()
       .max(64)
-      .regex(/^[A-Za-z0-9\-\._]*$/, "Barcode invalido")
+      .regex(/^$|^[A-Za-z0-9\-\._]*$/, "Codigo de barras invalido")
       .nullable(),
     price_final: z.number().min(0, "Precio final >= 0"),
     price_without_vat: z.number().min(0, "Precio sin IVA >= 0"),
@@ -165,23 +190,9 @@ const rowSchema = z
     profit_percent: z.number().min(0, "Ganancia >= 0"),
     vat_percent: z.number().min(0, "IVA >= 0"),
     stock_current: z.number().min(0, "Stock >= 0"),
+    is_favorite: z.boolean().nullable(),
     is_active: z.boolean(),
   });
-
-const templateColumns = [
-  "code",
-  "name",
-  "category",
-  "subcategory",
-  "barcode",
-  "stock_current",
-  "cost_price",
-  "profit_percent",
-  "price_without_vat",
-  "vat_percent",
-  "price_final",
-  "is_active",
-] as const;
 
 const toNullableString = (value: unknown): string | null => {
   const normalized = toTrimmedString(value);
@@ -189,53 +200,58 @@ const toNullableString = (value: unknown): string | null => {
 };
 
 const parseImportRow = (row: XlsxRow, rowNumber: number): ProductImportParsedRow | ProductImportErrorRow => {
-  const code = toTrimmedString(row.code);
-  const name = toTrimmedString(row.name);
-  const category = toTrimmedString(row.category);
-  const priceFinal = parseNumeric(row.price_final);
-  const priceWithoutVat = parseNumeric(row.price_without_vat);
-  const costPrice = parseNumeric(row.cost_price);
-  const profitPercent = parseNumeric(row.profit_percent);
-  const vatPercent = parseNumeric(row.vat_percent);
-  const stockCurrent = parseNumeric(row.stock_current);
+  const code = toTrimmedString(getRowValueByAlias(row, [...importFieldAliases.code]));
+  const name = toTrimmedString(getRowValueByAlias(row, [...importFieldAliases.name]));
+  const category = toTrimmedString(getRowValueByAlias(row, [...importFieldAliases.category]));
+  const priceFinal = parseNumeric(getRowValueByAlias(row, [...importFieldAliases.price_final]));
+  const priceWithoutVat = parseNumeric(getRowValueByAlias(row, [...importFieldAliases.price_without_vat]));
+  const costPrice = parseNumeric(getRowValueByAlias(row, [...importFieldAliases.cost_price])) ?? 0;
+  const profitPercent = parseNumeric(getRowValueByAlias(row, [...importFieldAliases.profit_percent]));
+  const vatPercent = parseNumeric(getRowValueByAlias(row, [...importFieldAliases.vat_percent]));
+  const stockCurrent = parseNumeric(getRowValueByAlias(row, [...importFieldAliases.stock_current])) ?? 0;
 
-  if (priceFinal == null || costPrice == null || stockCurrent == null) {
+  if (!name || !category) {
     return {
       rowNumber,
-      message: "price_final, cost_price y stock_current son obligatorios y numericos",
+      message: "Nombre y categoria son obligatorios",
     };
   }
 
   const resolvedVatPercent = vatPercent ?? DEFAULT_IVA_PERCENT;
   const resolvedProfitPercent = profitPercent ?? null;
-  const fallbackPriceWithoutVat = roundMoney(priceFinal / (1 + resolvedVatPercent / 100));
-  const forward =
-    resolvedProfitPercent == null
-      ? null
-      : computePricingForward({
-          precioCosto: costPrice,
-          porcentajeGanancia: resolvedProfitPercent,
-          porcentajeIva: resolvedVatPercent,
-        });
-  const parsedBoolean = parseBoolean(row.is_active);
+  const forwardFromCost = computePricingForward({
+    precioCosto: costPrice,
+    porcentajeGanancia: resolvedProfitPercent ?? 0,
+    porcentajeIva: resolvedVatPercent,
+  });
+
+  const resolvedPriceWithoutVat = roundMoney(
+    priceWithoutVat ??
+      (priceFinal != null ? priceFinal / (1 + resolvedVatPercent / 100) : forwardFromCost.precioSinIva)
+  );
+  const resolvedPriceFinal = roundMoney(
+    priceFinal ?? resolvedPriceWithoutVat * (1 + resolvedVatPercent / 100)
+  );
+
+  const parsedBoolean = parseBoolean(getRowValueByAlias(row, [...importFieldAliases.is_active]));
+  const parsedFavorite = parseBoolean(getRowValueByAlias(row, [...importFieldAliases.is_favorite]));
 
   const candidate = {
     code,
     name,
     category,
-    subcategory: toNullableString(row.subcategory),
-    barcode: normalizeBarcode(toNullableString(row.barcode)),
-    price_final: roundMoney(priceFinal),
-    price_without_vat: roundMoney(priceWithoutVat ?? forward?.precioSinIva ?? fallbackPriceWithoutVat),
+    subcategory: toNullableString(getRowValueByAlias(row, [...importFieldAliases.subcategory])),
+    barcode: normalizeBarcode(toNullableString(getRowValueByAlias(row, [...importFieldAliases.barcode]))),
+    price_final: resolvedPriceFinal,
+    price_without_vat: resolvedPriceWithoutVat,
     cost_price: costPrice,
     profit_percent: roundPercent(
       resolvedProfitPercent ??
-        (costPrice > 0
-          ? ((priceWithoutVat ?? forward?.precioSinIva ?? fallbackPriceWithoutVat) - costPrice) / costPrice * 100
-          : 0)
+        (costPrice > 0 ? (resolvedPriceWithoutVat - costPrice) / costPrice * 100 : 0)
     ),
     vat_percent: roundPercent(resolvedVatPercent),
     stock_current: stockCurrent,
+    is_favorite: parsedFavorite,
     is_active: parsedBoolean ?? true,
   };
 
@@ -264,6 +280,43 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
 
   const clearFeedback = () => setFeedback(null);
 
+  const sortByName = useCallback((rows: Product[]) => {
+    return [...rows].sort((a, b) => a.name.localeCompare(b.name));
+  }, []);
+
+  const upsertProductInState = useCallback((product: Product) => {
+    const safeProduct = { ...product };
+
+    setProducts((current) => {
+      const withoutCurrent = current.filter((item) => item.id !== safeProduct.id);
+      return sortByName([...withoutCurrent, safeProduct]);
+    });
+  }, [sortByName]);
+
+  const removeProductFromState = useCallback((productId: string) => {
+    setProducts((current) => current.filter((item) => item.id !== productId));
+    setPrimaryBarcodes((current) => {
+      const next = { ...current };
+      delete next[productId];
+      return next;
+    });
+    setAllBarcodes((current) => current.filter((row) => row.product_id !== productId));
+  }, []);
+
+  const patchPrimaryBarcodeState = useCallback((productId: string, barcodeValue: string) => {
+    const normalized = normalizeBarcode(barcodeValue) ?? "";
+
+    setPrimaryBarcodes((current) => {
+      const next = { ...current };
+      if (!normalized) {
+        delete next[productId];
+      } else {
+        next[productId] = normalized;
+      }
+      return next;
+    });
+  }, []);
+
   const loadProducts = useCallback(async () => {
     if (!tenantId) {
       setProducts([]);
@@ -281,16 +334,16 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
         productsService.getBarcodesByTenant(tenantId),
         priceListsService.getAllByTenant(tenantId),
       ]);
-      setProducts(list);
-      setAllBarcodes(barcodes);
-      setPrimaryBarcodes(barcodeMap);
+      setProducts(sortByName(list.map((row) => ({ ...row }))));
+      setAllBarcodes(barcodes.map((row) => ({ ...row })));
+      setPrimaryBarcodes({ ...barcodeMap });
       setPriceLists(lists.sort((a, b) => a.name.localeCompare(b.name)));
     } catch {
       setFeedback({ type: "error", message: "No se pudieron cargar los productos" });
     } finally {
       setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [sortByName, tenantId]);
 
   useEffect(() => {
     void loadProducts();
@@ -315,6 +368,8 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
         })
       );
       await productsService.setPrimaryBarcode(tenantId, created.id, values.codigoBarras ?? "");
+      upsertProductInState(created);
+      patchPrimaryBarcodeState(created.id, values.codigoBarras ?? "");
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "productos",
@@ -379,6 +434,27 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
         })
       );
       await productsService.setPrimaryBarcode(tenantId, productId, values.codigoBarras ?? "");
+      const optimisticUpdated: Product = {
+        ...existing,
+        ...toServiceInput(values, {
+          existingCode: existing.code,
+          existingName: existing.name,
+          existingCategory: existing.category,
+          existingSubcategory: existing.subcategory,
+          existingBrand: existing.brand,
+          existingSupplier: existing.supplier,
+          existingDescription: existing.description,
+          existingSaleMode: existing.sale_mode,
+          existingStockMin: existing.stock_min,
+          existingStockMax: existing.stock_max,
+          isActive: options?.isActive ?? existing.is_active,
+          isFavorite: options?.isFavorite ?? existing.is_favorite,
+        }),
+        updated_at: updated?.updated_at ?? new Date().toISOString(),
+      };
+
+      upsertProductInState(updated ?? optimisticUpdated);
+      patchPrimaryBarcodeState(productId, values.codigoBarras ?? "");
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "productos",
@@ -412,25 +488,11 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
 
   const deleteProduct = async (productId: string) => {
     if (!tenantId) return;
-    const target = products.find((product) => product.id === productId);
 
     setIsSubmitting(true);
     try {
       await productsService.delete(tenantId, productId);
-      await auditService.createSafe(tenantId, {
-        user_id: userId,
-        module: "productos",
-        action: "delete",
-        entity_type: "product",
-        entity_id: productId,
-        description: `Producto eliminado${target ? `: ${target.name}` : ""}`,
-        metadata: target
-          ? {
-              code: target.code,
-              category: target.category,
-            }
-          : null,
-      });
+      removeProductFromState(productId);
       setFeedback({ type: "success", message: "Producto eliminado" });
       await loadProducts();
     } catch {
@@ -453,8 +515,6 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
 
     try {
       for (const productId of uniqueIds) {
-        const target = products.find((product) => product.id === productId) ?? null;
-
         try {
           const ok = await productsService.delete(tenantId, productId);
           if (!ok) {
@@ -463,20 +523,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           }
 
           deleted += 1;
-          await auditService.createSafe(tenantId, {
-            user_id: userId,
-            module: "productos",
-            action: "bulk_delete",
-            entity_type: "product",
-            entity_id: productId,
-            description: `Producto eliminado en lote${target ? `: ${target.name}` : ""}`,
-            metadata: target
-              ? {
-                  code: target.code,
-                  category: target.category,
-                }
-              : null,
-          });
+          removeProductFromState(productId);
         } catch {
           failed += 1;
         }
@@ -507,7 +554,8 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
 
     setIsSubmitting(true);
     try {
-      await productsService.update(tenantId, productId, { is_active: nextIsActive });
+      const updated = await productsService.update(tenantId, productId, { is_active: nextIsActive });
+      upsertProductInState(updated ?? { ...product, is_active: nextIsActive });
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "productos",
@@ -541,7 +589,8 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
 
     setIsSubmitting(true);
     try {
-      await productsService.update(tenantId, productId, { is_favorite: nextIsFavorite });
+      const updated = await productsService.update(tenantId, productId, { is_favorite: nextIsFavorite });
+      upsertProductInState(updated ?? { ...product, is_favorite: nextIsFavorite });
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "productos",
@@ -567,22 +616,23 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
   };
 
   const downloadImportTemplate = async (): Promise<boolean> => {
-    const templateRow: Record<(typeof templateColumns)[number], string | number | boolean> = {
-      code: "PRD-0001",
-      name: "Yerba 1kg",
-      category: "Almacen",
-      subcategory: "Yerba",
-      barcode: "7791234567890",
-      stock_current: 20,
-      cost_price: 1200,
-      profit_percent: 20,
-      price_without_vat: 1440,
-      vat_percent: 21,
-      price_final: 1742.4,
-      is_active: true,
+    const templateRow: Record<string, string | number | boolean> = {
+      nombre: "Yerba 1kg",
+      "codigo de barras": "7791234567890",
+      "codigo de producto": "PRD-0001",
+      categoria: "Almacen",
+      subcategoria: "Yerba",
+      "precio costo": 1200,
+      "% ganancia": 20,
+      "precio sin iva": 1440,
+      "% iva": 21,
+      "precio final": 1742.4,
+      stock: 20,
+      favorito: false,
+      activo: true,
     };
 
-    return downloadXlsx("plantilla-productos", "Plantilla", [templateRow]);
+    return downloadXlsx("plantilla-productos", "Plantilla Productos", [templateRow]);
   };
 
   const parseImportFile = async (file: File): Promise<ProductImportPreview> => {
@@ -694,7 +744,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
               name: row.name,
               brand: existing.brand,
               supplier: existing.supplier,
-              is_favorite: existing.is_favorite,
+              is_favorite: row.is_favorite ?? existing.is_favorite,
               description: existing.description,
               category: row.category,
               subcategory: row.subcategory,
@@ -729,7 +779,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
             name: row.name,
             brand: null,
             supplier: null,
-            is_favorite: false,
+            is_favorite: row.is_favorite ?? false,
             description: null,
             price: row.price_final,
             cost_price: row.cost_price,
@@ -842,24 +892,27 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           : product.price;
 
         rows.push({
-          code: product.code,
-          name: product.name,
-          category: product.category,
-          subcategory: product.subcategory,
-          barcode,
-          stock_current: product.stock_current,
-          cost_price: product.cost_price,
-          profit_percent:
+          nombre: product.name,
+          "codigo de barras": barcode,
+          "codigo de producto": product.code,
+          categoria: product.category,
+          subcategoria: product.subcategory,
+          "precio costo": product.cost_price,
+          "% ganancia":
             product.profit_percent != null
               ? product.profit_percent
               : product.cost_price > 0
                 ? roundPercent((((product.price_without_vat ?? product.price) - product.cost_price) / product.cost_price) * 100)
                 : 0,
-          price_without_vat: product.price_without_vat ?? roundMoney(resolvedPrice / (1 + (product.vat_percent ?? DEFAULT_IVA_PERCENT) / 100)),
-          vat_percent: product.vat_percent ?? DEFAULT_IVA_PERCENT,
-          price_final: resolvedPrice,
-          is_active: product.is_active,
-          price_source: selectedPriceList ? `lista:${selectedPriceList.name}` : "base",
+          "precio sin iva":
+            product.price_without_vat ??
+            roundMoney(resolvedPrice / (1 + (product.vat_percent ?? DEFAULT_IVA_PERCENT) / 100)),
+          "% iva": product.vat_percent ?? DEFAULT_IVA_PERCENT,
+          "precio final": resolvedPrice,
+          stock: product.stock_current,
+          favorito: product.is_favorite,
+          activo: product.is_active,
+          "fuente de precio": selectedPriceList ? `lista:${selectedPriceList.name}` : "base",
         });
       }
 
@@ -870,22 +923,6 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
         options.format === "xlsx"
           ? await downloadXlsx(fileName, "Productos", rows)
           : downloadCsv(fileName, rows);
-
-      if (ok) {
-        await auditService.createSafe(tenantId, {
-          user_id: userId,
-          module: "productos",
-          action: "export",
-          entity_type: "product",
-          entity_id: null,
-          description: `Exportacion de productos (${options.format.toUpperCase()})`,
-          metadata: {
-            rows: rows.length,
-            format: options.format,
-            price_source: selectedPriceList ? selectedPriceList.id : "base",
-          },
-        });
-      }
 
       return ok;
     } finally {

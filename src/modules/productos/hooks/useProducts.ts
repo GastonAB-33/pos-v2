@@ -2,6 +2,7 @@
 import type { Product } from "@/types/entities";
 import { useProductsCrud } from "@/modules/productos/hooks/useProductsCrud";
 import { mapEntityToProductViewModel, productsModuleService } from "@/modules/productos/services/products.service";
+import { downloadXlsx } from "@/utils/xlsx";
 import type {
   ProductAuditEntry,
   ProductFiltersState,
@@ -142,10 +143,19 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
     values: ProductFormModalValues,
     targetProduct?: Product | null
   ) => {
+    const payload: ProductFormModalValues = {
+      ...values,
+      nombre: values.nombre?.trim() ?? "",
+      categoria: values.categoria?.trim() ?? "",
+      subcategoria: values.subcategoria?.trim() ?? "",
+      codigoProducto: values.codigoProducto?.trim() ?? "",
+      codigoBarras: values.codigoBarras?.trim() ?? "",
+    };
+
     if (mode === "create") {
-      await crud.createProduct(values, {
-        isActive: values.estadoActivo,
-        isFavorite: values.favorito,
+      await crud.createProduct(payload, {
+        isActive: payload.estadoActivo,
+        isFavorite: payload.favorito,
       });
       await reloadAudit();
       return;
@@ -153,9 +163,9 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
 
     if (!targetProduct) return;
 
-    await crud.updateProduct(targetProduct.id, values, {
-      isActive: values.estadoActivo,
-      isFavorite: values.favorito,
+    await crud.updateProduct(targetProduct.id, payload, {
+      isActive: payload.estadoActivo,
+      isFavorite: payload.favorito,
     });
     await reloadAudit();
   };
@@ -185,6 +195,21 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
     await reloadAudit();
   };
 
+  const exportAuditXlsx = async () => {
+    if (!auditLog.length) return false;
+
+    return downloadXlsx(
+      `historial-productos-${new Date().toISOString().slice(0, 10)}`,
+      "Historial Productos",
+      auditLog.map((entry) => ({
+        fecha: entry.date,
+        usuario: entry.user,
+        accion: entry.action,
+        detalle: entry.description,
+      }))
+    );
+  };
+
   return {
     ...crud,
     filters,
@@ -206,5 +231,6 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
     toggleFavorite,
     toggleActive,
     reloadAudit,
+    exportAuditXlsx,
   };
 };

@@ -4,13 +4,11 @@ export const productFormSchema = z.object({
   nombre: z.string().min(2, "El nombre es obligatorio"),
   codigoBarras: z
     .string()
-    .min(2, "El codigo de barras es obligatorio")
     .max(64, "Maximo 64 caracteres")
-    .regex(/^[A-Za-z0-9\-\._]*$/, "Solo letras, numeros, guion, punto o guion bajo")
+    .regex(/^$|^[A-Za-z0-9\-\._]*$/, "Solo letras, numeros, guion, punto o guion bajo")
     .transform((value) => value.trim()),
   codigoProducto: z
     .string()
-    .min(2, "El codigo de producto es obligatorio")
     .max(80, "Maximo 80 caracteres")
     .transform((value) => value.trim()),
   stock: z.coerce.number().min(0, "El stock debe ser mayor o igual a 0"),

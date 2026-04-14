@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { VoiceDictationButton } from "@/components/form/VoiceDictationButton";
 import type { Product } from "@/types/entities";
 import {
@@ -63,6 +64,7 @@ export const ProductForm = ({
   });
 
   const [calcMode, setCalcMode] = useState<CalcMode>("forward");
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   useEffect(() => {
     if (!product) {
@@ -164,7 +166,17 @@ export const ProductForm = ({
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Codigo de barras</label>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <label className="block text-sm font-medium text-slate-700">Codigo de barras</label>
+            <button
+              type="button"
+              className="ui-btn-ghost px-2 py-1 text-xs"
+              onClick={() => setScannerOpen(true)}
+              disabled={disabled}
+            >
+              Escanear camara
+            </button>
+          </div>
           <input
             {...register("codigoBarras")}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -333,6 +345,16 @@ export const ProductForm = ({
           {mode === "create" ? "Crear producto" : "Guardar cambios"}
         </button>
       </div>
+
+      <BarcodeScannerModal
+        open={scannerOpen}
+        title="Escanear codigo de barras del producto"
+        onClose={() => setScannerOpen(false)}
+        onDetected={(barcode) => {
+          setValue("codigoBarras", barcode, { shouldDirty: true, shouldValidate: true });
+          setScannerOpen(false);
+        }}
+      />
     </form>
   );
 };

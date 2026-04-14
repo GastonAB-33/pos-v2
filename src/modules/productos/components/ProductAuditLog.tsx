@@ -3,6 +3,8 @@
 interface ProductAuditLogProps {
   loading: boolean;
   entries: ProductAuditEntry[];
+  onExportXlsx: () => void;
+  exportDisabled?: boolean;
 }
 
 const formatDate = (iso: string): string => {
@@ -15,14 +17,22 @@ const formatDate = (iso: string): string => {
   }).format(date);
 };
 
-const normalizeAction = (value: string) => value.replace(/_/g, " ");
-
-export const ProductAuditLog = ({ loading, entries }: ProductAuditLogProps) => {
+export const ProductAuditLog = ({ loading, entries, onExportXlsx, exportDisabled }: ProductAuditLogProps) => {
   return (
     <section className="rounded-xl border border-slate-200 bg-slate-50 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-slate-900">Historial de Modificaciones</h3>
-        <span className="text-xs text-slate-500">Últimos movimientos del módulo</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500">Últimos movimientos del módulo</span>
+          <button
+            type="button"
+            className="ui-btn-ghost px-2 py-1 text-xs"
+            onClick={onExportXlsx}
+            disabled={exportDisabled || !entries.length}
+          >
+            Exportar historial XLSX
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -45,9 +55,7 @@ export const ProductAuditLog = ({ loading, entries }: ProductAuditLogProps) => {
                 <tr key={entry.id}>
                   <td className="px-3 py-2 text-slate-600">{formatDate(entry.date)}</td>
                   <td className="px-3 py-2 text-slate-700">{entry.user}</td>
-                  <td className="px-3 py-2 uppercase tracking-[0.04em] text-slate-500">
-                    {normalizeAction(entry.action)}
-                  </td>
+                  <td className="px-3 py-2 text-slate-700">{entry.action}</td>
                   <td className="px-3 py-2 text-slate-700">{entry.description}</td>
                 </tr>
               ))}
