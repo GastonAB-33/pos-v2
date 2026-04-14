@@ -20,7 +20,6 @@ const defaultFilters: ProductFilters = {
   search: "",
   category: "",
   subcategory: "",
-  supplier: "",
   status: "all",
 };
 
@@ -45,7 +44,6 @@ export const ProductosPage = () => {
     deleteProduct,
     deleteProductsBulk,
     toggleProductActive,
-    toggleProductFavorite,
     downloadImportTemplate,
     parseImportFile,
     applyImportPreview,
@@ -80,14 +78,6 @@ export const ProductosPage = () => {
     [products]
   );
 
-  const supplierOptions = useMemo(
-    () =>
-      [...new Set(products.map((product) => (product.supplier ?? "").trim()).filter(Boolean))].sort((a, b) =>
-        a.localeCompare(b)
-      ),
-    [products]
-  );
-
   const exportPriceListOptions = useMemo(
     () => [
       { id: "base", label: "Precio base" },
@@ -105,7 +95,6 @@ export const ProductosPage = () => {
     return products.filter((product) => {
       if (filters.category && product.category !== filters.category) return false;
       if (filters.subcategory && (product.subcategory ?? "") !== filters.subcategory) return false;
-      if (filters.supplier && (product.supplier ?? "") !== filters.supplier) return false;
       if (filters.status === "active" && !product.is_active) return false;
       if (filters.status === "inactive" && product.is_active) return false;
 
@@ -115,8 +104,6 @@ export const ProductosPage = () => {
       const searchable = [
         product.name,
         product.code,
-        product.brand ?? "",
-        product.supplier ?? "",
         product.category,
         product.subcategory ?? "",
         barcode,
@@ -223,7 +210,6 @@ export const ProductosPage = () => {
           filters={filters}
           categories={categoryOptions}
           subcategories={subcategoryOptions}
-          suppliers={supplierOptions}
           exportPriceListId={exportPriceListId}
           exportPriceListOptions={exportPriceListOptions}
           onFiltersChange={(patch) => {
@@ -302,10 +288,6 @@ export const ProductosPage = () => {
             onEdit={handleEditClick}
             onDelete={handleDeleteClick}
             onToggleActive={handleToggleClick}
-            onToggleFavorite={(product) => {
-              if (!canWriteProductos) return;
-              void toggleProductFavorite(product.id);
-            }}
           />
         )}
 

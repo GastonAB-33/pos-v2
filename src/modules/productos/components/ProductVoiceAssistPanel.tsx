@@ -2,6 +2,10 @@ import { useMemo, useState } from "react";
 import { productVoiceService, type ProductVoiceAnalyzeResult } from "@/services/ia/product-voice.service";
 import { useVoiceDictation } from "@/modules/productos/hooks/useVoiceDictation";
 import type { ProductFormValues } from "@/modules/productos/schemas/product-form.schema";
+import {
+  computePricingForward,
+  DEFAULT_IVA_PERCENT,
+} from "@/modules/productos/utils/product-pricing";
 
 interface ProductVoiceAssistPanelProps {
   canWrite: boolean;
@@ -14,18 +18,29 @@ const normalizeOptional = (value: string | null | undefined) => value?.trim() ??
 
 const mapVoiceSuggestionsToForm = (
   result: ProductVoiceAnalyzeResult
-): Partial<ProductFormValues> => ({
-  name: normalizeOptional(result.suggestions.name),
-  description: normalizeOptional(result.suggestions.description),
-  category: normalizeOptional(result.suggestions.category),
-  subcategory: normalizeOptional(result.suggestions.subcategory),
-  brand: normalizeOptional(result.suggestions.brand),
-  saleMode: result.suggestions.sale_mode ?? "unit",
-  barcode: normalizeOptional(result.suggestions.barcode),
-  price: result.suggestions.price ?? 0,
-  cost: result.suggestions.cost ?? 0,
-  stockInitial: result.suggestions.stock_initial ?? 0,
-});
+): Partial<ProductFormValues> => {
+  const precioCosto = result.suggestions.cost ?? 0;
+  const porcentajeGanancia = 0;
+  const porcentajeIva = DEFAULT_IVA_PERCENT;
+  const forward = computePricingForward({
+    precioCosto,
+    porcentajeGanancia,
+    porcentajeIva,
+  });
+
+  return {
+    nombre: normalizeOptional(result.suggestions.name),
+    categoria: normalizeOptional(result.suggestions.category),
+    subcategoria: normalizeOptional(result.suggestions.subcategory),
+    codigoBarras: normalizeOptional(result.suggestions.barcode),
+    stock: result.suggestions.stock_initial ?? 0,
+    precioCosto,
+    porcentajeGanancia,
+    porcentajeIva,
+    precioSinIva: forward.precioSinIva,
+    precioFinal: result.suggestions.price ?? forward.precioFinal,
+  };
+};
 
 export const ProductVoiceAssistPanel = ({
   canWrite,
@@ -266,4 +281,3 @@ export const ProductVoiceAssistPanel = ({
     </section>
   );
 };
-

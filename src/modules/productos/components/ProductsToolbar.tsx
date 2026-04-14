@@ -2,7 +2,6 @@ export interface ProductFilters {
   search: string;
   category: string;
   subcategory: string;
-  supplier: string;
   status: "all" | "active" | "inactive";
 }
 
@@ -14,7 +13,6 @@ interface ProductsToolbarProps {
   filters: ProductFilters;
   categories: string[];
   subcategories: string[];
-  suppliers: string[];
   exportPriceListId: string;
   exportPriceListOptions: Array<{ id: string; label: string }>;
   onFiltersChange: (patch: Partial<ProductFilters>) => void;
@@ -36,7 +34,6 @@ export const ProductsToolbar = ({
   filters,
   categories,
   subcategories,
-  suppliers,
   exportPriceListId,
   exportPriceListOptions,
   onFiltersChange,
@@ -138,11 +135,11 @@ export const ProductsToolbar = ({
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         <input
           value={filters.search}
           onChange={(event) => onFiltersChange({ search: event.target.value })}
-          placeholder="Buscar por nombre, codigo, marca, barcode"
+          placeholder="Buscar por nombre, codigos o barcode"
           className="ui-input lg:col-span-2"
         />
 
@@ -168,19 +165,6 @@ export const ProductsToolbar = ({
           {subcategories.map((subcategory) => (
             <option key={subcategory} value={subcategory}>
               {subcategory}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={filters.supplier}
-          onChange={(event) => onFiltersChange({ supplier: event.target.value })}
-          className="ui-input"
-        >
-          <option value="">Todos los proveedores</option>
-          {suppliers.map((supplier) => (
-            <option key={supplier} value={supplier}>
-              {supplier}
             </option>
           ))}
         </select>

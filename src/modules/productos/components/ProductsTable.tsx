@@ -16,7 +16,6 @@ interface ProductsTableProps {
   onEdit: (product: Product) => void;
   onDelete: (product: Product) => void;
   onToggleActive: (product: Product) => void;
-  onToggleFavorite: (product: Product) => void;
 }
 
 const columnHelper = createColumnHelper<Product>();
@@ -37,7 +36,6 @@ export const ProductsTable = ({
   onEdit,
   onDelete,
   onToggleActive,
-  onToggleFavorite,
 }: ProductsTableProps) => {
   const selectedIdSet = new Set(selectedIds);
   const selectableCount = products.length;
@@ -69,13 +67,51 @@ export const ProductsTable = ({
       header: "Nombre",
       cell: (info) => <span className="font-medium text-slate-900">{info.getValue()}</span>,
     }),
-    columnHelper.accessor("price", {
-      header: "Precio",
-      cell: (info) => currency.format(info.getValue()),
+    columnHelper.accessor("code", {
+      header: "Codigo",
+      cell: (info) => info.getValue(),
+    }),
+    columnHelper.display({
+      id: "barcode",
+      header: "Codigo barras",
+      cell: (info) => primaryBarcodes[info.row.original.id] ?? "-",
     }),
     columnHelper.accessor("stock_current", {
       header: "Stock",
       cell: (info) => info.getValue().toLocaleString("es-AR"),
+    }),
+    columnHelper.accessor("cost_price", {
+      header: "Costo",
+      cell: (info) => currency.format(info.getValue()),
+    }),
+    columnHelper.accessor("profit_percent", {
+      header: "Ganancia %",
+      cell: (info) => {
+        const product = info.row.original;
+        const resolved =
+          info.getValue() != null
+            ? Number(info.getValue())
+            : product.cost_price > 0
+              ? (((product.price_without_vat ?? product.price) - product.cost_price) / product.cost_price) * 100
+              : 0;
+        return `${resolved.toFixed(2)}%`;
+      },
+    }),
+    columnHelper.accessor("price_without_vat", {
+      header: "Precio sin IVA",
+      cell: (info) => {
+        const product = info.row.original;
+        const value = info.getValue() ?? product.price;
+        return currency.format(value);
+      },
+    }),
+    columnHelper.accessor("vat_percent", {
+      header: "IVA %",
+      cell: (info) => `${Number(info.getValue() ?? 21).toFixed(2)}%`,
+    }),
+    columnHelper.accessor("price", {
+      header: "Precio final",
+      cell: (info) => currency.format(info.getValue()),
     }),
     columnHelper.accessor("category", {
       header: "Categoria",
@@ -85,19 +121,6 @@ export const ProductsTable = ({
       header: "Subcategoria",
       cell: (info) => info.getValue() ?? "-",
     }),
-    columnHelper.accessor("supplier", {
-      header: "Proveedor",
-      cell: (info) => info.getValue() ?? "-",
-    }),
-    columnHelper.accessor("brand", {
-      header: "Marca",
-      cell: (info) => info.getValue() ?? "-",
-    }),
-    columnHelper.display({
-      id: "barcode",
-      header: "Barcode",
-      cell: (info) => primaryBarcodes[info.row.original.id] ?? "-",
-    }),
     columnHelper.accessor("is_active", {
       header: "Estado",
       cell: (info) =>
@@ -105,15 +128,6 @@ export const ProductsTable = ({
           <span className="ui-badge ui-badge--success">Activo</span>
         ) : (
           <span className="ui-badge">Inactivo</span>
-        ),
-    }),
-    columnHelper.accessor("is_favorite", {
-      header: "Favorito",
-      cell: (info) =>
-        info.getValue() ? (
-          <span className="ui-badge ui-badge--warn">Favorito</span>
-        ) : (
-          <span className="text-xs text-slate-500">No</span>
         ),
     }),
     columnHelper.display({
@@ -141,13 +155,6 @@ export const ProductsTable = ({
               className="ui-btn-ghost text-xs"
             >
               {row.is_active ? "Desactivar" : "Activar"}
-            </button>
-            <button
-              type="button"
-              onClick={() => onToggleFavorite(row)}
-              className="ui-btn-ghost text-xs"
-            >
-              {row.is_favorite ? "Quitar favorito" : "Favorito"}
             </button>
             <button
               type="button"

@@ -7,6 +7,12 @@ import type { PriceList, Product, ProductBarcode } from "@/types/entities";
 import { downloadCsv } from "@/utils/csv";
 import { downloadXlsx, parseXlsxFile, type XlsxRow } from "@/utils/xlsx";
 import type { ProductFormValues } from "@/modules/productos/schemas/product-form.schema";
+import {
+  computePricingForward,
+  DEFAULT_IVA_PERCENT,
+  roundMoney,
+  roundPercent,
+} from "@/modules/productos/utils/product-pricing";
 
 type FeedbackType = "success" | "error";
 
@@ -21,19 +27,15 @@ export interface ProductImportParsedRow {
   rowNumber: number;
   code: string;
   name: string;
-  brand: string | null;
-  supplier: string | null;
-  is_favorite: boolean;
-  description: string | null;
   category: string;
   subcategory: string | null;
   barcode: string | null;
-  sale_mode: "unit" | "weight";
-  price: number;
+  price_final: number;
+  price_without_vat: number;
   cost_price: number;
+  profit_percent: number;
+  vat_percent: number;
   stock_current: number;
-  stock_min: number | null;
-  stock_max: number | null;
   is_active: boolean;
 }
 
@@ -73,28 +75,38 @@ const buildProductCode = (name: string): string => {
 const toServiceInput = (
   values: ProductFormValues,
   options?: {
-    existingCode?: string;
+    existingCode?: string | null;
+    existingName?: string | null;
+    existingCategory?: string | null;
+    existingSubcategory?: string | null;
+    existingBrand?: string | null;
+    existingSupplier?: string | null;
+    existingDescription?: string | null;
+    existingSaleMode?: "unit" | "weight" | null;
+    existingStockMin?: number | null;
+    existingStockMax?: number | null;
     isActive?: boolean;
     isFavorite?: boolean;
-    stockMin?: number | null;
-    stockMax?: number | null;
   }
 ) => ({
-  code: options?.existingCode ?? buildProductCode(values.name),
-  name: values.name,
-  brand: values.brand?.trim() ? values.brand.trim() : null,
-  supplier: values.supplier?.trim() ? values.supplier.trim() : null,
+  code: values.codigoProducto || options?.existingCode || buildProductCode(values.nombre),
+  name: values.nombre || options?.existingName || "Producto",
+  brand: options?.existingBrand ?? null,
+  supplier: options?.existingSupplier ?? null,
   is_favorite: options?.isFavorite ?? false,
-  description: values.description?.trim() ? values.description.trim() : null,
-  price: values.price,
-  cost_price: values.cost,
-  stock_current: values.stockInitial,
-  stock_min: options?.stockMin ?? 5,
-  stock_max: options?.stockMax ?? null,
-  category: values.category,
-  subcategory: values.subcategory?.trim() ? values.subcategory.trim() : null,
-  sale_mode: values.saleMode,
+  description: options?.existingDescription ?? null,
+  price: roundMoney(values.precioFinal),
+  cost_price: roundMoney(values.precioCosto),
+  stock_current: values.stock,
+  stock_min: options?.existingStockMin ?? null,
+  stock_max: options?.existingStockMax ?? null,
+  category: values.categoria || options?.existingCategory || "General",
+  subcategory: values.subcategoria?.trim() ? values.subcategoria.trim() : options?.existingSubcategory ?? null,
+  sale_mode: options?.existingSaleMode ?? "unit",
   currency_code: "ARS",
+  price_without_vat: roundMoney(values.precioSinIva),
+  vat_percent: roundPercent(values.porcentajeIva),
+  profit_percent: roundPercent(values.porcentajeGanancia),
   is_active: options?.isActive ?? true,
 });
 
@@ -136,23 +148,10 @@ const parseBoolean = (value: unknown): boolean | null => {
   return null;
 };
 
-const parseSaleMode = (value: unknown): "unit" | "weight" | null => {
-  const raw = toTrimmedString(value).toLowerCase();
-  if (!raw) return "unit";
-
-  if (["unit", "unidad", "u"].includes(raw)) return "unit";
-  if (["weight", "peso", "kg"].includes(raw)) return "weight";
-  return null;
-};
-
 const rowSchema = z
   .object({
     code: z.string().max(80),
     name: z.string().min(2, "Nombre obligatorio"),
-    brand: z.string().max(120).nullable(),
-    supplier: z.string().max(160).nullable(),
-    is_favorite: z.boolean(),
-    description: z.string().max(500).nullable(),
     category: z.string().min(2, "Categoria obligatoria"),
     subcategory: z.string().max(120).nullable(),
     barcode: z
@@ -160,40 +159,27 @@ const rowSchema = z
       .max(64)
       .regex(/^[A-Za-z0-9\-\._]*$/, "Barcode invalido")
       .nullable(),
-    sale_mode: z.enum(["unit", "weight"]),
-    price: z.number().min(0, "Precio >= 0"),
+    price_final: z.number().min(0, "Precio final >= 0"),
+    price_without_vat: z.number().min(0, "Precio sin IVA >= 0"),
     cost_price: z.number().min(0, "Costo >= 0"),
+    profit_percent: z.number().min(0, "Ganancia >= 0"),
+    vat_percent: z.number().min(0, "IVA >= 0"),
     stock_current: z.number().min(0, "Stock >= 0"),
-    stock_min: z.number().min(0).nullable(),
-    stock_max: z.number().min(0).nullable(),
     is_active: z.boolean(),
-  })
-  .superRefine((value, context) => {
-    if (value.stock_min != null && value.stock_max != null && value.stock_max < value.stock_min) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "stock_max no puede ser menor a stock_min",
-        path: ["stock_max"],
-      });
-    }
   });
 
 const templateColumns = [
   "code",
   "name",
-  "brand",
-  "is_favorite",
-  "description",
   "category",
   "subcategory",
-  "supplier",
   "barcode",
-  "sale_mode",
-  "price",
-  "cost_price",
   "stock_current",
-  "stock_min",
-  "stock_max",
+  "cost_price",
+  "profit_percent",
+  "price_without_vat",
+  "vat_percent",
+  "price_final",
   "is_active",
 ] as const;
 
@@ -206,46 +192,50 @@ const parseImportRow = (row: XlsxRow, rowNumber: number): ProductImportParsedRow
   const code = toTrimmedString(row.code);
   const name = toTrimmedString(row.name);
   const category = toTrimmedString(row.category);
-
-  const saleMode = parseSaleMode(row.sale_mode);
-  if (!saleMode) {
-    return {
-      rowNumber,
-      message: "sale_mode invalido. Usa unit o weight",
-    };
-  }
-
-  const price = parseNumeric(row.price);
+  const priceFinal = parseNumeric(row.price_final);
+  const priceWithoutVat = parseNumeric(row.price_without_vat);
   const costPrice = parseNumeric(row.cost_price);
+  const profitPercent = parseNumeric(row.profit_percent);
+  const vatPercent = parseNumeric(row.vat_percent);
   const stockCurrent = parseNumeric(row.stock_current);
 
-  if (price == null || costPrice == null || stockCurrent == null) {
+  if (priceFinal == null || costPrice == null || stockCurrent == null) {
     return {
       rowNumber,
-      message: "price, cost_price y stock_current son obligatorios y numericos",
+      message: "price_final, cost_price y stock_current son obligatorios y numericos",
     };
   }
 
-  const stockMin = parseNumeric(row.stock_min);
-  const stockMax = parseNumeric(row.stock_max);
+  const resolvedVatPercent = vatPercent ?? DEFAULT_IVA_PERCENT;
+  const resolvedProfitPercent = profitPercent ?? null;
+  const fallbackPriceWithoutVat = roundMoney(priceFinal / (1 + resolvedVatPercent / 100));
+  const forward =
+    resolvedProfitPercent == null
+      ? null
+      : computePricingForward({
+          precioCosto: costPrice,
+          porcentajeGanancia: resolvedProfitPercent,
+          porcentajeIva: resolvedVatPercent,
+        });
   const parsedBoolean = parseBoolean(row.is_active);
 
   const candidate = {
     code,
     name,
-    brand: toNullableString(row.brand),
-    supplier: toNullableString(row.supplier),
-    is_favorite: parseBoolean(row.is_favorite) ?? false,
-    description: toNullableString(row.description),
     category,
     subcategory: toNullableString(row.subcategory),
     barcode: normalizeBarcode(toNullableString(row.barcode)),
-    sale_mode: saleMode,
-    price,
+    price_final: roundMoney(priceFinal),
+    price_without_vat: roundMoney(priceWithoutVat ?? forward?.precioSinIva ?? fallbackPriceWithoutVat),
     cost_price: costPrice,
+    profit_percent: roundPercent(
+      resolvedProfitPercent ??
+        (costPrice > 0
+          ? ((priceWithoutVat ?? forward?.precioSinIva ?? fallbackPriceWithoutVat) - costPrice) / costPrice * 100
+          : 0)
+    ),
+    vat_percent: roundPercent(resolvedVatPercent),
     stock_current: stockCurrent,
-    stock_min: stockMin,
-    stock_max: stockMax,
     is_active: parsedBoolean ?? true,
   };
 
@@ -312,7 +302,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
     setIsSubmitting(true);
     try {
       const created = await productsService.create(tenantId, toServiceInput(values));
-      await productsService.setPrimaryBarcode(tenantId, created.id, values.barcode ?? "");
+      await productsService.setPrimaryBarcode(tenantId, created.id, values.codigoBarras ?? "");
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "productos",
@@ -323,9 +313,13 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
         metadata: {
           code: created.code,
           category: created.category,
-          sale_mode: created.sale_mode,
-          supplier: created.supplier,
-          is_favorite: created.is_favorite,
+          subcategory: created.subcategory,
+          stock_current: created.stock_current,
+          cost_price: created.cost_price,
+          price: created.price,
+          vat_percent: created.vat_percent ?? null,
+          profit_percent: created.profit_percent ?? null,
+          price_without_vat: created.price_without_vat ?? null,
           is_active: created.is_active,
         },
       });
@@ -352,26 +346,38 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
         productId,
         toServiceInput(values, {
           existingCode: existing.code,
+          existingName: existing.name,
+          existingCategory: existing.category,
+          existingSubcategory: existing.subcategory,
+          existingBrand: existing.brand,
+          existingSupplier: existing.supplier,
+          existingDescription: existing.description,
+          existingSaleMode: existing.sale_mode,
+          existingStockMin: existing.stock_min,
+          existingStockMax: existing.stock_max,
           isActive: existing.is_active,
           isFavorite: existing.is_favorite,
-          stockMin: existing.stock_min,
-          stockMax: existing.stock_max,
         })
       );
-      await productsService.setPrimaryBarcode(tenantId, productId, values.barcode ?? "");
+      await productsService.setPrimaryBarcode(tenantId, productId, values.codigoBarras ?? "");
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "productos",
         action: "update",
         entity_type: "product",
         entity_id: updated?.id ?? productId,
-        description: `Producto actualizado: ${values.name}`,
+        description: `Producto actualizado: ${values.nombre}`,
         metadata: {
           previous_name: existing.name,
-          next_name: values.name,
-          category: values.category,
-          sale_mode: values.saleMode,
-          supplier: values.supplier?.trim() || null,
+          next_name: values.nombre,
+          category: values.categoria,
+          subcategory: values.subcategoria?.trim() || null,
+          stock_current: values.stock,
+          cost_price: values.precioCosto,
+          price: values.precioFinal,
+          vat_percent: values.porcentajeIva,
+          profit_percent: values.porcentajeGanancia,
+          price_without_vat: values.precioSinIva,
           is_favorite: existing.is_favorite,
         },
       });
@@ -545,19 +551,15 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
     const templateRow: Record<(typeof templateColumns)[number], string | number | boolean> = {
       code: "PRD-0001",
       name: "Yerba 1kg",
-      brand: "Marca demo",
-      is_favorite: false,
-      description: "Producto de ejemplo",
       category: "Almacen",
       subcategory: "Yerba",
-      supplier: "Proveedor demo",
       barcode: "7791234567890",
-      sale_mode: "unit",
-      price: 1850,
-      cost_price: 1200,
       stock_current: 20,
-      stock_min: 5,
-      stock_max: 80,
+      cost_price: 1200,
+      profit_percent: 20,
+      price_without_vat: 1440,
+      vat_percent: 21,
+      price_final: 1742.4,
       is_active: true,
     };
 
@@ -671,18 +673,21 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
             await productsService.update(tenantId, matchedProductId, {
               code: row.code || existing.code,
               name: row.name,
-              brand: row.brand,
-              supplier: row.supplier,
-              is_favorite: row.is_favorite,
-              description: row.description,
+              brand: existing.brand,
+              supplier: existing.supplier,
+              is_favorite: existing.is_favorite,
+              description: existing.description,
               category: row.category,
               subcategory: row.subcategory,
-              sale_mode: row.sale_mode,
-              price: row.price,
+              sale_mode: existing.sale_mode,
+              price: row.price_final,
               cost_price: row.cost_price,
               stock_current: row.stock_current,
-              stock_min: row.stock_min,
-              stock_max: row.stock_max,
+              stock_min: existing.stock_min,
+              stock_max: existing.stock_max,
+              price_without_vat: row.price_without_vat,
+              vat_percent: row.vat_percent,
+              profit_percent: row.profit_percent,
               is_active: row.is_active,
             });
 
@@ -703,19 +708,22 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           const createdProduct = await productsService.create(tenantId, {
             code: row.code || buildProductCode(row.name),
             name: row.name,
-            brand: row.brand,
-            supplier: row.supplier,
-            is_favorite: row.is_favorite,
-            description: row.description,
-            price: row.price,
+            brand: null,
+            supplier: null,
+            is_favorite: false,
+            description: null,
+            price: row.price_final,
             cost_price: row.cost_price,
             stock_current: row.stock_current,
-            stock_min: row.stock_min,
-            stock_max: row.stock_max,
+            stock_min: null,
+            stock_max: null,
             category: row.category,
             subcategory: row.subcategory,
-            sale_mode: row.sale_mode,
+            sale_mode: "unit",
             currency_code: "ARS",
+            price_without_vat: row.price_without_vat,
+            vat_percent: row.vat_percent,
+            profit_percent: row.profit_percent,
             is_active: row.is_active,
           });
 
@@ -817,20 +825,20 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
         rows.push({
           code: product.code,
           name: product.name,
-          brand: product.brand,
-          supplier: product.supplier,
-          is_favorite: product.is_favorite,
-          description: product.description,
           category: product.category,
           subcategory: product.subcategory,
           barcode,
-          sale_mode: product.sale_mode,
-          price_exported: resolvedPrice,
-          price_base: product.price,
-          cost_price: product.cost_price,
           stock_current: product.stock_current,
-          stock_min: product.stock_min,
-          stock_max: product.stock_max,
+          cost_price: product.cost_price,
+          profit_percent:
+            product.profit_percent != null
+              ? product.profit_percent
+              : product.cost_price > 0
+                ? roundPercent((((product.price_without_vat ?? product.price) - product.cost_price) / product.cost_price) * 100)
+                : 0,
+          price_without_vat: product.price_without_vat ?? roundMoney(resolvedPrice / (1 + (product.vat_percent ?? DEFAULT_IVA_PERCENT) / 100)),
+          vat_percent: product.vat_percent ?? DEFAULT_IVA_PERCENT,
+          price_final: resolvedPrice,
           is_active: product.is_active,
           price_source: selectedPriceList ? `lista:${selectedPriceList.name}` : "base",
         });

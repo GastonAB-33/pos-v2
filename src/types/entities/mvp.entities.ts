@@ -49,6 +49,9 @@ export interface Product extends TenantScopedEntity {
   subcategory: string | null;
   sale_mode: "unit" | "weight";
   currency_code: string;
+  price_without_vat?: number | null;
+  vat_percent?: number | null;
+  profit_percent?: number | null;
   is_active: boolean;
 }
 
