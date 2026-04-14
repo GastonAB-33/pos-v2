@@ -54,6 +54,7 @@ export const mapEntityToProductViewModel = (
   return {
     entity: product,
     barcode: barcode ?? "",
+    imagenUrl: product.image_url ?? "",
     nombre: product.name,
     codigoProducto: product.code,
     codigoBarras: barcode ?? "",
@@ -80,6 +81,7 @@ export const mapEntityToProduct = (
   return {
     id: product.id,
     tenant_id: product.tenant_id,
+    imagen_url: product.image_url ?? "",
     nombre: vm.nombre,
     codigo_barras: vm.codigoBarras,
     codigo_producto: vm.codigoProducto,

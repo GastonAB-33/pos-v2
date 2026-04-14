@@ -5,6 +5,7 @@ export interface Product {
   id: string;
   tenant_id: string;
   nombre: string;
+  imagen_url?: string;
   codigo_barras: string;
   codigo_producto: string;
   categoria: string;
@@ -44,6 +45,7 @@ export interface ProductFormModalValues extends ProductFormValues {
 export interface ProductViewModel {
   entity: ProductEntity;
   barcode: string;
+  imagenUrl: string;
   nombre: string;
   codigoProducto: string;
   codigoBarras: string;

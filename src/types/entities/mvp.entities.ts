@@ -36,6 +36,7 @@ export interface PermissionProfileRecord extends TenantScopedEntity {
 export interface Product extends TenantScopedEntity {
   code: string;
   name: string;
+  image_url?: string | null;
   brand: string | null;
   supplier: string | null;
   is_favorite: boolean;

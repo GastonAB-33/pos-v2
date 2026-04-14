@@ -97,36 +97,36 @@ export const ProductFilters = ({
             <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
               Categoría
             </label>
-            <select
+            <input
+              list="filtro-categorias-productos"
               className="ui-input"
               value={filters.category}
               onChange={(event) => onFiltersChange({ category: event.target.value })}
-            >
-              <option value="">Todas</option>
+              placeholder="Todas"
+            />
+            <datalist id="filtro-categorias-productos">
               {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
+                <option key={category} value={category} />
               ))}
-            </select>
+            </datalist>
           </div>
 
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
               Subcategoría
             </label>
-            <select
+            <input
+              list="filtro-subcategorias-productos"
               className="ui-input"
               value={filters.subcategory}
               onChange={(event) => onFiltersChange({ subcategory: event.target.value })}
-            >
-              <option value="">Todas</option>
+              placeholder="Todas"
+            />
+            <datalist id="filtro-subcategorias-productos">
               {subcategories.map((subcategory) => (
-                <option key={subcategory} value={subcategory}>
-                  {subcategory}
-                </option>
+                <option key={subcategory} value={subcategory} />
               ))}
-            </select>
+            </datalist>
           </div>
 
           <div>

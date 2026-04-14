@@ -68,7 +68,7 @@ export const tableDefinitions: Record<DbTableName, readonly string[]> = {
   tenants: ["id", "legal_name", "trade_name", "cuit", "is_active", "created_at", "updated_at"],
   permission_profiles: ["id", "tenant_id", "name", "description", "is_active", "permissions", "created_at", "updated_at"],
   users: ["id", "tenant_id", "email", "username", "full_name", "role_code", "permission_profile_id", "is_active", "created_at", "updated_at"],
-  products: ["id", "tenant_id", "code", "name", "brand", "supplier", "description", "price", "cost_price", "stock_current", "stock_min", "stock_max", "category", "subcategory", "sale_mode", "currency_code", "price_without_vat", "vat_percent", "profit_percent", "is_favorite", "is_active", "created_at", "updated_at"],
+  products: ["id", "tenant_id", "code", "name", "image_url", "brand", "supplier", "description", "price", "cost_price", "stock_current", "stock_min", "stock_max", "category", "subcategory", "sale_mode", "currency_code", "price_without_vat", "vat_percent", "profit_percent", "is_favorite", "is_active", "created_at", "updated_at"],
   product_barcodes: ["id", "tenant_id", "product_id", "barcode", "is_primary", "created_at", "updated_at"],
   customers: ["id", "tenant_id", "code", "full_name", "document_type", "document_number", "fiscal_business_name", "fiscal_address", "fiscal_condition", "price_list_id", "email", "phone", "address", "observations", "current_balance", "is_active", "created_at", "updated_at"],
   suppliers: ["id", "tenant_id", "code", "name", "phone", "email", "address", "observations", "is_active", "created_at", "updated_at"],

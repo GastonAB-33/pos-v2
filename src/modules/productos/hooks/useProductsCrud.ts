@@ -43,6 +43,9 @@ export interface ProductImportParsedRow {
 export interface ProductImportErrorRow {
   rowNumber: number;
   message: string;
+  column?: string;
+  expected?: string;
+  value?: string;
 }
 
 export interface ProductImportPreview {
@@ -83,33 +86,41 @@ const toServiceInput = (
     existingBrand?: string | null;
     existingSupplier?: string | null;
     existingDescription?: string | null;
+    existingImageUrl?: string | null;
     existingSaleMode?: "unit" | "weight" | null;
     existingStockMin?: number | null;
     existingStockMax?: number | null;
     isActive?: boolean;
     isFavorite?: boolean;
   }
-) => ({
-  code: values.codigoProducto || options?.existingCode || buildProductCode(values.nombre),
-  name: values.nombre || options?.existingName || "Producto",
-  brand: options?.existingBrand ?? null,
-  supplier: options?.existingSupplier ?? null,
-  is_favorite: options?.isFavorite ?? false,
-  description: options?.existingDescription ?? null,
-  price: roundMoney(values.precioFinal),
-  cost_price: roundMoney(values.precioCosto),
-  stock_current: values.stock,
-  stock_min: options?.existingStockMin ?? null,
-  stock_max: options?.existingStockMax ?? null,
-  category: values.categoria || options?.existingCategory || "General",
-  subcategory: values.subcategoria?.trim() ? values.subcategoria.trim() : options?.existingSubcategory ?? null,
-  sale_mode: options?.existingSaleMode ?? "unit",
-  currency_code: "ARS",
-  price_without_vat: roundMoney(values.precioSinIva),
-  vat_percent: roundPercent(values.porcentajeIva),
-  profit_percent: roundPercent(values.porcentajeGanancia),
-  is_active: options?.isActive ?? true,
-});
+) => {
+  const normalizedImageUrl =
+    typeof values.imagenUrl === "string" ? values.imagenUrl.trim() : undefined;
+
+  return {
+    code: values.codigoProducto || options?.existingCode || buildProductCode(values.nombre),
+    name: values.nombre || options?.existingName || "Producto",
+    image_url:
+      normalizedImageUrl === undefined ? options?.existingImageUrl ?? null : normalizedImageUrl || null,
+    brand: options?.existingBrand ?? null,
+    supplier: options?.existingSupplier ?? null,
+    is_favorite: options?.isFavorite ?? false,
+    description: options?.existingDescription ?? null,
+    price: roundMoney(values.precioFinal),
+    cost_price: roundMoney(values.precioCosto),
+    stock_current: values.stock,
+    stock_min: options?.existingStockMin ?? null,
+    stock_max: options?.existingStockMax ?? null,
+    category: values.categoria || options?.existingCategory || "General",
+    subcategory: values.subcategoria?.trim() ? values.subcategoria.trim() : options?.existingSubcategory ?? null,
+    sale_mode: options?.existingSaleMode ?? "unit",
+    currency_code: "ARS",
+    price_without_vat: roundMoney(values.precioSinIva),
+    vat_percent: roundPercent(values.porcentajeIva),
+    profit_percent: roundPercent(values.porcentajeGanancia),
+    is_active: options?.isActive ?? true,
+  };
+};
 
 const toTrimmedString = (value: unknown): string =>
   typeof value === "string" ? value.trim() : String(value ?? "").trim();
@@ -120,21 +131,21 @@ const normalizeBarcode = (value: string | null): string | null => {
   return cleaned || null;
 };
 
-const parseNumeric = (value: unknown): number | null => {
+const parseNumericCell = (value: unknown): { value: number | null; invalid: boolean; raw: string } => {
   if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
+    return { value, invalid: false, raw: String(value) };
   }
 
   const raw = toTrimmedString(value);
-  if (!raw) return null;
+  if (!raw) return { value: null, invalid: false, raw: "" };
 
   const compact = raw.replace(/\s+/g, "");
   const normalized = compact.includes(",")
     ? compact.replace(/\./g, "").replace(",", ".")
     : compact;
   const parsed = Number(normalized);
-  if (!Number.isFinite(parsed)) return null;
-  return parsed;
+  if (!Number.isFinite(parsed)) return { value: null, invalid: true, raw };
+  return { value: parsed, invalid: false, raw };
 };
 
 const parseBoolean = (value: unknown): boolean | null => {
@@ -158,26 +169,27 @@ const getRowValueByAlias = (row: XlsxRow, aliases: string[]): unknown => {
 };
 
 const importFieldAliases = {
-  code: ["code", "codigo", "código", "codigo_producto", "codigo de producto", "código de producto"],
-  name: ["name", "nombre"],
-  category: ["category", "categoria", "categoría"],
+  code: ["code", "codigo", "codigo_producto", "codigo de producto", "código de producto"],
+  name: ["name", "nombre", "nombre (obligatorio)"],
+  category: ["category", "categoria", "categoría", "categoria (obligatoria)"],
   subcategory: ["subcategory", "subcategoria", "subcategoría"],
   barcode: ["barcode", "codigo_barras", "codigo de barras", "código de barras"],
   stock_current: ["stock_current", "stock"],
-  cost_price: ["cost_price", "precio_costo", "precio costo", "precio de costo"],
+  cost_price: ["cost_price", "precio_costo", "precio costo", "precio de costo", "costo"],
   profit_percent: ["profit_percent", "porcentaje_ganancia", "% ganancia", "ganancia", "porcentaje de ganancia"],
   price_without_vat: ["price_without_vat", "precio_sin_iva", "precio sin iva", "precio sin iva"],
   vat_percent: ["vat_percent", "porcentaje_iva", "% iva", "iva", "porcentaje de iva"],
   price_final: ["price_final", "precio_final", "precio final"],
   is_active: ["is_active", "activo", "estado_activo"],
   is_favorite: ["is_favorite", "favorito"],
+  price_list: ["lista de precio", "lista_precio", "price_list", "fuente de precio"],
 } as const;
 
 const rowSchema = z
   .object({
     code: z.string().max(80),
-    name: z.string().min(2, "Nombre obligatorio"),
-    category: z.string().min(2, "Categoria obligatoria"),
+    name: z.string().min(1, "Nombre obligatorio"),
+    category: z.string().min(1, "Categoria obligatoria"),
     subcategory: z.string().max(120).nullable(),
     barcode: z
       .string()
@@ -199,39 +211,75 @@ const toNullableString = (value: unknown): string | null => {
   return normalized || null;
 };
 
-const parseImportRow = (row: XlsxRow, rowNumber: number): ProductImportParsedRow | ProductImportErrorRow => {
+type ProductImportRowParseResult =
+  | { ok: true; row: ProductImportParsedRow }
+  | { ok: false; errors: ProductImportErrorRow[] };
+
+const parseImportRow = (row: XlsxRow, rowNumber: number): ProductImportRowParseResult => {
+  const errors: ProductImportErrorRow[] = [];
+  const pushError = (message: string, column?: string, expected?: string, value?: string) => {
+    errors.push({ rowNumber, message, column, expected, value });
+  };
+
   const code = toTrimmedString(getRowValueByAlias(row, [...importFieldAliases.code]));
   const name = toTrimmedString(getRowValueByAlias(row, [...importFieldAliases.name]));
   const category = toTrimmedString(getRowValueByAlias(row, [...importFieldAliases.category]));
-  const priceFinal = parseNumeric(getRowValueByAlias(row, [...importFieldAliases.price_final]));
-  const priceWithoutVat = parseNumeric(getRowValueByAlias(row, [...importFieldAliases.price_without_vat]));
-  const costPrice = parseNumeric(getRowValueByAlias(row, [...importFieldAliases.cost_price])) ?? 0;
-  const profitPercent = parseNumeric(getRowValueByAlias(row, [...importFieldAliases.profit_percent]));
-  const vatPercent = parseNumeric(getRowValueByAlias(row, [...importFieldAliases.vat_percent]));
-  const stockCurrent = parseNumeric(getRowValueByAlias(row, [...importFieldAliases.stock_current])) ?? 0;
 
-  if (!name || !category) {
-    return {
-      rowNumber,
-      message: "Nombre y categoria son obligatorios",
-    };
+  const stockRaw = parseNumericCell(getRowValueByAlias(row, [...importFieldAliases.stock_current]));
+  const costRaw = parseNumericCell(getRowValueByAlias(row, [...importFieldAliases.cost_price]));
+  const profitRaw = parseNumericCell(getRowValueByAlias(row, [...importFieldAliases.profit_percent]));
+  const vatRaw = parseNumericCell(getRowValueByAlias(row, [...importFieldAliases.vat_percent]));
+  const priceFinalRaw = parseNumericCell(getRowValueByAlias(row, [...importFieldAliases.price_final]));
+  const priceWithoutVatRaw = parseNumericCell(getRowValueByAlias(row, [...importFieldAliases.price_without_vat]));
+
+  if (!name) {
+    pushError("Nombre obligatorio", "nombre", "Texto no vacío");
   }
 
-  const resolvedVatPercent = vatPercent ?? DEFAULT_IVA_PERCENT;
-  const resolvedProfitPercent = profitPercent ?? null;
+  if (!category) {
+    pushError("Categoría obligatoria", "categoría", "Texto no vacío");
+  }
+
+  if (stockRaw.invalid) {
+    pushError("Stock inválido", "stock", "Número", stockRaw.raw);
+  }
+  if (costRaw.invalid) {
+    pushError("Precio costo inválido", "precio costo", "Número", costRaw.raw);
+  }
+  if (profitRaw.invalid) {
+    pushError("Porcentaje de ganancia inválido", "% ganancia", "Número", profitRaw.raw);
+  }
+  if (vatRaw.invalid) {
+    pushError("Porcentaje de IVA inválido", "% IVA", "Número", vatRaw.raw);
+  }
+  if (priceFinalRaw.invalid) {
+    pushError("Precio final inválido", "precio final", "Número", priceFinalRaw.raw);
+  }
+  if (priceWithoutVatRaw.invalid) {
+    pushError("Precio sin IVA inválido", "precio sin IVA", "Número", priceWithoutVatRaw.raw);
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, errors };
+  }
+
+  const costPrice = costRaw.value ?? 0;
+  const stockCurrent = stockRaw.value ?? 0;
+  const vatPercent = vatRaw.value ?? DEFAULT_IVA_PERCENT;
+  const profitPercent = profitRaw.value ?? null;
+  const priceFinal = priceFinalRaw.value;
+  const priceWithoutVat = priceWithoutVatRaw.value;
+
   const forwardFromCost = computePricingForward({
     precioCosto: costPrice,
-    porcentajeGanancia: resolvedProfitPercent ?? 0,
-    porcentajeIva: resolvedVatPercent,
+    porcentajeGanancia: profitPercent ?? 0,
+    porcentajeIva: vatPercent,
   });
 
   const resolvedPriceWithoutVat = roundMoney(
-    priceWithoutVat ??
-      (priceFinal != null ? priceFinal / (1 + resolvedVatPercent / 100) : forwardFromCost.precioSinIva)
+    priceWithoutVat ?? (priceFinal != null ? priceFinal / (1 + vatPercent / 100) : forwardFromCost.precioSinIva)
   );
-  const resolvedPriceFinal = roundMoney(
-    priceFinal ?? resolvedPriceWithoutVat * (1 + resolvedVatPercent / 100)
-  );
+  const resolvedPriceFinal = roundMoney(priceFinal ?? resolvedPriceWithoutVat * (1 + vatPercent / 100));
 
   const parsedBoolean = parseBoolean(getRowValueByAlias(row, [...importFieldAliases.is_active]));
   const parsedFavorite = parseBoolean(getRowValueByAlias(row, [...importFieldAliases.is_favorite]));
@@ -246,10 +294,9 @@ const parseImportRow = (row: XlsxRow, rowNumber: number): ProductImportParsedRow
     price_without_vat: resolvedPriceWithoutVat,
     cost_price: costPrice,
     profit_percent: roundPercent(
-      resolvedProfitPercent ??
-        (costPrice > 0 ? (resolvedPriceWithoutVat - costPrice) / costPrice * 100 : 0)
+      profitPercent ?? (costPrice > 0 ? ((resolvedPriceWithoutVat - costPrice) / costPrice) * 100 : 0)
     ),
-    vat_percent: roundPercent(resolvedVatPercent),
+    vat_percent: roundPercent(vatPercent),
     stock_current: stockCurrent,
     is_favorite: parsedFavorite,
     is_active: parsedBoolean ?? true,
@@ -258,14 +305,21 @@ const parseImportRow = (row: XlsxRow, rowNumber: number): ProductImportParsedRow
   const validated = rowSchema.safeParse(candidate);
   if (!validated.success) {
     return {
-      rowNumber,
-      message: validated.error.issues.map((issue) => issue.message).join(". "),
+      ok: false,
+      errors: validated.error.issues.map((issue) => ({
+        rowNumber,
+        message: issue.message,
+        column: issue.path?.[0] ? String(issue.path[0]) : undefined,
+      })),
     };
   }
 
   return {
-    rowNumber,
-    ...validated.data,
+    ok: true,
+    row: {
+      rowNumber,
+      ...validated.data,
+    },
   };
 };
 
@@ -426,6 +480,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           existingBrand: existing.brand,
           existingSupplier: existing.supplier,
           existingDescription: existing.description,
+          existingImageUrl: existing.image_url ?? null,
           existingSaleMode: existing.sale_mode,
           existingStockMin: existing.stock_min,
           existingStockMax: existing.stock_max,
@@ -444,6 +499,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           existingBrand: existing.brand,
           existingSupplier: existing.supplier,
           existingDescription: existing.description,
+          existingImageUrl: existing.image_url ?? null,
           existingSaleMode: existing.sale_mode,
           existingStockMin: existing.stock_min,
           existingStockMax: existing.stock_max,
@@ -617,19 +673,17 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
 
   const downloadImportTemplate = async (): Promise<boolean> => {
     const templateRow: Record<string, string | number | boolean> = {
-      nombre: "Yerba 1kg",
+      "nombre (obligatorio)": "Yerba 1kg",
       "codigo de barras": "7791234567890",
       "codigo de producto": "PRD-0001",
-      categoria: "Almacen",
+      "categoria (obligatoria)": "Almacen",
       subcategoria: "Yerba",
       "precio costo": 1200,
       "% ganancia": 20,
-      "precio sin iva": 1440,
       "% iva": 21,
       "precio final": 1742.4,
       stock: 20,
-      favorito: false,
-      activo: true,
+      "lista de precio": "BASE (solo lectura - no editar)",
     };
 
     return downloadXlsx("plantilla-productos", "Plantilla Productos", [templateRow]);
@@ -650,12 +704,12 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       }
 
       const parsed = parseImportRow(normalized, rowNumber);
-      if ("message" in parsed) {
-        errorRows.push(parsed);
+      if (!parsed.ok) {
+        errorRows.push(...parsed.errors);
         return;
       }
 
-      validRows.push(parsed);
+      validRows.push(parsed.row);
     });
 
     return {
@@ -904,15 +958,10 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
               : product.cost_price > 0
                 ? roundPercent((((product.price_without_vat ?? product.price) - product.cost_price) / product.cost_price) * 100)
                 : 0,
-          "precio sin iva":
-            product.price_without_vat ??
-            roundMoney(resolvedPrice / (1 + (product.vat_percent ?? DEFAULT_IVA_PERCENT) / 100)),
           "% iva": product.vat_percent ?? DEFAULT_IVA_PERCENT,
           "precio final": resolvedPrice,
           stock: product.stock_current,
-          favorito: product.is_favorite,
-          activo: product.is_active,
-          "fuente de precio": selectedPriceList ? `lista:${selectedPriceList.name}` : "base",
+          "lista de precio": selectedPriceList ? selectedPriceList.name : "Base",
         });
       }
 

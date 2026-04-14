@@ -150,6 +150,7 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
       subcategoria: values.subcategoria?.trim() ?? "",
       codigoProducto: values.codigoProducto?.trim() ?? "",
       codigoBarras: values.codigoBarras?.trim() ?? "",
+      imagenUrl: values.imagenUrl?.trim() ?? "",
     };
 
     if (mode === "create") {

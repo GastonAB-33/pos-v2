@@ -126,6 +126,8 @@ export const ProductsPage = () => {
         open={Boolean(formModal)}
         mode={formModal?.mode ?? "create"}
         product={formModal?.product ?? null}
+        categoryOptions={products.categoryOptions}
+        subcategoryOptions={products.subcategoryOptions}
         disabled={products.isSubmitting || !canWriteProductos}
         onClose={() => setFormModal(null)}
         onSubmit={handleSaveProduct}
@@ -142,6 +144,7 @@ export const ProductsPage = () => {
           canWrite={canWriteProductos}
           loading={products.isSubmitting}
           onClose={() => setImportOpen(false)}
+          onDownloadTemplate={products.downloadImportTemplate}
           onParseFile={products.parseImportFile}
           onConfirmImport={products.applyImportPreview}
         />
