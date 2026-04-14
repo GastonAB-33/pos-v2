@@ -296,12 +296,24 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
     void loadProducts();
   }, [loadProducts]);
 
-  const createProduct = async (values: ProductFormValues) => {
+  const createProduct = async (
+    values: ProductFormValues,
+    options?: {
+      isActive?: boolean;
+      isFavorite?: boolean;
+    }
+  ) => {
     if (!tenantId) return;
 
     setIsSubmitting(true);
     try {
-      const created = await productsService.create(tenantId, toServiceInput(values));
+      const created = await productsService.create(
+        tenantId,
+        toServiceInput(values, {
+          isActive: options?.isActive ?? true,
+          isFavorite: options?.isFavorite ?? false,
+        })
+      );
       await productsService.setPrimaryBarcode(tenantId, created.id, values.codigoBarras ?? "");
       await auditService.createSafe(tenantId, {
         user_id: userId,
@@ -333,7 +345,14 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
     }
   };
 
-  const updateProduct = async (productId: string, values: ProductFormValues) => {
+  const updateProduct = async (
+    productId: string,
+    values: ProductFormValues,
+    options?: {
+      isActive?: boolean;
+      isFavorite?: boolean;
+    }
+  ) => {
     if (!tenantId) return;
 
     const existing = products.find((product) => product.id === productId);
@@ -355,8 +374,8 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           existingSaleMode: existing.sale_mode,
           existingStockMin: existing.stock_min,
           existingStockMax: existing.stock_max,
-          isActive: existing.is_active,
-          isFavorite: existing.is_favorite,
+          isActive: options?.isActive ?? existing.is_active,
+          isFavorite: options?.isFavorite ?? existing.is_favorite,
         })
       );
       await productsService.setPrimaryBarcode(tenantId, productId, values.codigoBarras ?? "");
