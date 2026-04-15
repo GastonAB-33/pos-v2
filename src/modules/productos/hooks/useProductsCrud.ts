@@ -562,6 +562,8 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       }
 
       patchPrimaryBarcodeState(productId, values.codigoBarras ?? "");
+      const previousBarcode = normalizeBarcode(primaryBarcodes[productId] ?? null) ?? null;
+      const nextBarcode = normalizeBarcode(values.codigoBarras ?? null) ?? null;
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "productos",
@@ -572,15 +574,30 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
         metadata: {
           previous_name: existing.name,
           next_name: values.nombre,
-          category: values.categoria,
-          subcategory: values.subcategoria?.trim() || null,
-          stock_current: values.stock,
-          cost_price: values.precioCosto,
-          price: values.precioFinal,
-          vat_percent: values.porcentajeIva,
-          profit_percent: values.porcentajeGanancia,
-          price_without_vat: values.precioSinIva,
-          is_favorite: existing.is_favorite,
+          previous_code: existing.code,
+          next_code: values.codigoProducto || existing.code,
+          previous_barcode: previousBarcode,
+          next_barcode: nextBarcode,
+          previous_category: existing.category,
+          next_category: values.categoria,
+          previous_subcategory: existing.subcategory ?? null,
+          next_subcategory: values.subcategoria?.trim() || null,
+          previous_stock_current: existing.stock_current,
+          next_stock_current: values.stock,
+          previous_cost_price: existing.cost_price,
+          next_cost_price: values.precioCosto,
+          previous_price: existing.price,
+          next_price: values.precioFinal,
+          previous_vat_percent: existing.vat_percent ?? DEFAULT_IVA_PERCENT,
+          next_vat_percent: values.porcentajeIva,
+          previous_profit_percent: existing.profit_percent ?? 0,
+          next_profit_percent: values.porcentajeGanancia,
+          previous_price_without_vat: existing.price_without_vat ?? 0,
+          next_price_without_vat: values.precioSinIva,
+          previous_is_active: existing.is_active,
+          next_is_active: options?.isActive ?? existing.is_active,
+          previous_is_favorite: existing.is_favorite,
+          next_is_favorite: options?.isFavorite ?? existing.is_favorite,
         },
       });
       setFeedback({ type: "success", message: "Producto actualizado" });

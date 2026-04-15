@@ -39,6 +39,93 @@ const PRODUCT_AUDIT_ACTION_LABELS: Record<string, string> = {
 
 const PRODUCT_AUDIT_ALLOWED_ACTIONS = new Set(Object.keys(PRODUCT_AUDIT_ACTION_LABELS));
 
+type MetadataRecord = Record<string, unknown>;
+
+const formatAuditValue = (value: unknown, kind: "text" | "money" | "number" | "boolean"): string => {
+  if (kind === "boolean") {
+    if (typeof value !== "boolean") return "-";
+    return value ? "Sí" : "No";
+  }
+
+  if (kind === "money") {
+    if (typeof value !== "number" || Number.isNaN(value)) return "-";
+    return new Intl.NumberFormat("es-AR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
+
+  if (kind === "number") {
+    if (typeof value !== "number" || Number.isNaN(value)) return "-";
+    return new Intl.NumberFormat("es-AR", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 3,
+    }).format(value);
+  }
+
+  if (typeof value !== "string") return "-";
+  return value.trim() || "-";
+};
+
+const sameAuditValue = (left: unknown, right: unknown): boolean => {
+  if (typeof left === "number" && typeof right === "number") {
+    return Math.abs(left - right) < 0.0001;
+  }
+
+  if (typeof left === "string" && typeof right === "string") {
+    return left.trim() === right.trim();
+  }
+
+  return left === right;
+};
+
+const summarizeProductUpdate = (description: string, metadata: Record<string, unknown> | null): string => {
+  if (!metadata) return description;
+
+  const fields: Array<{
+    label: string;
+    previousKey: string;
+    nextKey: string;
+    kind: "text" | "money" | "number" | "boolean";
+  }> = [
+    { label: "nombre", previousKey: "previous_name", nextKey: "next_name", kind: "text" },
+    { label: "código", previousKey: "previous_code", nextKey: "next_code", kind: "text" },
+    { label: "cód. barras", previousKey: "previous_barcode", nextKey: "next_barcode", kind: "text" },
+    { label: "categoría", previousKey: "previous_category", nextKey: "next_category", kind: "text" },
+    { label: "subcategoría", previousKey: "previous_subcategory", nextKey: "next_subcategory", kind: "text" },
+    { label: "stock", previousKey: "previous_stock_current", nextKey: "next_stock_current", kind: "number" },
+    { label: "precio costo", previousKey: "previous_cost_price", nextKey: "next_cost_price", kind: "money" },
+    { label: "precio final", previousKey: "previous_price", nextKey: "next_price", kind: "money" },
+    { label: "% IVA", previousKey: "previous_vat_percent", nextKey: "next_vat_percent", kind: "number" },
+    { label: "% ganancia", previousKey: "previous_profit_percent", nextKey: "next_profit_percent", kind: "number" },
+    {
+      label: "precio sin IVA",
+      previousKey: "previous_price_without_vat",
+      nextKey: "next_price_without_vat",
+      kind: "money",
+    },
+    { label: "activo", previousKey: "previous_is_active", nextKey: "next_is_active", kind: "boolean" },
+    { label: "favorito", previousKey: "previous_is_favorite", nextKey: "next_is_favorite", kind: "boolean" },
+  ];
+
+  const changes = fields
+    .filter((field) => field.previousKey in metadata && field.nextKey in metadata)
+    .filter((field) => !sameAuditValue(metadata[field.previousKey], metadata[field.nextKey]))
+    .map((field) => {
+      const previous = formatAuditValue(metadata[field.previousKey], field.kind);
+      const next = formatAuditValue(metadata[field.nextKey], field.kind);
+      return `${field.label}: ${previous} -> ${next}`;
+    });
+
+  if (!changes.length) return description;
+
+  const max = 4;
+  const visible = changes.slice(0, max).join(" | ");
+  const hiddenCount = changes.length - max;
+
+  return hiddenCount > 0 ? `${visible} | +${hiddenCount} cambios` : visible;
+};
+
 export const getProductAuditActionLabel = (action: string): string => {
   return PRODUCT_AUDIT_ACTION_LABELS[action] ?? action.replace(/_/g, " ");
 };
@@ -116,7 +203,10 @@ export const getProductAuditLog = async (tenantId: string, limit = 24): Promise<
       date: row.created_at,
       user: userById.get(row.user_id ?? "") || "Sistema",
       action: getProductAuditActionLabel(row.action),
-      description: row.description,
+      description:
+        row.action === "update"
+          ? summarizeProductUpdate(row.description, (row.metadata as MetadataRecord | null) ?? null)
+          : row.description,
     }));
 };
 

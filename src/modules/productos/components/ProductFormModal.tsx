@@ -516,9 +516,11 @@ export const ProductFormModal = ({
                 </div>
 
                 <div>
-                  <div className="mb-1 flex min-h-[2.25rem] items-center justify-between gap-2">
-                    <label className="block whitespace-nowrap text-sm font-medium leading-5 text-slate-700">Código de barras</label>
-                    <div className="flex min-h-[2rem] items-center gap-1">
+                  <label className="mb-1 block whitespace-nowrap text-sm font-medium leading-5 text-slate-700">
+                    Código de barras
+                  </label>
+                  <div className="mb-1 flex h-8 items-center gap-1">
+                    <div className="shrink-0">
                       <VoiceDictationButton
                         value={codigoBarras ?? ""}
                         onValueChange={(nextValue) =>
@@ -531,15 +533,15 @@ export const ProductFormModal = ({
                         disabled={disabled}
                         label="Dictar código de barras"
                       />
-                      <button
-                        type="button"
-                        className="ui-btn-ghost px-2 py-1 text-xs"
-                        onClick={() => setScannerOpen(true)}
-                        disabled={disabled}
-                      >
-                        Escanear cámara
-                      </button>
                     </div>
+                    <button
+                      type="button"
+                      className="ui-btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs"
+                      onClick={() => setScannerOpen(true)}
+                      disabled={disabled}
+                    >
+                      Escanear cámara
+                    </button>
                   </div>
                   <input
                     {...register("codigoBarras", {
@@ -554,9 +556,11 @@ export const ProductFormModal = ({
                 </div>
 
                 <div>
-                  <div className="mb-1 flex min-h-[2.25rem] items-center justify-between gap-2">
-                    <label className="block whitespace-nowrap text-sm font-medium leading-5 text-slate-700">Código de producto</label>
-                    <div className="flex min-h-[2rem] items-center">
+                  <label className="mb-1 block whitespace-nowrap text-sm font-medium leading-5 text-slate-700">
+                    Código de producto
+                  </label>
+                  <div className="mb-1 flex h-8 items-center justify-start">
+                    <div className="shrink-0">
                       <VoiceDictationButton
                         value={codigoProducto ?? ""}
                         onValueChange={(nextValue) =>
