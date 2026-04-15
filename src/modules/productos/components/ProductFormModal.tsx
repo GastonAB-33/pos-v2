@@ -446,11 +446,12 @@ export const ProductFormModal = ({
 
   return (
     <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-4">
-      <div className="max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-panel md:p-5">
-        <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+      <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-panel md:p-6">
+        <div className="mb-5 flex items-center justify-between gap-3 border-b border-slate-200 pb-4">
           <div>
-            <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-            <p className="text-xs text-slate-500">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-700">Gestión de productos</p>
+            <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+            <p className="mt-0.5 text-xs text-slate-500">
               Cálculo automático en vivo. Guardado solo con el botón "Guardar".
             </p>
           </div>
@@ -459,10 +460,16 @@ export const ProductFormModal = ({
           </button>
         </div>
 
-        <form className="space-y-4" onSubmit={handleSubmit(handleFormSubmit)} onKeyDown={handlePreventEnterSubmit}>
-          <div className="grid gap-4 xl:grid-cols-[1fr_220px]">
-            <div className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <form className="space-y-6" onSubmit={handleSubmit(handleFormSubmit)} onKeyDown={handlePreventEnterSubmit}>
+          <div className="grid gap-5 xl:grid-cols-[1fr_280px]">
+            <div className="space-y-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5">
+              <div>
+                <h4 className="text-sm font-semibold text-slate-900">Datos básicos</h4>
+                <p className="mt-1 text-xs text-slate-500">
+                  Información principal del producto, identificación y stock.
+                </p>
+              </div>
+              <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-2 xl:grid-cols-3">
                 <div className="xl:col-span-2">
                   <div className="mb-1 flex items-center justify-between gap-2">
                     <label className="block text-sm font-medium text-slate-700">Nombre</label>
@@ -573,76 +580,88 @@ export const ProductFormModal = ({
                     <p className="mt-1 text-xs text-red-600">{errors.codigoProducto.message}</p>
                   ) : null}
                 </div>
+              </div>
 
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Categoría</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      list="categorias-productos"
-                      {...register("categoria", {
-                        onBlur: (event) => ensureCategory(event.target.value),
-                      })}
-                      className="ui-input"
-                      disabled={disabled}
-                      placeholder="Buscar o crear categoría"
-                    />
-                    <button
-                      type="button"
-                      className="ui-btn-ghost px-2 py-1 text-xs"
-                      onClick={() => ensureCategory(categoria ?? "")}
-                      disabled={disabled || !categoria?.trim()}
-                    >
-                      Crear
-                    </button>
-                  </div>
-                  <datalist id="categorias-productos">
-                    {localCategories.map((item) => (
-                      <option key={item} value={item} />
-                    ))}
-                  </datalist>
-                  {errors.categoria ? <p className="mt-1 text-xs text-red-600">{errors.categoria.message}</p> : null}
+                  <h5 className="text-sm font-semibold text-slate-900">Clasificación</h5>
+                  <p className="mt-1 text-xs text-slate-500">Asigna categoría y subcategoría para organizar mejor el catálogo.</p>
                 </div>
 
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Subcategoría</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      list="subcategorias-productos"
-                      {...register("subcategoria", {
-                        onBlur: (event) => ensureSubcategory(event.target.value),
-                      })}
-                      className="ui-input"
-                      disabled={disabled}
-                      placeholder="Buscar o crear subcategoría"
-                    />
-                    <button
-                      type="button"
-                      className="ui-btn-ghost px-2 py-1 text-xs"
-                      onClick={() => ensureSubcategory(subcategoria ?? "")}
-                      disabled={disabled || !subcategoria?.trim()}
-                    >
-                      Crear
-                    </button>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Categoría</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        list="categorias-productos"
+                        {...register("categoria", {
+                          onBlur: (event) => ensureCategory(event.target.value),
+                        })}
+                        className="ui-input"
+                        disabled={disabled}
+                        placeholder="Buscar o crear categoría"
+                      />
+                      <button
+                        type="button"
+                        className="ui-btn-ghost px-2 py-1 text-xs"
+                        onClick={() => ensureCategory(categoria ?? "")}
+                        disabled={disabled || !categoria?.trim()}
+                      >
+                        Crear
+                      </button>
+                    </div>
+                    <datalist id="categorias-productos">
+                      {localCategories.map((item) => (
+                        <option key={item} value={item} />
+                      ))}
+                    </datalist>
+                    {errors.categoria ? <p className="mt-1 text-xs text-red-600">{errors.categoria.message}</p> : null}
                   </div>
-                  <datalist id="subcategorias-productos">
-                    {localSubcategories.map((item) => (
-                      <option key={item} value={item} />
-                    ))}
-                  </datalist>
-                  {errors.subcategoria ? (
-                    <p className="mt-1 text-xs text-red-600">{errors.subcategoria.message}</p>
-                  ) : null}
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Subcategoría</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        list="subcategorias-productos"
+                        {...register("subcategoria", {
+                          onBlur: (event) => ensureSubcategory(event.target.value),
+                        })}
+                        className="ui-input"
+                        disabled={disabled}
+                        placeholder="Buscar o crear subcategoría"
+                      />
+                      <button
+                        type="button"
+                        className="ui-btn-ghost px-2 py-1 text-xs"
+                        onClick={() => ensureSubcategory(subcategoria ?? "")}
+                        disabled={disabled || !subcategoria?.trim()}
+                      >
+                        Crear
+                      </button>
+                    </div>
+                    <datalist id="subcategorias-productos">
+                      {localSubcategories.map((item) => (
+                        <option key={item} value={item} />
+                      ))}
+                    </datalist>
+                    {errors.subcategoria ? (
+                      <p className="mt-1 text-xs text-red-600">{errors.subcategoria.message}</p>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </div>
 
-            <aside className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <h4 className="mb-2 text-sm font-semibold text-slate-900">Fotografía</h4>
-              <div className="flex h-44 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <aside className="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div>
+                <h4 className="text-sm font-semibold text-slate-900">Fotografía</h4>
+                <p className="mt-1 text-xs text-slate-500">Agrega una imagen para identificar el producto rápidamente en el catálogo y en POS.</p>
+              </div>
+              <div className="mt-3 flex h-60 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-slate-50">
                 {imagenPreview ? (
                   <img src={imagenPreview} alt="Foto del producto" className="h-full w-full object-cover" />
                 ) : (
-                  <span className="px-3 text-center text-xs text-slate-500">Sin imagen</span>
+                  <span className="px-3 text-center text-xs text-slate-500">Sin imagen cargada</span>
                 )}
               </div>
 
@@ -655,21 +674,27 @@ export const ProductFormModal = ({
                 onChange={handleImagePick}
               />
 
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 grid gap-2">
                 <button
                   type="button"
-                  className="ui-btn-ghost w-full justify-center px-2 py-1 text-xs"
+                  className="ui-btn-ghost w-full justify-center gap-2 px-2 py-1.5 text-xs"
                   onClick={() => photoInputRef.current?.click()}
                   disabled={disabled}
                 >
-                  Editar foto
+                  <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-current stroke-2">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  Cargar o reemplazar
                 </button>
                 <button
                   type="button"
-                  className="ui-btn-ghost w-full justify-center px-2 py-1 text-xs"
+                  className="ui-btn-ghost w-full justify-center gap-2 px-2 py-1.5 text-xs"
                   onClick={handleRemovePhoto}
                   disabled={disabled || !imagenPreview}
                 >
+                  <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-none stroke-current stroke-2">
+                    <path d="M3 6h18M8 6V4h8v2M7 6l1 14h8l1-14M10 10v6M14 10v6" />
+                  </svg>
                   Eliminar foto
                 </button>
               </div>
@@ -678,11 +703,16 @@ export const ProductFormModal = ({
             </aside>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <h4 className="mb-3 text-sm font-semibold text-slate-900">Precios y cálculo</h4>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5">
+            <div className="mb-3">
+              <h4 className="text-sm font-semibold text-slate-900">Precios y cálculo</h4>
+              <p className="mt-1 text-xs text-slate-500">
+                Modifica costo, ganancia, IVA o precio final y el sistema recalcula automáticamente.
+              </p>
+            </div>
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              <div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
                 <label className="mb-1 block text-sm font-medium text-slate-700">Precio de costo</label>
                 <input
                   type="number"
@@ -700,7 +730,7 @@ export const ProductFormModal = ({
                 ) : null}
               </div>
 
-              <div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
                 <label className="mb-1 block text-sm font-medium text-slate-700">% Ganancia</label>
                 <input
                   type="number"
@@ -718,14 +748,19 @@ export const ProductFormModal = ({
                 ) : null}
               </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Precio sin IVA</label>
+              <div className="rounded-xl border border-sky-200 bg-sky-50 p-3">
+                <div className="mb-1 flex items-center gap-2">
+                  <label className="block text-sm font-medium text-slate-700">Precio sin IVA</label>
+                  <span className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-sky-700">
+                    Calculado
+                  </span>
+                </div>
                 <input
                   type="number"
                   step="0.01"
                   {...register("precioSinIva")}
                   readOnly
-                  className="ui-input bg-slate-100"
+                  className="ui-input bg-sky-50 font-semibold"
                   disabled={disabled}
                 />
                 {errors.precioSinIva ? (
@@ -733,7 +768,7 @@ export const ProductFormModal = ({
                 ) : null}
               </div>
 
-              <div>
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
                 <label className="mb-1 block text-sm font-medium text-slate-700">% IVA</label>
                 <input
                   type="number"
@@ -751,8 +786,13 @@ export const ProductFormModal = ({
                 ) : null}
               </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Precio final</label>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                <div className="mb-1 flex items-center gap-2">
+                  <label className="block text-sm font-medium text-slate-700">Precio final</label>
+                  <span className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-700">
+                    Principal
+                  </span>
+                </div>
                 <input
                   type="number"
                   step="0.01"
@@ -761,7 +801,7 @@ export const ProductFormModal = ({
                     onChange: () => setCalcMode("backward"),
                     onBlur: applyBackwardPricing,
                   })}
-                  className="ui-input"
+                  className="ui-input border-emerald-200 bg-emerald-50 text-base font-semibold"
                   disabled={disabled}
                 />
                 {errors.precioFinal ? (
@@ -775,25 +815,45 @@ export const ProductFormModal = ({
             </p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-              <input type="checkbox" {...register("favorito")} disabled={disabled} />
-              Marcar como favorito para POS
-            </label>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5">
+            <h4 className="mb-3 text-sm font-semibold text-slate-900">Estado y favorito</h4>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
+                <div>
+                  <p className="font-medium text-slate-900">Favorito en POS</p>
+                  <p className="text-xs text-slate-500">Aparece destacado para acceso rápido en la venta.</p>
+                </div>
+                <span className="relative inline-flex h-6 w-11 shrink-0 items-center">
+                  <input type="checkbox" className="peer sr-only" {...register("favorito")} disabled={disabled} />
+                  <span className="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-brand-600 peer-disabled:opacity-50" />
+                  <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+                </span>
+              </label>
 
-            <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
-              <input type="checkbox" {...register("estadoActivo")} disabled={disabled} />
-              Producto activo
-            </label>
+              <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
+                <div>
+                  <p className="font-medium text-slate-900">Producto activo</p>
+                  <p className="text-xs text-slate-500">Controla si el producto está disponible en el sistema.</p>
+                </div>
+                <span className="relative inline-flex h-6 w-11 shrink-0 items-center">
+                  <input type="checkbox" className="peer sr-only" {...register("estadoActivo")} disabled={disabled} />
+                  <span className="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-brand-600 peer-disabled:opacity-50" />
+                  <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+                </span>
+              </label>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-3">
-            <button type="button" className="ui-btn-ghost" onClick={onClose} disabled={disabled}>
-              Cancelar
-            </button>
-            <button type="submit" className="ui-btn-primary" disabled={disabled}>
-              {mode === "create" ? "Crear producto" : "Guardar cambios"}
-            </button>
+          <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
+            <p className="text-xs text-slate-500">Los cambios se aplican solo al presionar el botón de guardado.</p>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button type="button" className="ui-btn-ghost" onClick={onClose} disabled={disabled}>
+                Cancelar
+              </button>
+              <button type="submit" className="ui-btn-primary" disabled={disabled}>
+                {mode === "create" ? "Crear producto" : "Guardar cambios"}
+              </button>
+            </div>
           </div>
         </form>
       </div>
