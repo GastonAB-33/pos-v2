@@ -4,6 +4,7 @@ import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { StockAdjustmentForm } from "@/modules/stock/components/StockAdjustmentForm";
 import { StockMovementsTable } from "@/modules/stock/components/StockMovementsTable";
+import { StockTrackingTable } from "@/modules/stock/components/StockTrackingTable";
 import { StockSummaryCards } from "@/modules/stock/components/StockSummaryCards";
 import { useStockModule } from "@/modules/stock/hooks/useStockModule";
 
@@ -18,9 +19,9 @@ export const StockPage = () => {
     products,
     stockSettings,
     productsById,
-    alertRows,
     movementRows,
     summary,
+    categoryOptions,
     movementTypeFilter,
     setMovementTypeFilter,
     dateFrom,
@@ -33,6 +34,8 @@ export const StockPage = () => {
     clearFeedback,
     reload,
     applyManualAdjustment,
+    updateStockThreshold,
+    updateStockThresholdBulk,
   } = useStockModule(tenantId, user?.id ?? null);
 
   const movementViewRows = movementRows.map((movement) => ({
@@ -113,45 +116,13 @@ export const StockPage = () => {
           />
         ) : null}
 
-        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
-          <h2 className="text-base font-semibold text-slate-900">Alertas de stock</h2>
-          {!alertRows.length ? (
-            <p className="text-sm text-slate-500">No hay alertas activas.</p>
-          ) : (
-            <div className="space-y-2">
-              {alertRows.map(({ product, isNoStock, isLow, isOver }) => (
-                <article
-                  key={product.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">{product.name}</p>
-                    <p className="text-xs text-slate-500">
-                      Stock actual: {product.stock_current.toLocaleString("es-AR")}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {isNoStock ? (
-                      <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-medium text-red-700">
-                        Sin stock
-                      </span>
-                    ) : null}
-                    {isLow ? (
-                      <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">
-                        Bajo minimo
-                      </span>
-                    ) : null}
-                    {isOver ? (
-                      <span className="rounded-full bg-sky-100 px-2 py-1 text-xs font-medium text-sky-700">
-                        Sobre maximo
-                      </span>
-                    ) : null}
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
+        <StockTrackingTable
+          products={products}
+          categories={categoryOptions}
+          disabled={isSubmitting || !canWriteStock}
+          onUpdateOne={updateStockThreshold}
+          onUpdateBulk={updateStockThresholdBulk}
+        />
 
         <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
           <div className="grid gap-3 md:grid-cols-3">

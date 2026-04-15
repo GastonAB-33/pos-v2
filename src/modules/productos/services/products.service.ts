@@ -81,6 +81,7 @@ const sameAuditValue = (left: unknown, right: unknown): boolean => {
 
 const summarizeProductUpdate = (description: string, metadata: Record<string, unknown> | null): string => {
   if (!metadata) return description;
+  const productName = formatAuditValue(metadata.next_name ?? metadata.previous_name, "text");
 
   const fields: Array<{
     label: string;
@@ -88,14 +89,14 @@ const summarizeProductUpdate = (description: string, metadata: Record<string, un
     nextKey: string;
     kind: "text" | "money" | "number" | "boolean";
   }> = [
-    { label: "nombre", previousKey: "previous_name", nextKey: "next_name", kind: "text" },
-    { label: "código", previousKey: "previous_code", nextKey: "next_code", kind: "text" },
-    { label: "cód. barras", previousKey: "previous_barcode", nextKey: "next_barcode", kind: "text" },
+    { label: "precio final", previousKey: "previous_price", nextKey: "next_price", kind: "money" },
+    { label: "precio costo", previousKey: "previous_cost_price", nextKey: "next_cost_price", kind: "money" },
+    { label: "stock", previousKey: "previous_stock_current", nextKey: "next_stock_current", kind: "number" },
     { label: "categoría", previousKey: "previous_category", nextKey: "next_category", kind: "text" },
     { label: "subcategoría", previousKey: "previous_subcategory", nextKey: "next_subcategory", kind: "text" },
-    { label: "stock", previousKey: "previous_stock_current", nextKey: "next_stock_current", kind: "number" },
-    { label: "precio costo", previousKey: "previous_cost_price", nextKey: "next_cost_price", kind: "money" },
-    { label: "precio final", previousKey: "previous_price", nextKey: "next_price", kind: "money" },
+    { label: "código", previousKey: "previous_code", nextKey: "next_code", kind: "text" },
+    { label: "cód. barras", previousKey: "previous_barcode", nextKey: "next_barcode", kind: "text" },
+    { label: "nombre", previousKey: "previous_name", nextKey: "next_name", kind: "text" },
     { label: "% IVA", previousKey: "previous_vat_percent", nextKey: "next_vat_percent", kind: "number" },
     { label: "% ganancia", previousKey: "previous_profit_percent", nextKey: "next_profit_percent", kind: "number" },
     {
@@ -108,22 +109,18 @@ const summarizeProductUpdate = (description: string, metadata: Record<string, un
     { label: "favorito", previousKey: "previous_is_favorite", nextKey: "next_is_favorite", kind: "boolean" },
   ];
 
-  const changes = fields
+  const firstChange = fields
     .filter((field) => field.previousKey in metadata && field.nextKey in metadata)
     .filter((field) => !sameAuditValue(metadata[field.previousKey], metadata[field.nextKey]))
     .map((field) => {
       const previous = formatAuditValue(metadata[field.previousKey], field.kind);
       const next = formatAuditValue(metadata[field.nextKey], field.kind);
       return `${field.label}: ${previous} -> ${next}`;
-    });
+    })[0];
 
-  if (!changes.length) return description;
-
-  const max = 4;
-  const visible = changes.slice(0, max).join(" | ");
-  const hiddenCount = changes.length - max;
-
-  return hiddenCount > 0 ? `${visible} | +${hiddenCount} cambios` : visible;
+  if (!firstChange) return description;
+  if (productName !== "-") return `${productName} - ${firstChange}`;
+  return firstChange;
 };
 
 export const getProductAuditActionLabel = (action: string): string => {
