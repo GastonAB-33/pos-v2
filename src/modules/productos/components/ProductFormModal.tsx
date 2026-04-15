@@ -516,9 +516,9 @@ export const ProductFormModal = ({
                 </div>
 
                 <div>
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <label className="block text-sm font-medium text-slate-700">Código de barras</label>
-                    <div className="flex items-center gap-1">
+                  <div className="mb-1 flex min-h-[2.25rem] items-center justify-between gap-2">
+                    <label className="block whitespace-nowrap text-sm font-medium leading-5 text-slate-700">Código de barras</label>
+                    <div className="flex min-h-[2rem] items-center gap-1">
                       <VoiceDictationButton
                         value={codigoBarras ?? ""}
                         onValueChange={(nextValue) =>
@@ -554,20 +554,22 @@ export const ProductFormModal = ({
                 </div>
 
                 <div>
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <label className="block text-sm font-medium text-slate-700">Código de producto</label>
-                    <VoiceDictationButton
-                      value={codigoProducto ?? ""}
-                      onValueChange={(nextValue) =>
-                        setValue("codigoProducto", normalizeVoiceProductCode(nextValue), {
-                          shouldDirty: true,
-                          shouldValidate: true,
-                        })
-                      }
-                      insertMode="replace"
-                      disabled={disabled}
-                      label="Dictar código de producto"
-                    />
+                  <div className="mb-1 flex min-h-[2.25rem] items-center justify-between gap-2">
+                    <label className="block whitespace-nowrap text-sm font-medium leading-5 text-slate-700">Código de producto</label>
+                    <div className="flex min-h-[2rem] items-center">
+                      <VoiceDictationButton
+                        value={codigoProducto ?? ""}
+                        onValueChange={(nextValue) =>
+                          setValue("codigoProducto", normalizeVoiceProductCode(nextValue), {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          })
+                        }
+                        insertMode="replace"
+                        disabled={disabled}
+                        label="Dictar código de producto"
+                      />
+                    </div>
                   </div>
                   <input
                     {...register("codigoProducto", {
