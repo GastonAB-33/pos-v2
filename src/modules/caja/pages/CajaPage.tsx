@@ -84,18 +84,7 @@ export const CajaPage = () => {
           {cashSettings.require_notes_on_manual_movements ? " | observacion obligatoria" : ""}
         </p>
 
-        {feedback ? (
-          <div
-            className={[
-              "rounded-lg border px-3 py-2 text-sm",
-              feedback.type === "success"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-red-200 bg-red-50 text-red-700",
-            ].join(" ")}
-          >
-            {feedback.message}
-          </div>
-        ) : null}
+        {feedback ? <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>{feedback.message}</div> : null}
 
         <CashSummaryCards
           openingAmount={summary.openingAmount}

@@ -9,7 +9,7 @@ import { StockTrackingTable } from "@/modules/stock/components/StockTrackingTabl
 import { StockSummaryCards } from "@/modules/stock/components/StockSummaryCards";
 import { useStockModule } from "@/modules/stock/hooks/useStockModule";
 import { movementTypeLabel } from "@/modules/stock/utils/stock-labels";
-import { downloadCsv } from "@/utils/csv";
+import { downloadXlsx } from "@/utils/xlsx";
 import type { StockMovement } from "@/types/entities";
 
 interface DateFilterInputProps {
@@ -36,23 +36,17 @@ const DateFilterInput = ({ label, value, onChange }: DateFilterInputProps) => {
   };
 
   return (
-    <div className="relative">
+    <div>
       <label className="mb-1 block text-xs font-medium text-slate-600">{label}</label>
       <input
         ref={inputRef}
         type="date"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="ui-input cursor-pointer pr-14"
-      />
-      <button
-        type="button"
         onClick={openPicker}
-        className="absolute right-1 top-[1.35rem] h-9 w-12 rounded-md border border-slate-200 bg-slate-50 text-[10px] text-slate-600"
-        aria-label={`Abrir calendario de ${label.toLowerCase()}`}
-      >
-        Abrir
-      </button>
+        onFocus={openPicker}
+        className="ui-input cursor-pointer"
+      />
     </div>
   );
 };
@@ -104,7 +98,7 @@ export const StockPage = () => {
     product: productsById.get(movement.product_id) ?? null,
   }));
 
-  const handleDownloadMovementHistory = () => {
+  const handleDownloadMovementHistory = async () => {
     const reportRows = movementViewRows.map(({ movement, product }) => ({
       fecha: new Date(movement.created_at).toLocaleString("es-AR"),
       producto: product?.name ?? "Producto eliminado",
@@ -117,7 +111,11 @@ export const StockPage = () => {
       observacion: movement.notes ?? "",
     }));
 
-    void downloadCsv(`historial-stock-${formatCsvDateStamp()}.csv`, reportRows);
+    void downloadXlsx(
+      `historial-stock-${formatCsvDateStamp()}.xlsx`,
+      "Historial stock",
+      reportRows
+    );
   };
 
   if (!tenantId) {
@@ -186,18 +184,7 @@ export const StockPage = () => {
           overMax={summary.overMax}
         />
 
-        {feedback ? (
-          <div
-            className={[
-              "rounded-lg border px-3 py-2 text-sm",
-              feedback.type === "success"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-red-200 bg-red-50 text-red-700",
-            ].join(" ")}
-          >
-            {feedback.message}
-          </div>
-        ) : null}
+        {feedback ? <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>{feedback.message}</div> : null}
 
         <StockTrackingTable
           products={products}

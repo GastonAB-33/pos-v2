@@ -1,5 +1,5 @@
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
-import { EmptyState, ErrorState, LoadingState } from "@/components/ui/UiStates";
+import { EmptyState, LoadingState } from "@/components/ui/UiStates";
 import { useToast } from "@/components/ui/useToast";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -42,7 +42,8 @@ export const CuentasCorrientesPage = () => {
   useEffect(() => {
     if (!feedback) return;
     toast.error(feedback.message);
-  }, [feedback, toast]);
+    clearFeedback();
+  }, [clearFeedback, feedback, toast]);
 
   if (!tenantId) {
     return (
@@ -88,10 +89,6 @@ export const CuentasCorrientesPage = () => {
             Recargar
           </button>
         </div>
-
-        {feedback ? (
-          <ErrorState message={feedback.message} />
-        ) : null}
 
         <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
           <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel">

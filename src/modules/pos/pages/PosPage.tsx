@@ -923,12 +923,6 @@ export const PosPage = () => {
           </p>
         ) : null}
 
-        {feedback ? (
-          <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>
-            {feedback.message}
-          </div>
-        ) : null}
-
         {!paymentMethods.length ? (
           <div className="ui-empty-state">
             No hay medios de pago activos. Configuralos desde el modulo Medios de pago.

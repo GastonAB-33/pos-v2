@@ -99,15 +99,14 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
       .map((item) => {
         const quantityIn = roundQty(Math.max(0, item.quantityIn));
         const quantityOut = roundQty(Math.max(0, item.quantityOut));
-        const quantity = roundQty(quantityIn - quantityOut);
         return {
           productId: item.productId,
           quantityIn,
           quantityOut,
-          quantity,
+          netQuantity: roundQty(quantityIn - quantityOut),
         };
       })
-      .filter((item) => item.quantity !== 0);
+      .filter((item) => item.quantityIn > 0 || item.quantityOut > 0);
 
     if (!normalizedAdjustments.length) {
       setFeedback({
@@ -133,7 +132,7 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
           continue;
         }
 
-        const nextStock = roundQty(product.stock_current + adjustment.quantity);
+        const nextStock = roundQty(product.stock_current + adjustment.netQuantity);
         if (!stockSettings.allow_negative_stock && nextStock < 0) {
           skipped += 1;
           skippedProducts.push(product.name);
@@ -141,22 +140,37 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
         }
 
         try {
-          const movement = await stockService.create(tenantId, {
-            product_id: product.id,
-            movement_type: "adjustment",
-            quantity: adjustment.quantity,
-            reference_type: "manual_adjustment",
-            reference_id: null,
-            notes,
-            created_by: userId,
-          });
+          if (adjustment.quantityIn > 0) {
+            const movementIn = await stockService.create(tenantId, {
+              product_id: product.id,
+              movement_type: "in",
+              quantity: adjustment.quantityIn,
+              reference_type: "in",
+              reference_id: null,
+              notes: notes ? `${notes} | Ingreso manual` : "Ingreso manual",
+              created_by: userId,
+            });
+            appendMovementInState(movementIn);
+          }
+
+          if (adjustment.quantityOut > 0) {
+            const movementOut = await stockService.create(tenantId, {
+              product_id: product.id,
+              movement_type: "out",
+              quantity: adjustment.quantityOut,
+              reference_type: "out",
+              reference_id: null,
+              notes: notes ? `${notes} | Salida manual` : "Salida manual",
+              created_by: userId,
+            });
+            appendMovementInState(movementOut);
+          }
 
           await productsService.update(tenantId, product.id, {
             stock_current: nextStock,
           });
 
           patchProductInState(product.id, { stock_current: nextStock });
-          appendMovementInState(movement);
 
           productsMap.set(product.id, {
             ...product,

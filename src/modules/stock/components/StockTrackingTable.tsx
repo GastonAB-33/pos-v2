@@ -1,6 +1,6 @@
 ﻿import { useMemo, useState } from "react";
 import type { Product } from "@/types/entities";
-import { downloadCsv } from "@/utils/csv";
+import { downloadXlsx } from "@/utils/xlsx";
 import {
   getStockStatus,
   stockStatusLabel,
@@ -165,7 +165,7 @@ export const StockTrackingTable = ({
     });
   };
 
-  const handleDownloadStatusReport = () => {
+  const handleDownloadStatusReport = async () => {
     const reportRows = rows.map((product) => {
       const status = getStockStatus(product);
       return {
@@ -180,7 +180,7 @@ export const StockTrackingTable = ({
       };
     });
 
-    const ok = downloadCsv(`informe-estado-stock-${buildReportDateStamp()}.csv`, reportRows);
+    const ok = await downloadXlsx(`informe-estado-stock-${buildReportDateStamp()}.xlsx`, "Estado stock", reportRows);
     setReportMessage(ok ? "Informe de estado de stock descargado" : "No hay datos para exportar");
   };
 
@@ -198,7 +198,9 @@ export const StockTrackingTable = ({
           <button
             type="button"
             className="ui-btn-ghost px-2 py-1 text-xs"
-            onClick={handleDownloadStatusReport}
+            onClick={() => {
+              void handleDownloadStatusReport();
+            }}
             disabled={!rows.length}
           >
             Descargar informe de estado
@@ -380,3 +382,4 @@ export const StockTrackingTable = ({
     </section>
   );
 };
+
