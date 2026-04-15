@@ -1,9 +1,11 @@
 import { dbTables } from "@/lib/database/tables";
+import { supabase } from "@/lib/supabase/client";
 import {
   TenantCrudService,
   type CreateEntityInput,
   type UpdateEntityInput,
 } from "@/services/base/tenant-crud.service";
+import { isMockDataProvider } from "@/services/config/data-provider";
 import type { Product, ProductBarcode } from "@/types/entities";
 
 const crud = new TenantCrudService<Product>(dbTables.products);
@@ -14,6 +16,34 @@ export type UpdateProductInput = UpdateEntityInput<Product>;
 export type CreateProductBarcodeInput = CreateEntityInput<ProductBarcode>;
 
 const normalizeBarcode = (value: string) => value.trim().replace(/\s+/g, "");
+const productImagesBucket =
+  (import.meta.env.VITE_SUPABASE_PRODUCT_IMAGES_BUCKET as string | undefined)?.trim() ||
+  "product-images";
+
+const fileToDataUrl = async (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("No se pudo leer la imagen seleccionada"));
+    };
+    reader.onerror = () => reject(new Error("No se pudo leer la imagen seleccionada"));
+    reader.readAsDataURL(file);
+  });
+};
+
+const extractStoragePathFromPublicUrl = (publicUrl: string): string | null => {
+  const marker = `/storage/v1/object/public/${productImagesBucket}/`;
+  const markerIndex = publicUrl.indexOf(marker);
+  if (markerIndex < 0) return null;
+
+  const pathWithParams = publicUrl.slice(markerIndex + marker.length);
+  const [path] = pathWithParams.split("?");
+  return decodeURIComponent(path ?? "");
+};
 
 export const productsService = {
   getAllByTenant: (tenantId: string) => crud.getAllByTenant(tenantId),
@@ -93,5 +123,42 @@ export const productsService = {
       barcode,
       is_primary: true,
     } satisfies CreateProductBarcodeInput);
+  },
+
+  uploadProductImage: async (tenantId: string, productId: string, file: File): Promise<string> => {
+    if (isMockDataProvider) {
+      return fileToDataUrl(file);
+    }
+
+    const normalizedExt = (file.name.split(".").pop() ?? "jpg").toLowerCase();
+    const extension = ["jpg", "jpeg", "png", "webp"].includes(normalizedExt) ? normalizedExt : "jpg";
+    const path = `${tenantId}/${productId}/${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}.${extension}`;
+
+    const { error } = await supabase.storage.from(productImagesBucket).upload(path, file, {
+      cacheControl: "3600",
+      upsert: false,
+      contentType: file.type || "image/jpeg",
+    });
+
+    if (error) {
+      throw new Error(`No se pudo subir la imagen: ${error.message}`);
+    }
+
+    const { data } = supabase.storage.from(productImagesBucket).getPublicUrl(path);
+    return data.publicUrl;
+  },
+
+  deleteProductImageByUrl: async (publicUrl: string | null | undefined): Promise<void> => {
+    if (!publicUrl || isMockDataProvider) return;
+
+    const path = extractStoragePathFromPublicUrl(publicUrl);
+    if (!path) return;
+
+    const { error } = await supabase.storage.from(productImagesBucket).remove([path]);
+    if (error) {
+      throw new Error(`No se pudo eliminar la imagen anterior: ${error.message}`);
+    }
   },
 };

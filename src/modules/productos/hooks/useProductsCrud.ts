@@ -63,6 +63,11 @@ export interface ProductImportResult {
   errorRows: ProductImportErrorRow[];
 }
 
+type ProductWriteValues = ProductFormValues & {
+  imagenFile?: File | null;
+  imagenEliminada?: boolean;
+};
+
 const buildProductCode = (name: string): string => {
   const normalized = name
     .toUpperCase()
@@ -86,22 +91,26 @@ const toServiceInput = (
     existingBrand?: string | null;
     existingSupplier?: string | null;
     existingDescription?: string | null;
-    existingImageUrl?: string | null;
     existingSaleMode?: "unit" | "weight" | null;
     existingStockMin?: number | null;
     existingStockMax?: number | null;
     isActive?: boolean;
     isFavorite?: boolean;
+    forcedImageUrl?: string | null;
   }
 ) => {
   const normalizedImageUrl =
     typeof values.imagenUrl === "string" ? values.imagenUrl.trim() : undefined;
+  const hasForcedImageUrl = options && Object.prototype.hasOwnProperty.call(options, "forcedImageUrl");
 
   return {
     code: values.codigoProducto || options?.existingCode || buildProductCode(values.nombre),
     name: values.nombre || options?.existingName || "Producto",
-    image_url:
-      normalizedImageUrl === undefined ? options?.existingImageUrl ?? null : normalizedImageUrl || null,
+    image_url: hasForcedImageUrl
+      ? options?.forcedImageUrl ?? null
+      : normalizedImageUrl === undefined
+        ? null
+        : normalizedImageUrl || null,
     brand: options?.existingBrand ?? null,
     supplier: options?.existingSupplier ?? null,
     is_favorite: options?.isFavorite ?? false,
@@ -404,7 +413,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
   }, [loadProducts]);
 
   const createProduct = async (
-    values: ProductFormValues,
+    values: ProductWriteValues,
     options?: {
       isActive?: boolean;
       isFavorite?: boolean;
@@ -414,13 +423,36 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
 
     setIsSubmitting(true);
     try {
-      const created = await productsService.create(
+      const createdBase = await productsService.create(
         tenantId,
         toServiceInput(values, {
           isActive: options?.isActive ?? true,
           isFavorite: options?.isFavorite ?? false,
+          forcedImageUrl: null,
         })
       );
+      let created = createdBase;
+
+      let imageUploadWarning: string | null = null;
+      if (values.imagenFile) {
+        try {
+          const uploadedImageUrl = await productsService.uploadProductImage(
+            tenantId,
+            createdBase.id,
+            values.imagenFile
+          );
+          const updatedWithImage = await productsService.update(tenantId, createdBase.id, {
+            image_url: uploadedImageUrl,
+          });
+          created = updatedWithImage ?? { ...createdBase, image_url: uploadedImageUrl };
+        } catch (reason) {
+          imageUploadWarning =
+            reason instanceof Error && reason.message
+              ? reason.message
+              : "No se pudo subir la imagen del producto";
+        }
+      }
+
       await productsService.setPrimaryBarcode(tenantId, created.id, values.codigoBarras ?? "");
       upsertProductInState(created);
       patchPrimaryBarcodeState(created.id, values.codigoBarras ?? "");
@@ -444,7 +476,12 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           is_active: created.is_active,
         },
       });
-      setFeedback({ type: "success", message: "Producto creado" });
+      setFeedback({
+        type: imageUploadWarning ? "error" : "success",
+        message: imageUploadWarning
+          ? `Producto creado sin imagen. ${imageUploadWarning}`
+          : "Producto creado",
+      });
       await loadProducts();
     } catch (error) {
       const message = error instanceof Error && error.message ? error.message : "Error al crear producto";
@@ -456,7 +493,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
 
   const updateProduct = async (
     productId: string,
-    values: ProductFormValues,
+    values: ProductWriteValues,
     options?: {
       isActive?: boolean;
       isFavorite?: boolean;
@@ -469,6 +506,15 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
 
     setIsSubmitting(true);
     try {
+      const previousImageUrl = existing.image_url ?? null;
+      let nextImageUrl = previousImageUrl;
+
+      if (values.imagenFile) {
+        nextImageUrl = await productsService.uploadProductImage(tenantId, productId, values.imagenFile);
+      } else if (values.imagenEliminada) {
+        nextImageUrl = null;
+      }
+
       const updated = await productsService.update(
         tenantId,
         productId,
@@ -480,7 +526,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           existingBrand: existing.brand,
           existingSupplier: existing.supplier,
           existingDescription: existing.description,
-          existingImageUrl: existing.image_url ?? null,
+          forcedImageUrl: nextImageUrl,
           existingSaleMode: existing.sale_mode,
           existingStockMin: existing.stock_min,
           existingStockMax: existing.stock_max,
@@ -499,7 +545,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           existingBrand: existing.brand,
           existingSupplier: existing.supplier,
           existingDescription: existing.description,
-          existingImageUrl: existing.image_url ?? null,
+          forcedImageUrl: nextImageUrl,
           existingSaleMode: existing.sale_mode,
           existingStockMin: existing.stock_min,
           existingStockMax: existing.stock_max,
@@ -510,6 +556,11 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       };
 
       upsertProductInState(updated ?? optimisticUpdated);
+
+      if (previousImageUrl && previousImageUrl !== nextImageUrl) {
+        void productsService.deleteProductImageByUrl(previousImageUrl).catch(() => undefined);
+      }
+
       patchPrimaryBarcodeState(productId, values.codigoBarras ?? "");
       await auditService.createSafe(tenantId, {
         user_id: userId,

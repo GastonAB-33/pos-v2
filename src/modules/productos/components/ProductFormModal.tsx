@@ -1,9 +1,10 @@
 ﻿import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { VoiceDictationButton } from "@/components/form/VoiceDictationButton";
+import { ProductImageEditorModal } from "@/modules/productos/components/ProductImageEditorModal";
 import {
   computePricingBackward,
   computePricingForward,
@@ -47,6 +48,8 @@ const createDefaults = (): ProductFormModalValues => ({
   ...createBaseDefaults(),
   favorito: false,
   estadoActivo: true,
+  imagenFile: null,
+  imagenEliminada: false,
 });
 
 const productFormModalSchema = productFormSchema.extend({
@@ -69,34 +72,69 @@ const normalizeToUniqueSorted = (values: string[]): string[] => {
   return normalized.sort((a, b) => a.localeCompare(b));
 };
 
-const parseVoiceNumber = (value: string, fallback: number): number => {
+const collapseSpaces = (value: string): string => value.replace(/\s+/g, " ").trim();
+
+const replaceSpokenNumbers = (value: string): string => {
   const replacements: Array<[RegExp, string]> = [
-    [/\bcero\b/g, "0"],
-    [/\buno\b/g, "1"],
-    [/\bdos\b/g, "2"],
-    [/\btres\b/g, "3"],
-    [/\bcuatro\b/g, "4"],
-    [/\bcinco\b/g, "5"],
-    [/\bseis\b/g, "6"],
-    [/\bsiete\b/g, "7"],
-    [/\bocho\b/g, "8"],
-    [/\bnueve\b/g, "9"],
-    [/\bdiez\b/g, "10"],
-    [/\bcoma\b/g, "."],
-    [/\bpunto\b/g, "."],
+    [/\bcero\b/gi, "0"],
+    [/\buno\b/gi, "1"],
+    [/\bdos\b/gi, "2"],
+    [/\btres\b/gi, "3"],
+    [/\bcuatro\b/gi, "4"],
+    [/\bcinco\b/gi, "5"],
+    [/\bseis\b/gi, "6"],
+    [/\bsiete\b/gi, "7"],
+    [/\bocho\b/gi, "8"],
+    [/\bnueve\b/gi, "9"],
+    [/\bdiez\b/gi, "10"],
+    [/\bcoma\b/gi, "."],
+    [/\bpunto\b/gi, "."],
   ];
 
-  let normalized = value.toLowerCase();
+  let normalized = value;
   for (const [pattern, replacement] of replacements) {
     normalized = normalized.replace(pattern, replacement);
   }
 
-  const clean = normalized.replace(/[^\d,.-]/g, "").replace(/,/g, ".");
+  return normalized;
+};
 
-  if (!clean) return fallback;
+const normalizeVoiceName = (value: string): string => collapseSpaces(value);
 
-  const parsed = Number(clean);
+const normalizeVoiceBarcode = (value: string): string => {
+  const normalized = replaceSpokenNumbers(value);
+  return normalized.replace(/\D/g, "");
+};
+
+const normalizeVoiceProductCode = (value: string): string => {
+  const normalized = replaceSpokenNumbers(value).toUpperCase();
+  return normalized.replace(/[^A-Z0-9-_]/g, "").slice(0, 80);
+};
+
+const parseVoiceNumber = (value: string, fallback: number): number => {
+  const normalized = replaceSpokenNumbers(value)
+    .replace(/[^\d,.-]/g, "")
+    .replace(/,/g, ".");
+
+  if (!normalized) return fallback;
+
+  const parsed = Number(normalized);
   if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+
+  return parsed;
+};
+
+const parseNumericField = (value: unknown): number => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  const normalized = String(value ?? "")
+    .replace(/\s+/g, "")
+    .replace(/,/g, ".");
+
+  if (!normalized) return 0;
+
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
 
   return parsed;
 };
@@ -148,12 +186,32 @@ export const ProductFormModal = ({
   const [calcMode, setCalcMode] = useState<CalcMode>("forward");
   const [scannerOpen, setScannerOpen] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [imageEditorSource, setImageEditorSource] = useState<string | null>(null);
+  const [imageDraftFile, setImageDraftFile] = useState<File | null>(null);
+  const [imageRemoved, setImageRemoved] = useState(false);
+  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
   const [localCategories, setLocalCategories] = useState<string[]>(() => normalizeToUniqueSorted(categoryOptions));
   const [localSubcategories, setLocalSubcategories] = useState<string[]>(() =>
     normalizeToUniqueSorted(subcategoryOptions)
   );
 
   const photoInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!localPreviewUrl?.startsWith("blob:")) return undefined;
+
+    return () => {
+      URL.revokeObjectURL(localPreviewUrl);
+    };
+  }, [localPreviewUrl]);
+
+  useEffect(() => {
+    if (open) return;
+    setImageEditorSource(null);
+    setImageDraftFile(null);
+    setImageRemoved(false);
+    setLocalPreviewUrl(null);
+  }, [open]);
 
   useEffect(() => {
     setLocalCategories((current) => normalizeToUniqueSorted([...current, ...categoryOptions]));
@@ -170,6 +228,10 @@ export const ProductFormModal = ({
       reset(createDefaults());
       setCalcMode("forward");
       setPhotoError(null);
+      setImageEditorSource(null);
+      setImageDraftFile(null);
+      setImageRemoved(false);
+      setLocalPreviewUrl(null);
       return;
     }
 
@@ -188,9 +250,15 @@ export const ProductFormModal = ({
       favorito: product.favorito,
       estadoActivo: product.activo,
       imagenUrl: product.imagenUrl,
+      imagenFile: null,
+      imagenEliminada: false,
     });
     setCalcMode("forward");
     setPhotoError(null);
+    setImageEditorSource(null);
+    setImageDraftFile(null);
+    setImageRemoved(false);
+    setLocalPreviewUrl(null);
   }, [open, product, reset]);
 
   const nombre = watch("nombre");
@@ -200,10 +268,65 @@ export const ProductFormModal = ({
   const categoria = watch("categoria");
   const subcategoria = watch("subcategoria");
   const imagenUrl = watch("imagenUrl");
+  const precioCosto = watch("precioCosto");
+  const porcentajeGanancia = watch("porcentajeGanancia");
+  const porcentajeIva = watch("porcentajeIva");
+  const precioFinal = watch("precioFinal");
 
-  const imagenPreview = useMemo(() => imagenUrl?.trim() ?? "", [imagenUrl]);
+  const imagenPreview = useMemo(() => {
+    if (localPreviewUrl) return localPreviewUrl;
+    return imagenUrl?.trim() ?? "";
+  }, [imagenUrl, localPreviewUrl]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const setIfChanged = (
+      field: "precioSinIva" | "precioFinal" | "porcentajeGanancia",
+      nextValue: number
+    ) => {
+      const current = Number(getValues(field));
+      if (Math.abs(current - nextValue) < 0.005) return;
+
+      setValue(field, nextValue, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    };
+
+    if (calcMode === "backward") {
+      const backward = computePricingBackward({
+        precioCosto,
+        precioFinal,
+        porcentajeIva,
+      });
+
+      setIfChanged("precioSinIva", backward.precioSinIva);
+      setIfChanged("porcentajeGanancia", backward.porcentajeGanancia);
+      return;
+    }
+
+    const forward = computePricingForward({
+      precioCosto,
+      porcentajeGanancia,
+      porcentajeIva,
+    });
+
+    setIfChanged("precioSinIva", forward.precioSinIva);
+    setIfChanged("precioFinal", forward.precioFinal);
+  }, [
+    calcMode,
+    getValues,
+    open,
+    porcentajeGanancia,
+    porcentajeIva,
+    precioCosto,
+    precioFinal,
+    setValue,
+  ]);
 
   const applyForwardPricing = () => {
+    setCalcMode("forward");
     const values = getValues();
     const next = computePricingForward({
       precioCosto: values.precioCosto,
@@ -213,11 +336,10 @@ export const ProductFormModal = ({
 
     setValue("precioSinIva", next.precioSinIva, { shouldDirty: true, shouldValidate: true });
     setValue("precioFinal", next.precioFinal, { shouldDirty: true, shouldValidate: true });
-    setValue("porcentajeGanancia", next.porcentajeGanancia, { shouldDirty: true, shouldValidate: true });
-    setCalcMode("forward");
   };
 
   const applyBackwardPricing = () => {
+    setCalcMode("backward");
     const values = getValues();
     const next = computePricingBackward({
       precioCosto: values.precioCosto,
@@ -227,8 +349,6 @@ export const ProductFormModal = ({
 
     setValue("precioSinIva", next.precioSinIva, { shouldDirty: true, shouldValidate: true });
     setValue("porcentajeGanancia", next.porcentajeGanancia, { shouldDirty: true, shouldValidate: true });
-    setValue("precioFinal", next.precioFinal, { shouldDirty: true, shouldValidate: true });
-    setCalcMode("backward");
   };
 
   const ensureCategory = (value: string) => {
@@ -252,15 +372,15 @@ export const ProductFormModal = ({
     setValue("stock", parsed, { shouldDirty: true, shouldValidate: true });
   };
 
-  const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
+  const handleImagePick = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     if (!file) return;
 
     setPhotoError(null);
 
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setValue("imagenUrl", dataUrl, { shouldDirty: true, shouldValidate: true });
+      const source = await readFileAsDataUrl(file);
+      setImageEditorSource(source);
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "No se pudo cargar la imagen";
       setPhotoError(message);
@@ -269,6 +389,23 @@ export const ProductFormModal = ({
         event.target.value = "";
       }
     }
+  };
+
+  const handleRemovePhoto = () => {
+    setImageDraftFile(null);
+    setImageRemoved(Boolean(imagenPreview || product?.imagenUrl));
+    setLocalPreviewUrl(null);
+    setValue("imagenUrl", "", { shouldDirty: true, shouldValidate: true });
+  };
+
+  const handlePreventEnterSubmit = (event: KeyboardEvent<HTMLFormElement>) => {
+    if (event.key !== "Enter") return;
+
+    const target = event.target;
+    if (target instanceof HTMLTextAreaElement) return;
+    if (target instanceof HTMLButtonElement && target.type === "submit") return;
+
+    event.preventDefault();
   };
 
   const title = useMemo(
@@ -300,6 +437,8 @@ export const ProductFormModal = ({
       precioSinIva: pricing.precioSinIva,
       precioFinal: pricing.precioFinal,
       porcentajeGanancia: pricing.porcentajeGanancia,
+      imagenFile: imageDraftFile,
+      imagenEliminada: imageRemoved,
     });
   };
 
@@ -307,12 +446,12 @@ export const ProductFormModal = ({
 
   return (
     <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-4">
-      <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-panel md:p-5">
+      <div className="max-h-[90vh] w-full max-w-6xl overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-panel md:p-5">
         <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
           <div>
             <h3 className="text-base font-semibold text-slate-900">{title}</h3>
             <p className="text-xs text-slate-500">
-              Completa los datos y el sistema recalcula precios al salir de cada campo.
+              Cálculo automático en vivo. Guardado solo con el botón "Guardar".
             </p>
           </div>
           <button type="button" className="ui-btn-ghost" onClick={onClose} disabled={disabled}>
@@ -320,226 +459,223 @@ export const ProductFormModal = ({
           </button>
         </div>
 
-        <form className="space-y-4" onSubmit={handleSubmit(handleFormSubmit)}>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <div className="xl:col-span-2">
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <label className="block text-sm font-medium text-slate-700">Nombre</label>
-                <VoiceDictationButton
-                  value={nombre ?? ""}
-                  onValueChange={(nextValue) =>
-                    setValue("nombre", nextValue, { shouldDirty: true, shouldValidate: true })
-                  }
-                  insertMode="replace"
-                  disabled={disabled}
-                  label="Dictar nombre"
-                />
-              </div>
-              <input {...register("nombre")} className="ui-input" disabled={disabled} />
-              {errors.nombre ? <p className="mt-1 text-xs text-red-600">{errors.nombre.message}</p> : null}
-            </div>
+        <form className="space-y-4" onSubmit={handleSubmit(handleFormSubmit)} onKeyDown={handlePreventEnterSubmit}>
+          <div className="grid gap-4 xl:grid-cols-[1fr_220px]">
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <div className="xl:col-span-2">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <label className="block text-sm font-medium text-slate-700">Nombre</label>
+                    <VoiceDictationButton
+                      value={nombre ?? ""}
+                      onValueChange={(nextValue) =>
+                        setValue("nombre", normalizeVoiceName(nextValue), {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        })
+                      }
+                      insertMode="replace"
+                      disabled={disabled}
+                      label="Dictar nombre"
+                    />
+                  </div>
+                  <input {...register("nombre")} className="ui-input" disabled={disabled} />
+                  {errors.nombre ? <p className="mt-1 text-xs text-red-600">{errors.nombre.message}</p> : null}
+                </div>
 
-            <div>
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <label className="block text-sm font-medium text-slate-700">Stock</label>
-                <VoiceDictationButton
-                  value={String(stock ?? "")}
-                  onValueChange={handleStockVoiceChange}
-                  insertMode="replace"
-                  disabled={disabled}
-                  label="Dictar stock"
-                />
-              </div>
-              <input
-                type="number"
-                inputMode="decimal"
-                min={0}
-                step="0.001"
-                {...register("stock", {
-                  setValueAs: (value) => {
-                    if (typeof value === "number") return value;
-                    const parsed = Number(String(value ?? "").replace(",", "."));
-                    return Number.isFinite(parsed) ? parsed : 0;
-                  },
-                })}
-                className="ui-input"
-                disabled={disabled}
-              />
-              {errors.stock ? <p className="mt-1 text-xs text-red-600">{errors.stock.message}</p> : null}
-            </div>
-
-            <div>
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <label className="block text-sm font-medium text-slate-700">Código de barras</label>
-                <div className="flex items-center gap-1">
-                  <VoiceDictationButton
-                    value={codigoBarras ?? ""}
-                    onValueChange={(nextValue) =>
-                      setValue("codigoBarras", nextValue.replace(/\s+/g, ""), {
-                        shouldDirty: true,
-                        shouldValidate: true,
-                      })
-                    }
-                    insertMode="replace"
+                <div>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <label className="block text-sm font-medium text-slate-700">Stock</label>
+                    <VoiceDictationButton
+                      value={String(stock ?? "")}
+                      onValueChange={handleStockVoiceChange}
+                      insertMode="replace"
+                      disabled={disabled}
+                      label="Dictar stock"
+                    />
+                  </div>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    step="0.001"
+                    {...register("stock", {
+                      setValueAs: parseNumericField,
+                    })}
+                    className="ui-input"
                     disabled={disabled}
-                    label="Dictar código de barras"
                   />
-                  <button
-                    type="button"
-                    className="ui-btn-ghost px-2 py-1 text-xs"
-                    onClick={() => setScannerOpen(true)}
+                  {errors.stock ? <p className="mt-1 text-xs text-red-600">{errors.stock.message}</p> : null}
+                </div>
+
+                <div>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <label className="block text-sm font-medium text-slate-700">Código de barras</label>
+                    <div className="flex items-center gap-1">
+                      <VoiceDictationButton
+                        value={codigoBarras ?? ""}
+                        onValueChange={(nextValue) =>
+                          setValue("codigoBarras", normalizeVoiceBarcode(nextValue), {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          })
+                        }
+                        insertMode="replace"
+                        disabled={disabled}
+                        label="Dictar código de barras"
+                      />
+                      <button
+                        type="button"
+                        className="ui-btn-ghost px-2 py-1 text-xs"
+                        onClick={() => setScannerOpen(true)}
+                        disabled={disabled}
+                      >
+                        Escanear cámara
+                      </button>
+                    </div>
+                  </div>
+                  <input
+                    {...register("codigoBarras", {
+                      setValueAs: (value) => normalizeVoiceBarcode(String(value ?? "")),
+                    })}
+                    className="ui-input"
                     disabled={disabled}
-                  >
-                    Escanear cámara
-                  </button>
+                  />
+                  {errors.codigoBarras ? (
+                    <p className="mt-1 text-xs text-red-600">{errors.codigoBarras.message}</p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <label className="block text-sm font-medium text-slate-700">Código de producto</label>
+                    <VoiceDictationButton
+                      value={codigoProducto ?? ""}
+                      onValueChange={(nextValue) =>
+                        setValue("codigoProducto", normalizeVoiceProductCode(nextValue), {
+                          shouldDirty: true,
+                          shouldValidate: true,
+                        })
+                      }
+                      insertMode="replace"
+                      disabled={disabled}
+                      label="Dictar código de producto"
+                    />
+                  </div>
+                  <input
+                    {...register("codigoProducto", {
+                      setValueAs: (value) => normalizeVoiceProductCode(String(value ?? "")),
+                    })}
+                    className="ui-input"
+                    disabled={disabled}
+                  />
+                  {errors.codigoProducto ? (
+                    <p className="mt-1 text-xs text-red-600">{errors.codigoProducto.message}</p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Categoría</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      list="categorias-productos"
+                      {...register("categoria", {
+                        onBlur: (event) => ensureCategory(event.target.value),
+                      })}
+                      className="ui-input"
+                      disabled={disabled}
+                      placeholder="Buscar o crear categoría"
+                    />
+                    <button
+                      type="button"
+                      className="ui-btn-ghost px-2 py-1 text-xs"
+                      onClick={() => ensureCategory(categoria ?? "")}
+                      disabled={disabled || !categoria?.trim()}
+                    >
+                      Crear
+                    </button>
+                  </div>
+                  <datalist id="categorias-productos">
+                    {localCategories.map((item) => (
+                      <option key={item} value={item} />
+                    ))}
+                  </datalist>
+                  {errors.categoria ? <p className="mt-1 text-xs text-red-600">{errors.categoria.message}</p> : null}
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Subcategoría</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      list="subcategorias-productos"
+                      {...register("subcategoria", {
+                        onBlur: (event) => ensureSubcategory(event.target.value),
+                      })}
+                      className="ui-input"
+                      disabled={disabled}
+                      placeholder="Buscar o crear subcategoría"
+                    />
+                    <button
+                      type="button"
+                      className="ui-btn-ghost px-2 py-1 text-xs"
+                      onClick={() => ensureSubcategory(subcategoria ?? "")}
+                      disabled={disabled || !subcategoria?.trim()}
+                    >
+                      Crear
+                    </button>
+                  </div>
+                  <datalist id="subcategorias-productos">
+                    {localSubcategories.map((item) => (
+                      <option key={item} value={item} />
+                    ))}
+                  </datalist>
+                  {errors.subcategoria ? (
+                    <p className="mt-1 text-xs text-red-600">{errors.subcategoria.message}</p>
+                  ) : null}
                 </div>
               </div>
-              <input {...register("codigoBarras")} className="ui-input" disabled={disabled} />
-              {errors.codigoBarras ? (
-                <p className="mt-1 text-xs text-red-600">{errors.codigoBarras.message}</p>
-              ) : null}
             </div>
 
-            <div>
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <label className="block text-sm font-medium text-slate-700">Código de producto</label>
-                <VoiceDictationButton
-                  value={codigoProducto ?? ""}
-                  onValueChange={(nextValue) =>
-                    setValue("codigoProducto", nextValue.replace(/\s+/g, ""), {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    })
-                  }
-                  insertMode="replace"
-                  disabled={disabled}
-                  label="Dictar código de producto"
-                />
+            <aside className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <h4 className="mb-2 text-sm font-semibold text-slate-900">Fotografía</h4>
+              <div className="flex h-44 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+                {imagenPreview ? (
+                  <img src={imagenPreview} alt="Foto del producto" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="px-3 text-center text-xs text-slate-500">Sin imagen</span>
+                )}
               </div>
-              <input {...register("codigoProducto")} className="ui-input" disabled={disabled} />
-              {errors.codigoProducto ? (
-                <p className="mt-1 text-xs text-red-600">{errors.codigoProducto.message}</p>
-              ) : null}
-            </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Categoría</label>
-              <div className="flex items-center gap-2">
-                <input
-                  list="categorias-productos"
-                  {...register("categoria", {
-                    onBlur: (event) => ensureCategory(event.target.value),
-                  })}
-                  className="ui-input"
-                  disabled={disabled}
-                  placeholder="Buscar o crear categoría"
-                />
-                <button
-                  type="button"
-                  className="ui-btn-ghost px-2 py-1 text-xs"
-                  onClick={() => ensureCategory(categoria ?? "")}
-                  disabled={disabled || !categoria?.trim()}
-                >
-                  Crear
-                </button>
-              </div>
-              <datalist id="categorias-productos">
-                {localCategories.map((item) => (
-                  <option key={item} value={item} />
-                ))}
-              </datalist>
-              {errors.categoria ? <p className="mt-1 text-xs text-red-600">{errors.categoria.message}</p> : null}
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Subcategoría</label>
-              <div className="flex items-center gap-2">
-                <input
-                  list="subcategorias-productos"
-                  {...register("subcategoria", {
-                    onBlur: (event) => ensureSubcategory(event.target.value),
-                  })}
-                  className="ui-input"
-                  disabled={disabled}
-                  placeholder="Buscar o crear subcategoría"
-                />
-                <button
-                  type="button"
-                  className="ui-btn-ghost px-2 py-1 text-xs"
-                  onClick={() => ensureSubcategory(subcategoria ?? "")}
-                  disabled={disabled || !subcategoria?.trim()}
-                >
-                  Crear
-                </button>
-              </div>
-              <datalist id="subcategorias-productos">
-                {localSubcategories.map((item) => (
-                  <option key={item} value={item} />
-                ))}
-              </datalist>
-              {errors.subcategoria ? (
-                <p className="mt-1 text-xs text-red-600">{errors.subcategoria.message}</p>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <h4 className="text-sm font-semibold text-slate-900">Foto del producto</h4>
               <input
                 ref={photoInputRef}
                 type="file"
                 accept="image/*"
                 capture="environment"
                 className="hidden"
-                onChange={handleImageChange}
+                onChange={handleImagePick}
               />
-              <div className="flex items-center gap-2">
+
+              <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  className="ui-btn-ghost px-2 py-1 text-xs"
+                  className="ui-btn-ghost w-full justify-center px-2 py-1 text-xs"
                   onClick={() => photoInputRef.current?.click()}
                   disabled={disabled}
                 >
-                  Cargar / sacar foto
+                  Editar foto
                 </button>
                 <button
                   type="button"
-                  className="ui-btn-ghost px-2 py-1 text-xs"
-                  onClick={() => setValue("imagenUrl", "", { shouldDirty: true, shouldValidate: true })}
+                  className="ui-btn-ghost w-full justify-center px-2 py-1 text-xs"
+                  onClick={handleRemovePhoto}
                   disabled={disabled || !imagenPreview}
                 >
-                  Quitar
+                  Eliminar foto
                 </button>
               </div>
-            </div>
 
-            <div className="grid gap-3 md:grid-cols-[180px_1fr]">
-              <div className="flex h-36 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
-                {imagenPreview ? (
-                  <img src={imagenPreview} alt="Foto del producto" className="h-full w-full object-cover" />
-                ) : (
-                  <span className="px-2 text-center text-xs text-slate-500">Sin foto</span>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
-                  URL / referencia de imagen
-                </label>
-                <input
-                  {...register("imagenUrl")}
-                  className="ui-input"
-                  disabled={disabled}
-                  placeholder="https://... o referencia"
-                />
-                <p className="text-xs text-slate-500">
-                  Puedes pegar una URL manual o cargar una foto desde archivo/cámara.
-                </p>
-                {photoError ? <p className="text-xs text-red-600">{photoError}</p> : null}
-                {errors.imagenUrl ? <p className="text-xs text-red-600">{errors.imagenUrl.message}</p> : null}
-              </div>
-            </div>
+              {photoError ? <p className="mt-2 text-xs text-red-600">{photoError}</p> : null}
+            </aside>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -552,7 +688,9 @@ export const ProductFormModal = ({
                   type="number"
                   step="0.01"
                   {...register("precioCosto", {
-                    onBlur: () => applyForwardPricing(),
+                    setValueAs: parseNumericField,
+                    onChange: () => setCalcMode("forward"),
+                    onBlur: applyForwardPricing,
                   })}
                   className="ui-input"
                   disabled={disabled}
@@ -568,7 +706,9 @@ export const ProductFormModal = ({
                   type="number"
                   step="0.01"
                   {...register("porcentajeGanancia", {
-                    onBlur: () => applyForwardPricing(),
+                    setValueAs: parseNumericField,
+                    onChange: () => setCalcMode("forward"),
+                    onBlur: applyForwardPricing,
                   })}
                   className="ui-input"
                   disabled={disabled}
@@ -599,7 +739,9 @@ export const ProductFormModal = ({
                   type="number"
                   step="0.01"
                   {...register("porcentajeIva", {
-                    onBlur: () => applyForwardPricing(),
+                    setValueAs: parseNumericField,
+                    onChange: () => setCalcMode("forward"),
+                    onBlur: applyForwardPricing,
                   })}
                   className="ui-input"
                   disabled={disabled}
@@ -615,7 +757,9 @@ export const ProductFormModal = ({
                   type="number"
                   step="0.01"
                   {...register("precioFinal", {
-                    onBlur: () => applyBackwardPricing(),
+                    setValueAs: parseNumericField,
+                    onChange: () => setCalcMode("backward"),
+                    onBlur: applyBackwardPricing,
                   })}
                   className="ui-input"
                   disabled={disabled}
@@ -627,7 +771,7 @@ export const ProductFormModal = ({
             </div>
 
             <p className="mt-3 text-xs text-slate-500">
-              Si editas el precio final, se recalcula la ganancia de forma inversa. Si el costo es 0, se evita dividir por cero.
+              El cálculo se actualiza automáticamente al escribir y al salir de cada campo.
             </p>
           </div>
 
@@ -654,16 +798,33 @@ export const ProductFormModal = ({
         </form>
       </div>
 
+      <ProductImageEditorModal
+        open={Boolean(imageEditorSource)}
+        sourceUrl={imageEditorSource}
+        disabled={disabled}
+        onClose={() => setImageEditorSource(null)}
+        onConfirm={({ file, previewUrl }) => {
+          setImageEditorSource(null);
+          setImageDraftFile(file);
+          setImageRemoved(false);
+          setLocalPreviewUrl(previewUrl);
+          setValue("imagenUrl", previewUrl, { shouldDirty: true, shouldValidate: true });
+          setPhotoError(null);
+        }}
+      />
+
       <BarcodeScannerModal
         open={scannerOpen}
         title="Escanear código de barras del producto"
         onClose={() => setScannerOpen(false)}
         onDetected={(barcode) => {
-          setValue("codigoBarras", barcode, { shouldDirty: true, shouldValidate: true });
+          setValue("codigoBarras", normalizeVoiceBarcode(barcode), {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
           setScannerOpen(false);
         }}
       />
     </section>
   );
 };
-

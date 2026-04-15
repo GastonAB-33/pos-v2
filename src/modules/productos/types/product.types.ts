@@ -40,6 +40,8 @@ export interface ProductAuditEntry {
 export interface ProductFormModalValues extends ProductFormValues {
   favorito: boolean;
   estadoActivo: boolean;
+  imagenFile?: File | null;
+  imagenEliminada?: boolean;
 }
 
 export interface ProductViewModel {
