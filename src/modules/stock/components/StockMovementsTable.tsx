@@ -1,10 +1,11 @@
-import {
+﻿import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
 import type { Product, StockMovement } from "@/types/entities";
+import { movementTypeLabel } from "@/modules/stock/utils/stock-labels";
 
 interface StockMovementRow {
   movement: StockMovement;
@@ -16,6 +17,16 @@ interface StockMovementsTableProps {
 }
 
 const columnHelper = createColumnHelper<StockMovementRow>();
+
+const referenceTypeLabelMap: Record<string, string> = {
+  manual_adjustment: "Ajuste manual",
+  sale: "Venta",
+  purchase: "Compra",
+  in: "Ingreso",
+  out: "Salida",
+};
+
+const getReferenceTypeLabel = (value: string): string => referenceTypeLabelMap[value] ?? value;
 
 export const StockMovementsTable = ({ rows }: StockMovementsTableProps) => {
   const columns = [
@@ -32,7 +43,7 @@ export const StockMovementsTable = ({ rows }: StockMovementsTableProps) => {
     columnHelper.accessor((row) => row.movement.movement_type, {
       id: "type",
       header: "Tipo",
-      cell: (info) => info.getValue(),
+      cell: (info) => movementTypeLabel[info.getValue()] ?? info.getValue(),
     }),
     columnHelper.accessor((row) => row.movement.quantity, {
       id: "quantity",
@@ -44,9 +55,8 @@ export const StockMovementsTable = ({ rows }: StockMovementsTableProps) => {
       header: "Referencia",
       cell: (info) => {
         const movement = info.row.original.movement;
-        return movement.reference_id
-          ? `${movement.reference_type} (${movement.reference_id})`
-          : movement.reference_type;
+        const referenceType = getReferenceTypeLabel(movement.reference_type);
+        return movement.reference_id ? `${referenceType} (${movement.reference_id})` : referenceType;
       },
     }),
     columnHelper.accessor((row) => row.movement.created_by ?? "-", {
@@ -101,4 +111,3 @@ export const StockMovementsTable = ({ rows }: StockMovementsTableProps) => {
     </div>
   );
 };
-

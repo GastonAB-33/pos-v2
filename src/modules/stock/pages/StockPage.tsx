@@ -1,12 +1,72 @@
+﻿import { useRef, useState } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
-import { StockAdjustmentForm } from "@/modules/stock/components/StockAdjustmentForm";
+import { StockAdjustmentModal } from "@/modules/stock/components/StockAdjustmentModal";
 import { StockMovementsTable } from "@/modules/stock/components/StockMovementsTable";
 import { StockTrackingTable } from "@/modules/stock/components/StockTrackingTable";
 import { StockSummaryCards } from "@/modules/stock/components/StockSummaryCards";
 import { useStockModule } from "@/modules/stock/hooks/useStockModule";
+import { movementTypeLabel } from "@/modules/stock/utils/stock-labels";
+import { downloadCsv } from "@/utils/csv";
+import type { StockMovement } from "@/types/entities";
+
+interface DateFilterInputProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+const DateFilterInput = ({ label, value, onChange }: DateFilterInputProps) => {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const openPicker = () => {
+    const input = inputRef.current;
+    if (!input) return;
+
+    const pickerInput = input as HTMLInputElement & { showPicker?: () => void };
+    if (typeof pickerInput.showPicker === "function") {
+      pickerInput.showPicker();
+      return;
+    }
+
+    input.focus();
+    input.click();
+  };
+
+  return (
+    <div className="relative">
+      <label className="mb-1 block text-xs font-medium text-slate-600">{label}</label>
+      <input
+        ref={inputRef}
+        type="date"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="ui-input cursor-pointer pr-14"
+      />
+      <button
+        type="button"
+        onClick={openPicker}
+        className="absolute right-1 top-[1.35rem] h-9 w-12 rounded-md border border-slate-200 bg-slate-50 text-[10px] text-slate-600"
+        aria-label={`Abrir calendario de ${label.toLowerCase()}`}
+      >
+        Abrir
+      </button>
+    </div>
+  );
+};
+
+const movementTypeOptions: Array<{ value: "all" | StockMovement["movement_type"]; label: string }> = [
+  { value: "all", label: "Todos los tipos" },
+  { value: "sale", label: movementTypeLabel.sale },
+  { value: "purchase", label: movementTypeLabel.purchase },
+  { value: "adjustment", label: movementTypeLabel.adjustment },
+  { value: "in", label: movementTypeLabel.in },
+  { value: "out", label: movementTypeLabel.out },
+];
+
+const formatCsvDateStamp = (): string => new Date().toISOString().slice(0, 10);
 
 export const StockPage = () => {
   const { tenantId } = useTenant();
@@ -14,6 +74,7 @@ export const StockPage = () => {
   const { canRead, canWrite } = usePermissions();
   const canReadStock = canRead("stock");
   const canWriteStock = canWrite("stock");
+  const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
 
   const {
     products,
@@ -33,7 +94,7 @@ export const StockPage = () => {
     feedback,
     clearFeedback,
     reload,
-    applyManualAdjustment,
+    applyManualAdjustmentsBulk,
     updateStockThreshold,
     updateStockThresholdBulk,
   } = useStockModule(tenantId, user?.id ?? null);
@@ -42,6 +103,22 @@ export const StockPage = () => {
     movement,
     product: productsById.get(movement.product_id) ?? null,
   }));
+
+  const handleDownloadMovementHistory = () => {
+    const reportRows = movementViewRows.map(({ movement, product }) => ({
+      fecha: new Date(movement.created_at).toLocaleString("es-AR"),
+      producto: product?.name ?? "Producto eliminado",
+      codigo: product?.code ?? "",
+      tipo_movimiento: movementTypeLabel[movement.movement_type] ?? movement.movement_type,
+      cantidad: Number(movement.quantity.toFixed(3)),
+      tipo_referencia: movement.reference_type,
+      referencia: movement.reference_id ?? "",
+      usuario: movement.created_by ?? "",
+      observacion: movement.notes ?? "",
+    }));
+
+    void downloadCsv(`historial-stock-${formatCsvDateStamp()}.csv`, reportRows);
+  };
 
   if (!tenantId) {
     return (
@@ -68,17 +145,32 @@ export const StockPage = () => {
           <p className="text-sm text-slate-600">
             Movimientos: {movementRows.length} | Productos activos: {summary.activeProducts}
           </p>
-          <button
-            type="button"
-            onClick={() => {
-              clearFeedback();
-              void reload();
-            }}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            disabled={isLoading || isSubmitting}
-          >
-            Recargar
-          </button>
+          <div className="flex items-center gap-2">
+            {canWriteStock && stockSettings.allow_manual_adjustments ? (
+              <button
+                type="button"
+                onClick={() => {
+                  clearFeedback();
+                  setIsAdjustmentModalOpen(true);
+                }}
+                className="ui-btn-primary"
+                disabled={isLoading || isSubmitting}
+              >
+                Ajuste manual
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                clearFeedback();
+                void reload();
+              }}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              disabled={isLoading || isSubmitting}
+            >
+              Recargar
+            </button>
+          </div>
         </div>
 
         <p className="text-xs text-slate-500">
@@ -107,15 +199,6 @@ export const StockPage = () => {
           </div>
         ) : null}
 
-        {canWriteStock && stockSettings.allow_manual_adjustments ? (
-          <StockAdjustmentForm
-            products={products}
-            canWrite={canWriteStock}
-            disabled={isSubmitting}
-            onSubmit={applyManualAdjustment}
-          />
-        ) : null}
-
         <StockTrackingTable
           products={products}
           categories={categoryOptions}
@@ -125,33 +208,36 @@ export const StockPage = () => {
         />
 
         <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
-          <div className="grid gap-3 md:grid-cols-3">
-            <select
-              value={movementTypeFilter}
-              onChange={(event) =>
-                setMovementTypeFilter(event.target.value as typeof movementTypeFilter)
-              }
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="grid flex-1 gap-3 md:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Tipo de movimiento</label>
+                <select
+                  value={movementTypeFilter}
+                  onChange={(event) =>
+                    setMovementTypeFilter(event.target.value as typeof movementTypeFilter)
+                  }
+                  className="ui-input"
+                >
+                  {movementTypeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <DateFilterInput label="Desde" value={dateFrom} onChange={setDateFrom} />
+              <DateFilterInput label="Hasta" value={dateTo} onChange={setDateTo} />
+            </div>
+
+            <button
+              type="button"
+              className="ui-btn-ghost"
+              onClick={handleDownloadMovementHistory}
+              disabled={!movementViewRows.length}
             >
-              <option value="all">Todos los tipos</option>
-              <option value="sale">Sale</option>
-              <option value="purchase">Purchase</option>
-              <option value="adjustment">Adjustment</option>
-              <option value="in">In</option>
-              <option value="out">Out</option>
-            </select>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(event) => setDateFrom(event.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(event) => setDateTo(event.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
+              Descargar historial
+            </button>
           </div>
 
           {isLoading ? (
@@ -163,6 +249,15 @@ export const StockPage = () => {
           )}
         </section>
       </div>
+
+      <StockAdjustmentModal
+        open={isAdjustmentModalOpen}
+        products={products}
+        canWrite={canWriteStock}
+        disabled={isSubmitting}
+        onClose={() => setIsAdjustmentModalOpen(false)}
+        onSubmit={applyManualAdjustmentsBulk}
+      />
     </PagePlaceholder>
   );
 };

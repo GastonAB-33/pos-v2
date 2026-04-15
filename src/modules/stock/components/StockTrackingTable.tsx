@@ -1,7 +1,13 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import type { Product } from "@/types/entities";
+import { downloadCsv } from "@/utils/csv";
+import {
+  getStockStatus,
+  stockStatusLabel,
+  type StockStatus,
+  type StockStatusFilter,
+} from "@/modules/stock/utils/stock-labels";
 
-type StockStatusFilter = "all" | "low" | "normal" | "over";
 type BulkScope = "selected" | "category";
 
 interface StockTrackingTableProps {
@@ -29,20 +35,13 @@ const normalizeQty = (value: number): string => {
   return Number(value.toFixed(3)).toString();
 };
 
-const getStockStatus = (product: Product): "low" | "normal" | "over" => {
-  const min = product.stock_min;
-  const max = product.stock_max;
+const buildReportDateStamp = (): string => new Date().toISOString().slice(0, 10);
 
-  if (min != null && product.stock_current < min) return "low";
-  if (max != null && product.stock_current > max) return "over";
-  return "normal";
-};
-
-const stockStatusLabel: Record<StockStatusFilter, string> = {
-  all: "Todos",
-  low: "Bajo",
-  normal: "Normal",
-  over: "Sobre stock",
+const getStatusBadgeClassName = (status: StockStatus): string => {
+  if (status === "low") return "ui-badge ui-badge--warn";
+  if (status === "over") return "ui-badge ui-badge--info";
+  if (status === "unassigned") return "ui-badge ui-badge--danger";
+  return "ui-badge ui-badge--success";
 };
 
 export const StockTrackingTable = ({
@@ -60,6 +59,7 @@ export const StockTrackingTable = ({
   const [bulkScope, setBulkScope] = useState<BulkScope>("selected");
   const [bulkStockMin, setBulkStockMin] = useState("");
   const [bulkStockMax, setBulkStockMax] = useState("");
+  const [reportMessage, setReportMessage] = useState<string | null>(null);
 
   const rows = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -165,27 +165,58 @@ export const StockTrackingTable = ({
     });
   };
 
+  const handleDownloadStatusReport = () => {
+    const reportRows = rows.map((product) => {
+      const status = getStockStatus(product);
+      return {
+        producto: product.name,
+        codigo: product.code,
+        categoria: product.category,
+        subcategoria: product.subcategory ?? "",
+        stock_actual: Number(product.stock_current.toFixed(3)),
+        stock_min: product.stock_min ?? "",
+        stock_max: product.stock_max ?? "",
+        estado: stockStatusLabel[status],
+      };
+    });
+
+    const ok = downloadCsv(`informe-estado-stock-${buildReportDateStamp()}.csv`, reportRows);
+    setReportMessage(ok ? "Informe de estado de stock descargado" : "No hay datos para exportar");
+  };
+
   return (
     <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-slate-900">Seguimiento de stock</h2>
           <p className="text-xs text-slate-500">
-            Definí mínimos/máximos por producto y aplicá cambios masivos por selección o categoría.
+            Defini minimos/maximos por producto y aplica cambios masivos por seleccion o categoria.
           </p>
         </div>
-        <div className="text-xs text-slate-500">Mostrando: {rows.length} producto(s)</div>
+        <div className="flex flex-col items-end gap-2">
+          <div className="text-xs text-slate-500">Mostrando: {rows.length} producto(s)</div>
+          <button
+            type="button"
+            className="ui-btn-ghost px-2 py-1 text-xs"
+            onClick={handleDownloadStatusReport}
+            disabled={!rows.length}
+          >
+            Descargar informe de estado
+          </button>
+        </div>
       </div>
+
+      {reportMessage ? <div className="ui-info-state">{reportMessage}</div> : null}
 
       <div className="grid gap-3 md:grid-cols-4">
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           className="ui-input"
-          placeholder="Buscar por nombre o código"
+          placeholder="Buscar por nombre o codigo"
         />
         <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="ui-input">
-          <option value="">Todas las categorías</option>
+          <option value="">Todas las categorias</option>
           {categories.map((category) => (
             <option key={category} value={category}>
               {category}
@@ -217,7 +248,7 @@ export const StockTrackingTable = ({
             disabled={disabled}
           >
             <option value="selected">Aplicar a seleccionados</option>
-            <option value="category">Aplicar a categoría filtrada</option>
+            <option value="category">Aplicar a categoria filtrada</option>
           </select>
           <input
             type="number"
@@ -225,7 +256,7 @@ export const StockTrackingTable = ({
             value={bulkStockMin}
             onChange={(event) => setBulkStockMin(event.target.value)}
             className="ui-input"
-            placeholder="Nuevo mínimo"
+            placeholder="Nuevo minimo"
             disabled={disabled}
           />
           <input
@@ -234,7 +265,7 @@ export const StockTrackingTable = ({
             value={bulkStockMax}
             onChange={(event) => setBulkStockMax(event.target.value)}
             className="ui-input"
-            placeholder="Nuevo máximo"
+            placeholder="Nuevo maximo"
             disabled={disabled}
           />
           <button
@@ -253,7 +284,7 @@ export const StockTrackingTable = ({
             onClick={() => setSelectedIds([])}
             disabled={disabled || !selectedVisibleIds.length}
           >
-            Limpiar selección
+            Limpiar seleccion
           </button>
         </div>
       </div>
@@ -274,12 +305,12 @@ export const StockTrackingTable = ({
                   />
                 </th>
                 <th className="px-3 py-2 text-left">Producto</th>
-                <th className="px-3 py-2 text-left">Categoría</th>
+                <th className="px-3 py-2 text-left">Categoria</th>
                 <th className="px-3 py-2 text-left">Stock actual</th>
-                <th className="px-3 py-2 text-left">Mínimo</th>
-                <th className="px-3 py-2 text-left">Máximo</th>
+                <th className="px-3 py-2 text-left">Minimo</th>
+                <th className="px-3 py-2 text-left">Maximo</th>
                 <th className="px-3 py-2 text-left">Estado</th>
-                <th className="px-3 py-2 text-left">Acción</th>
+                <th className="px-3 py-2 text-left">Accion</th>
               </tr>
             </thead>
             <tbody>
@@ -325,13 +356,7 @@ export const StockTrackingTable = ({
                       />
                     </td>
                     <td className="px-3 py-2">
-                      {status === "low" ? (
-                        <span className="ui-badge ui-badge--warn">Bajo</span>
-                      ) : status === "over" ? (
-                        <span className="ui-badge ui-badge--info">Sobre stock</span>
-                      ) : (
-                        <span className="ui-badge ui-badge--success">Normal</span>
-                      )}
+                      <span className={getStatusBadgeClassName(status)}>{stockStatusLabel[status]}</span>
                     </td>
                     <td className="px-3 py-2">
                       <button
@@ -355,4 +380,3 @@ export const StockTrackingTable = ({
     </section>
   );
 };
-
