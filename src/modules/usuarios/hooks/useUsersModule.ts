@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
+import type { ModuleGroup } from "@/modules/usuarios/components/PermissionMatrix";
 import { auditService } from "@/services/audit.service";
 import { permissionProfilesService } from "@/services/permission-profiles.service";
 import { usersService } from "@/services/users.service";
@@ -190,14 +191,42 @@ export const useUsersModule = (tenantId: string | null) => {
     );
   }, [profileSearch, profiles]);
 
-  const moduleRows = useMemo(
-    () =>
-      appModules.map((module) => ({
-        module,
-        label: appModuleLabels[module],
-      })),
-    []
-  );
+  const moduleGroups = useMemo<ModuleGroup[]>(() => {
+    const generalModules = appModules.filter(
+      (module) => module !== "configuracion" && !module.startsWith("configuracion_")
+    );
+    const settingsSubmodules = appModules.filter((module) => module.startsWith("configuracion_"));
+
+    return [
+      {
+        id: "general",
+        label: "Modulos generales",
+        description: "Secciones principales operativas del sistema",
+        modules: generalModules.map((module) => ({
+          module,
+          label: appModuleLabels[module],
+          isSubmodule: false,
+        })),
+      },
+      {
+        id: "configuracion",
+        label: "Configuracion",
+        description: "Permisos globales y submodulos de configuracion",
+        modules: [
+          {
+            module: "configuracion",
+            label: appModuleLabels.configuracion,
+            isSubmodule: false,
+          },
+          ...settingsSubmodules.map((module) => ({
+            module,
+            label: appModuleLabels[module],
+            isSubmodule: true,
+          })),
+        ],
+      },
+    ];
+  }, []);
 
   const createProfile = async (
     values: PermissionProfileFormValues,
@@ -535,7 +564,7 @@ export const useUsersModule = (tenantId: string | null) => {
     profiles: profileRows,
     profilesById,
     usersByProfileId,
-    moduleRows,
+    moduleGroups,
     userSearch,
     setUserSearch,
     profileSearch,

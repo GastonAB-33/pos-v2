@@ -3,8 +3,17 @@ const dataProvider =
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const hasPlaceholderSupabaseUrl = supabaseUrl?.includes("your-project-ref.supabase.co");
-const hasPlaceholderSupabaseAnonKey = supabaseAnonKey === "your-anon-key";
+const apiUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim() || "";
+const supportConsoleEmails =
+  (import.meta.env.VITE_SUPPORT_CONSOLE_EMAILS as string | undefined)?.trim() || "";
+const supportConsoleUserIds =
+  (import.meta.env.VITE_SUPPORT_CONSOLE_USER_IDS as string | undefined)?.trim() || "";
+const hasPlaceholderSupabaseUrl =
+  supabaseUrl?.includes("your-project-ref.supabase.co") ||
+  supabaseUrl === "TU_URL_DE_SUPABASE";
+const hasPlaceholderSupabaseAnonKey =
+  supabaseAnonKey === "your-anon-key" ||
+  supabaseAnonKey === "TU_CLAVE_PUBLICA";
 
 if (dataProvider === "supabase") {
   const required = ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"] as const;
@@ -33,6 +42,9 @@ if (dataProvider === "supabase") {
 export const env = {
   appName: import.meta.env.VITE_APP_NAME || "POS V2",
   dataProvider,
+  apiUrl,
+  supportConsoleEmails,
+  supportConsoleUserIds,
   // Valores seguros para evitar crash en modo mock.
   supabaseUrl: supabaseUrl || "http://localhost:54321",
   supabaseAnonKey: supabaseAnonKey || "public-anon-key",

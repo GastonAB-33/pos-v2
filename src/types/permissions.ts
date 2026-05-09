@@ -56,5 +56,13 @@ export const hasModulePermission = (
   requirement: PermissionRequirement
 ): boolean => {
   const level = requirement.level ?? "read";
-  return Boolean(profile[requirement.module]?.[level]);
+  const directPermission = Boolean(profile[requirement.module]?.[level]);
+  if (directPermission) return true;
+
+  const isScopedConfigModule = requirement.module.startsWith("configuracion_");
+  if (!isScopedConfigModule) return false;
+
+  // Compatibilidad: si el perfil aun no tiene los permisos nuevos por submodulo
+  // pero si tiene el permiso legacy de configuracion, se habilita el acceso.
+  return Boolean(profile.configuracion?.[level]);
 };

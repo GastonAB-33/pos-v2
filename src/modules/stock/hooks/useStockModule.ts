@@ -18,6 +18,14 @@ type StockMovementFilter = "all" | StockMovement["movement_type"];
 const roundQty = (value: number): number => Number(value.toFixed(3));
 const sortMovementsDesc = (rows: StockMovement[]): StockMovement[] =>
   [...rows].sort((a, b) => b.created_at.localeCompare(a.created_at));
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const normalizeMaxForRules = (value: number | null | undefined): number | null => {
+  if (value == null) return null;
+  if (value === 0) return null;
+  return value;
+};
 
 const defaultStockSettings: StockSettings = {
   use_min_max: true,
@@ -62,15 +70,33 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
 
     setIsLoading(true);
     try {
-      const [allProducts, allMovements, tenantSettings] = await Promise.all([
+      const [productsResult, movementsResult, settingsResult] = await Promise.allSettled([
         productsService.getAllByTenant(tenantId),
         stockService.getAllByTenant(tenantId),
         settingsService.getByTenant(tenantId),
       ]);
 
-      setProducts(allProducts);
-      setMovements(sortMovementsDesc(allMovements));
-      setStockSettings(tenantSettings.stock ?? defaultStockSettings);
+      if (productsResult.status === "fulfilled") {
+        setProducts(productsResult.value);
+      } else {
+        setProducts([]);
+      }
+
+      if (movementsResult.status === "fulfilled") {
+        setMovements(sortMovementsDesc(movementsResult.value));
+      } else {
+        setMovements([]);
+      }
+
+      if (settingsResult.status === "fulfilled") {
+        setStockSettings(settingsResult.value.stock ?? defaultStockSettings);
+      } else {
+        setStockSettings(defaultStockSettings);
+      }
+
+      if (productsResult.status === "rejected" && movementsResult.status === "rejected") {
+        setFeedback({ type: "error", message: "No se pudieron cargar datos de stock" });
+      }
     } catch {
       setFeedback({ type: "error", message: "No se pudieron cargar datos de stock" });
     } finally {
@@ -119,6 +145,7 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
     const productsMap = new Map(products.map((product) => [product.id, product]));
     const notes = values.notes.trim() || null;
     const skippedProducts: string[] = [];
+    const movementCreatedBy = userId && uuidPattern.test(userId) ? userId : null;
 
     let applied = 0;
     let skipped = 0;
@@ -143,12 +170,12 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
           if (adjustment.quantityIn > 0) {
             const movementIn = await stockService.create(tenantId, {
               product_id: product.id,
-              movement_type: "in",
+              movement_type: "adjustment",
               quantity: adjustment.quantityIn,
-              reference_type: "in",
+              reference_type: "adjustment",
               reference_id: null,
-              notes: notes ? `${notes} | Ingreso manual` : "Ingreso manual",
-              created_by: userId,
+              notes: notes ? `${notes} | Ajuste manual (+)` : "Ajuste manual (+)",
+              created_by: movementCreatedBy,
             });
             appendMovementInState(movementIn);
           }
@@ -156,12 +183,12 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
           if (adjustment.quantityOut > 0) {
             const movementOut = await stockService.create(tenantId, {
               product_id: product.id,
-              movement_type: "out",
+              movement_type: "adjustment",
               quantity: adjustment.quantityOut,
-              reference_type: "out",
+              reference_type: "adjustment",
               reference_id: null,
-              notes: notes ? `${notes} | Salida manual` : "Salida manual",
-              created_by: userId,
+              notes: notes ? `${notes} | Ajuste manual (-)` : "Ajuste manual (-)",
+              created_by: movementCreatedBy,
             });
             appendMovementInState(movementOut);
           }
@@ -241,7 +268,8 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
       return;
     }
 
-    if (values.stockMin != null && values.stockMax != null && values.stockMin > values.stockMax) {
+    const normalizedMax = normalizeMaxForRules(values.stockMax);
+    if (values.stockMin != null && normalizedMax != null && values.stockMin > normalizedMax) {
       setFeedback({ type: "error", message: "El stock minimo no puede ser mayor al maximo" });
       return;
     }
@@ -289,7 +317,8 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
       return;
     }
 
-    if (values.stockMin != null && values.stockMax != null && values.stockMin > values.stockMax) {
+    const normalizedMax = normalizeMaxForRules(values.stockMax);
+    if (values.stockMin != null && normalizedMax != null && values.stockMin > normalizedMax) {
       setFeedback({ type: "error", message: "El stock minimo no puede ser mayor al maximo" });
       return;
     }
@@ -393,6 +422,7 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
         const isOver =
           stockSettings.use_min_max &&
           product.stock_max != null &&
+          product.stock_max > 0 &&
           product.stock_current > product.stock_max;
 
         return { product, isNoStock, isLow, isOver };

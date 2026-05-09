@@ -8,10 +8,28 @@ import { CustomerForm } from "@/modules/clientes/components/CustomerForm";
 import { CustomersTable } from "@/modules/clientes/components/CustomersTable";
 import { CustomersToolbar } from "@/modules/clientes/components/CustomersToolbar";
 import { useCustomersCrud } from "@/modules/clientes/hooks/useCustomersCrud";
+import { PosCustomerModal, type PosCustomerModalValues } from "@/modules/pos/components/PosCustomerModal";
+import { posCustomerProfilesService } from "@/services/pos-customer-profiles.service";
 import type { Customer } from "@/types/entities";
 import type { CustomerFormValues } from "@/modules/clientes/schemas/customer-form.schema";
 
 type FormMode = "create" | "edit";
+
+const defaultPosModalValues: PosCustomerModalValues = {
+  firstName: "",
+  lastName: "",
+  documentType: "dni",
+  documentNumber: "",
+  phone: "",
+  email: "",
+  address: "",
+  fiscalBusinessName: "",
+  fiscalAddress: "",
+  fiscalCondition: "",
+  fiscalCuit: "",
+  currentAccountEnabled: false,
+  currentAccountLimit: "",
+};
 
 export const ClientesPage = () => {
   const { tenantId } = useTenant();
@@ -51,13 +69,12 @@ export const ClientesPage = () => {
   const [formMode, setFormMode] = useState<FormMode>("create");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | undefined>(undefined);
   const [currentAccountCustomer, setCurrentAccountCustomer] = useState<Customer | null>(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const handleCreateClick = () => {
     if (!canWriteClientes) return;
     clearFeedback();
-    setFormMode("create");
-    setSelectedCustomer(undefined);
-    setFormOpen(true);
+    setCreateModalOpen(true);
   };
 
   const handleEditClick = (customer: Customer) => {
@@ -91,6 +108,44 @@ export const ClientesPage = () => {
 
     setFormOpen(false);
     setSelectedCustomer(undefined);
+  };
+
+  const handleCreateFromPosModal = async (values: PosCustomerModalValues) => {
+    const normalizeNamePart = (part: string) => part.trim();
+    const firstName = normalizeNamePart(values.firstName);
+    const lastName = normalizeNamePart(values.lastName);
+    const fullName = `${firstName} ${lastName}`.replace(/\s+/g, " ").trim();
+    const fiscalCuit = (values.fiscalCuit ?? "").trim();
+    const parsedLimit = Number(values.currentAccountLimit ?? "");
+    const currentAccountLimit =
+      (values.currentAccountLimit ?? "").trim() &&
+      Number.isFinite(parsedLimit) &&
+      parsedLimit >= 0
+        ? Number(parsedLimit.toFixed(2))
+        : null;
+
+    const created = await createCustomer({
+      fullName,
+      documentType: fiscalCuit ? "cuit" : values.documentType,
+      documentNumber: fiscalCuit || values.documentNumber.trim(),
+      fiscalBusinessName: values.fiscalBusinessName,
+      fiscalAddress: values.fiscalAddress,
+      fiscalCondition: values.fiscalCondition,
+      priceListId: "",
+      phone: values.phone,
+      email: values.email,
+      address: values.address,
+      observations: "",
+    });
+
+    if (!tenantId || !created) return;
+
+    posCustomerProfilesService.saveProfile(tenantId, created.id, {
+      enabled: values.currentAccountEnabled,
+      limit: currentAccountLimit,
+    });
+
+    setCreateModalOpen(false);
   };
 
   const handleOpenCurrentAccount = (customer: Customer) => {
@@ -179,6 +234,17 @@ export const ClientesPage = () => {
               onSubmit={handleSubmitForm}
             />
           </section>
+        ) : null}
+
+        {createModalOpen ? (
+          <PosCustomerModal
+            mode="create"
+            initialValues={defaultPosModalValues}
+            currentBalance={0}
+            disabled={isSubmitting}
+            onCancel={() => setCreateModalOpen(false)}
+            onSubmit={handleCreateFromPosModal}
+          />
         ) : null}
       </div>
     </PagePlaceholder>

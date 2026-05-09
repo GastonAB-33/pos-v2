@@ -21,6 +21,33 @@ interface CrudFeedback {
   message: string;
 }
 
+const isProductDeleteConflictError = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") return false;
+
+  const candidate = error as {
+    code?: unknown;
+    message?: unknown;
+    details?: unknown;
+    status?: unknown;
+  };
+
+  const code = typeof candidate.code === "string" ? candidate.code : "";
+  const status =
+    typeof candidate.status === "number"
+      ? candidate.status
+      : typeof candidate.status === "string"
+        ? Number(candidate.status)
+        : NaN;
+  const message =
+    `${typeof candidate.message === "string" ? candidate.message : ""} ${
+      typeof candidate.details === "string" ? candidate.details : ""
+    }`.toLowerCase();
+
+  if (status === 409) return true;
+  if (code === "23503") return true;
+  return message.includes("foreign key") || message.includes("update or delete on table");
+};
+
 export type ProductImportMode = "create_only" | "upsert";
 
 export interface ProductImportParsedRow {
@@ -619,7 +646,25 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       removeProductFromState(productId);
       setFeedback({ type: "success", message: "Producto eliminado" });
       await loadProducts();
-    } catch {
+    } catch (error) {
+      if (isProductDeleteConflictError(error)) {
+        const updated = await productsService.update(tenantId, productId, {
+          is_active: false,
+          is_favorite: false,
+        });
+
+        if (updated) {
+          upsertProductInState(updated);
+        }
+
+        setFeedback({
+          type: "success",
+          message: "Producto con movimientos previos: se desactivo en lugar de eliminarse",
+        });
+        await loadProducts();
+        return;
+      }
+
       setFeedback({ type: "error", message: "Error al eliminar producto" });
     } finally {
       setIsSubmitting(false);
@@ -635,20 +680,34 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
     setIsSubmitting(true);
 
     let deleted = 0;
+    let deactivated = 0;
     let failed = 0;
 
     try {
       for (const productId of uniqueIds) {
         try {
           const ok = await productsService.delete(tenantId, productId);
-          if (!ok) {
-            failed += 1;
+          if (ok) {
+            deleted += 1;
+            removeProductFromState(productId);
             continue;
           }
 
-          deleted += 1;
-          removeProductFromState(productId);
-        } catch {
+          failed += 1;
+        } catch (error) {
+          if (isProductDeleteConflictError(error)) {
+            const updated = await productsService.update(tenantId, productId, {
+              is_active: false,
+              is_favorite: false,
+            });
+
+            if (updated) {
+              deactivated += 1;
+              upsertProductInState(updated);
+              continue;
+            }
+          }
+
           failed += 1;
         }
       }
@@ -656,10 +715,13 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       if (failed > 0) {
         setFeedback({
           type: "error",
-          message: `Eliminacion masiva parcial. Eliminados: ${deleted} | Errores: ${failed}`,
+          message: `Eliminacion masiva parcial. Eliminados: ${deleted} | Desactivados: ${deactivated} | Errores: ${failed}`,
         });
       } else {
-        setFeedback({ type: "success", message: `Se eliminaron ${deleted} productos` });
+        setFeedback({
+          type: "success",
+          message: `Proceso finalizado. Eliminados: ${deleted} | Desactivados: ${deactivated}`,
+        });
       }
 
       await loadProducts();

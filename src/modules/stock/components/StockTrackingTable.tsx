@@ -1,8 +1,8 @@
-﻿import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Product } from "@/types/entities";
 import { downloadXlsx } from "@/utils/xlsx";
 import {
-  getStockStatus,
+  getStockStatusFromValues,
   stockStatusLabel,
   type StockStatus,
   type StockStatusFilter,
@@ -44,6 +44,26 @@ const getStatusBadgeClassName = (status: StockStatus): string => {
   return "ui-badge ui-badge--success";
 };
 
+const resolveThresholds = (product: Product, draft: StockDraft | undefined) => {
+  if (!draft) {
+    return {
+      stockMin: product.stock_min,
+      stockMax: product.stock_max,
+    };
+  }
+
+  return {
+    stockMin: toNullableNumber(draft.stockMin),
+    stockMax: toNullableNumber(draft.stockMax),
+  };
+};
+
+const sameNullableNumber = (left: number | null, right: number | null): boolean => {
+  if (left == null && right == null) return true;
+  if (left == null || right == null) return false;
+  return Number(left.toFixed(3)) === Number(right.toFixed(3));
+};
+
 export const StockTrackingTable = ({
   products,
   categories,
@@ -60,14 +80,31 @@ export const StockTrackingTable = ({
   const [bulkStockMin, setBulkStockMin] = useState("");
   const [bulkStockMax, setBulkStockMax] = useState("");
   const [reportMessage, setReportMessage] = useState<string | null>(null);
+  const [isReportMenuOpen, setIsReportMenuOpen] = useState(false);
+  const reportMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isReportMenuOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!reportMenuRef.current) return;
+      if (reportMenuRef.current.contains(event.target as Node)) return;
+      setIsReportMenuOpen(false);
+    };
+
+    window.addEventListener("mousedown", handleClickOutside);
+    return () => window.removeEventListener("mousedown", handleClickOutside);
+  }, [isReportMenuOpen]);
 
   const rows = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
+
     return products.filter((product) => {
       if (!product.is_active) return false;
       if (categoryFilter && product.category !== categoryFilter) return false;
 
-      const status = getStockStatus(product);
+      const { stockMin, stockMax } = resolveThresholds(product, drafts[product.id]);
+      const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
       if (statusFilter !== "all" && status !== statusFilter) return false;
 
       if (!normalizedSearch) return true;
@@ -75,7 +112,21 @@ export const StockTrackingTable = ({
       const searchTarget = `${product.name} ${product.code} ${product.category} ${product.subcategory ?? ""}`.toLowerCase();
       return searchTarget.includes(normalizedSearch);
     });
-  }, [products, search, categoryFilter, statusFilter]);
+  }, [products, search, categoryFilter, statusFilter, drafts]);
+
+  const reportCandidates = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+
+    return products.filter((product) => {
+      if (!product.is_active) return false;
+      if (categoryFilter && product.category !== categoryFilter) return false;
+
+      if (!normalizedSearch) return true;
+
+      const searchTarget = `${product.name} ${product.code} ${product.category} ${product.subcategory ?? ""}`.toLowerCase();
+      return searchTarget.includes(normalizedSearch);
+    });
+  }, [products, search, categoryFilter]);
 
   const selectedVisibleIds = useMemo(
     () => selectedIds.filter((id) => rows.some((row) => row.id === id)),
@@ -90,6 +141,7 @@ export const StockTrackingTable = ({
         stockMin: product.stock_min != null ? normalizeQty(product.stock_min) : "",
         stockMax: product.stock_max != null ? normalizeQty(product.stock_max) : "",
       };
+
       return {
         ...current,
         [product.id]: { ...currentDraft, ...patch },
@@ -104,6 +156,24 @@ export const StockTrackingTable = ({
         stockMax: product.stock_max != null ? normalizeQty(product.stock_max) : "",
       }
     );
+  };
+
+  const persistRowIfChanged = async (product: Product) => {
+    const draft = getDraft(product);
+    const nextMin = toNullableNumber(draft.stockMin);
+    const nextMax = toNullableNumber(draft.stockMax);
+
+    const currentMin = product.stock_min;
+    const currentMax = product.stock_max;
+
+    if (sameNullableNumber(nextMin, currentMin) && sameNullableNumber(nextMax, currentMax)) {
+      return;
+    }
+
+    await onUpdateOne(product.id, {
+      stockMin: nextMin,
+      stockMax: nextMax,
+    });
   };
 
   const toggleRow = (productId: string, checked: boolean) => {
@@ -126,14 +196,6 @@ export const StockTrackingTable = ({
       const next = new Set(current);
       rows.forEach((row) => next.add(row.id));
       return [...next];
-    });
-  };
-
-  const handleSaveRow = async (product: Product) => {
-    const draft = getDraft(product);
-    await onUpdateOne(product.id, {
-      stockMin: toNullableNumber(draft.stockMin),
-      stockMax: toNullableNumber(draft.stockMax),
     });
   };
 
@@ -165,23 +227,48 @@ export const StockTrackingTable = ({
     });
   };
 
-  const handleDownloadStatusReport = async () => {
-    const reportRows = rows.map((product) => {
-      const status = getStockStatus(product);
-      return {
-        producto: product.name,
-        codigo: product.code,
-        categoria: product.category,
-        subcategoria: product.subcategory ?? "",
-        stock_actual: Number(product.stock_current.toFixed(3)),
-        stock_min: product.stock_min ?? "",
-        stock_max: product.stock_max ?? "",
-        estado: stockStatusLabel[status],
-      };
-    });
+  const handleDownloadStatusReport = async (targetStatus: StockStatus) => {
+    const reportRows = reportCandidates
+      .map((product) => {
+        const { stockMin, stockMax } = resolveThresholds(product, drafts[product.id]);
+        const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
 
-    const ok = await downloadXlsx(`informe-estado-stock-${buildReportDateStamp()}.xlsx`, "Estado stock", reportRows);
-    setReportMessage(ok ? "Informe de estado de stock descargado" : "No hay datos para exportar");
+        return {
+          producto: product.name,
+          codigo: product.code,
+          categoria: product.category,
+          subcategoria: product.subcategory ?? "",
+          stock_actual: Number(product.stock_current.toFixed(3)),
+          stock_min: stockMin ?? "",
+          stock_max: stockMax ?? "",
+          estado: status,
+        };
+      })
+      .filter((row) => row.estado === targetStatus)
+      .map((row) => ({
+        ...row,
+        estado: stockStatusLabel[row.estado],
+      }));
+
+    if (!reportRows.length) {
+      setReportMessage(`No hay productos en estado "${stockStatusLabel[targetStatus]}" para exportar`);
+      return;
+    }
+
+    const fileNameByStatus: Record<StockStatus, string> = {
+      low: "stock-bajo",
+      normal: "normal",
+      over: "sobrestock",
+      unassigned: "sin-asignar",
+    };
+
+    const ok = await downloadXlsx(
+      `informe-estado-${fileNameByStatus[targetStatus]}-${buildReportDateStamp()}.xlsx`,
+      `Estado ${stockStatusLabel[targetStatus]}`,
+      reportRows
+    );
+
+    setReportMessage(ok ? `Informe "${stockStatusLabel[targetStatus]}" descargado` : "No hay datos para exportar");
   };
 
   return (
@@ -195,16 +282,34 @@ export const StockTrackingTable = ({
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className="text-xs text-slate-500">Mostrando: {rows.length} producto(s)</div>
-          <button
-            type="button"
-            className="ui-btn-ghost px-2 py-1 text-xs"
-            onClick={() => {
-              void handleDownloadStatusReport();
-            }}
-            disabled={!rows.length}
-          >
-            Descargar informe de estado
-          </button>
+          <div className="relative" ref={reportMenuRef}>
+            <button
+              type="button"
+              className="ui-btn-ghost px-2 py-1 text-xs"
+              onClick={() => setIsReportMenuOpen((current) => !current)}
+              disabled={!reportCandidates.length}
+            >
+              Descargar informe de estado v
+            </button>
+
+            {isReportMenuOpen ? (
+              <div className="absolute right-0 top-full z-10 mt-1 min-w-[220px] rounded-lg border border-slate-200 bg-white p-1 shadow-panel">
+                {(["low", "normal", "over", "unassigned"] as StockStatus[]).map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    className="block w-full rounded-md px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-50"
+                    onClick={() => {
+                      setIsReportMenuOpen(false);
+                      void handleDownloadStatusReport(status);
+                    }}
+                  >
+                    {stockStatusLabel[status]}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -272,7 +377,7 @@ export const StockTrackingTable = ({
           />
           <button
             type="button"
-            className="ui-btn-primary md:col-span-2"
+            className="ui-btn-primary h-10 md:col-span-2"
             onClick={() => {
               void handleApplyBulk();
             }}
@@ -282,7 +387,7 @@ export const StockTrackingTable = ({
           </button>
           <button
             type="button"
-            className="ui-btn-ghost"
+            className="ui-btn-ghost h-10"
             onClick={() => setSelectedIds([])}
             disabled={disabled || !selectedVisibleIds.length}
           >
@@ -295,7 +400,7 @@ export const StockTrackingTable = ({
         <div className="ui-empty-state">No hay productos para los filtros elegidos.</div>
       ) : (
         <div className="ui-table-wrap max-h-[420px] overflow-auto">
-          <table className="min-w-full text-sm">
+          <table className="min-w-full table-auto text-sm">
             <thead>
               <tr>
                 <th className="px-3 py-2 text-left">
@@ -306,19 +411,20 @@ export const StockTrackingTable = ({
                     disabled={disabled}
                   />
                 </th>
-                <th className="px-3 py-2 text-left">Producto</th>
-                <th className="px-3 py-2 text-left">Categoria</th>
-                <th className="px-3 py-2 text-left">Stock actual</th>
-                <th className="px-3 py-2 text-left">Minimo</th>
-                <th className="px-3 py-2 text-left">Maximo</th>
-                <th className="px-3 py-2 text-left">Estado</th>
-                <th className="px-3 py-2 text-left">Accion</th>
+                <th className="w-[28%] px-3 py-2 text-left">Producto</th>
+                <th className="w-[15%] px-3 py-2 text-left">Categoria</th>
+                <th className="w-[12%] px-3 py-2 text-left">Stock actual</th>
+                <th className="w-[16%] px-3 py-2 text-left">Minimo</th>
+                <th className="w-[16%] px-3 py-2 text-left">Maximo</th>
+                <th className="w-[13%] px-3 py-2 text-left">Estado</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((product) => {
                 const draft = getDraft(product);
-                const status = getStockStatus(product);
+                const { stockMin, stockMax } = resolveThresholds(product, draft);
+                const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
+
                 return (
                   <tr key={product.id}>
                     <td className="px-3 py-2">
@@ -341,6 +447,9 @@ export const StockTrackingTable = ({
                         step="0.001"
                         value={draft.stockMin}
                         onChange={(event) => updateDraft(product, { stockMin: event.target.value })}
+                        onBlur={() => {
+                          void persistRowIfChanged(product);
+                        }}
                         className="ui-input"
                         placeholder="-"
                         disabled={disabled}
@@ -352,6 +461,9 @@ export const StockTrackingTable = ({
                         step="0.001"
                         value={draft.stockMax}
                         onChange={(event) => updateDraft(product, { stockMax: event.target.value })}
+                        onBlur={() => {
+                          void persistRowIfChanged(product);
+                        }}
                         className="ui-input"
                         placeholder="-"
                         disabled={disabled}
@@ -359,18 +471,6 @@ export const StockTrackingTable = ({
                     </td>
                     <td className="px-3 py-2">
                       <span className={getStatusBadgeClassName(status)}>{stockStatusLabel[status]}</span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <button
-                        type="button"
-                        className="ui-btn-ghost px-2 py-1 text-xs"
-                        disabled={disabled}
-                        onClick={() => {
-                          void handleSaveRow(product);
-                        }}
-                      >
-                        Guardar
-                      </button>
                     </td>
                   </tr>
                 );
@@ -382,4 +482,3 @@ export const StockTrackingTable = ({
     </section>
   );
 };
-

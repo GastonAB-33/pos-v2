@@ -19,12 +19,24 @@ export const movementTypeLabel: Record<StockMovementType, string> = {
   out: "Salida",
 };
 
-export const getStockStatus = (product: Product): StockStatus => {
-  const min = product.stock_min;
-  const max = product.stock_max;
+const normalizeMax = (max: number | null): number | null => {
+  if (max == null) return null;
+  if (max <= 0) return null;
+  return max;
+};
 
-  if (min == null && max == null) return "unassigned";
-  if (min != null && product.stock_current <= min) return "low";
-  if (max != null && product.stock_current > max) return "over";
+export const getStockStatusFromValues = (
+  stockCurrent: number,
+  min: number | null,
+  max: number | null
+): StockStatus => {
+  const normalizedMax = normalizeMax(max);
+
+  if (min == null && normalizedMax == null) return "unassigned";
+  if (min != null && stockCurrent <= min) return "low";
+  if (normalizedMax != null && stockCurrent > normalizedMax) return "over";
   return "normal";
 };
+
+export const getStockStatus = (product: Product): StockStatus =>
+  getStockStatusFromValues(product.stock_current, product.stock_min, product.stock_max);

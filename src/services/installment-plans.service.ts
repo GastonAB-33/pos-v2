@@ -11,6 +11,21 @@ const crud = new TenantCrudService<InstallmentPlan>(dbTables.installment_plans);
 export type CreateInstallmentPlanInput = CreateEntityInput<InstallmentPlan>;
 export type UpdateInstallmentPlanInput = UpdateEntityInput<InstallmentPlan>;
 
+interface ConflictLikeError {
+  code?: string;
+  status?: number;
+  message?: string;
+  details?: string;
+}
+
+const isUniqueConflictError = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") return false;
+  const conflict = error as ConflictLikeError;
+  if (conflict.code === "23505" || conflict.status === 409) return true;
+  const text = `${conflict.message ?? ""} ${conflict.details ?? ""}`.toLowerCase();
+  return text.includes("duplicate key") || text.includes("unique constraint");
+};
+
 const defaultInstallmentPlans: Array<
   Omit<CreateInstallmentPlanInput, "tenant_id" | "id" | "created_at" | "updated_at">
 > = [
@@ -64,8 +79,12 @@ export const installmentPlansService = {
 
     for (const template of defaultInstallmentPlans) {
       if (existingCodes.has(template.code)) continue;
-      const next = await crud.create(tenantId, template);
-      created.push(next);
+      try {
+        const next = await crud.create(tenantId, template);
+        created.push(next);
+      } catch (error) {
+        if (!isUniqueConflictError(error)) throw error;
+      }
       existingCodes.add(template.code);
     }
 
@@ -81,4 +100,3 @@ export const installmentPlansService = {
   calculateTotalWithInterest: (baseAmount: number, interestPercent: number): number =>
     Number((baseAmount + baseAmount * (interestPercent / 100)).toFixed(2)),
 };
-

@@ -86,7 +86,7 @@ export const useCustomersCrud = (tenantId: string | null, userId: string | null)
   }, [loadCustomers]);
 
   const createCustomer = async (values: CustomerFormValues) => {
-    if (!tenantId) return;
+    if (!tenantId) return null;
 
     setIsSubmitting(true);
     try {
@@ -106,8 +106,10 @@ export const useCustomersCrud = (tenantId: string | null, userId: string | null)
       });
       setFeedback({ type: "success", message: "Cliente creado" });
       await loadCustomers();
+      return created;
     } catch {
       setFeedback({ type: "error", message: "Error al crear cliente" });
+      return null;
     } finally {
       setIsSubmitting(false);
     }

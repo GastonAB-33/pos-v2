@@ -91,11 +91,12 @@ export interface Supplier extends TenantScopedEntity {
 
 export type PaymentMethodType =
   | "cash"
+  | "card_debit"
+  | "card_credit"
   | "transfer"
-  | "card"
   | "mercado_pago"
-  | "current_account"
-  | "other";
+  | "cheque"
+  | "current_account";
 
 export interface PaymentMethod extends TenantScopedEntity {
   name: string;

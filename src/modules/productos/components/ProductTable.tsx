@@ -86,24 +86,43 @@ export const ProductTable = ({
                 <td className="px-3 py-3 font-medium text-slate-900">{currency.format(product.precioFinal)}</td>
                 <td className="px-3 py-3">{product.stock.toLocaleString("es-AR")}</td>
                 <td className="px-3 py-3">
-                  <button
-                    type="button"
-                    title={isFavorite ? "Quitar de favoritos" : "Marcar como favorito"}
-                    aria-label={isFavorite ? "Quitar de favoritos" : "Marcar como favorito"}
-                    onClick={() => onToggleFavorite(product)}
-                    disabled={!canWrite}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <svg
-                      viewBox="0 0 24 24"
-                      className="h-5 w-5"
-                      fill={isFavorite ? "currentColor" : "none"}
-                      stroke="currentColor"
-                      strokeWidth="1.8"
+                  <div className="inline-flex items-center gap-2">
+                    <button
+                      type="button"
+                      title={isFavorite ? "Quitar de favoritos" : "Marcar como favorito"}
+                      aria-label={isFavorite ? "Quitar de favoritos" : "Marcar como favorito"}
+                      onClick={() => onToggleFavorite(product)}
+                      disabled={!canWrite}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      style={{ color: isFavorite ? "var(--ui-accent)" : "var(--ui-muted)" }}
                     >
-                      <path d="m12 3.8 2.57 5.21 5.75.84-4.16 4.06.98 5.73L12 16.98 6.86 19.64l.98-5.73L3.68 9.85l5.75-.84L12 3.8z" />
-                    </svg>
-                  </button>
+                      <svg
+                        viewBox="0 0 24 24"
+                        className="h-5 w-5"
+                        fill={isFavorite ? "currentColor" : "none"}
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                      >
+                        <path d="m12 3.8 2.57 5.21 5.75.84-4.16 4.06.98 5.73L12 16.98 6.86 19.64l.98-5.73L3.68 9.85l5.75-.84L12 3.8z" />
+                      </svg>
+                    </button>
+                    <span
+                      aria-label={product.activo ? "Producto activo" : "Producto inactivo"}
+                      title={product.activo ? "Producto activo" : "Producto inactivo"}
+                      className="inline-flex h-4 w-4 items-center justify-center"
+                      style={{ color: product.activo ? "var(--ui-success)" : "var(--ui-danger)" }}
+                    >
+                      {product.activo ? (
+                        <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M3 8.3 6.3 11.2 13 4.7" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="m4.2 4.2 7.6 7.6M11.8 4.2l-7.6 7.6" />
+                        </svg>
+                      )}
+                    </span>
+                  </div>
                 </td>
                 <td className="px-3 py-3">
                   <ProductActions

@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditService } from "@/services/audit.service";
-import { paymentMethodsService } from "@/services/payment-methods.service";
-import type { PaymentMethod } from "@/types/entities";
+import { bankAccountsService } from "@/services/bank-accounts.service";
+import {
+  composePaymentMethodNotes,
+  isSystemPaymentMethodCode,
+  normalizePaymentMethodCode,
+  paymentMethodsService,
+} from "@/services/payment-methods.service";
+import type { BankAccount, PaymentMethod } from "@/types/entities";
 import type { PaymentMethodFormValues } from "@/modules/medios-pago/schemas/payment-method-form.schema";
 
 type FeedbackType = "success" | "error";
@@ -11,11 +17,9 @@ interface CrudFeedback {
   message: string;
 }
 
-const normalizeText = (value?: string) => (value?.trim() ? value.trim() : null);
-const normalizeCode = (code: string) => code.trim().toLowerCase().replace(/\s+/g, "_");
-
 export const usePaymentMethodsCrud = (tenantId: string | null, userId: string | null) => {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -26,14 +30,19 @@ export const usePaymentMethodsCrud = (tenantId: string | null, userId: string | 
   const loadPaymentMethods = useCallback(async () => {
     if (!tenantId) {
       setPaymentMethods([]);
+      setBankAccounts([]);
       return;
     }
 
     setIsLoading(true);
     try {
-      await paymentMethodsService.ensureDefaultMethods(tenantId);
-      const list = await paymentMethodsService.getAllByTenant(tenantId);
-      setPaymentMethods(list);
+      const [methods, accounts] = await Promise.all([
+        paymentMethodsService.getAllByTenant(tenantId),
+        bankAccountsService.getActiveByTenant(tenantId),
+      ]);
+
+      setPaymentMethods(methods);
+      setBankAccounts(accounts.sort((a, b) => a.bank_name.localeCompare(b.bank_name)));
     } catch {
       setFeedback({ type: "error", message: "No se pudieron cargar los medios de pago" });
     } finally {
@@ -45,58 +54,27 @@ export const usePaymentMethodsCrud = (tenantId: string | null, userId: string | 
     void loadPaymentMethods();
   }, [loadPaymentMethods]);
 
-  const createPaymentMethod = async (values: PaymentMethodFormValues) => {
-    if (!tenantId) return;
-
-    setIsSubmitting(true);
-    try {
-      const created = await paymentMethodsService.create(tenantId, {
-        name: values.name.trim(),
-        code: normalizeCode(values.code),
-        type: values.type,
-        is_active: true,
-        affects_cash: values.affects_cash,
-        surcharge_percent: Number(values.surcharge_percent),
-        discount_percent: Number(values.discount_percent),
-        notes: normalizeText(values.notes),
-      });
-      await auditService.createSafe(tenantId, {
-        user_id: userId,
-        module: "medios_pago",
-        action: "create",
-        entity_type: "payment_method",
-        entity_id: created.id,
-        description: `Medio de pago creado: ${created.name}`,
-        metadata: {
-          code: created.code,
-          type: created.type,
-          affects_cash: created.affects_cash,
-          is_active: created.is_active,
-        },
-      });
-
-      setFeedback({ type: "success", message: "Medio de pago creado" });
-      await loadPaymentMethods();
-    } catch {
-      setFeedback({ type: "error", message: "No se pudo crear el medio de pago" });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   const updatePaymentMethod = async (id: string, values: PaymentMethodFormValues) => {
-    if (!tenantId) return;
+    if (!tenantId) return false;
+
+    const existing = paymentMethods.find((method) => method.id === id);
+    if (!existing) {
+      setFeedback({ type: "error", message: "No se encontro el medio de pago a editar" });
+      return false;
+    }
+
+    const normalizedCode = normalizePaymentMethodCode(existing.code);
+    if (!isSystemPaymentMethodCode(normalizedCode)) {
+      setFeedback({ type: "error", message: "Solo se pueden editar medios del catalogo fijo" });
+      return false;
+    }
 
     setIsSubmitting(true);
     try {
       const updated = await paymentMethodsService.update(tenantId, id, {
-        name: values.name.trim(),
-        code: normalizeCode(values.code),
-        type: values.type,
-        affects_cash: values.affects_cash,
         surcharge_percent: Number(values.surcharge_percent),
         discount_percent: Number(values.discount_percent),
-        notes: normalizeText(values.notes),
+        notes: composePaymentMethodNotes(normalizedCode, values.notes, values.config),
       });
       await auditService.createSafe(tenantId, {
         user_id: userId,
@@ -104,55 +82,28 @@ export const usePaymentMethodsCrud = (tenantId: string | null, userId: string | 
         action: "update",
         entity_type: "payment_method",
         entity_id: updated?.id ?? id,
-        description: `Medio de pago actualizado: ${values.name.trim()}`,
+        description: `Configuracion de medio de pago actualizada: ${existing.name}`,
         metadata: {
-          code: normalizeCode(values.code),
-          type: values.type,
-          affects_cash: values.affects_cash,
+          code: existing.code,
+          surcharge_percent: values.surcharge_percent,
+          discount_percent: values.discount_percent,
+          config: values.config,
         },
       });
 
-      setFeedback({ type: "success", message: "Medio de pago actualizado" });
+      setFeedback({ type: "success", message: "Configuracion de medio de pago actualizada" });
       await loadPaymentMethods();
+      return true;
     } catch {
       setFeedback({ type: "error", message: "No se pudo actualizar el medio de pago" });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const deletePaymentMethod = async (id: string) => {
-    if (!tenantId) return;
-    const target = paymentMethods.find((method) => method.id === id);
-
-    setIsSubmitting(true);
-    try {
-      await paymentMethodsService.delete(tenantId, id);
-      await auditService.createSafe(tenantId, {
-        user_id: userId,
-        module: "medios_pago",
-        action: "delete",
-        entity_type: "payment_method",
-        entity_id: id,
-        description: `Medio de pago eliminado${target ? `: ${target.name}` : ""}`,
-        metadata: target
-          ? {
-              code: target.code,
-              type: target.type,
-            }
-          : null,
-      });
-      setFeedback({ type: "success", message: "Medio de pago eliminado" });
-      await loadPaymentMethods();
-    } catch {
-      setFeedback({ type: "error", message: "No se pudo eliminar el medio de pago" });
+      return false;
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const togglePaymentMethod = async (id: string) => {
-    if (!tenantId) return;
+    if (!tenantId) return false;
     const target = paymentMethods.find((method) => method.id === id);
 
     setIsSubmitting(true);
@@ -170,10 +121,12 @@ export const usePaymentMethodsCrud = (tenantId: string | null, userId: string | 
           next_is_active: updated?.is_active ?? null,
         },
       });
-      setFeedback({ type: "success", message: "Estado actualizado" });
+      setFeedback({ type: "success", message: "Estado de medio de pago actualizado" });
       await loadPaymentMethods();
+      return true;
     } catch {
       setFeedback({ type: "error", message: "No se pudo cambiar el estado" });
+      return false;
     } finally {
       setIsSubmitting(false);
     }
@@ -181,12 +134,12 @@ export const usePaymentMethodsCrud = (tenantId: string | null, userId: string | 
 
   const filteredPaymentMethods = useMemo(() => {
     const term = search.trim().toLowerCase();
-    const base = [...paymentMethods].sort((a, b) => a.name.localeCompare(b.name));
+    const base = [...paymentMethods];
 
     if (!term) return base;
 
     return base.filter((method) =>
-      [method.name, method.code, method.type, method.notes ?? ""]
+      [method.name, method.code, method.type]
         .join(" ")
         .toLowerCase()
         .includes(term)
@@ -195,6 +148,7 @@ export const usePaymentMethodsCrud = (tenantId: string | null, userId: string | 
 
   return {
     paymentMethods: filteredPaymentMethods,
+    bankAccounts,
     search,
     setSearch,
     isLoading,
@@ -202,9 +156,7 @@ export const usePaymentMethodsCrud = (tenantId: string | null, userId: string | 
     feedback,
     clearFeedback,
     reload: loadPaymentMethods,
-    createPaymentMethod,
     updatePaymentMethod,
-    deletePaymentMethod,
     togglePaymentMethod,
   };
 };

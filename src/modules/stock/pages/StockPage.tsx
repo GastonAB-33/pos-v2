@@ -44,8 +44,7 @@ const DateFilterInput = ({ label, value, onChange }: DateFilterInputProps) => {
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onClick={openPicker}
-        onFocus={openPicker}
-        className="ui-input cursor-pointer"
+        className="ui-input ui-input--date cursor-pointer"
       />
     </div>
   );
@@ -137,12 +136,13 @@ export const StockPage = () => {
   }
 
   return (
-    <PagePlaceholder title="Stock" description="Movimientos reales y ajustes manuales">
-      <div className="space-y-4">
+    <PagePlaceholder title="Stock">
+      <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-slate-600">
-            Movimientos: {movementRows.length} | Productos activos: {summary.activeProducts}
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="ui-badge ui-badge--info">Movimientos: {movementRows.length}</span>
+            <span className="ui-badge ui-badge--success">Activos: {summary.activeProducts}</span>
+          </div>
           <div className="flex items-center gap-2">
             {canWriteStock && stockSettings.allow_manual_adjustments ? (
               <button
@@ -170,12 +170,6 @@ export const StockPage = () => {
             </button>
           </div>
         </div>
-
-        <p className="text-xs text-slate-500">
-          Politica: {stockSettings.alerts_active ? "alertas activas" : "alertas desactivadas"} |{" "}
-          {stockSettings.allow_negative_stock ? "stock negativo permitido" : "stock negativo bloqueado"} |{" "}
-          {stockSettings.allow_manual_adjustments ? "ajustes manuales habilitados" : "ajustes manuales deshabilitados"}
-        </p>
 
         <StockSummaryCards
           activeProducts={summary.activeProducts}

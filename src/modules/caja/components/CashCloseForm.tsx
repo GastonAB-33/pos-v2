@@ -48,7 +48,9 @@ export const CashCloseForm = ({
       <p className="text-sm text-slate-600">Monto esperado: {currency.format(expectedBalance)}</p>
       <form className="grid gap-3" onSubmit={handleSubmit(submit)}>
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Monto real</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Arqueo de caja (monto real)
+          </label>
           <input
             type="number"
             step="0.01"
@@ -80,4 +82,3 @@ export const CashCloseForm = ({
     </section>
   );
 };
-

@@ -14,11 +14,15 @@ const currency = new Intl.NumberFormat("es-AR", {
 });
 
 const getPaymentMethodLabel = (paymentMethod: Receipt["payment_method"]) => {
-  if (paymentMethod === "cash") return "Efectivo";
-  if (paymentMethod === "transfer") return "Transferencia";
-  if (paymentMethod === "card") return "Tarjeta";
-  if (paymentMethod === "mercado_pago") return "Mercado Pago";
-  if (paymentMethod === "current_account") return "Cuenta corriente";
+  const normalized = String(paymentMethod).trim().toLowerCase();
+  if (normalized === "cash") return "Efectivo";
+  if (normalized === "card_debit") return "Tarjeta de debito";
+  if (normalized === "card_credit") return "Tarjeta de credito";
+  if (normalized === "transfer") return "Transferencia bancaria";
+  if (normalized === "mercado_pago") return "Mercado Pago";
+  if (normalized === "cheque") return "Cheque";
+  if (normalized === "current_account") return "Cuenta corriente";
+  if (normalized === "card") return "Tarjeta";
   return "Otro";
 };
 

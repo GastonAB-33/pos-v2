@@ -19,6 +19,7 @@ interface StockMovementsTableProps {
 const columnHelper = createColumnHelper<StockMovementRow>();
 
 const referenceTypeLabelMap: Record<string, string> = {
+  adjustment: "Ajuste manual",
   manual_adjustment: "Ajuste manual",
   sale: "Venta",
   purchase: "Compra",

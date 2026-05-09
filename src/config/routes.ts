@@ -1,6 +1,7 @@
 ﻿export const routePaths = {
   login: "/login",
   home: "/",
+  menuPrincipal: "/menu-principal",
   dashboard: "/dashboard",
   pos: "/pos",
   productos: "/productos",
@@ -18,6 +19,13 @@
   reportes: "/reportes",
   auditoria: "/auditoria",
   configuracion: "/configuracion",
+  configuracionAgenda: "/agenda/configuracion",
+  configuracionCatalogo: "/catalogo/configuracion",
+  configuracionAnalisis: "/analisis/configuracion",
+  configuracionSistema: "/sistema/configuracion",
+  centroSoporte: "/sistema/centro-soporte",
+  misConsultas: "/sistema/mis-consultas",
+  configuracionContable: "/contable/configuracion",
   usuarios: "/usuarios",
   unauthorized: "/unauthorized",
 } as const;

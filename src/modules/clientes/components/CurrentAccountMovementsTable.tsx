@@ -5,9 +5,11 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import type { CurrentAccountMovement } from "@/types/entities";
+import type { CurrentAccountSaleDetail } from "@/modules/clientes/hooks/useCurrentAccount";
 
 interface CurrentAccountMovementsTableProps {
   movements: CurrentAccountMovement[];
+  saleDetailsById?: Record<string, CurrentAccountSaleDetail>;
 }
 
 const columnHelper = createColumnHelper<CurrentAccountMovement>();
@@ -18,8 +20,27 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
+const movementTypeLabels: Record<CurrentAccountMovement["type"], string> = {
+  debt: "Deuda",
+  payment: "Pago",
+  adjustment: "Ajuste",
+};
+
+const formatProductsSummary = (saleDetail: CurrentAccountSaleDetail): string => {
+  if (!saleDetail.items.length) return "Sin detalle de productos";
+
+  const topItems = saleDetail.items.slice(0, 2);
+  const visible = topItems
+    .map((item) => `${item.product_name} x${item.quantity.toLocaleString("es-AR")}`)
+    .join(", ");
+  const remaining = saleDetail.items.length - topItems.length;
+
+  return remaining > 0 ? `${visible} (+${remaining} mas)` : visible;
+};
+
 export const CurrentAccountMovementsTable = ({
   movements,
+  saleDetailsById = {},
 }: CurrentAccountMovementsTableProps) => {
   const columns = [
     columnHelper.accessor("created_at", {
@@ -28,7 +49,44 @@ export const CurrentAccountMovementsTable = ({
     }),
     columnHelper.accessor("type", {
       header: "Tipo",
-      cell: (info) => info.getValue(),
+      cell: (info) => movementTypeLabels[info.getValue()] ?? info.getValue(),
+    }),
+    columnHelper.display({
+      id: "voucher",
+      header: "Comprobante",
+      cell: (info) => {
+        const movement = info.row.original;
+        if (!movement.sale_id) return "-";
+
+        const saleDetail = saleDetailsById[movement.sale_id];
+        if (!saleDetail) return `Venta ${movement.sale_id.slice(0, 8)}`;
+
+        return (
+          <div className="space-y-0.5">
+            <p className="font-medium text-slate-800">{saleDetail.sale_number}</p>
+            <p className="text-xs text-slate-500">
+              {saleDetail.receipt_number ? `Ticket ${saleDetail.receipt_number}` : "Sin ticket"}
+            </p>
+          </div>
+        );
+      },
+    }),
+    columnHelper.display({
+      id: "products",
+      header: "Productos",
+      cell: (info) => {
+        const movement = info.row.original;
+        if (!movement.sale_id) return "-";
+
+        const saleDetail = saleDetailsById[movement.sale_id];
+        if (!saleDetail) return "Sin detalle";
+
+        return (
+          <p className="max-w-[320px] text-xs text-slate-600">
+            {formatProductsSummary(saleDetail)}
+          </p>
+        );
+      },
     }),
     columnHelper.accessor("amount", {
       header: "Monto",
@@ -78,7 +136,7 @@ export const CurrentAccountMovementsTable = ({
           {table.getRowModel().rows.map((row) => (
             <tr key={row.id}>
               {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} className="px-4 py-2 text-slate-700">
+                <td key={cell.id} className="px-4 py-2 align-top text-slate-700">
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}
@@ -89,4 +147,3 @@ export const CurrentAccountMovementsTable = ({
     </div>
   );
 };
-
