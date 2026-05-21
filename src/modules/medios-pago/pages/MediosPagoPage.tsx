@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -7,6 +7,7 @@ import { PaymentMethodForm } from "@/modules/medios-pago/components/PaymentMetho
 import { PaymentMethodsTable } from "@/modules/medios-pago/components/PaymentMethodsTable";
 import { PaymentMethodsToolbar } from "@/modules/medios-pago/components/PaymentMethodsToolbar";
 import { usePaymentMethodsCrud } from "@/modules/medios-pago/hooks/usePaymentMethodsCrud";
+import { getPaymentMethodTypeLabel } from "@/services/payment-methods.service";
 import type { PaymentMethod } from "@/types/entities";
 import type { PaymentMethodFormValues } from "@/modules/medios-pago/schemas/payment-method-form.schema";
 
@@ -19,6 +20,7 @@ export const MediosPagoPage = () => {
 
   const {
     paymentMethods,
+    bankAccounts,
     search,
     setSearch,
     isLoading,
@@ -26,41 +28,34 @@ export const MediosPagoPage = () => {
     feedback,
     clearFeedback,
     reload,
-    createPaymentMethod,
     updatePaymentMethod,
-    deletePaymentMethod,
     togglePaymentMethod,
   } = usePaymentMethodsCrud(tenantId, user?.id ?? null);
 
-  const [formOpen, setFormOpen] = useState(false);
-  const [formMode, setFormMode] = useState<"create" | "edit">("create");
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | undefined>(
-    undefined
+  const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!paymentMethods.length) {
+      setSelectedPaymentMethodId(null);
+      return;
+    }
+
+    setSelectedPaymentMethodId((current) => {
+      if (current && paymentMethods.some((method) => method.id === current)) {
+        return current;
+      }
+
+      return paymentMethods[0].id;
+    });
+  }, [paymentMethods]);
+
+  const selectedPaymentMethod = useMemo(
+    () => paymentMethods.find((method) => method.id === selectedPaymentMethodId),
+    [paymentMethods, selectedPaymentMethodId]
   );
-
-  const handleCreateClick = () => {
-    if (!canWritePaymentMethods) return;
+  const handleSelectClick = (paymentMethod: PaymentMethod) => {
     clearFeedback();
-    setFormMode("create");
-    setSelectedPaymentMethod(undefined);
-    setFormOpen(true);
-  };
-
-  const handleEditClick = (paymentMethod: PaymentMethod) => {
-    if (!canWritePaymentMethods) return;
-    clearFeedback();
-    setFormMode("edit");
-    setSelectedPaymentMethod(paymentMethod);
-    setFormOpen(true);
-  };
-
-  const handleDeleteClick = async (paymentMethod: PaymentMethod) => {
-    if (!canWritePaymentMethods) return;
-
-    const confirmed = window.confirm(`Eliminar medio de pago ${paymentMethod.name}?`);
-    if (!confirmed) return;
-
-    await deletePaymentMethod(paymentMethod.id);
+    setSelectedPaymentMethodId(paymentMethod.id);
   };
 
   const handleToggleClick = async (paymentMethod: PaymentMethod) => {
@@ -69,14 +64,12 @@ export const MediosPagoPage = () => {
   };
 
   const handleSubmitForm = async (values: PaymentMethodFormValues) => {
-    if (formMode === "create") {
-      await createPaymentMethod(values);
-    } else if (selectedPaymentMethod) {
-      await updatePaymentMethod(selectedPaymentMethod.id, values);
-    }
+    clearFeedback();
+    if (!selectedPaymentMethod) return;
 
-    setFormOpen(false);
-    setSelectedPaymentMethod(undefined);
+    const wasSuccessful = await updatePaymentMethod(selectedPaymentMethod.id, values);
+
+    if (!wasSuccessful) return;
   };
 
   if (!tenantId) {
@@ -98,14 +91,15 @@ export const MediosPagoPage = () => {
   }
 
   return (
-    <PagePlaceholder title="Medios de pago" description="CRUD tenant-scoped para POS y caja">
+    <PagePlaceholder
+      title="Medios de pago"
+      description="Activa, desactiva y configura como se cobran las ventas"
+    >
       <div className="space-y-4">
         <PaymentMethodsToolbar
-          canWrite={canWritePaymentMethods}
           loading={isLoading || isSubmitting}
           search={search}
           onSearchChange={setSearch}
-          onCreate={handleCreateClick}
           onReload={() => void reload()}
         />
 
@@ -120,29 +114,62 @@ export const MediosPagoPage = () => {
         ) : (
           <PaymentMethodsTable
             paymentMethods={paymentMethods}
-            canWrite={canWritePaymentMethods}
-            onEdit={handleEditClick}
-            onDelete={handleDeleteClick}
-            onToggleActive={handleToggleClick}
+            selectedPaymentMethodId={selectedPaymentMethodId}
+            disabled={isSubmitting}
+            onSelect={handleSelectClick}
           />
         )}
 
-        {formOpen ? (
-          <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <h3 className="mb-4 text-base font-semibold text-slate-900">
-              {formMode === "create" ? "Crear medio de pago" : "Editar medio de pago"}
-            </h3>
+        {selectedPaymentMethod ? (
+          <section className="payment-method-panel">
+            <div className="payment-method-panel__hero">
+              <div className="space-y-1">
+                <h3 className="text-lg font-semibold text-slate-900">{selectedPaymentMethod.name}</h3>
+                <p className="text-xs text-slate-500">
+                  Codigo <span className="font-mono">{selectedPaymentMethod.code}</span> |{" "}
+                  {getPaymentMethodTypeLabel(selectedPaymentMethod.type)}
+                </p>
+              </div>
 
-            <PaymentMethodForm
-              mode={formMode}
-              paymentMethod={selectedPaymentMethod}
-              disabled={isSubmitting}
-              onCancel={() => {
-                setFormOpen(false);
-                setSelectedPaymentMethod(undefined);
-              }}
-              onSubmit={handleSubmitForm}
-            />
+              <div className="payment-method-panel__chips">
+                <span
+                  className={
+                    selectedPaymentMethod.is_active
+                      ? "payment-method-chip payment-method-chip--success"
+                      : "payment-method-chip payment-method-chip--danger"
+                  }
+                >
+                  {selectedPaymentMethod.is_active ? "Activo" : "Inactivo"}
+                </span>
+                <span
+                  className={
+                    selectedPaymentMethod.affects_cash
+                      ? "payment-method-chip payment-method-chip--accent"
+                      : "payment-method-chip payment-method-chip--warn"
+                  }
+                >
+                  {selectedPaymentMethod.affects_cash ? "Impacta caja" : "No impacta caja"}
+                </span>
+                <button
+                  type="button"
+                  className="ui-btn-ghost px-3 py-1.5 text-xs"
+                  onClick={() => void handleToggleClick(selectedPaymentMethod)}
+                  disabled={isSubmitting || !canWritePaymentMethods}
+                >
+                  {selectedPaymentMethod.is_active ? "Desactivar medio" : "Activar medio"}
+                </button>
+              </div>
+            </div>
+
+            <div className="payment-method-panel__form-wrap">
+              <PaymentMethodForm
+                paymentMethod={selectedPaymentMethod}
+                bankAccounts={bankAccounts}
+                disabled={isSubmitting || !canWritePaymentMethods}
+                showHeader={false}
+                onSubmit={handleSubmitForm}
+              />
+            </div>
           </section>
         ) : null}
       </div>

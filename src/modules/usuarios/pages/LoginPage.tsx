@@ -4,6 +4,7 @@ import { isDevAuthBypassEnabled } from "@/features/auth/config/dev-auth";
 import { useLandingPath } from "@/features/auth/hooks/useLandingPath";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { useMockLogin } from "@/modules/usuarios/hooks/useMockLogin";
+import { dataProvider } from "@/services/config/data-provider";
 
 export const LoginPage = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -51,9 +52,12 @@ export const LoginPage = () => {
     <main className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
       <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-panel">
         <h1 className="text-2xl font-semibold text-slate-900">Ingresar a POS V2</h1>
-        <p className="mt-1 text-sm text-slate-600">Acceso de desarrollo</p>
+        <p className="mt-1 text-sm text-slate-600">
+          {dataProvider === "supabase" ? "Acceso del comercio" : "Acceso de desarrollo"}
+        </p>
 
-        <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
+        {dataProvider === "mock" ? (
+          <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
           <p className="font-semibold">Acceso de desarrollo</p>
           <p className="mt-1">Tenant: <span className="font-kpi">{demoCredentials.tenant}</span></p>
           <p>Usuario: <span className="font-kpi">{demoCredentials.username}</span></p>
@@ -69,7 +73,8 @@ export const LoginPage = () => {
           >
             Ingresar como Admin Demo
           </button>
-        </div>
+          </div>
+        ) : null}
 
         {isDevAuthBypassEnabled ? (
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
@@ -91,18 +96,22 @@ export const LoginPage = () => {
           }}
         >
           <section className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <h2 className="text-sm font-semibold text-slate-900">Ingreso manual</h2>
-            <input
-              id="tenantInput"
-              value={tenantInput}
-              onChange={(event) => {
-                clearError();
-                setTenantInput(event.target.value);
-              }}
-              className="ui-input"
-              disabled={isLoading || isSubmitting}
-              placeholder="Tenant"
-            />
+            <h2 className="text-sm font-semibold text-slate-900">
+              {dataProvider === "supabase" ? "Ingreso con email" : "Ingreso manual"}
+            </h2>
+            {dataProvider === "mock" ? (
+              <input
+                id="tenantInput"
+                value={tenantInput}
+                onChange={(event) => {
+                  clearError();
+                  setTenantInput(event.target.value);
+                }}
+                className="ui-input"
+                disabled={isLoading || isSubmitting}
+                placeholder="Tenant"
+              />
+            ) : null}
             <input
               id="usernameInput"
               value={usernameInput}
@@ -112,7 +121,7 @@ export const LoginPage = () => {
               }}
               className="ui-input"
               disabled={isLoading || isSubmitting}
-              placeholder="Usuario"
+              placeholder={dataProvider === "supabase" ? "Email" : "Usuario"}
             />
             <input
               id="passwordInput"
@@ -135,6 +144,7 @@ export const LoginPage = () => {
             </button>
           </section>
 
+          {dataProvider === "mock" ? (
           <details className="rounded-lg border border-slate-200 p-3">
             <summary className="cursor-pointer text-sm font-medium text-slate-700">
               Opciones avanzadas (tenant/usuario)
@@ -191,6 +201,7 @@ export const LoginPage = () => {
               </div>
             </div>
           </details>
+          ) : null}
 
           <div className="flex items-center">
             <button
@@ -207,13 +218,13 @@ export const LoginPage = () => {
           </div>
         </form>
 
-        {!hasTenants ? (
+        {dataProvider === "mock" && !hasTenants ? (
           <p className="mt-4 text-xs text-slate-500">
             No hay tenants cargados. En mock se bootstrappea automaticamente el tenant demo.
           </p>
         ) : null}
 
-        {!hasUsers && tenantId ? (
+        {dataProvider === "mock" && !hasUsers && tenantId ? (
           <p className="mt-2 text-xs text-slate-500">
             No hay usuarios para el tenant seleccionado.
           </p>

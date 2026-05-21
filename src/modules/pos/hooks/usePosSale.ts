@@ -16,16 +16,20 @@ import {
   type MercadoPagoPaymentIntent,
 } from "@/services/mercadopago/mercadopago-payments.service";
 import { originBanksService } from "@/services/origin-banks.service";
-import { paymentMethodsService } from "@/services/payment-methods.service";
+import {
+  getPaymentMethodPosConfig,
+  normalizePaymentMethodCode,
+  paymentMethodsService,
+} from "@/services/payment-methods.service";
 import { posCustomerProfilesService } from "@/services/pos-customer-profiles.service";
 import { priceListsService } from "@/services/price-lists.service";
 import { productsService } from "@/services/products.service";
-import { promotionsService } from "@/services/promotions.service";
+import { buildPromotionBarcode, promotionsService, type PromotionWithDetails } from "@/services/promotions.service";
 import { receiptsService } from "@/services/receipts.service";
 import { salesService } from "@/services/sales.service";
 import { settingsService } from "@/services/settings.service";
 import { stockService } from "@/services/stock.service";
-import type { ArcaSettings, BankAccount, BarcodeScaleSettings, Customer, InstallmentPlan, Invoice, InvoiceDocumentType, MercadoPagoSettings, OriginBank, PaymentMethod, PosSettings, PriceList, Product, ProductBarcode, Promotion, Receipt, Sale } from "@/types/entities";
+import type { ArcaSettings, BankAccount, BarcodeScaleSettings, Customer, InstallmentPlan, Invoice, InvoiceDocumentType, MercadoPagoSettings, OriginBank, PaymentMethod, PaymentMethodType, PosSettings, PriceList, Product, ProductBarcode, Receipt, Sale } from "@/types/entities";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
 
 interface PosCartItem {
@@ -75,15 +79,42 @@ interface BarcodeScanResult {
   ok: boolean;
   barcode: string;
   product?: Product;
+  promotion?: PromotionWithDetails;
   parsedScale?: ParsedScaleBarcode | null;
   error?: string;
 }
 
 const roundQty = (value: number): number => Number(value.toFixed(3));
 const roundAmount = (value: number): number => Number(value.toFixed(2));
+const buildSaleNumber = (): string => {
+  const randomSuffix = Math.floor(Math.random() * 10000)
+    .toString()
+    .padStart(4, "0");
+  return `VTA-${Date.now()}-${randomSuffix}`;
+};
+
+interface BackendErrorLike {
+  message?: string;
+  details?: string;
+  hint?: string;
+  code?: string;
+}
+
+const getBackendErrorMessage = (error: unknown): string | null => {
+  if (!error || typeof error !== "object") return null;
+  const backendError = error as BackendErrorLike;
+  const message = backendError.message?.trim() ?? "";
+  const details = backendError.details?.trim() ?? "";
+  const hint = backendError.hint?.trim() ?? "";
+
+  const parts = [message, details, hint].filter(Boolean);
+  if (!parts.length) return null;
+  return parts.join(" | ");
+};
 
 const defaultPosSettings: PosSettings = {
   default_customer_id: null,
+  default_payment_method_id: null,
   auto_print_receipt: false,
   allow_sale_without_customer: true,
   allow_negative_stock: false,
@@ -93,14 +124,17 @@ const defaultPosSettings: PosSettings = {
 
 const defaultBarcodeScaleSettings: BarcodeScaleSettings = {
   scale_parser_enabled: false,
+  scale_mode: "total_price",
   scale_prefix: "20",
   code_length: 13,
   plu_start: 3,
   plu_length: 4,
   weight_start: 7,
   weight_length: 5,
+  weight_decimals: 3,
   amount_start: 7,
-  amount_length: 5,
+  amount_length: 6,
+  amount_decimals: 2,
   ean13_enabled: true,
 };
 
@@ -152,15 +186,18 @@ const calculateSummaryByMethod = (
 };
 
 const paymentMethodPriority = (method: PaymentMethod): number => {
-  const code = method.code.trim().toLowerCase();
+  const code = normalizePaymentMethodCode(method.code);
   if (code === "cash") return 0;
   if (code === "card_debit") return 1;
   if (code === "card_credit") return 2;
   if (code === "transfer") return 3;
-  if (code === "current_account") return 4;
-  if (method.type === "mercado_pago") return 5;
-  return 6;
+  if (code === "mercado_pago") return 4;
+  if (code === "cheque") return 5;
+  if (code === "current_account") return 6;
+  return 7;
 };
+
+const normalizeBarcodeValue = (value: string): string => value.trim().replace(/\s+/g, "");
 
 export const usePosSale = (tenantId: string | null) => {
   const { isOnline, refreshPending } = useOffline();
@@ -173,7 +210,7 @@ export const usePosSale = (tenantId: string | null) => {
   const [originBanks, setOriginBanks] = useState<OriginBank[]>([]);
   const [installmentPlans, setInstallmentPlans] = useState<InstallmentPlan[]>([]);
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
-  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [promotions, setPromotions] = useState<PromotionWithDetails[]>([]);
   const [posSettings, setPosSettings] = useState<PosSettings>(defaultPosSettings);
   const [scaleSettings, setScaleSettings] = useState<BarcodeScaleSettings>(defaultBarcodeScaleSettings);
   const [mercadoPagoSettings, setMercadoPagoSettings] = useState<MercadoPagoSettings>(
@@ -233,7 +270,6 @@ export const usePosSale = (tenantId: string | null) => {
 
     setIsLoading(true);
     try {
-      await paymentMethodsService.ensureDefaultMethods(tenantId);
       await Promise.allSettled([
         originBanksService.ensureDefaults(tenantId),
         installmentPlansService.ensureDefaults(tenantId),
@@ -259,7 +295,7 @@ export const usePosSale = (tenantId: string | null) => {
         originBanksService.getActiveByTenant(tenantId),
         installmentPlansService.getActiveByTenant(tenantId),
         priceListsService.getAllByTenant(tenantId),
-        promotionsService.getActiveByTenant(tenantId),
+        promotionsService.getActiveByTenantWithDetails(tenantId),
         settingsService.getByTenant(tenantId),
       ]);
 
@@ -653,6 +689,58 @@ export const usePosSale = (tenantId: string | null) => {
     return true;
   };
 
+  const findPromotionByBarcode = useCallback(
+    (rawBarcode: string): PromotionWithDetails | null => {
+      const barcode = normalizeBarcodeValue(rawBarcode).toLowerCase();
+      if (!barcode) return null;
+
+      return (
+        promotions.find((promotion) => {
+          if (normalizeBarcodeValue(promotion.code).toLowerCase() === barcode) return true;
+          if (normalizeBarcodeValue(buildPromotionBarcode(promotion.code)).toLowerCase() === barcode) {
+            return true;
+          }
+          return (promotion.barcodes ?? []).some(
+            (row) => normalizeBarcodeValue(row.barcode).toLowerCase() === barcode
+          );
+        }) ?? null
+      );
+    },
+    [promotions]
+  );
+
+  const addPromotionToCart = useCallback(
+    async (promotion: PromotionWithDetails, rawBarcode: string): Promise<BarcodeScanResult> => {
+      if (promotion.scope !== "bundle" || !promotion.items?.length) {
+        const message = `La promocion ${promotion.name} no es un combo escaneable`;
+        setFeedback({ type: "error", message });
+        return { ok: false, barcode: rawBarcode, promotion, error: message };
+      }
+
+      for (const promoItem of promotion.items) {
+        const product = products.find((candidate) => candidate.id === promoItem.product_id);
+        if (!product || !product.is_active) {
+          const message = `Producto no disponible en promo ${promotion.name}`;
+          setFeedback({ type: "error", message });
+          return { ok: false, barcode: rawBarcode, promotion, error: message };
+        }
+      }
+
+      for (const promoItem of promotion.items) {
+        const product = products.find((candidate) => candidate.id === promoItem.product_id);
+        if (!product) continue;
+        const added = await addProductToCart(product, promoItem.quantity);
+        if (!added) {
+          return { ok: false, barcode: rawBarcode, promotion, error: "No se pudo agregar promo" };
+        }
+      }
+
+      setFeedback({ type: "success", message: `Promo agregada: ${promotion.name}` });
+      return { ok: true, barcode: rawBarcode, promotion, parsedScale: null };
+    },
+    [products]
+  );
+
   const normalizePluCode = (value: string): string => value.replace(/^0+/, "");
 
   const findProductByPluCode = useCallback(
@@ -678,9 +766,27 @@ export const usePosSale = (tenantId: string | null) => {
     [productBarcodes, products]
   );
 
+  const findProductByUnitBarcode = useCallback(
+    (barcode: string): Product | null => {
+      const normalizedBarcode = normalizeBarcodeValue(barcode);
+      if (!normalizedBarcode) return null;
+
+      const barcodeRow =
+        productBarcodes.find(
+          (row) => normalizeBarcodeValue(row.barcode) === normalizedBarcode && row.is_primary
+        ) ??
+        productBarcodes.find((row) => normalizeBarcodeValue(row.barcode) === normalizedBarcode) ??
+        null;
+
+      if (!barcodeRow) return null;
+      return products.find((candidate) => candidate.id === barcodeRow.product_id) ?? null;
+    },
+    [productBarcodes, products]
+  );
+
   const addProductByBarcode = useCallback(
     async (rawBarcode: string): Promise<BarcodeScanResult> => {
-      const barcode = rawBarcode.trim();
+      const barcode = normalizeBarcodeValue(rawBarcode);
       if (!tenantId || !barcode) {
         return { ok: false, barcode, error: "Codigo de barras invalido" };
       }
@@ -694,19 +800,27 @@ export const usePosSale = (tenantId: string | null) => {
           return { ok: false, barcode, parsedScale, error: message };
         }
 
-        const detectedWeight =
-          parsedScale.weight != null && parsedScale.weight > 0
-            ? parsedScale.weight
-            : Math.max(0.001, posSettings.barcode_scan_quantity || 1);
-
         const hasAssignedPriceList = Boolean(
           getCustomerPriceList(selectedCustomerId || null)
         );
+        const pricing = await resolvePricingForProduct(scaleProduct, selectedCustomerId || null);
+        const pricePerWeightUnit = pricing.unitPrice > 0 ? pricing.unitPrice : scaleProduct.price;
+
+        const detectedWeight =
+          parsedScale.weight != null && parsedScale.weight > 0
+            ? parsedScale.weight
+            : parsedScale.mode === "total_price" &&
+                parsedScale.totalPrice != null &&
+                parsedScale.totalPrice > 0 &&
+                pricePerWeightUnit > 0
+              ? roundQty(parsedScale.totalPrice / pricePerWeightUnit)
+              : Math.max(0.001, posSettings.barcode_scan_quantity || 1);
 
         const overrideUnitPrice =
           !hasAssignedPriceList &&
           parsedScale.totalPrice != null &&
           parsedScale.totalPrice > 0 &&
+          parsedScale.mode === "weight" &&
           detectedWeight > 0
             ? roundAmount(parsedScale.totalPrice / detectedWeight)
             : null;
@@ -729,19 +843,17 @@ export const usePosSale = (tenantId: string | null) => {
       }
 
       try {
-        let product = await productsService.getByBarcode(tenantId, barcode);
-
-        if (!product && !isOnline) {
-          const barcodeRow = productBarcodes.find(
-            (row) => row.barcode.trim() === barcode
-          );
-          product =
-            barcodeRow != null
-              ? products.find((candidate) => candidate.id === barcodeRow.product_id) ?? null
-              : null;
+        let product = findProductByUnitBarcode(barcode);
+        if (!product && isOnline) {
+          product = await productsService.getByBarcode(tenantId, barcode);
         }
 
         if (!product || !product.is_active) {
+          const promotion = findPromotionByBarcode(barcode);
+          if (promotion) {
+            return addPromotionToCart(promotion, barcode);
+          }
+
           const message = `No se encontro producto para el codigo ${barcode}`;
           setFeedback({ type: "error", message });
           return { ok: false, barcode, error: message };
@@ -755,22 +867,18 @@ export const usePosSale = (tenantId: string | null) => {
 
         return { ok: true, barcode, product, parsedScale: null };
       } catch {
-        if (!isOnline) {
-          const barcodeRow = productBarcodes.find(
-            (row) => row.barcode.trim() === barcode
-          );
-          const fallbackProduct =
-            barcodeRow != null
-              ? products.find((candidate) => candidate.id === barcodeRow.product_id) ?? null
-              : null;
-
-          if (fallbackProduct && fallbackProduct.is_active) {
-            const scanQuantity = Math.max(0.001, posSettings.barcode_scan_quantity || 1);
-            const added = await addProductToCart(fallbackProduct, scanQuantity);
-            if (added) {
-              return { ok: true, barcode, product: fallbackProduct, parsedScale: null };
-            }
+        const fallbackProduct = findProductByUnitBarcode(barcode);
+        if (fallbackProduct && fallbackProduct.is_active) {
+          const scanQuantity = Math.max(0.001, posSettings.barcode_scan_quantity || 1);
+          const added = await addProductToCart(fallbackProduct, scanQuantity);
+          if (added) {
+            return { ok: true, barcode, product: fallbackProduct, parsedScale: null };
           }
+        }
+
+        const fallbackPromotion = findPromotionByBarcode(barcode);
+        if (fallbackPromotion) {
+          return addPromotionToCart(fallbackPromotion, barcode);
         }
 
         const message = "Error al leer codigo de barras";
@@ -780,7 +888,10 @@ export const usePosSale = (tenantId: string | null) => {
     },
     [
       addProductToCart,
+      addPromotionToCart,
+      findPromotionByBarcode,
       findProductByPluCode,
+      findProductByUnitBarcode,
       getCustomerPriceList,
       isOnline,
       posSettings.allow_negative_stock,
@@ -801,7 +912,7 @@ export const usePosSale = (tenantId: string | null) => {
     }
 
     if (normalizedQty <= 0) {
-      removeFromCart(productId);
+      setFeedback({ type: "error", message: "La cantidad debe ser mayor a 0" });
       return;
     }
 
@@ -930,7 +1041,7 @@ export const usePosSale = (tenantId: string | null) => {
     if (!tenantId) return null;
 
     const paymentMethod = getPaymentMethodById(input.paymentMethodId);
-    if (!paymentMethod || paymentMethod.type !== "mercado_pago") {
+    if (!paymentMethod || normalizePaymentMethodCode(paymentMethod.code) !== "mercado_pago") {
       setFeedback({ type: "error", message: "Selecciona Mercado Pago para iniciar el cobro" });
       return null;
     }
@@ -1064,7 +1175,8 @@ export const usePosSale = (tenantId: string | null) => {
     saleNumber: string,
     paymentMethod: PaymentMethod,
     values: PosCheckoutValues,
-    summary: PosCheckoutSummary
+    summary: PosCheckoutSummary,
+    createdBy: string | null
   ): Receipt => {
     const now = new Date().toISOString();
     const localId = `rcpt-off-${Date.now()}`;
@@ -1082,7 +1194,7 @@ export const usePosSale = (tenantId: string | null) => {
       receipt_number: `TCK-OFF-${Date.now()}`,
       issued_at: now,
       customer_name: customerName,
-      payment_method: paymentMethod.type,
+      payment_method: normalizePaymentMethodCode(paymentMethod.code) as PaymentMethodType,
       items: cart.map((item) => ({
         name: item.name,
         quantity: item.quantity,
@@ -1091,7 +1203,7 @@ export const usePosSale = (tenantId: string | null) => {
       })),
       total: summary.total,
       notes: values.notes?.trim() || "Venta offline pendiente de sincronizacion",
-      created_by: null,
+      created_by: createdBy,
       created_at: now,
       updated_at: now,
     };
@@ -1099,7 +1211,10 @@ export const usePosSale = (tenantId: string | null) => {
 
   const confirmSale = async (
     values: PosCheckoutValues,
-    createdBy: string | null
+    createdBy: string | null,
+    options?: {
+      openCashSessionId?: string | null;
+    }
   ): Promise<Sale | null> => {
     if (!tenantId) return null;
 
@@ -1118,21 +1233,25 @@ export const usePosSale = (tenantId: string | null) => {
       values.paymentDetails && typeof values.paymentDetails === "object"
         ? (values.paymentDetails as Record<string, unknown>)
         : null;
+    const paymentMethodCode = normalizePaymentMethodCode(paymentMethod.code);
+    const paymentMethodConfig = getPaymentMethodPosConfig(paymentMethod);
+    const isMercadoPagoMethod = paymentMethodCode === "mercado_pago";
+    const isCurrentAccountMethod = paymentMethodCode === "current_account";
     const isMercadoPagoManual =
-      paymentMethod.type === "mercado_pago" && !mercadoPagoSettings.enabled;
+      isMercadoPagoMethod && !mercadoPagoSettings.enabled;
 
-    if (paymentMethod.type === "current_account" && !values.customerId) {
+    if (isCurrentAccountMethod && !values.customerId) {
       setFeedback({ type: "error", message: "Cliente obligatorio para cuenta corriente" });
       return null;
     }
 
-    if (paymentMethod.type === "mercado_pago") {
+    if (isMercadoPagoMethod) {
       if (isMercadoPagoManual) {
         const operationId =
           typeof paymentDetails?.operation_id === "string"
             ? paymentDetails.operation_id.trim()
             : "";
-        if (!operationId) {
+        if (paymentMethodConfig.ask_operation_number && !operationId) {
           setFeedback({
             type: "error",
             message: "Completa el ID de operacion para Mercado Pago manual",
@@ -1189,17 +1308,27 @@ export const usePosSale = (tenantId: string | null) => {
     }
 
     const summary = getCheckoutSummary(paymentMethod.id);
-    const saleNumber = `VTA-${Date.now()}`;
+    const saleNumber = buildSaleNumber();
     const normalizedCustomerId = values.customerId?.trim() ?? "";
     const selectedCustomerForSale = normalizedCustomerId
       ? customers.find((customer) => customer.id === normalizedCustomerId) ?? null
       : null;
+    const requiresOpenCashSessionForSale = true;
+    const requiresCashMovementRegistration = !isCurrentAccountMethod;
 
-    if (paymentMethod.type === "current_account" && normalizedCustomerId) {
-      const currentAccountProfile = posCustomerProfilesService.getProfile(
+    if (isCurrentAccountMethod && normalizedCustomerId) {
+      const legacyCurrentAccountProfile = posCustomerProfilesService.getProfile(
         tenantId,
         normalizedCustomerId
       );
+      const currentAccountProfile = {
+        enabled:
+          selectedCustomerForSale?.current_account_enabled ??
+          legacyCurrentAccountProfile.enabled,
+        limit:
+          selectedCustomerForSale?.current_account_limit ??
+          legacyCurrentAccountProfile.limit,
+      };
 
       if (!currentAccountProfile.enabled) {
         setFeedback({
@@ -1221,10 +1350,45 @@ export const usePosSale = (tenantId: string | null) => {
       }
     }
 
-    if (paymentMethod.type === "mercado_pago" && !isMercadoPagoManual && !isOnline) {
+    if (isMercadoPagoMethod && !isMercadoPagoManual && !isOnline) {
       setFeedback({
         type: "error",
         message: "Sin conexion: no se puede cobrar con Mercado Pago",
+      });
+      return null;
+    }
+
+    if (!createdBy) {
+      setFeedback({
+        type: "error",
+        message: "No se pudo identificar el usuario responsable del movimiento",
+      });
+      return null;
+    }
+
+    const resolvedCreatedBy: string = createdBy;
+
+    let openSession: { id: string } | null = options?.openCashSessionId
+      ? { id: options.openCashSessionId }
+      : null;
+    if (requireOpenSessionForSale || requiresOpenCashSessionForSale) {
+      if (!openSession) {
+        try {
+          openSession = await cashService.getOpenSessionByUser(tenantId, resolvedCreatedBy);
+        } catch {
+          setFeedback({
+            type: "error",
+            message: "No se pudo validar la caja abierta para este usuario",
+          });
+          return null;
+        }
+      }
+    }
+
+    if ((requireOpenSessionForSale || requiresOpenCashSessionForSale) && !openSession) {
+      setFeedback({
+        type: "error",
+        message: "Debes abrir caja antes de registrar movimientos contables",
       });
       return null;
     }
@@ -1237,7 +1401,7 @@ export const usePosSale = (tenantId: string | null) => {
       try {
         const pendingSale = offlineService.savePendingSale({
           tenant_id: tenantId,
-          created_by: createdBy,
+          created_by: resolvedCreatedBy,
           sale_number: saleNumber,
           customer_id: values.customerId?.trim() || null,
           currency_code: "ARS",
@@ -1247,7 +1411,7 @@ export const usePosSale = (tenantId: string | null) => {
             id: paymentMethod.id,
             code: paymentMethod.code,
             name: paymentMethod.name,
-            type: paymentMethod.type,
+            type: paymentMethodCode as PaymentMethodType,
             affects_cash: paymentMethod.affects_cash,
             surcharge_percent: paymentMethod.surcharge_percent,
             discount_percent: paymentMethod.discount_percent,
@@ -1285,11 +1449,11 @@ export const usePosSale = (tenantId: string | null) => {
           })),
         });
 
-        if (paymentMethod.affects_cash && paymentMethod.type !== "mercado_pago") {
+        if (requiresCashMovementRegistration && openSession) {
           offlineService.savePendingCashMovement({
             tenant_id: tenantId,
-            created_by: createdBy,
-            cash_session_id: null,
+            created_by: resolvedCreatedBy,
+            cash_session_id: openSession.id,
             movement_type: "sale_payment",
             amount: summary.total,
             currency_code: "ARS",
@@ -1300,10 +1464,12 @@ export const usePosSale = (tenantId: string | null) => {
           });
         }
 
-        setGeneratedReceipt(buildOfflineReceipt(saleNumber, paymentMethod, values, summary));
+        setGeneratedReceipt(
+          buildOfflineReceipt(saleNumber, paymentMethod, values, summary, resolvedCreatedBy)
+        );
 
         await auditService.createSafe(tenantId, {
-          user_id: createdBy,
+          user_id: resolvedCreatedBy,
           module: "pos",
           action: "sale_pending_sync",
           entity_type: "pending_sale",
@@ -1342,22 +1508,10 @@ export const usePosSale = (tenantId: string | null) => {
     setGeneratedInvoice(null);
 
     try {
-      const openSession = createdBy
-        ? await cashService.getOpenSessionByUser(tenantId, createdBy)
-        : await cashService.getOpenSession(tenantId);
-
-      if (requireOpenSessionForSale && !openSession) {
-        setFeedback({
-          type: "error",
-          message: "La configuracion exige caja abierta para vender",
-        });
-        return null;
-      }
-
       const sale = await salesService.create(tenantId, {
         sale_number: saleNumber,
         customer_id: values.customerId?.trim() || null,
-        cash_session_id: paymentMethod.affects_cash ? openSession?.id ?? null : null,
+        cash_session_id: openSession?.id ?? null,
         status: "completed",
         subtotal: summary.subtotal,
         discount_total: roundAmount(totalPromotionDiscount + summary.discountTotal),
@@ -1368,11 +1522,9 @@ export const usePosSale = (tenantId: string | null) => {
         current_account_id: null,
         arca_document_id: null,
         mercado_pago_preference_id:
-          paymentMethod.type === "mercado_pago" ? (mercadoPagoIntent?.reference ?? null) : null,
-        items: [],
-        payments: [],
-        customer: null,
+          isMercadoPagoMethod ? (mercadoPagoIntent?.reference ?? null) : null,
       });
+      const updatedStockByProductId = new Map<string, number>();
 
       for (const item of cart) {
         await salesService.createItem(tenantId, {
@@ -1405,15 +1557,14 @@ export const usePosSale = (tenantId: string | null) => {
           reference_type: "sale",
           reference_id: sale.id,
           notes: `Venta ${sale.sale_number}`,
-          created_by: createdBy,
+          created_by: resolvedCreatedBy,
         });
 
         const nextStock = posSettings.allow_negative_stock
           ? roundQty(item.stock_available - item.quantity)
           : roundQty(Math.max(0, item.stock_available - item.quantity));
-        await productsService.update(tenantId, item.product_id, {
-          stock_current: nextStock,
-        });
+        await productsService.updateStock(tenantId, item.product_id, nextStock);
+        updatedStockByProductId.set(item.product_id, nextStock);
       }
 
       const paymentCapturedAt = new Date().toISOString();
@@ -1425,32 +1576,32 @@ export const usePosSale = (tenantId: string | null) => {
       await salesService.createPayment(tenantId, {
         sale_id: sale.id,
         payment_method_code: paymentMethod.code,
-        provider: paymentMethod.type === "mercado_pago" ? "mercado_pago" : "internal",
+        provider: isMercadoPagoMethod ? "mercado_pago" : "internal",
         provider_code:
-          paymentMethod.type === "mercado_pago"
+          isMercadoPagoMethod
             ? isMercadoPagoManual
               ? "mercado_pago_manual"
               : "mercado_pago"
             : "internal",
         amount: summary.total,
         currency_code: "ARS",
-        status: paymentMethod.type === "current_account" ? "pending" : "approved",
+        status: isCurrentAccountMethod ? "pending" : "approved",
         provider_status:
-          paymentMethod.type === "mercado_pago"
+          isMercadoPagoMethod
             ? isMercadoPagoManual
               ? "approved"
               : (mercadoPagoIntent?.status ?? "pending")
-            : paymentMethod.type === "current_account"
+            : isCurrentAccountMethod
               ? "pending"
               : "approved",
         provider_reference:
-          paymentMethod.type === "mercado_pago"
+          isMercadoPagoMethod
             ? isMercadoPagoManual
               ? manualMercadoPagoOperationId
               : (mercadoPagoIntent?.reference ?? null)
             : null,
         provider_metadata:
-          paymentMethod.type === "mercado_pago"
+          isMercadoPagoMethod
             ? isMercadoPagoManual
               ? ({
                   operation_id: manualMercadoPagoOperationId,
@@ -1464,7 +1615,7 @@ export const usePosSale = (tenantId: string | null) => {
                 } as Record<string, unknown>)
             : null,
         external_reference:
-          paymentMethod.type === "mercado_pago"
+          isMercadoPagoMethod
             ? isMercadoPagoManual
               ? manualMercadoPagoOperationId
               : (mercadoPagoIntent?.reference ?? null)
@@ -1474,7 +1625,7 @@ export const usePosSale = (tenantId: string | null) => {
             id: paymentMethod.id,
             name: paymentMethod.name,
             code: paymentMethod.code,
-            type: paymentMethod.type,
+            type: paymentMethodCode as PaymentMethodType,
             affects_cash: paymentMethod.affects_cash,
             surcharge_percent: paymentMethod.surcharge_percent,
             discount_percent: paymentMethod.discount_percent,
@@ -1492,7 +1643,7 @@ export const usePosSale = (tenantId: string | null) => {
           payment_details: paymentDetails,
           payment_captured_at: paymentCapturedAt,
           provider_snapshot:
-            paymentMethod.type === "mercado_pago"
+            isMercadoPagoMethod
               ? isMercadoPagoManual
                 ? {
                     provider: "mercado_pago_manual",
@@ -1522,13 +1673,15 @@ export const usePosSale = (tenantId: string | null) => {
             ? "sale_payment_debit_card"
             : paymentMethod.code === "transfer"
               ? "sale_payment_transfer"
+              : paymentMethod.code === "cheque"
+                ? "sale_payment_cheque"
               : isMercadoPagoManual
                 ? "sale_payment_mercado_pago_manual"
                 : null;
 
       if (paymentAuditAction) {
         await auditService.createSafe(tenantId, {
-          user_id: createdBy,
+          user_id: resolvedCreatedBy,
           module: "pos",
           action: paymentAuditAction,
           entity_type: "sale_payment",
@@ -1543,18 +1696,18 @@ export const usePosSale = (tenantId: string | null) => {
         });
       }
 
-      if (paymentMethod.type === "current_account") {
+      if (isCurrentAccountMethod) {
         await currentAccountsService.createMovement(tenantId, {
           customer_id: values.customerId!,
           sale_id: sale.id,
           type: "debt",
           amount: summary.total,
           notes: `Venta ${sale.sale_number}`,
-          created_by: createdBy,
+          created_by: resolvedCreatedBy,
         });
       }
 
-      if (paymentMethod.affects_cash && paymentMethod.type !== "mercado_pago" && openSession) {
+      if (requiresCashMovementRegistration && openSession) {
         await cashService.createMovement(tenantId, {
           cash_session_id: openSession.id,
           movement_type: "sale_payment",
@@ -1563,7 +1716,7 @@ export const usePosSale = (tenantId: string | null) => {
           reference_type: paymentMethod.code,
           reference_id: sale.id,
           notes: `Cobro venta ${sale.sale_number} - ${paymentMethod.name}`,
-          created_by: createdBy,
+          created_by: resolvedCreatedBy,
         });
       }
 
@@ -1573,7 +1726,7 @@ export const usePosSale = (tenantId: string | null) => {
         receipt_number: `TCK-${Date.now()}`,
         issued_at: new Date().toISOString(),
         customer_name: selectedCustomerForSale?.full_name ?? null,
-        payment_method: paymentMethod.type,
+        payment_method: paymentMethodCode as PaymentMethodType,
         items: cart.map((item) => ({
           name: item.name,
           quantity: item.quantity,
@@ -1582,7 +1735,7 @@ export const usePosSale = (tenantId: string | null) => {
         })),
         total: summary.total,
         notes: values.notes?.trim() || null,
-        created_by: createdBy,
+        created_by: resolvedCreatedBy,
       });
 
       let generatedInvoiceFromSale: Invoice | null = null;
@@ -1600,7 +1753,7 @@ export const usePosSale = (tenantId: string | null) => {
             });
 
             await auditService.createSafe(tenantId, {
-              user_id: createdBy,
+              user_id: resolvedCreatedBy,
               module: "facturacion",
               action: "generate_from_sale",
               entity_type: "invoice",
@@ -1624,7 +1777,7 @@ export const usePosSale = (tenantId: string | null) => {
                   )}`
                 );
                 await auditService.createSafe(tenantId, {
-                  user_id: createdBy,
+                  user_id: resolvedCreatedBy,
                   module: "facturacion",
                   action: "arca_validation_error",
                   entity_type: "invoice",
@@ -1647,7 +1800,7 @@ export const usePosSale = (tenantId: string | null) => {
                 );
 
                 await auditService.createSafe(tenantId, {
-                  user_id: createdBy,
+                  user_id: resolvedCreatedBy,
                   module: "facturacion",
                   action: "arca_send",
                   entity_type: "invoice",
@@ -1698,7 +1851,7 @@ export const usePosSale = (tenantId: string | null) => {
                 );
 
                 await auditService.createSafe(tenantId, {
-                  user_id: createdBy,
+                  user_id: resolvedCreatedBy,
                   module: "facturacion",
                   action: "arca_status_change",
                   entity_type: "invoice",
@@ -1727,7 +1880,7 @@ export const usePosSale = (tenantId: string | null) => {
                   : `ARCA no disponible y fallback interno deshabilitado: ${arcaOperationalStatus.reason ?? "sin detalle"}.`
               );
               await auditService.createSafe(tenantId, {
-                user_id: createdBy,
+                user_id: resolvedCreatedBy,
                 module: "facturacion",
                 action: "arca_send_blocked",
                 entity_type: "invoice",
@@ -1755,7 +1908,7 @@ export const usePosSale = (tenantId: string | null) => {
       setGeneratedReceipt(receipt);
       setGeneratedInvoice(generatedInvoiceFromSale);
       await auditService.createSafe(tenantId, {
-        user_id: createdBy,
+        user_id: resolvedCreatedBy,
         module: "pos",
         action: "sale_confirmed",
         entity_type: "sale",
@@ -1782,13 +1935,35 @@ export const usePosSale = (tenantId: string | null) => {
       setMercadoPagoIntent(null);
       clearCart();
       setSelectedCustomerId("");
-      await loadPosData();
+      if (updatedStockByProductId.size) {
+        setProducts((previous) =>
+          previous.map((product) => {
+            const updatedStock = updatedStockByProductId.get(product.id);
+            return updatedStock == null ? product : { ...product, stock_current: updatedStock };
+          })
+        );
+      }
+      if (isCurrentAccountMethod && normalizedCustomerId) {
+        setCustomers((previous) =>
+          previous.map((customer) =>
+            customer.id !== normalizedCustomerId
+              ? customer
+              : {
+                  ...customer,
+                  current_balance: roundAmount(customer.current_balance + summary.total),
+                }
+          )
+        );
+      }
 
       return sale;
-    } catch {
+    } catch (error) {
+      const backendError = getBackendErrorMessage(error);
       setFeedback({
         type: "error",
-        message: "No se pudo confirmar la venta",
+        message: backendError
+          ? `No se pudo confirmar la venta: ${backendError}`
+          : "No se pudo confirmar la venta",
       });
       return null;
     } finally {

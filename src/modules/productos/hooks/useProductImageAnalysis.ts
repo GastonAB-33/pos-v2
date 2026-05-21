@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { productImageService } from "@/services/ia/product-image.service";
 import type { ProductImageAnalyzeResult } from "@/services/ia/product-image.service";
 import type { ProductFormValues } from "@/modules/productos/schemas/product-form.schema";
+import {
+  computePricingBackward,
+  DEFAULT_IVA_PERCENT,
+} from "@/modules/productos/utils/product-pricing";
 
 const toFileKey = (file: File) => `${file.name}:${file.size}:${file.lastModified}`;
 
@@ -11,16 +15,22 @@ export const mapImageSuggestionsToProductForm = (
   result: ProductImageAnalyzeResult
 ): Partial<ProductFormValues> => {
   const suggestions = result.suggestions;
+  const precioFinal = suggestions.suggested_price ?? 0;
+  const backward = computePricingBackward({
+    precioCosto: 0,
+    precioFinal,
+    porcentajeIva: DEFAULT_IVA_PERCENT,
+  });
 
   return {
-    name: normalizeOptional(suggestions.name),
-    brand: normalizeOptional(suggestions.brand),
-    barcode: normalizeOptional(suggestions.barcode),
-    description: normalizeOptional(suggestions.description),
-    category: normalizeOptional(suggestions.category),
-    subcategory: normalizeOptional(suggestions.subcategory),
-    saleMode: suggestions.sale_mode ?? "unit",
-    price: suggestions.suggested_price ?? 0,
+    nombre: normalizeOptional(suggestions.name),
+    codigoBarras: normalizeOptional(suggestions.barcode),
+    categoria: normalizeOptional(suggestions.category),
+    subcategoria: normalizeOptional(suggestions.subcategory),
+    precioFinal,
+    porcentajeIva: DEFAULT_IVA_PERCENT,
+    precioSinIva: backward.precioSinIva,
+    porcentajeGanancia: backward.porcentajeGanancia,
   };
 };
 

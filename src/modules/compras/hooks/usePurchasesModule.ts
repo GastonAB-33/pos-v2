@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditService } from "@/services/audit.service";
+import { cashService } from "@/services/cash.service";
 import { productsService } from "@/services/products.service";
 import { purchasesService } from "@/services/purchases.service";
 import { stockService } from "@/services/stock.service";
 import { suppliersService } from "@/services/suppliers.service";
-import type { Product, Purchase, PurchaseItem, Supplier } from "@/types/entities";
+import type { Product, ProductBarcode, Purchase, PurchaseItem, Supplier } from "@/types/entities";
+import type { ProductFormModalValues } from "@/modules/productos/types/product.types";
 import type { PurchaseCheckoutValues } from "@/modules/compras/schemas/purchase-checkout.schema";
 
 interface PurchaseCartItem {
   product_id: string;
   name: string;
+  sale_mode: Product["sale_mode"];
   quantity: number;
   unit_cost: number;
   stock_current: number;
@@ -24,9 +27,53 @@ interface PurchaseFeedback {
 
 const roundAmount = (value: number): number => Number(value.toFixed(2));
 const roundQty = (value: number): number => Number(value.toFixed(3));
+const normalizeText = (value: string): string =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+const normalizeBarcode = (value: string | null | undefined): string =>
+  (value ?? "").replace(/\s+/g, "").trim();
+
+const similarityScore = (left: string, right: string): number => {
+  const leftTokens = new Set(normalizeText(left).split(" ").filter(Boolean));
+  const rightTokens = new Set(normalizeText(right).split(" ").filter(Boolean));
+  if (!leftTokens.size || !rightTokens.size) return 0;
+
+  const intersection = [...leftTokens].filter((token) => rightTokens.has(token)).length;
+  const union = new Set([...leftTokens, ...rightTokens]).size;
+  return union > 0 ? intersection / union : 0;
+};
+
+const toProductCreateInput = (values: ProductFormModalValues) => ({
+  code: values.codigoProducto || `PRD-${Date.now().toString().slice(-6)}`,
+  name: values.nombre,
+  image_url: values.imagenUrl?.trim() || null,
+  brand: null,
+  supplier: null,
+  is_favorite: values.favorito,
+  description: null,
+  price: roundAmount(values.precioFinal),
+  cost_price: roundAmount(values.precioCosto),
+  stock_current: roundQty(values.stock),
+  stock_min: null,
+  stock_max: null,
+  category: values.categoria || "General",
+  subcategory: values.subcategoria?.trim() || null,
+  sale_mode: values.saleMode,
+  currency_code: "ARS",
+  price_without_vat: roundAmount(values.precioSinIva),
+  vat_percent: roundAmount(values.porcentajeIva),
+  profit_percent: roundAmount(values.porcentajeGanancia),
+  is_active: values.estadoActivo,
+});
 
 export const usePurchasesModule = (tenantId: string | null, userId: string | null) => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [productBarcodes, setProductBarcodes] = useState<ProductBarcode[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [search, setSearch] = useState("");
@@ -48,8 +95,9 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
 
     setIsLoading(true);
     try {
-      const [allProducts, allSuppliers, allPurchases, allPurchaseItems] = await Promise.all([
+      const [allProducts, allProductBarcodes, allSuppliers, allPurchases, allPurchaseItems] = await Promise.all([
         productsService.getAllByTenant(tenantId),
+        productsService.getBarcodesByTenant(tenantId),
         suppliersService.getAllByTenant(tenantId),
         purchasesService.getAllByTenant(tenantId),
         purchasesService.getAllItemsByTenant(tenantId),
@@ -65,7 +113,8 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         new Map<string, PurchaseItem[]>()
       );
 
-      setProducts(allProducts.filter((product) => product.is_active));
+      setProducts(allProducts);
+      setProductBarcodes(allProductBarcodes);
       setSuppliers(allSuppliers.filter((supplier) => supplier.is_active));
       setPurchases(
         allPurchases
@@ -88,9 +137,10 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
 
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return products;
+    const activeProducts = products.filter((product) => product.is_active);
+    if (!term) return activeProducts;
 
-    return products.filter((product) =>
+    return activeProducts.filter((product) =>
       [product.name, product.code, product.category, product.subcategory ?? ""]
         .join(" ")
         .toLowerCase()
@@ -107,6 +157,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
             ? {
                 ...item,
                 quantity: roundQty(item.quantity + 1),
+                sale_mode: product.sale_mode,
                 stock_current: product.stock_current,
               }
             : item
@@ -118,6 +169,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         {
           product_id: product.id,
           name: product.name,
+          sale_mode: product.sale_mode,
           quantity: 1,
           unit_cost: product.cost_price,
           stock_current: product.stock_current,
@@ -128,10 +180,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
 
   const setItemQuantity = (productId: string, quantity: number) => {
     const normalized = roundQty(quantity);
-    if (!Number.isFinite(normalized) || normalized <= 0) {
-      setFeedback({ type: "error", message: "La cantidad debe ser mayor a 0" });
-      return;
-    }
+    if (!Number.isFinite(normalized)) return;
 
     setCart((prev) =>
       prev.map((item) => (item.product_id === productId ? { ...item, quantity: normalized } : item))
@@ -140,10 +189,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
 
   const setItemUnitCost = (productId: string, unitCost: number) => {
     const normalized = roundAmount(unitCost);
-    if (!Number.isFinite(normalized) || normalized < 0) {
-      setFeedback({ type: "error", message: "El costo unitario no puede ser negativo" });
-      return;
-    }
+    if (!Number.isFinite(normalized)) return;
 
     setCart((prev) =>
       prev.map((item) => (item.product_id === productId ? { ...item, unit_cost: normalized } : item))
@@ -177,6 +223,20 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
 
     setIsSubmitting(true);
     try {
+      const openCashSession =
+        userId != null
+          ? (await cashService.getOpenSessionByUser(tenantId, userId)) ??
+            (await cashService.getOpenSession(tenantId))
+          : await cashService.getOpenSession(tenantId);
+
+      if (!openCashSession) {
+        setFeedback({
+          type: "error",
+          message: "Debes tener una caja abierta para registrar el pago al proveedor",
+        });
+        return null;
+      }
+
       const purchase = await purchasesService.create(tenantId, {
         supplier_id: values.supplierId,
         purchase_number: `CP-${Date.now()}`,
@@ -211,10 +271,26 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
           created_by: userId,
         });
 
-        await productsService.update(tenantId, item.product_id, {
-          stock_current: roundQty(item.stock_current + item.quantity),
-        });
+        const currentProduct = await productsService.getById(tenantId, item.product_id);
+        const currentStock = currentProduct?.stock_current ?? item.stock_current;
+        await productsService.updateStock(
+          tenantId,
+          item.product_id,
+          roundQty(currentStock + item.quantity)
+        );
       }
+
+      const cashMovement = await cashService.createMovement(tenantId, {
+        cash_session_id: openCashSession.id,
+        movement_type: "expense",
+        amount: summary.total,
+        currency_code: "ARS",
+        reference_type: "purchase_payment",
+        reference_id: purchase.id,
+        notes: `Pago a proveedor - ${purchase.purchase_number}`,
+        created_by: userId,
+      });
+
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "compras",
@@ -226,12 +302,14 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
           supplier_id: purchase.supplier_id,
           item_count: cart.length,
           total: purchase.total,
+          cash_session_id: openCashSession.id,
+          cash_movement_id: cashMovement.id,
         },
       });
 
       setFeedback({
         type: "success",
-        message: `Compra ${purchase.purchase_number} registrada`,
+        message: `Compra ${purchase.purchase_number} registrada y pagada en caja`,
       });
       clearCart();
       await loadData();
@@ -249,8 +327,99 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     [suppliers]
   );
 
+  const categoryOptions = useMemo(
+    () => [...new Set(products.map((product) => product.category).filter(Boolean))].sort(),
+    [products]
+  );
+
+  const subcategoryOptions = useMemo(
+    () => [...new Set(products.map((product) => product.subcategory).filter(Boolean) as string[])].sort(),
+    [products]
+  );
+
+  const findPotentialDuplicateProducts = (values: ProductFormModalValues): Product[] => {
+    const barcode = normalizeBarcode(values.codigoBarras);
+    const byId = new Map(products.map((product) => [product.id, product]));
+
+    if (barcode) {
+      const barcodeMatch = productBarcodes.find((row) => normalizeBarcode(row.barcode) === barcode);
+      const product = barcodeMatch ? byId.get(barcodeMatch.product_id) : null;
+      if (product) return [product];
+    }
+
+    const normalizedName = normalizeText(values.nombre);
+    if (!normalizedName) return [];
+
+    return products
+      .map((product) => ({
+        product,
+        score:
+          normalizeText(product.name).includes(normalizedName) ||
+          normalizedName.includes(normalizeText(product.name))
+            ? 1
+            : similarityScore(values.nombre, product.name),
+      }))
+      .filter((item) => item.score >= 0.45)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5)
+      .map((item) => item.product);
+  };
+
+  const createProductAndAddToCart = async (values: ProductFormModalValues): Promise<Product | null> => {
+    if (!tenantId) return null;
+
+    setIsSubmitting(true);
+    try {
+      let created = await productsService.create(tenantId, toProductCreateInput(values));
+
+      if (values.imagenFile) {
+        const imageUrl = await productsService.uploadProductImage(tenantId, created.id, values.imagenFile);
+        created = await productsService.update(tenantId, created.id, { image_url: imageUrl }) ?? {
+          ...created,
+          image_url: imageUrl,
+        };
+      }
+
+      await productsService.setPrimaryBarcode(tenantId, created.id, values.codigoBarras ?? "");
+
+      setProducts((current) => [created, ...current.filter((product) => product.id !== created.id)]);
+      if (values.codigoBarras?.trim()) {
+        const refreshedBarcodes = await productsService.getBarcodesByTenant(tenantId);
+        setProductBarcodes(refreshedBarcodes);
+      }
+      addProductToCart(created);
+
+      await auditService.createSafe(tenantId, {
+        user_id: userId,
+        module: "compras",
+        action: "create_product_from_purchase",
+        entity_type: "product",
+        entity_id: created.id,
+        description: `Producto creado desde compras: ${created.name}`,
+        metadata: {
+          code: created.code,
+          barcode: normalizeBarcode(values.codigoBarras),
+          sale_mode: created.sale_mode,
+        },
+      });
+
+      setFeedback({ type: "success", message: "Producto creado y agregado a la compra" });
+      return created;
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message ? error.message : "No se pudo crear el producto";
+      setFeedback({ type: "error", message });
+      return null;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return {
     products: filteredProducts,
+    allProducts: products,
+    categoryOptions,
+    subcategoryOptions,
     suppliers,
     purchases,
     suppliersById,
@@ -269,5 +438,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     removeItem,
     clearCart,
     confirmPurchase,
+    findPotentialDuplicateProducts,
+    createProductAndAddToCart,
   };
 };

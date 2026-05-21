@@ -1,5 +1,6 @@
 import { routePaths } from "@/config/routes";
 import type { ModuleRouteItem } from "@/app/router/types";
+import { MainMenuPage } from "@/modules/menu-principal/pages/MainMenuPage";
 import { DashboardPage } from "@/modules/dashboard/pages/DashboardPage";
 import { PosPage } from "@/modules/pos/pages/PosPage";
 import { ProductosPage } from "@/modules/productos/pages/ProductosPage";
@@ -17,9 +18,19 @@ import { ComprobantesPage } from "@/modules/comprobantes/pages/ComprobantesPage"
 import { ReportesPage } from "@/modules/reportes/pages/ReportesPage";
 import { AuditoriaPage } from "@/modules/auditoria/pages/AuditoriaPage";
 import { ConfiguracionPage } from "@/modules/configuracion/pages/ConfiguracionPage";
+import {
+  ConfiguracionAgendaPage,
+  ConfiguracionAnalisisPage,
+  ConfiguracionCatalogoPage,
+  ConfiguracionContablePage,
+  ConfiguracionSistemaPage,
+} from "@/modules/configuracion/pages/ConfiguracionScopedPages";
 import { UsuariosPage } from "@/modules/usuarios/pages/UsuariosPage";
+import { MisConsultasPage } from "@/modules/sistema/pages/MisConsultasPage";
+import { CentroSoportePage } from "@/modules/sistema/pages/CentroSoportePage";
 
 export const moduleRoutes: ModuleRouteItem[] = [
+  { path: routePaths.menuPrincipal, Component: MainMenuPage },
   { path: routePaths.dashboard, Component: DashboardPage, requiredPermission: { module: "dashboard", level: "read" } },
   { path: routePaths.pos, Component: PosPage, requiredPermission: { module: "pos", level: "read" } },
   { path: routePaths.productos, Component: ProductosPage, requiredPermission: { module: "productos", level: "read" } },
@@ -37,5 +48,12 @@ export const moduleRoutes: ModuleRouteItem[] = [
   { path: routePaths.reportes, Component: ReportesPage, requiredPermission: { module: "reportes", level: "read" } },
   { path: routePaths.auditoria, Component: AuditoriaPage, requiredPermission: { module: "auditoria", level: "read" } },
   { path: routePaths.configuracion, Component: ConfiguracionPage, requiredPermission: { module: "configuracion", level: "read" } },
+  { path: routePaths.configuracionAgenda, Component: ConfiguracionAgendaPage, requiredPermission: { module: "configuracion_agenda", level: "read" } },
+  { path: routePaths.configuracionCatalogo, Component: ConfiguracionCatalogoPage, requiredPermission: { module: "configuracion_catalogo", level: "read" } },
+  { path: routePaths.configuracionAnalisis, Component: ConfiguracionAnalisisPage, requiredPermission: { module: "configuracion_analisis", level: "read" } },
+  { path: routePaths.configuracionSistema, Component: ConfiguracionSistemaPage, requiredPermission: { module: "configuracion_sistema", level: "read" } },
+  { path: routePaths.centroSoporte, Component: CentroSoportePage, requiredPermission: { module: "configuracion_sistema", level: "read" } },
+  { path: routePaths.misConsultas, Component: MisConsultasPage, requiredPermission: { module: "configuracion_sistema", level: "read" } },
+  { path: routePaths.configuracionContable, Component: ConfiguracionContablePage, requiredPermission: { module: "configuracion_contable", level: "read" } },
   { path: routePaths.usuarios, Component: UsuariosPage, requiredPermission: { module: "usuarios", level: "read" } },
 ];

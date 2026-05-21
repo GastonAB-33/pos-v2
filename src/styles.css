@@ -434,6 +434,78 @@ html.dark {
     color: var(--ui-text);
   }
 
+  .ui-input--date {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+  }
+
+  .ui-input--date::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+  }
+
+  .app-main:not(.app-main--pos) .ui-panel {
+    @apply space-y-5 border p-5 md:p-6;
+    border-color: color-mix(in srgb, var(--ui-border) 88%, transparent);
+    border-radius: calc(var(--radius-xl) + 2px);
+    background:
+      radial-gradient(circle at top right, color-mix(in srgb, var(--ui-accent-soft) 32%, transparent), transparent 48%),
+      color-mix(in srgb, var(--ui-surface) 97%, transparent);
+    box-shadow: var(--shadow-panel);
+  }
+
+  .app-main:not(.app-main--pos) .ui-card {
+    @apply border p-4 md:p-5;
+    border-color: color-mix(in srgb, var(--ui-border) 92%, transparent);
+    border-radius: calc(var(--radius-xl) + 1px);
+    background-color: color-mix(in srgb, var(--ui-surface) 97%, transparent);
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--ui-accent-soft) 15%, transparent);
+  }
+
+  .app-main:not(.app-main--pos) .ui-input {
+    border-color: color-mix(in srgb, var(--ui-border) 92%, transparent);
+    background-color: color-mix(in srgb, var(--ui-surface-2) 90%, transparent);
+    min-height: 2.45rem;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+  }
+
+  .app-main:not(.app-main--pos) .ui-btn-primary {
+    border-radius: 10px;
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--ui-accent-soft) 36%, transparent);
+  }
+
+  .app-main:not(.app-main--pos) .ui-btn-ghost {
+    border-radius: 10px;
+    background-color: color-mix(in srgb, var(--ui-surface-2) 65%, transparent);
+    transition: border-color 0.18s ease, color 0.18s ease, background-color 0.18s ease;
+  }
+
+  .app-main:not(.app-main--pos) .ui-table-wrap {
+    border-color: color-mix(in srgb, var(--ui-border) 88%, transparent);
+    border-radius: calc(var(--radius-xl) + 1px);
+    background-color: color-mix(in srgb, var(--ui-surface) 98%, transparent);
+    box-shadow: 0 12px 26px color-mix(in srgb, var(--ui-accent-soft) 12%, transparent);
+  }
+
+  .app-main:not(.app-main--pos) .ui-empty-state,
+  .app-main:not(.app-main--pos) .ui-loading,
+  .app-main:not(.app-main--pos) .ui-error-state,
+  .app-main:not(.app-main--pos) .ui-success-state,
+  .app-main:not(.app-main--pos) .ui-info-state {
+    border-radius: calc(var(--radius-lg) + 2px);
+  }
+
+  .app-main:not(.app-main--pos) h1 {
+    @apply text-2xl font-semibold;
+    letter-spacing: -0.02em;
+    color: var(--ui-text);
+  }
+
+  .app-main:not(.app-main--pos) h1 + p {
+    @apply mt-1 text-sm;
+    color: var(--ui-muted);
+  }
+
   .ui-table-wrap {
     @apply overflow-x-auto rounded-lg border;
     border-color: var(--ui-border);
@@ -494,6 +566,98 @@ html.dark {
 
   .pos-side-tab--active {
     @apply bg-white text-slate-900 shadow-sm;
+  }
+
+  .payment-methods-tabs {
+    @apply flex gap-1 overflow-x-auto;
+  }
+
+  .payment-methods-tab {
+    @apply rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition whitespace-nowrap;
+    background: color-mix(in srgb, var(--ui-surface-2) 72%, transparent);
+    border: none;
+  }
+
+  .payment-methods-tab:hover {
+    color: var(--ui-text);
+    background: color-mix(in srgb, var(--ui-surface-2) 88%, transparent);
+  }
+
+  .payment-methods-tab--active {
+    color: var(--ui-text);
+    background: color-mix(in srgb, var(--ui-surface) 96%, transparent);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .payment-method-panel {
+    @apply space-y-4 rounded-2xl border p-4 md:p-5;
+    border-color: color-mix(in srgb, var(--ui-accent) 24%, var(--ui-border));
+    background:
+      radial-gradient(circle at top right, color-mix(in srgb, var(--ui-accent-soft) 88%, transparent), transparent 48%),
+      color-mix(in srgb, var(--ui-surface) 97%, transparent);
+    box-shadow: 0 12px 26px color-mix(in srgb, var(--ui-accent-soft) 22%, transparent);
+  }
+
+  .payment-method-panel__hero {
+    @apply flex flex-wrap items-start justify-between gap-3;
+  }
+
+  .payment-method-panel__eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em];
+    color: var(--ui-accent);
+  }
+
+  .payment-method-panel__chips {
+    @apply flex flex-wrap items-center justify-end gap-2;
+  }
+
+  .payment-method-chip {
+    @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium;
+    border: 1px solid transparent;
+  }
+
+  .payment-method-chip--accent {
+    color: var(--ui-accent);
+    background: color-mix(in srgb, var(--ui-accent-soft) 88%, transparent);
+    border-color: color-mix(in srgb, var(--ui-accent) 24%, transparent);
+  }
+
+  .payment-method-chip--success {
+    color: var(--ui-success);
+    background: color-mix(in srgb, var(--ui-success-soft) 90%, transparent);
+    border-color: color-mix(in srgb, var(--ui-success) 22%, transparent);
+  }
+
+  .payment-method-chip--warn {
+    color: var(--ui-warn);
+    background: color-mix(in srgb, var(--ui-warn-soft) 90%, transparent);
+    border-color: color-mix(in srgb, var(--ui-warn) 22%, transparent);
+  }
+
+  .payment-method-chip--danger {
+    color: var(--ui-danger);
+    background: color-mix(in srgb, var(--ui-danger-soft) 90%, transparent);
+    border-color: color-mix(in srgb, var(--ui-danger) 22%, transparent);
+  }
+
+  .payment-method-panel__info-grid {
+    @apply grid gap-3 md:grid-cols-3;
+  }
+
+  .payment-method-panel__info-card {
+    @apply space-y-2 rounded-xl border p-3;
+    border-color: color-mix(in srgb, var(--ui-accent) 12%, var(--ui-border));
+    background: color-mix(in srgb, var(--ui-surface) 95%, transparent);
+  }
+
+  .payment-method-panel__info-title {
+    @apply text-sm font-semibold text-slate-900;
+  }
+
+  .payment-method-panel__form-wrap {
+    @apply rounded-xl border p-3;
+    border-color: color-mix(in srgb, var(--ui-accent) 14%, var(--ui-border));
+    background: color-mix(in srgb, var(--ui-surface-2) 72%, transparent);
   }
 
   .pos-search-wrap {

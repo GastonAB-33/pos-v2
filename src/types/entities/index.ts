@@ -17,6 +17,8 @@ export type {
   PriceListItem,
   PriceMode,
   Promotion,
+  PromotionBarcode,
+  PromotionItem,
   PromotionType,
   PromotionScope,
   CurrentAccountMovement,
@@ -40,6 +42,7 @@ export type {
   ArcaMode,
   ArcaFiscalEnvironment,
   ArcaSettings,
+  BarcodeScaleMode,
   BarcodeScaleSettings,
   AppearanceSettings,
   SystemSettings,
@@ -64,4 +67,5 @@ export type {
   StockMovementType,
   CashSessionStatus,
   CashMovementType,
+  CurrentAccountPricingMode,
 } from "@/types/entities/mvp.entities";

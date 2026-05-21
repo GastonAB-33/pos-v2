@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { auditService } from "@/services/audit.service";
 import { customersService } from "@/services/customers.service";
+import { paymentMethodsService } from "@/services/payment-methods.service";
 import {
   settingsService,
   type TenantSettingsUpdateInput,
 } from "@/services/settings.service";
 import type {
   Customer,
+  PaymentMethod,
   TenantSettings,
   TenantSettingsSectionKey,
 } from "@/types/entities";
@@ -66,6 +68,7 @@ export const useConfiguracionModule = (
   const [settings, setSettings] = useState<TenantSettings | null>(null);
   const [draft, setDraft] = useState<TenantSettings | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [savingSection, setSavingSection] = useState<
@@ -89,6 +92,7 @@ export const useConfiguracionModule = (
       setSettings(null);
       setDraft(null);
       setCustomers([]);
+      setPaymentMethods([]);
       return;
     }
 
@@ -96,9 +100,10 @@ export const useConfiguracionModule = (
     setFeedback(null);
 
     try {
-      const [resolvedSettings, customerRows] = await Promise.all([
+      const [resolvedSettings, customerRows, paymentMethodRows] = await Promise.all([
         settingsService.getByTenant(tenantId),
         customersService.getAllByTenant(tenantId),
+        paymentMethodsService.getActiveByTenant(tenantId),
       ]);
 
       setSettings(resolvedSettings);
@@ -107,6 +112,11 @@ export const useConfiguracionModule = (
         customerRows
           .filter((customer) => customer.is_active)
           .sort((a, b) => a.full_name.localeCompare(b.full_name))
+      );
+      setPaymentMethods(
+        paymentMethodRows
+          .filter((method) => method.is_active)
+          .sort((a, b) => a.name.localeCompare(b.name))
       );
     } catch {
       setFeedback({ type: "error", message: "No se pudo cargar la configuracion" });
@@ -254,6 +264,7 @@ export const useConfiguracionModule = (
     draft,
     setDraft,
     customers,
+    paymentMethods,
     isLoading,
     isSavingAll,
     savingSection,

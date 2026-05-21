@@ -1,12 +1,10 @@
-import type { ProductFormValues } from "@/modules/productos/schemas/product-form.schema";
-
 export interface ProductVoiceSuggestions {
   name: string | null;
   description: string | null;
   category: string | null;
   subcategory: string | null;
   brand: string | null;
-  sale_mode: ProductFormValues["saleMode"] | null;
+  sale_mode: "unit" | "weight" | null;
   barcode: string | null;
   price: number | null;
   cost: number | null;
@@ -86,7 +84,7 @@ const parseTranscriptToSuggestions = (rawTranscript: string): ProductVoiceSugges
   );
   const brand = matchText(lower, /(?:marca)\s*(?:es)?\s*[:\-]?\s*([^.,;]+)/i);
 
-  let saleMode: ProductFormValues["saleMode"] = "unit";
+  let saleMode: "unit" | "weight" = "unit";
   if (/\b(peso|granel|kilo|kilogramo|kg)\b/i.test(lower)) {
     saleMode = "weight";
   }
@@ -156,4 +154,3 @@ export const productVoiceService = {
     };
   },
 };
-

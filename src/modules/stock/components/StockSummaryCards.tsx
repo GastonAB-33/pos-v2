@@ -12,26 +12,11 @@ export const StockSummaryCards = ({
   overMax,
 }: StockSummaryCardsProps) => {
   return (
-    <div className="ui-summary-grid">
-      <article className="ui-summary-card">
-        <p className="ui-summary-label">Productos activos</p>
-        <p className="ui-kpi">{activeProducts}</p>
-      </article>
-
-      <article className="ui-summary-card border-amber-300/50 bg-amber-500/10">
-        <p className="ui-summary-label text-amber-300">Stock bajo minimo</p>
-        <p className="ui-kpi text-amber-200">{lowStock}</p>
-      </article>
-
-      <article className="ui-summary-card border-red-300/50 bg-red-500/10">
-        <p className="ui-summary-label text-red-300">Sin stock</p>
-        <p className="ui-kpi text-red-200">{noStock}</p>
-      </article>
-
-      <article className="ui-summary-card border-sky-300/50 bg-sky-500/10">
-        <p className="ui-summary-label text-sky-300">Sobre maximo</p>
-        <p className="ui-kpi text-sky-200">{overMax}</p>
-      </article>
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="ui-badge ui-badge--success">Activos: {activeProducts}</span>
+      <span className="ui-badge ui-badge--warn">Bajo minimo: {lowStock}</span>
+      <span className="ui-badge ui-badge--danger">Sin stock: {noStock}</span>
+      <span className="ui-badge ui-badge--info">Sobre maximo: {overMax}</span>
     </div>
   );
 };

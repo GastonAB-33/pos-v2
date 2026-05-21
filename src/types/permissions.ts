@@ -23,7 +23,22 @@ export const createDefaultPermissionProfile = (): PermissionProfile => {
   return profile;
 };
 
+const createFullPermissionProfile = (): PermissionProfile => {
+  const profile = createDefaultPermissionProfile();
+
+  for (const module of appModules) {
+    profile[module] = { read: true, write: true };
+  }
+
+  return profile;
+};
+
 export const normalizePermissionProfile = (profile: PermissionProfile): PermissionProfile => {
+  const maybeWildcard = profile as unknown as { all?: unknown };
+  if (maybeWildcard?.all === true) {
+    return createFullPermissionProfile();
+  }
+
   const base = createDefaultPermissionProfile();
 
   for (const module of appModules) {
@@ -41,5 +56,13 @@ export const hasModulePermission = (
   requirement: PermissionRequirement
 ): boolean => {
   const level = requirement.level ?? "read";
-  return Boolean(profile[requirement.module]?.[level]);
+  const directPermission = Boolean(profile[requirement.module]?.[level]);
+  if (directPermission) return true;
+
+  const isScopedConfigModule = requirement.module.startsWith("configuracion_");
+  if (!isScopedConfigModule) return false;
+
+  // Compatibilidad: si el perfil aun no tiene los permisos nuevos por submodulo
+  // pero si tiene el permiso legacy de configuracion, se habilita el acceso.
+  return Boolean(profile.configuracion?.[level]);
 };

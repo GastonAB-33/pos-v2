@@ -29,6 +29,8 @@ const defaultValues: CustomerFormValues = {
   email: "",
   address: "",
   observations: "",
+  currentAccountEnabled: false,
+  currentAccountLimit: "",
 };
 
 export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, onSubmit }: CustomerFormProps) => {
@@ -62,10 +64,16 @@ export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, o
       email: customer.email ?? "",
       address: customer.address ?? "",
       observations: customer.observations ?? "",
+      currentAccountEnabled: customer.current_account_enabled ?? false,
+      currentAccountLimit:
+        customer.current_account_limit != null && Number.isFinite(customer.current_account_limit)
+          ? customer.current_account_limit.toString()
+          : "",
     });
   }, [customer, reset]);
 
   const observationsValue = watch("observations");
+  const currentAccountEnabled = watch("currentAccountEnabled");
 
   return (
     <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
@@ -181,6 +189,30 @@ export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, o
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           disabled={disabled}
         />
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+          <input
+            type="checkbox"
+            {...register("currentAccountEnabled")}
+            className="h-4 w-4"
+            disabled={disabled}
+          />
+          Habilitar cuenta corriente
+        </label>
+        <div className="mt-3">
+          <label className="mb-1 block text-sm font-medium text-slate-700">Limite autorizado</label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            {...register("currentAccountLimit")}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            disabled={disabled || !currentAccountEnabled}
+            placeholder="Sin limite si se deja vacio"
+          />
+        </div>
       </div>
 
       <div>

@@ -5,6 +5,7 @@ import type {
   MercadoPagoOperationalStatus,
   MercadoPagoPaymentIntent,
 } from "@/services/mercadopago/mercadopago-payments.service";
+import { PaymentMethodSelector } from "@/components/payments/PaymentMethodSelector";
 import type {
   BankAccount,
   Customer,
@@ -14,6 +15,11 @@ import type {
   PaymentMethod,
 } from "@/types/entities";
 import {
+  getPaymentMethodPosConfig,
+  normalizePaymentMethodCode,
+  type PaymentMethodPosConfig,
+} from "@/services/payment-methods.service";
+import {
   posCheckoutSchema,
   type PosCheckoutValues,
 } from "@/modules/pos/schemas/pos-checkout.schema";
@@ -21,6 +27,7 @@ import {
 interface PosCheckoutPanelProps {
   panelId?: string;
   formId?: string;
+  layout?: "panel" | "modal";
   customers: Customer[];
   paymentMethods: PaymentMethod[];
   bankAccounts: BankAccount[];
@@ -52,33 +59,22 @@ interface PosCheckoutPanelProps {
   onApproveMercadoPago: () => void;
   onRejectMercadoPago: () => void;
   onCancelMercadoPago: () => void;
+  onClose?: () => void;
   onSubmit: (values: PosCheckoutValues) => Promise<void>;
 }
-
-const getPaymentMethodLabel = (paymentMethod: PaymentMethod) => {
-  const labels: Record<PaymentMethod["type"], string> = {
-    cash: "Efectivo",
-    transfer: "Transferencia",
-    card: "Tarjeta",
-    mercado_pago: "Mercado Pago",
-    current_account: "Cuenta corriente",
-    other: "Otro",
-  };
-
-  return labels[paymentMethod.type];
-};
 
 const normalizeSearchText = (value: string) => value.trim().toLowerCase();
 
 const paymentMethodPriority = (method: PaymentMethod): number => {
-  const code = method.code.trim().toLowerCase();
+  const code = normalizePaymentMethodCode(method.code);
   if (code === "cash") return 0;
   if (code === "card_debit") return 1;
   if (code === "card_credit") return 2;
   if (code === "transfer") return 3;
-  if (code === "current_account") return 4;
-  if (method.type === "mercado_pago") return 5;
-  return 6;
+  if (code === "mercado_pago") return 4;
+  if (code === "cheque") return 5;
+  if (code === "current_account") return 6;
+  return 7;
 };
 
 interface CardDebitDetails {
@@ -105,9 +101,20 @@ interface MercadoPagoManualDetails {
   destinationBankAccountId: string;
 }
 
+interface ChequeDetails {
+  chequeNumber: string;
+  approvalNumber: string;
+  dueDate: string;
+  originBankId: string;
+  newOriginBankName: string;
+  originAccountHolder: string;
+  destinationBankAccountId: string;
+}
+
 export const PosCheckoutPanel = ({
   panelId,
   formId,
+  layout = "panel",
   customers,
   paymentMethods,
   bankAccounts,
@@ -134,6 +141,7 @@ export const PosCheckoutPanel = ({
   onApproveMercadoPago,
   onRejectMercadoPago,
   onCancelMercadoPago,
+  onClose,
   onSubmit,
 }: PosCheckoutPanelProps) => {
   const [customerQuery, setCustomerQuery] = useState("");
@@ -164,6 +172,15 @@ export const PosCheckoutPanel = ({
       operationId: "",
       destinationBankAccountId: "",
     });
+  const [chequeDetails, setChequeDetails] = useState<ChequeDetails>({
+    chequeNumber: "",
+    approvalNumber: "",
+    dueDate: "",
+    originBankId: "",
+    newOriginBankName: "",
+    originAccountHolder: "",
+    destinationBankAccountId: "",
+  });
   const customerLookupRef = useRef<HTMLDivElement | null>(null);
 
   const {
@@ -209,15 +226,38 @@ export const PosCheckoutPanel = ({
     [paymentMethods, watchedPaymentMethodId]
   );
 
-  const selectedMethodCode = selectedMethod?.code.trim().toLowerCase() ?? "";
+  const selectedMethodConfig = useMemo<PaymentMethodPosConfig | null>(
+    () => (selectedMethod ? getPaymentMethodPosConfig(selectedMethod) : null),
+    [selectedMethod]
+  );
+
+  const selectedMethodCode = normalizePaymentMethodCode(selectedMethod?.code);
   const isCreditCardMethod = selectedMethodCode === "card_credit";
   const isDebitCardMethod = selectedMethodCode === "card_debit";
-  const isTransferMethod = selectedMethodCode === "transfer" || selectedMethod?.type === "transfer";
-  const isMercadoPagoMethod = selectedMethod?.type === "mercado_pago";
+  const isTransferMethod = selectedMethodCode === "transfer";
+  const isChequeMethod = selectedMethodCode === "cheque";
+  const isMercadoPagoMethod = selectedMethodCode === "mercado_pago";
   const isMercadoPagoManual = isMercadoPagoMethod && !mercadoPagoSettings.enabled;
-  const isCurrentAccountMethod = selectedMethod?.type === "current_account";
-  const requiresPaymentDetails =
-    isCreditCardMethod || isDebitCardMethod || isTransferMethod || isMercadoPagoManual;
+  const isCurrentAccountMethod = selectedMethodCode === "current_account";
+  const requiresPaymentDetails = Boolean(
+    selectedMethodConfig &&
+      (isCreditCardMethod ||
+        isDebitCardMethod ||
+        isTransferMethod ||
+        isMercadoPagoManual ||
+        isChequeMethod) &&
+      (selectedMethodConfig.ask_destination_bank ||
+        selectedMethodConfig.ask_coupon_number ||
+        selectedMethodConfig.ask_approval_number ||
+        selectedMethodConfig.ask_operation_number ||
+        selectedMethodConfig.ask_voucher_number ||
+        selectedMethodConfig.ask_origin_bank ||
+        selectedMethodConfig.ask_origin_account_holder ||
+        selectedMethodConfig.ask_card_brand ||
+        selectedMethodConfig.ask_installment_plan ||
+        selectedMethodConfig.ask_cheque_number ||
+        selectedMethodConfig.ask_cheque_due_date)
+  );
 
   const selectedCustomer = useMemo(
     () => customers.find((customer) => customer.id === watchedCustomerId) ?? null,
@@ -304,33 +344,49 @@ export const PosCheckoutPanel = ({
     [paymentMethods]
   );
 
+  const destinationBankAccounts = useMemo(() => {
+    if (!selectedMethodConfig?.ask_destination_bank) return bankAccounts;
+    if (!selectedMethodConfig.destination_bank_account_ids.length) return bankAccounts;
+
+    const allowedIds = new Set(selectedMethodConfig.destination_bank_account_ids);
+    const filtered = bankAccounts.filter((account) => allowedIds.has(account.id));
+    return filtered.length ? filtered : bankAccounts;
+  }, [bankAccounts, selectedMethodConfig]);
+
   const selectedCreditDestination = useMemo(
     () =>
-      bankAccounts.find((account) => account.id === cardCreditDetails.destinationBankAccountId) ??
+      destinationBankAccounts.find((account) => account.id === cardCreditDetails.destinationBankAccountId) ??
       null,
-    [bankAccounts, cardCreditDetails.destinationBankAccountId]
+    [cardCreditDetails.destinationBankAccountId, destinationBankAccounts]
   );
 
   const selectedDebitDestination = useMemo(
     () =>
-      bankAccounts.find((account) => account.id === cardDebitDetails.destinationBankAccountId) ??
+      destinationBankAccounts.find((account) => account.id === cardDebitDetails.destinationBankAccountId) ??
       null,
-    [bankAccounts, cardDebitDetails.destinationBankAccountId]
+    [cardDebitDetails.destinationBankAccountId, destinationBankAccounts]
   );
 
   const selectedTransferDestination = useMemo(
     () =>
-      bankAccounts.find((account) => account.id === transferDetails.destinationBankAccountId) ??
+      destinationBankAccounts.find((account) => account.id === transferDetails.destinationBankAccountId) ??
       null,
-    [bankAccounts, transferDetails.destinationBankAccountId]
+    [destinationBankAccounts, transferDetails.destinationBankAccountId]
   );
 
   const selectedManualMpDestination = useMemo(
     () =>
-      bankAccounts.find(
+      destinationBankAccounts.find(
         (account) => account.id === mercadoPagoManualDetails.destinationBankAccountId
       ) ?? null,
-    [bankAccounts, mercadoPagoManualDetails.destinationBankAccountId]
+    [destinationBankAccounts, mercadoPagoManualDetails.destinationBankAccountId]
+  );
+
+  const selectedChequeDestination = useMemo(
+    () =>
+      destinationBankAccounts.find((account) => account.id === chequeDetails.destinationBankAccountId) ??
+      null,
+    [chequeDetails.destinationBankAccountId, destinationBankAccounts]
   );
 
   const availableInstallmentPlans = useMemo(() => {
@@ -373,10 +429,12 @@ export const PosCheckoutPanel = ({
 
   useEffect(() => {
     if (!selectedMethod) return;
-    if (selectedMethod.type !== "current_account") return;
+    if (normalizePaymentMethodCode(selectedMethod.code) !== "current_account") return;
     if (canUseCurrentAccountMethod) return;
 
-    const fallback = paymentMethodsOrdered.find((method) => method.type !== "current_account");
+    const fallback = paymentMethodsOrdered.find(
+      (method) => normalizePaymentMethodCode(method.code) !== "current_account"
+    );
     if (!fallback) return;
 
     setValue("paymentMethodId", fallback.id, { shouldDirty: true, shouldValidate: true });
@@ -397,56 +455,89 @@ export const PosCheckoutPanel = ({
       mercadoPagoIntent.status === "expired");
 
   const arePaymentDetailsReady = useMemo(() => {
-    if (!requiresPaymentDetails) return true;
+    if (!requiresPaymentDetails || !selectedMethodConfig) return true;
 
     if (isCreditCardMethod) {
-      return Boolean(
-        cardCreditDetails.couponNumber.trim() &&
-          cardCreditDetails.authorizationNumber.trim() &&
-          selectedInstallmentPlan &&
-          selectedCreditDestination
-      );
+      const hasCoupon = !selectedMethodConfig.ask_coupon_number || Boolean(cardCreditDetails.couponNumber.trim());
+      const hasApproval =
+        !selectedMethodConfig.ask_approval_number || Boolean(cardCreditDetails.authorizationNumber.trim());
+      const hasCardBrand = !selectedMethodConfig.ask_card_brand || Boolean(cardCreditDetails.cardBrand.trim());
+      const hasInstallments = !selectedMethodConfig.ask_installment_plan || Boolean(selectedInstallmentPlan);
+      const hasDestination = !selectedMethodConfig.ask_destination_bank || Boolean(selectedCreditDestination);
+      return hasCoupon && hasApproval && hasCardBrand && hasInstallments && hasDestination;
     }
 
     if (isDebitCardMethod) {
-      return Boolean(
-        cardDebitDetails.couponNumber.trim() &&
-          cardDebitDetails.authorizationNumber.trim() &&
-          selectedDebitDestination
-      );
+      const hasCoupon = !selectedMethodConfig.ask_coupon_number || Boolean(cardDebitDetails.couponNumber.trim());
+      const hasApproval =
+        !selectedMethodConfig.ask_approval_number || Boolean(cardDebitDetails.authorizationNumber.trim());
+      const hasDestination = !selectedMethodConfig.ask_destination_bank || Boolean(selectedDebitDestination);
+      return hasCoupon && hasApproval && hasDestination;
     }
 
     if (isTransferMethod) {
-      const hasOrigin =
-        transferDetails.originBankId === "__new__"
-          ? Boolean(transferDetails.newOriginBankName.trim())
+      const hasOrigin = !selectedMethodConfig.ask_origin_bank
+        ? true
+        : transferDetails.originBankId === "__new__"
+          ? selectedMethodConfig.allow_new_origin_bank && Boolean(transferDetails.newOriginBankName.trim())
           : Boolean(transferDetails.originBankId.trim());
-      return Boolean(
-        hasOrigin &&
-          transferDetails.voucherNumber.trim() &&
-          transferDetails.originAccountHolder.trim() &&
-          selectedTransferDestination
-      );
+      const hasVoucher =
+        !selectedMethodConfig.ask_voucher_number || Boolean(transferDetails.voucherNumber.trim());
+      const hasOriginHolder =
+        !selectedMethodConfig.ask_origin_account_holder ||
+        Boolean(transferDetails.originAccountHolder.trim());
+      const hasDestination = !selectedMethodConfig.ask_destination_bank || Boolean(selectedTransferDestination);
+      return hasOrigin && hasVoucher && hasOriginHolder && hasDestination;
     }
 
     if (isMercadoPagoManual) {
-      return Boolean(
-        mercadoPagoManualDetails.operationId.trim() && selectedManualMpDestination
-      );
+      const hasOperation =
+        !selectedMethodConfig.ask_operation_number || Boolean(mercadoPagoManualDetails.operationId.trim());
+      const hasDestination = !selectedMethodConfig.ask_destination_bank || Boolean(selectedManualMpDestination);
+      return hasOperation && hasDestination;
+    }
+
+    if (isChequeMethod) {
+      const hasOrigin = !selectedMethodConfig.ask_origin_bank
+        ? true
+        : chequeDetails.originBankId === "__new__"
+          ? selectedMethodConfig.allow_new_origin_bank && Boolean(chequeDetails.newOriginBankName.trim())
+          : Boolean(chequeDetails.originBankId.trim());
+      const hasOriginHolder =
+        !selectedMethodConfig.ask_origin_account_holder ||
+        Boolean(chequeDetails.originAccountHolder.trim());
+      const hasChequeNumber =
+        !selectedMethodConfig.ask_cheque_number || Boolean(chequeDetails.chequeNumber.trim());
+      const hasDueDate = !selectedMethodConfig.ask_cheque_due_date || Boolean(chequeDetails.dueDate.trim());
+      const hasApproval =
+        !selectedMethodConfig.ask_approval_number || Boolean(chequeDetails.approvalNumber.trim());
+      const hasDestination = !selectedMethodConfig.ask_destination_bank || Boolean(selectedChequeDestination);
+      return hasOrigin && hasOriginHolder && hasChequeNumber && hasDueDate && hasApproval && hasDestination;
     }
 
     return true;
   }, [
+    chequeDetails.approvalNumber,
+    chequeDetails.chequeNumber,
+    chequeDetails.destinationBankAccountId,
+    chequeDetails.dueDate,
+    chequeDetails.newOriginBankName,
+    chequeDetails.originAccountHolder,
+    chequeDetails.originBankId,
     cardCreditDetails.authorizationNumber,
+    cardCreditDetails.cardBrand,
     cardCreditDetails.couponNumber,
     cardDebitDetails.authorizationNumber,
     cardDebitDetails.couponNumber,
     isCreditCardMethod,
     isDebitCardMethod,
+    isChequeMethod,
     isMercadoPagoManual,
     isTransferMethod,
     mercadoPagoManualDetails.operationId,
     requiresPaymentDetails,
+    selectedMethodConfig,
+    selectedChequeDestination,
     selectedCreditDestination,
     selectedDebitDestination,
     selectedInstallmentPlan,
@@ -459,23 +550,35 @@ export const PosCheckoutPanel = ({
   ]);
 
   const buildPaymentDetailsPayload = useCallback(async () => {
-    if (!requiresPaymentDetails || !selectedMethod) {
+    if (!requiresPaymentDetails || !selectedMethod || !selectedMethodConfig) {
       return { ok: true as const, payload: null as Record<string, unknown> | null };
     }
 
     const capturedAt = new Date().toISOString();
 
     if (isCreditCardMethod) {
-      if (!selectedInstallmentPlan) {
+      if (selectedMethodConfig.ask_installment_plan && !selectedInstallmentPlan) {
         return { ok: false as const, error: "Selecciona un plan de cuotas." };
       }
-      if (!selectedCreditDestination) {
+      if (selectedMethodConfig.ask_destination_bank && !selectedCreditDestination) {
         return { ok: false as const, error: "Selecciona una cuenta bancaria destino." };
       }
-      if (!cardCreditDetails.couponNumber.trim() || !cardCreditDetails.authorizationNumber.trim()) {
+      if (selectedMethodConfig.ask_coupon_number && !cardCreditDetails.couponNumber.trim()) {
         return {
           ok: false as const,
-          error: "Completa numero de cupon y autorizacion para tarjeta de credito.",
+          error: "Completa numero de cupon para tarjeta de credito.",
+        };
+      }
+      if (selectedMethodConfig.ask_approval_number && !cardCreditDetails.authorizationNumber.trim()) {
+        return {
+          ok: false as const,
+          error: "Completa numero de autorizacion para tarjeta de credito.",
+        };
+      }
+      if (selectedMethodConfig.ask_card_brand && !cardCreditDetails.cardBrand.trim()) {
+        return {
+          ok: false as const,
+          error: "Completa la marca de la tarjeta.",
         };
       }
 
@@ -484,30 +587,36 @@ export const PosCheckoutPanel = ({
         payload: {
           kind: "card_credit",
           captured_at: capturedAt,
-          coupon_number: cardCreditDetails.couponNumber.trim(),
-          authorization_number: cardCreditDetails.authorizationNumber.trim(),
+          coupon_number: cardCreditDetails.couponNumber.trim() || null,
+          authorization_number: cardCreditDetails.authorizationNumber.trim() || null,
           card_brand: cardCreditDetails.cardBrand.trim() || null,
-          installment_plan_id: selectedInstallmentPlan.id,
-          installment_plan_name: selectedInstallmentPlan.name,
-          installments: selectedInstallmentPlan.installments,
-          interest_percent: selectedInstallmentPlan.interest_percent,
+          installment_plan_id: selectedInstallmentPlan?.id ?? null,
+          installment_plan_name: selectedInstallmentPlan?.name ?? null,
+          installments: selectedInstallmentPlan?.installments ?? null,
+          interest_percent: selectedInstallmentPlan?.interest_percent ?? null,
           base_amount: checkoutTotal,
           total_amount_with_interest: creditTotalWithInterest,
-          destination_account_id: selectedCreditDestination.id,
-          destination_account_bank: selectedCreditDestination.bank_name,
-          destination_account_alias: selectedCreditDestination.alias,
+          destination_account_id: selectedCreditDestination?.id ?? null,
+          destination_account_bank: selectedCreditDestination?.bank_name ?? null,
+          destination_account_alias: selectedCreditDestination?.alias ?? null,
         } satisfies Record<string, unknown>,
       };
     }
 
     if (isDebitCardMethod) {
-      if (!selectedDebitDestination) {
+      if (selectedMethodConfig.ask_destination_bank && !selectedDebitDestination) {
         return { ok: false as const, error: "Selecciona una cuenta bancaria destino." };
       }
-      if (!cardDebitDetails.couponNumber.trim() || !cardDebitDetails.authorizationNumber.trim()) {
+      if (selectedMethodConfig.ask_coupon_number && !cardDebitDetails.couponNumber.trim()) {
         return {
           ok: false as const,
-          error: "Completa numero de cupon y autorizacion para tarjeta de debito.",
+          error: "Completa numero de cupon para tarjeta de debito.",
+        };
+      }
+      if (selectedMethodConfig.ask_approval_number && !cardDebitDetails.authorizationNumber.trim()) {
+        return {
+          ok: false as const,
+          error: "Completa numero de autorizacion para tarjeta de debito.",
         };
       }
 
@@ -516,24 +625,28 @@ export const PosCheckoutPanel = ({
         payload: {
           kind: "card_debit",
           captured_at: capturedAt,
-          coupon_number: cardDebitDetails.couponNumber.trim(),
-          authorization_number: cardDebitDetails.authorizationNumber.trim(),
-          destination_account_id: selectedDebitDestination.id,
-          destination_account_bank: selectedDebitDestination.bank_name,
-          destination_account_alias: selectedDebitDestination.alias,
+          coupon_number: cardDebitDetails.couponNumber.trim() || null,
+          authorization_number: cardDebitDetails.authorizationNumber.trim() || null,
+          destination_account_id: selectedDebitDestination?.id ?? null,
+          destination_account_bank: selectedDebitDestination?.bank_name ?? null,
+          destination_account_alias: selectedDebitDestination?.alias ?? null,
         } satisfies Record<string, unknown>,
       };
     }
 
     if (isTransferMethod) {
-      if (!selectedTransferDestination) {
+      if (selectedMethodConfig.ask_destination_bank && !selectedTransferDestination) {
         return { ok: false as const, error: "Selecciona una cuenta bancaria destino." };
       }
 
       let selectedOriginBank =
         originBanks.find((bank) => bank.id === transferDetails.originBankId) ?? null;
 
-      if (transferDetails.originBankId === "__new__") {
+      if (selectedMethodConfig.ask_origin_bank && transferDetails.originBankId === "__new__") {
+        if (!selectedMethodConfig.allow_new_origin_bank) {
+          return { ok: false as const, error: "No esta habilitada la creacion de banco de origen." };
+        }
+
         const newName = transferDetails.newOriginBankName.trim();
         if (!newName) {
           return { ok: false as const, error: "Ingresa el nombre del banco de origen nuevo." };
@@ -556,13 +669,22 @@ export const PosCheckoutPanel = ({
         }
       }
 
-      if (!selectedOriginBank) {
+      if (selectedMethodConfig.ask_origin_bank && !selectedOriginBank) {
         return { ok: false as const, error: "Selecciona banco de origen." };
       }
-      if (!transferDetails.voucherNumber.trim() || !transferDetails.originAccountHolder.trim()) {
+      if (selectedMethodConfig.ask_voucher_number && !transferDetails.voucherNumber.trim()) {
         return {
           ok: false as const,
-          error: "Completa comprobante y titular de cuenta origen.",
+          error: "Completa numero de comprobante.",
+        };
+      }
+      if (
+        selectedMethodConfig.ask_origin_account_holder &&
+        !transferDetails.originAccountHolder.trim()
+      ) {
+        return {
+          ok: false as const,
+          error: "Completa titular de cuenta origen.",
         };
       }
 
@@ -571,22 +693,94 @@ export const PosCheckoutPanel = ({
         payload: {
           kind: "transfer",
           captured_at: capturedAt,
-          origin_bank_id: selectedOriginBank.id,
-          origin_bank_name: selectedOriginBank.name,
-          voucher_number: transferDetails.voucherNumber.trim(),
-          origin_account_holder: transferDetails.originAccountHolder.trim(),
-          destination_account_id: selectedTransferDestination.id,
-          destination_account_bank: selectedTransferDestination.bank_name,
-          destination_account_alias: selectedTransferDestination.alias,
+          origin_bank_id: selectedOriginBank?.id ?? null,
+          origin_bank_name: selectedOriginBank?.name ?? null,
+          voucher_number: transferDetails.voucherNumber.trim() || null,
+          origin_account_holder: transferDetails.originAccountHolder.trim() || null,
+          destination_account_id: selectedTransferDestination?.id ?? null,
+          destination_account_bank: selectedTransferDestination?.bank_name ?? null,
+          destination_account_alias: selectedTransferDestination?.alias ?? null,
+        } satisfies Record<string, unknown>,
+      };
+    }
+
+    if (isChequeMethod) {
+      if (selectedMethodConfig.ask_destination_bank && !selectedChequeDestination) {
+        return { ok: false as const, error: "Selecciona una cuenta bancaria destino." };
+      }
+
+      let selectedOriginBank =
+        originBanks.find((bank) => bank.id === chequeDetails.originBankId) ?? null;
+
+      if (selectedMethodConfig.ask_origin_bank && chequeDetails.originBankId === "__new__") {
+        if (!selectedMethodConfig.allow_new_origin_bank) {
+          return { ok: false as const, error: "No esta habilitada la creacion de banco de origen." };
+        }
+
+        const newName = chequeDetails.newOriginBankName.trim();
+        if (!newName) {
+          return { ok: false as const, error: "Ingresa el nombre del banco de origen nuevo." };
+        }
+
+        setIsCreatingOriginBank(true);
+        try {
+          const created = await onCreateOriginBank(newName);
+          if (!created) {
+            return { ok: false as const, error: "No se pudo crear el banco de origen." };
+          }
+          selectedOriginBank = created;
+          setChequeDetails((current) => ({
+            ...current,
+            originBankId: created.id,
+            newOriginBankName: "",
+          }));
+        } finally {
+          setIsCreatingOriginBank(false);
+        }
+      }
+
+      if (selectedMethodConfig.ask_origin_bank && !selectedOriginBank) {
+        return { ok: false as const, error: "Selecciona banco de origen del cheque." };
+      }
+      if (selectedMethodConfig.ask_cheque_number && !chequeDetails.chequeNumber.trim()) {
+        return { ok: false as const, error: "Completa numero de cheque." };
+      }
+      if (selectedMethodConfig.ask_cheque_due_date && !chequeDetails.dueDate.trim()) {
+        return { ok: false as const, error: "Completa fecha de vencimiento del cheque." };
+      }
+      if (
+        selectedMethodConfig.ask_origin_account_holder &&
+        !chequeDetails.originAccountHolder.trim()
+      ) {
+        return { ok: false as const, error: "Completa titular emisor del cheque." };
+      }
+      if (selectedMethodConfig.ask_approval_number && !chequeDetails.approvalNumber.trim()) {
+        return { ok: false as const, error: "Completa numero de aprobacion del cheque." };
+      }
+
+      return {
+        ok: true as const,
+        payload: {
+          kind: "cheque",
+          captured_at: capturedAt,
+          cheque_number: chequeDetails.chequeNumber.trim() || null,
+          due_date: chequeDetails.dueDate.trim() || null,
+          approval_number: chequeDetails.approvalNumber.trim() || null,
+          origin_bank_id: selectedOriginBank?.id ?? null,
+          origin_bank_name: selectedOriginBank?.name ?? null,
+          origin_account_holder: chequeDetails.originAccountHolder.trim() || null,
+          destination_account_id: selectedChequeDestination?.id ?? null,
+          destination_account_bank: selectedChequeDestination?.bank_name ?? null,
+          destination_account_alias: selectedChequeDestination?.alias ?? null,
         } satisfies Record<string, unknown>,
       };
     }
 
     if (isMercadoPagoManual) {
-      if (!selectedManualMpDestination) {
+      if (selectedMethodConfig.ask_destination_bank && !selectedManualMpDestination) {
         return { ok: false as const, error: "Selecciona una cuenta bancaria destino." };
       }
-      if (!mercadoPagoManualDetails.operationId.trim()) {
+      if (selectedMethodConfig.ask_operation_number && !mercadoPagoManualDetails.operationId.trim()) {
         return { ok: false as const, error: "Completa el ID de operacion de Mercado Pago." };
       }
 
@@ -595,16 +789,22 @@ export const PosCheckoutPanel = ({
         payload: {
           kind: "mercado_pago_manual",
           captured_at: capturedAt,
-          operation_id: mercadoPagoManualDetails.operationId.trim(),
-          destination_account_id: selectedManualMpDestination.id,
-          destination_account_bank: selectedManualMpDestination.bank_name,
-          destination_account_alias: selectedManualMpDestination.alias,
+          operation_id: mercadoPagoManualDetails.operationId.trim() || null,
+          destination_account_id: selectedManualMpDestination?.id ?? null,
+          destination_account_bank: selectedManualMpDestination?.bank_name ?? null,
+          destination_account_alias: selectedManualMpDestination?.alias ?? null,
         } satisfies Record<string, unknown>,
       };
     }
 
     return { ok: true as const, payload: null as Record<string, unknown> | null };
   }, [
+    chequeDetails.approvalNumber,
+    chequeDetails.chequeNumber,
+    chequeDetails.dueDate,
+    chequeDetails.newOriginBankName,
+    chequeDetails.originAccountHolder,
+    chequeDetails.originBankId,
     cardCreditDetails.authorizationNumber,
     cardCreditDetails.cardBrand,
     cardCreditDetails.couponNumber,
@@ -614,6 +814,7 @@ export const PosCheckoutPanel = ({
     creditTotalWithInterest,
     isCreditCardMethod,
     isDebitCardMethod,
+    isChequeMethod,
     isMercadoPagoManual,
     isTransferMethod,
     mercadoPagoManualDetails.operationId,
@@ -625,6 +826,8 @@ export const PosCheckoutPanel = ({
     selectedInstallmentPlan,
     selectedManualMpDestination,
     selectedMethod,
+    selectedMethodConfig,
+    selectedChequeDestination,
     selectedTransferDestination,
     transferDetails.newOriginBankName,
     transferDetails.originAccountHolder,
@@ -682,50 +885,101 @@ export const PosCheckoutPanel = ({
   }, [mercadoPagoStatus.mode]);
 
   const customerActionLabel = selectedCustomer ? "Editar cliente" : "Nuevo cliente";
+  const isModalLayout = layout === "modal";
 
   const paymentDetailsSummary = useMemo(() => {
-    if (!requiresPaymentDetails) return null;
+    if (!requiresPaymentDetails || !selectedMethodConfig) return null;
 
     if (isCreditCardMethod) {
-      if (!arePaymentDetailsReady || !selectedInstallmentPlan || !selectedCreditDestination) {
+      if (!arePaymentDetailsReady) {
         return "Completa los datos de tarjeta de credito.";
       }
-      return `${selectedInstallmentPlan.installments} cuotas | ${selectedInstallmentPlan.interest_percent.toFixed(
-        2
-      )}% | ${selectedCreditDestination.bank_name}`;
+      const details: string[] = [];
+      if (selectedMethodConfig.ask_installment_plan && selectedInstallmentPlan) {
+        details.push(
+          `${selectedInstallmentPlan.installments} cuotas (${selectedInstallmentPlan.interest_percent.toFixed(2)}%)`
+        );
+      }
+      if (selectedMethodConfig.ask_destination_bank && selectedCreditDestination) {
+        details.push(selectedCreditDestination.bank_name);
+      }
+      return details.length ? details.join(" | ") : "Tarjeta de credito configurada";
     }
 
     if (isDebitCardMethod) {
-      if (!arePaymentDetailsReady || !selectedDebitDestination) {
+      if (!arePaymentDetailsReady) {
         return "Completa los datos de tarjeta de debito.";
       }
-      return `Cupon ${cardDebitDetails.couponNumber.trim()} | ${selectedDebitDestination.bank_name}`;
+      const details: string[] = [];
+      if (selectedMethodConfig.ask_coupon_number) {
+        details.push(`Cupon ${cardDebitDetails.couponNumber.trim()}`);
+      }
+      if (selectedMethodConfig.ask_destination_bank && selectedDebitDestination) {
+        details.push(selectedDebitDestination.bank_name);
+      }
+      return details.length ? details.join(" | ") : "Tarjeta de debito configurada";
     }
 
     if (isTransferMethod) {
-      if (!arePaymentDetailsReady || !selectedTransferDestination) {
+      if (!arePaymentDetailsReady) {
         return "Completa los datos de transferencia.";
       }
-      return `Comprobante ${transferDetails.voucherNumber.trim()} | ${selectedTransferDestination.bank_name}`;
+      const details: string[] = [];
+      if (selectedMethodConfig.ask_voucher_number) {
+        details.push(`Comprobante ${transferDetails.voucherNumber.trim()}`);
+      }
+      if (selectedMethodConfig.ask_destination_bank && selectedTransferDestination) {
+        details.push(selectedTransferDestination.bank_name);
+      }
+      return details.length ? details.join(" | ") : "Transferencia configurada";
+    }
+
+    if (isChequeMethod) {
+      if (!arePaymentDetailsReady) {
+        return "Completa los datos del cheque.";
+      }
+      const details: string[] = [];
+      if (selectedMethodConfig.ask_cheque_number) {
+        details.push(`Cheque ${chequeDetails.chequeNumber.trim()}`);
+      }
+      if (selectedMethodConfig.ask_cheque_due_date) {
+        details.push(`Vence ${chequeDetails.dueDate.trim()}`);
+      }
+      if (selectedMethodConfig.ask_destination_bank && selectedChequeDestination) {
+        details.push(selectedChequeDestination.bank_name);
+      }
+      return details.length ? details.join(" | ") : "Cheque configurado";
     }
 
     if (isMercadoPagoManual) {
-      if (!arePaymentDetailsReady || !selectedManualMpDestination) {
+      if (!arePaymentDetailsReady) {
         return "Completa los datos manuales de Mercado Pago.";
       }
-      return `Operacion ${mercadoPagoManualDetails.operationId.trim()} | ${selectedManualMpDestination.bank_name}`;
+      const details: string[] = [];
+      if (selectedMethodConfig.ask_operation_number) {
+        details.push(`Operacion ${mercadoPagoManualDetails.operationId.trim()}`);
+      }
+      if (selectedMethodConfig.ask_destination_bank && selectedManualMpDestination) {
+        details.push(selectedManualMpDestination.bank_name);
+      }
+      return details.length ? details.join(" | ") : "Mercado Pago manual configurado";
     }
 
     return null;
   }, [
     arePaymentDetailsReady,
+    chequeDetails.chequeNumber,
+    chequeDetails.dueDate,
     cardDebitDetails.couponNumber,
     isCreditCardMethod,
     isDebitCardMethod,
+    isChequeMethod,
     isMercadoPagoManual,
     isTransferMethod,
     mercadoPagoManualDetails.operationId,
     requiresPaymentDetails,
+    selectedMethodConfig,
+    selectedChequeDestination,
     selectedCreditDestination,
     selectedDebitDestination,
     selectedInstallmentPlan,
@@ -735,16 +989,30 @@ export const PosCheckoutPanel = ({
   ]);
 
   return (
-    <section id={panelId} className="pos-surface space-y-3">
+    <section id={panelId} className={isModalLayout ? "space-y-3" : "pos-surface space-y-3"}>
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold text-slate-900">Checkout</h2>
-        <span className="font-kpi text-2xl font-semibold text-brand-700">
-          {new Intl.NumberFormat("es-AR", {
-            style: "currency",
-            currency: "ARS",
-            maximumFractionDigits: 2,
-          }).format(checkoutTotal)}
-        </span>
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">
+            {isModalLayout ? "Confirmar venta" : "Checkout"}
+          </h2>
+          {isModalLayout ? (
+            <p className="text-xs text-slate-500">Elegi cliente, medio de pago y datos contables.</p>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-kpi text-2xl font-semibold text-brand-700">
+            {new Intl.NumberFormat("es-AR", {
+              style: "currency",
+              currency: "ARS",
+              maximumFractionDigits: 2,
+            }).format(checkoutTotal)}
+          </span>
+          {onClose ? (
+            <button type="button" className="ui-btn-ghost px-2.5 py-1.5 text-xs" onClick={onClose}>
+              Cerrar
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="pos-summary-panel text-xs">
@@ -864,61 +1132,30 @@ export const PosCheckoutPanel = ({
 
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Medio de pago</label>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {paymentMethodsOrdered.map((method) => {
-              const selected = method.id === watchedPaymentMethodId;
-              const isCurrentAccount = method.type === "current_account";
-              const isDisabled =
-                disabled ||
-                !canWrite ||
-                (isCurrentAccount && (!canUseCurrentAccount || !isCurrentAccountEnabled || isCurrentAccountNoFunds));
-
-              return (
-                <button
-                  key={method.id}
-                  type="button"
-                  disabled={isDisabled}
-                  onClick={() => {
-                    if (isDisabled) return;
-                    setValue("paymentMethodId", method.id, {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    });
-                  }}
-                  className={
-                    selected
-                      ? "rounded-xl bg-brand-600/10 px-3 py-2 text-left shadow-sm ring-1 ring-brand-500/40"
-                      : "rounded-xl bg-slate-50 px-3 py-2 text-left"
-                  }
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className={selected ? "text-sm font-semibold text-slate-900" : "text-sm font-medium text-slate-800"}>
-                      {method.name}
-                    </p>
-                    {selected ? <span className="ui-badge ui-badge--info">Seleccionado</span> : null}
-                  </div>
-                  <p className="text-xs text-slate-500">{getPaymentMethodLabel(method)}</p>
-                  <div className="mt-1 flex flex-wrap items-center gap-1">
-                    {method.surcharge_percent > 0 ? (
-                      <span className="ui-badge ui-badge--warn">+{method.surcharge_percent}%</span>
-                    ) : null}
-                    {method.discount_percent > 0 ? (
-                      <span className="ui-badge ui-badge--success">-{method.discount_percent}%</span>
-                    ) : null}
-                    {isCurrentAccount && !canUseCurrentAccount ? (
-                      <span className="ui-badge ui-badge--danger">Requiere cliente</span>
-                    ) : null}
-                    {isCurrentAccount && canUseCurrentAccount && !isCurrentAccountEnabled ? (
-                      <span className="ui-badge ui-badge--danger">Credito deshabilitado</span>
-                    ) : null}
-                    {isCurrentAccount && canUseCurrentAccount && isCurrentAccountNoFunds ? (
-                      <span className="ui-badge ui-badge--warn">Sin fondo</span>
-                    ) : null}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          <PaymentMethodSelector
+            paymentMethods={paymentMethodsOrdered}
+            selectedPaymentMethodId={watchedPaymentMethodId}
+            disabled={disabled || !canWrite}
+            columns={isModalLayout ? 3 : 2}
+            isMethodDisabled={(method) => {
+              const isCurrentAccount = normalizePaymentMethodCode(method.code) === "current_account";
+              return isCurrentAccount && (!canUseCurrentAccount || !isCurrentAccountEnabled || isCurrentAccountNoFunds);
+            }}
+            getMethodBadges={(method) => {
+              const isCurrentAccount = normalizePaymentMethodCode(method.code) === "current_account";
+              if (!isCurrentAccount) return [];
+              if (!canUseCurrentAccount) return ["Requiere cliente"];
+              if (!isCurrentAccountEnabled) return ["Credito deshabilitado"];
+              if (isCurrentAccountNoFunds) return ["Sin fondo"];
+              return [];
+            }}
+            onChange={(methodId) => {
+              setValue("paymentMethodId", methodId, {
+                shouldDirty: true,
+                shouldValidate: true,
+              });
+            }}
+          />
           {errors.paymentMethodId ? (
             <p className="mt-1 text-xs text-red-600">{errors.paymentMethodId.message}</p>
           ) : null}
@@ -1010,82 +1247,94 @@ export const PosCheckoutPanel = ({
 
             {isCreditCardMethod ? (
               <div className="grid gap-2">
-                <input
-                  className="ui-input"
-                  value={cardCreditDetails.cardBrand}
-                  onChange={(event) =>
-                    setCardCreditDetails((current) => ({
-                      ...current,
-                      cardBrand: event.target.value,
-                      installmentPlanId: "",
-                    }))
-                  }
-                  placeholder="Tarjeta (Visa, Master, Amex...)"
-                  disabled={disabled || !canWrite}
-                />
-                <select
-                  className="ui-input"
-                  value={cardCreditDetails.installmentPlanId}
-                  onChange={(event) =>
-                    setCardCreditDetails((current) => ({
-                      ...current,
-                      installmentPlanId: event.target.value,
-                    }))
-                  }
-                  disabled={disabled || !canWrite}
-                >
-                  <option value="">Plan de cuotas</option>
-                  {availableInstallmentPlans.map((plan) => (
-                    <option key={plan.id} value={plan.id}>
-                      {plan.name} | {plan.installments} cuotas | {plan.interest_percent.toFixed(2)}%
-                    </option>
-                  ))}
-                </select>
-                <div className="grid gap-2 sm:grid-cols-2">
+                {selectedMethodConfig?.ask_card_brand ? (
                   <input
                     className="ui-input"
-                    value={cardCreditDetails.couponNumber}
+                    value={cardCreditDetails.cardBrand}
                     onChange={(event) =>
                       setCardCreditDetails((current) => ({
                         ...current,
-                        couponNumber: event.target.value,
+                        cardBrand: event.target.value,
+                        installmentPlanId: "",
                       }))
                     }
-                    placeholder="Numero de cupon"
+                    placeholder="Tarjeta (Visa, Master, Amex...)"
                     disabled={disabled || !canWrite}
                   />
-                  <input
+                ) : null}
+                {selectedMethodConfig?.ask_installment_plan ? (
+                  <select
                     className="ui-input"
-                    value={cardCreditDetails.authorizationNumber}
+                    value={cardCreditDetails.installmentPlanId}
                     onChange={(event) =>
                       setCardCreditDetails((current) => ({
                         ...current,
-                        authorizationNumber: event.target.value,
+                        installmentPlanId: event.target.value,
                       }))
                     }
-                    placeholder="Numero de autorizacion"
                     disabled={disabled || !canWrite}
-                  />
-                </div>
-                <select
-                  className="ui-input"
-                  value={cardCreditDetails.destinationBankAccountId}
-                  onChange={(event) =>
-                    setCardCreditDetails((current) => ({
-                      ...current,
-                      destinationBankAccountId: event.target.value,
-                    }))
-                  }
-                  disabled={disabled || !canWrite}
-                >
-                  <option value="">Cuenta bancaria destino</option>
-                  {bankAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.bank_name} | {account.alias || account.holder_name}
-                    </option>
-                  ))}
-                </select>
-                {selectedInstallmentPlan ? (
+                  >
+                    <option value="">Plan de cuotas</option>
+                    {availableInstallmentPlans.map((plan) => (
+                      <option key={plan.id} value={plan.id}>
+                        {plan.name} | {plan.installments} cuotas | {plan.interest_percent.toFixed(2)}%
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                {selectedMethodConfig?.ask_coupon_number || selectedMethodConfig?.ask_approval_number ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {selectedMethodConfig?.ask_coupon_number ? (
+                      <input
+                        className="ui-input"
+                        value={cardCreditDetails.couponNumber}
+                        onChange={(event) =>
+                          setCardCreditDetails((current) => ({
+                            ...current,
+                            couponNumber: event.target.value,
+                          }))
+                        }
+                        placeholder="Numero de cupon"
+                        disabled={disabled || !canWrite}
+                      />
+                    ) : null}
+                    {selectedMethodConfig?.ask_approval_number ? (
+                      <input
+                        className="ui-input"
+                        value={cardCreditDetails.authorizationNumber}
+                        onChange={(event) =>
+                          setCardCreditDetails((current) => ({
+                            ...current,
+                            authorizationNumber: event.target.value,
+                          }))
+                        }
+                        placeholder="Numero de autorizacion"
+                        disabled={disabled || !canWrite}
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
+                {selectedMethodConfig?.ask_destination_bank ? (
+                  <select
+                    className="ui-input"
+                    value={cardCreditDetails.destinationBankAccountId}
+                    onChange={(event) =>
+                      setCardCreditDetails((current) => ({
+                        ...current,
+                        destinationBankAccountId: event.target.value,
+                      }))
+                    }
+                    disabled={disabled || !canWrite}
+                  >
+                    <option value="">Cuenta bancaria destino</option>
+                    {destinationBankAccounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.bank_name} | {account.alias || account.holder_name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                {selectedMethodConfig?.ask_installment_plan && selectedInstallmentPlan ? (
                   <p className="text-xs text-slate-500">
                     Interes aplicado: {selectedInstallmentPlan.interest_percent.toFixed(2)}% | Importe credito:{" "}
                     {new Intl.NumberFormat("es-AR", {
@@ -1100,75 +1349,89 @@ export const PosCheckoutPanel = ({
 
             {isDebitCardMethod ? (
               <div className="grid gap-2">
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <input
+                {selectedMethodConfig?.ask_coupon_number || selectedMethodConfig?.ask_approval_number ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {selectedMethodConfig?.ask_coupon_number ? (
+                      <input
+                        className="ui-input"
+                        value={cardDebitDetails.couponNumber}
+                        onChange={(event) =>
+                          setCardDebitDetails((current) => ({
+                            ...current,
+                            couponNumber: event.target.value,
+                          }))
+                        }
+                        placeholder="Numero de cupon"
+                        disabled={disabled || !canWrite}
+                      />
+                    ) : null}
+                    {selectedMethodConfig?.ask_approval_number ? (
+                      <input
+                        className="ui-input"
+                        value={cardDebitDetails.authorizationNumber}
+                        onChange={(event) =>
+                          setCardDebitDetails((current) => ({
+                            ...current,
+                            authorizationNumber: event.target.value,
+                          }))
+                        }
+                        placeholder="Numero de autorizacion"
+                        disabled={disabled || !canWrite}
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
+                {selectedMethodConfig?.ask_destination_bank ? (
+                  <select
                     className="ui-input"
-                    value={cardDebitDetails.couponNumber}
+                    value={cardDebitDetails.destinationBankAccountId}
                     onChange={(event) =>
                       setCardDebitDetails((current) => ({
                         ...current,
-                        couponNumber: event.target.value,
+                        destinationBankAccountId: event.target.value,
                       }))
                     }
-                    placeholder="Numero de cupon"
                     disabled={disabled || !canWrite}
-                  />
-                  <input
-                    className="ui-input"
-                    value={cardDebitDetails.authorizationNumber}
-                    onChange={(event) =>
-                      setCardDebitDetails((current) => ({
-                        ...current,
-                        authorizationNumber: event.target.value,
-                      }))
-                    }
-                    placeholder="Numero de autorizacion"
-                    disabled={disabled || !canWrite}
-                  />
-                </div>
-                <select
-                  className="ui-input"
-                  value={cardDebitDetails.destinationBankAccountId}
-                  onChange={(event) =>
-                    setCardDebitDetails((current) => ({
-                      ...current,
-                      destinationBankAccountId: event.target.value,
-                    }))
-                  }
-                  disabled={disabled || !canWrite}
-                >
-                  <option value="">Cuenta bancaria destino</option>
-                  {bankAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.bank_name} | {account.alias || account.holder_name}
-                    </option>
-                  ))}
-                </select>
+                  >
+                    <option value="">Cuenta bancaria destino</option>
+                    {destinationBankAccounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.bank_name} | {account.alias || account.holder_name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
               </div>
             ) : null}
 
             {isTransferMethod ? (
               <div className="grid gap-2">
-                <select
-                  className="ui-input"
-                  value={transferDetails.originBankId}
-                  onChange={(event) =>
-                    setTransferDetails((current) => ({
-                      ...current,
-                      originBankId: event.target.value,
-                    }))
-                  }
-                  disabled={disabled || !canWrite || isCreatingOriginBank}
-                >
-                  <option value="">Banco de origen</option>
-                  {originBanks.map((bank) => (
-                    <option key={bank.id} value={bank.id}>
-                      {bank.name}
-                    </option>
-                  ))}
-                  <option value="__new__">+ Agregar banco de origen</option>
-                </select>
-                {transferDetails.originBankId === "__new__" ? (
+                {selectedMethodConfig?.ask_origin_bank ? (
+                  <select
+                    className="ui-input"
+                    value={transferDetails.originBankId}
+                    onChange={(event) =>
+                      setTransferDetails((current) => ({
+                        ...current,
+                        originBankId: event.target.value,
+                      }))
+                    }
+                    disabled={disabled || !canWrite || isCreatingOriginBank}
+                  >
+                    <option value="">Banco de origen</option>
+                    {originBanks.map((bank) => (
+                      <option key={bank.id} value={bank.id}>
+                        {bank.name}
+                      </option>
+                    ))}
+                    {selectedMethodConfig?.allow_new_origin_bank ? (
+                      <option value="__new__">+ Agregar banco de origen</option>
+                    ) : null}
+                  </select>
+                ) : null}
+                {selectedMethodConfig?.ask_origin_bank &&
+                selectedMethodConfig?.allow_new_origin_bank &&
+                transferDetails.originBankId === "__new__" ? (
                   <input
                     className="ui-input"
                     value={transferDetails.newOriginBankName}
@@ -1182,54 +1445,189 @@ export const PosCheckoutPanel = ({
                     disabled={disabled || !canWrite || isCreatingOriginBank}
                   />
                 ) : null}
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <input
+                {selectedMethodConfig?.ask_voucher_number ||
+                selectedMethodConfig?.ask_origin_account_holder ? (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {selectedMethodConfig?.ask_voucher_number ? (
+                      <input
+                        className="ui-input"
+                        value={transferDetails.voucherNumber}
+                        onChange={(event) =>
+                          setTransferDetails((current) => ({
+                            ...current,
+                            voucherNumber: event.target.value,
+                          }))
+                        }
+                        placeholder="Numero de comprobante"
+                        disabled={disabled || !canWrite}
+                      />
+                    ) : null}
+                    {selectedMethodConfig?.ask_origin_account_holder ? (
+                      <input
+                        className="ui-input"
+                        value={transferDetails.originAccountHolder}
+                        onChange={(event) =>
+                          setTransferDetails((current) => ({
+                            ...current,
+                            originAccountHolder: event.target.value,
+                          }))
+                        }
+                        placeholder="Titular cuenta origen"
+                        disabled={disabled || !canWrite}
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
+                {selectedMethodConfig?.ask_destination_bank ? (
+                  <select
                     className="ui-input"
-                    value={transferDetails.voucherNumber}
+                    value={transferDetails.destinationBankAccountId}
                     onChange={(event) =>
                       setTransferDetails((current) => ({
                         ...current,
-                        voucherNumber: event.target.value,
+                        destinationBankAccountId: event.target.value,
                       }))
                     }
-                    placeholder="Numero de comprobante"
                     disabled={disabled || !canWrite}
-                  />
+                  >
+                    <option value="">Cuenta bancaria destino</option>
+                    {destinationBankAccounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.bank_name} | {account.alias || account.holder_name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                {selectedMethodConfig?.ask_destination_bank && selectedTransferDestination ? (
+                  <p className="text-xs text-slate-500">
+                    Alias destino: {selectedTransferDestination.alias || "Sin alias"}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {isChequeMethod ? (
+              <div className="grid gap-2">
+                {selectedMethodConfig?.ask_origin_bank ? (
+                  <select
+                    className="ui-input"
+                    value={chequeDetails.originBankId}
+                    onChange={(event) =>
+                      setChequeDetails((current) => ({
+                        ...current,
+                        originBankId: event.target.value,
+                      }))
+                    }
+                    disabled={disabled || !canWrite || isCreatingOriginBank}
+                  >
+                    <option value="">Banco emisor</option>
+                    {originBanks.map((bank) => (
+                      <option key={bank.id} value={bank.id}>
+                        {bank.name}
+                      </option>
+                    ))}
+                    {selectedMethodConfig?.allow_new_origin_bank ? (
+                      <option value="__new__">+ Agregar banco emisor</option>
+                    ) : null}
+                  </select>
+                ) : null}
+                {selectedMethodConfig?.ask_origin_bank &&
+                selectedMethodConfig?.allow_new_origin_bank &&
+                chequeDetails.originBankId === "__new__" ? (
                   <input
                     className="ui-input"
-                    value={transferDetails.originAccountHolder}
+                    value={chequeDetails.newOriginBankName}
                     onChange={(event) =>
-                      setTransferDetails((current) => ({
+                      setChequeDetails((current) => ({
+                        ...current,
+                        newOriginBankName: event.target.value,
+                      }))
+                    }
+                    placeholder="Nuevo banco emisor"
+                    disabled={disabled || !canWrite || isCreatingOriginBank}
+                  />
+                ) : null}
+                {selectedMethodConfig?.ask_cheque_number ||
+                selectedMethodConfig?.ask_cheque_due_date ||
+                selectedMethodConfig?.ask_approval_number ? (
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {selectedMethodConfig?.ask_cheque_number ? (
+                      <input
+                        className="ui-input"
+                        value={chequeDetails.chequeNumber}
+                        onChange={(event) =>
+                          setChequeDetails((current) => ({
+                            ...current,
+                            chequeNumber: event.target.value,
+                          }))
+                        }
+                        placeholder="Numero de cheque"
+                        disabled={disabled || !canWrite}
+                      />
+                    ) : null}
+                    {selectedMethodConfig?.ask_cheque_due_date ? (
+                      <input
+                        type="date"
+                        className="ui-input"
+                        value={chequeDetails.dueDate}
+                        onChange={(event) =>
+                          setChequeDetails((current) => ({
+                            ...current,
+                            dueDate: event.target.value,
+                          }))
+                        }
+                        disabled={disabled || !canWrite}
+                      />
+                    ) : null}
+                    {selectedMethodConfig?.ask_approval_number ? (
+                      <input
+                        className="ui-input"
+                        value={chequeDetails.approvalNumber}
+                        onChange={(event) =>
+                          setChequeDetails((current) => ({
+                            ...current,
+                            approvalNumber: event.target.value,
+                          }))
+                        }
+                        placeholder="Aprobacion / clearing"
+                        disabled={disabled || !canWrite}
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
+                {selectedMethodConfig?.ask_origin_account_holder ? (
+                  <input
+                    className="ui-input"
+                    value={chequeDetails.originAccountHolder}
+                    onChange={(event) =>
+                      setChequeDetails((current) => ({
                         ...current,
                         originAccountHolder: event.target.value,
                       }))
                     }
-                    placeholder="Titular cuenta origen"
+                    placeholder="Titular emisor"
                     disabled={disabled || !canWrite}
                   />
-                </div>
-                <select
-                  className="ui-input"
-                  value={transferDetails.destinationBankAccountId}
-                  onChange={(event) =>
-                    setTransferDetails((current) => ({
-                      ...current,
-                      destinationBankAccountId: event.target.value,
-                    }))
-                  }
-                  disabled={disabled || !canWrite}
-                >
-                  <option value="">Cuenta bancaria destino</option>
-                  {bankAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.bank_name} | {account.alias || account.holder_name}
-                    </option>
-                  ))}
-                </select>
-                {selectedTransferDestination ? (
-                  <p className="text-xs text-slate-500">
-                    Alias destino: {selectedTransferDestination.alias || "Sin alias"}
-                  </p>
+                ) : null}
+                {selectedMethodConfig?.ask_destination_bank ? (
+                  <select
+                    className="ui-input"
+                    value={chequeDetails.destinationBankAccountId}
+                    onChange={(event) =>
+                      setChequeDetails((current) => ({
+                        ...current,
+                        destinationBankAccountId: event.target.value,
+                      }))
+                    }
+                    disabled={disabled || !canWrite}
+                  >
+                    <option value="">Cuenta bancaria destino</option>
+                    {destinationBankAccounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.bank_name} | {account.alias || account.holder_name}
+                      </option>
+                    ))}
+                  </select>
                 ) : null}
               </div>
             ) : null}
@@ -1239,36 +1637,40 @@ export const PosCheckoutPanel = ({
                 <p className="text-xs text-slate-500">
                   Mercado Pago integrado desactivado. Se registrara la operacion manual.
                 </p>
-                <input
-                  className="ui-input"
-                  value={mercadoPagoManualDetails.operationId}
-                  onChange={(event) =>
-                    setMercadoPagoManualDetails((current) => ({
-                      ...current,
-                      operationId: event.target.value,
-                    }))
-                  }
-                  placeholder="ID de operacion"
-                  disabled={disabled || !canWrite}
-                />
-                <select
-                  className="ui-input"
-                  value={mercadoPagoManualDetails.destinationBankAccountId}
-                  onChange={(event) =>
-                    setMercadoPagoManualDetails((current) => ({
-                      ...current,
-                      destinationBankAccountId: event.target.value,
-                    }))
-                  }
-                  disabled={disabled || !canWrite}
-                >
-                  <option value="">Cuenta bancaria destino</option>
-                  {bankAccounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.bank_name} | {account.alias || account.holder_name}
-                    </option>
-                  ))}
-                </select>
+                {selectedMethodConfig?.ask_operation_number ? (
+                  <input
+                    className="ui-input"
+                    value={mercadoPagoManualDetails.operationId}
+                    onChange={(event) =>
+                      setMercadoPagoManualDetails((current) => ({
+                        ...current,
+                        operationId: event.target.value,
+                      }))
+                    }
+                    placeholder="ID de operacion"
+                    disabled={disabled || !canWrite}
+                  />
+                ) : null}
+                {selectedMethodConfig?.ask_destination_bank ? (
+                  <select
+                    className="ui-input"
+                    value={mercadoPagoManualDetails.destinationBankAccountId}
+                    onChange={(event) =>
+                      setMercadoPagoManualDetails((current) => ({
+                        ...current,
+                        destinationBankAccountId: event.target.value,
+                      }))
+                    }
+                    disabled={disabled || !canWrite}
+                  >
+                    <option value="">Cuenta bancaria destino</option>
+                    {destinationBankAccounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.bank_name} | {account.alias || account.holder_name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
               </div>
             ) : null}
 

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
+import type { ModuleGroup } from "@/modules/usuarios/components/PermissionMatrix";
 import { auditService } from "@/services/audit.service";
+import { authAdminService } from "@/services/auth-admin.service";
+import { dataProvider } from "@/services/config/data-provider";
 import { permissionProfilesService } from "@/services/permission-profiles.service";
 import { usersService } from "@/services/users.service";
 import type { PermissionProfileRecord, UserRecord } from "@/types/entities";
@@ -190,14 +193,42 @@ export const useUsersModule = (tenantId: string | null) => {
     );
   }, [profileSearch, profiles]);
 
-  const moduleRows = useMemo(
-    () =>
-      appModules.map((module) => ({
-        module,
-        label: appModuleLabels[module],
-      })),
-    []
-  );
+  const moduleGroups = useMemo<ModuleGroup[]>(() => {
+    const generalModules = appModules.filter(
+      (module) => module !== "configuracion" && !module.startsWith("configuracion_")
+    );
+    const settingsSubmodules = appModules.filter((module) => module.startsWith("configuracion_"));
+
+    return [
+      {
+        id: "general",
+        label: "Modulos generales",
+        description: "Secciones principales operativas del sistema",
+        modules: generalModules.map((module) => ({
+          module,
+          label: appModuleLabels[module],
+          isSubmodule: false,
+        })),
+      },
+      {
+        id: "configuracion",
+        label: "Configuracion",
+        description: "Permisos globales y submodulos de configuracion",
+        modules: [
+          {
+            module: "configuracion",
+            label: appModuleLabels.configuracion,
+            isSubmodule: false,
+          },
+          ...settingsSubmodules.map((module) => ({
+            module,
+            label: appModuleLabels[module],
+            isSubmodule: true,
+          })),
+        ],
+      },
+    ];
+  }, []);
 
   const createProfile = async (
     values: PermissionProfileFormValues,
@@ -354,19 +385,34 @@ export const useUsersModule = (tenantId: string | null) => {
     }
   };
 
-  const createUser = async (values: UserFormValues) => {
-    if (!tenantId) return;
+  const createUser = async (values: UserFormValues): Promise<boolean> => {
+    if (!tenantId) return false;
 
     setIsSubmitting(true);
     try {
-      const created = await usersService.create(tenantId, {
-        full_name: values.fullName.trim(),
-        email: normalizeEmpty(values.email),
-        username: normalizeEmpty(values.username),
-        role_code: "staff",
-        permission_profile_id: values.permissionProfileId,
-        is_active: true,
-      });
+      const created =
+        dataProvider === "supabase"
+          ? await authAdminService.createUser({
+              tenant_id: tenantId,
+              full_name: values.fullName.trim(),
+              email: values.email.trim(),
+              username: normalizeEmpty(values.username),
+              password: values.password,
+              permission_profile_id: values.permissionProfileId,
+            })
+          : await usersService.create(tenantId, {
+              full_name: values.fullName.trim(),
+              email: normalizeEmpty(values.email),
+              username: normalizeEmpty(values.username),
+              role_code: "staff",
+              permission_profile_id: values.permissionProfileId,
+              is_active: true,
+            });
+
+      if (!created) {
+        throw new Error("No se pudo crear el usuario");
+      }
+
       await logAudit({
         module: "usuarios",
         action: "create_user",
@@ -383,25 +429,40 @@ export const useUsersModule = (tenantId: string | null) => {
 
       setFeedback({ type: "success", message: "Usuario creado" });
       await loadData();
-    } catch {
-      setFeedback({ type: "error", message: "No se pudo crear el usuario" });
+      return true;
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        message: error instanceof Error ? error.message : "No se pudo crear el usuario",
+      });
+      return false;
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const updateUser = async (userId: string, values: UserFormValues) => {
-    if (!tenantId) return;
+  const updateUser = async (userId: string, values: UserFormValues): Promise<boolean> => {
+    if (!tenantId) return false;
     const existing = users.find((user) => user.id === userId) ?? null;
 
     setIsSubmitting(true);
     try {
-      const updatedUser = await usersService.update(tenantId, userId, {
-        full_name: values.fullName.trim(),
-        email: normalizeEmpty(values.email),
-        username: normalizeEmpty(values.username),
-        permission_profile_id: values.permissionProfileId,
-      });
+      const updatedUser =
+        dataProvider === "supabase"
+          ? await authAdminService.updateUser({
+              user_id: userId,
+              full_name: values.fullName.trim(),
+              email: values.email.trim(),
+              username: normalizeEmpty(values.username),
+              password: values.password.trim() ? values.password : null,
+              permission_profile_id: values.permissionProfileId,
+            })
+          : await usersService.update(tenantId, userId, {
+              full_name: values.fullName.trim(),
+              email: normalizeEmpty(values.email),
+              username: normalizeEmpty(values.username),
+              permission_profile_id: values.permissionProfileId,
+            });
       if (updatedUser) {
         await logAudit({
           module: "usuarios",
@@ -432,8 +493,13 @@ export const useUsersModule = (tenantId: string | null) => {
 
       setFeedback({ type: "success", message: "Usuario actualizado" });
       await loadData();
-    } catch {
-      setFeedback({ type: "error", message: "No se pudo actualizar el usuario" });
+      return true;
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        message: error instanceof Error ? error.message : "No se pudo actualizar el usuario",
+      });
+      return false;
     } finally {
       setIsSubmitting(false);
     }
@@ -487,7 +553,10 @@ export const useUsersModule = (tenantId: string | null) => {
     setIsSubmitting(true);
     try {
       const target = users.find((user) => user.id === userId) ?? null;
-      const deleted = await usersService.delete(tenantId, userId);
+      const deleted =
+        dataProvider === "supabase"
+          ? await authAdminService.deleteUser({ user_id: userId })
+          : await usersService.delete(tenantId, userId);
       if (!deleted) {
         setFeedback({ type: "error", message: "Usuario no encontrado" });
         return;
@@ -535,7 +604,7 @@ export const useUsersModule = (tenantId: string | null) => {
     profiles: profileRows,
     profilesById,
     usersByProfileId,
-    moduleRows,
+    moduleGroups,
     userSearch,
     setUserSearch,
     profileSearch,

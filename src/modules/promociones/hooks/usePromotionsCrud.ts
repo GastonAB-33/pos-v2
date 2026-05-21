@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditService } from "@/services/audit.service";
 import { productsService } from "@/services/products.service";
-import { promotionsService } from "@/services/promotions.service";
-import type { Product, Promotion } from "@/types/entities";
+import { buildPromotionBarcode, promotionsService, type PromotionWithDetails } from "@/services/promotions.service";
+import type { Product } from "@/types/entities";
 import type { PromotionFormValues } from "@/modules/promociones/schemas/promotion-form.schema";
 
 type FeedbackType = "success" | "error";
@@ -31,7 +31,7 @@ const toServiceInput = (values: PromotionFormValues, options?: { isActive?: bool
   type: values.type,
   scope: values.scope,
   product_id: values.scope === "product" ? normalizeText(values.productId) : null,
-  min_quantity: normalizeOptionalNumber(values.minQuantity),
+  min_quantity: values.scope === "bundle" ? 1 : normalizeOptionalNumber(values.minQuantity),
   discount_percent:
     values.type === "percentage_discount" ? normalizeOptionalNumber(values.discountPercent) : null,
   discount_amount:
@@ -42,8 +42,19 @@ const toServiceInput = (values: PromotionFormValues, options?: { isActive?: bool
   is_active: options?.isActive ?? true,
 });
 
+const toServiceDetails = (values: PromotionFormValues) => ({
+  barcode: normalizeText(values.barcode) ?? buildPromotionBarcode(values.code),
+  items:
+    values.scope === "bundle"
+      ? (values.bundleItems ?? []).map((item) => ({
+          product_id: item.productId,
+          quantity: Number(item.quantity),
+        }))
+      : [],
+});
+
 export const usePromotionsCrud = (tenantId: string | null, userId: string | null) => {
-  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [promotions, setPromotions] = useState<PromotionWithDetails[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -62,7 +73,7 @@ export const usePromotionsCrud = (tenantId: string | null, userId: string | null
     setIsLoading(true);
     try {
       const [allPromotions, allProducts] = await Promise.all([
-        promotionsService.getAllByTenant(tenantId),
+        promotionsService.getAllByTenantWithDetails(tenantId),
         productsService.getAllByTenant(tenantId),
       ]);
 
@@ -84,7 +95,11 @@ export const usePromotionsCrud = (tenantId: string | null, userId: string | null
 
     setIsSubmitting(true);
     try {
-      const created = await promotionsService.create(tenantId, toServiceInput(values));
+      const created = await promotionsService.createWithDetails(
+        tenantId,
+        toServiceInput(values),
+        toServiceDetails(values)
+      );
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "promociones",
@@ -117,10 +132,11 @@ export const usePromotionsCrud = (tenantId: string | null, userId: string | null
 
     setIsSubmitting(true);
     try {
-      const updated = await promotionsService.update(
+      const updated = await promotionsService.updateWithDetails(
         tenantId,
         id,
-        toServiceInput(values, { isActive: existing.is_active })
+        toServiceInput(values, { isActive: existing.is_active }),
+        toServiceDetails(values)
       );
       await auditService.createSafe(tenantId, {
         user_id: userId,

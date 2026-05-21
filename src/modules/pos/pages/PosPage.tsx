@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { useToast } from "@/components/ui/useToast";
 import { routePaths } from "@/config/routes";
@@ -8,6 +9,7 @@ import { useOffline } from "@/features/offline/hooks/useOffline";
 import { usePwa } from "@/features/pwa/hooks/usePwa";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { PosCustomerModal, type PosCustomerModalValues } from "@/modules/pos/components/PosCustomerModal";
+import { CashOpenForm } from "@/modules/caja/components/CashOpenForm";
 import { ReceiptTicketPanel } from "@/modules/comprobantes/components/ReceiptTicketPanel";
 import { PosCart } from "@/modules/pos/components/PosCart";
 import { PosCheckoutPanel } from "@/modules/pos/components/PosCheckoutPanel";
@@ -15,12 +17,16 @@ import { PosProductList } from "@/modules/pos/components/PosProductList";
 import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
 import { usePosSale } from "@/modules/pos/hooks/usePosSale";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
+import type { OpenCashValues } from "@/modules/caja/schemas/cash.schemas";
 import { auditService } from "@/services/audit.service";
+import { cashService } from "@/services/cash.service";
 import { customersService } from "@/services/customers.service";
 import { invoicesService } from "@/services/invoices.service";
+import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
 import { posCustomerProfilesService } from "@/services/pos-customer-profiles.service";
 import { receiptsService } from "@/services/receipts.service";
 import { settingsService } from "@/services/settings.service";
+import { usersService } from "@/services/users.service";
 import type { Customer, Invoice, OriginBank, Receipt } from "@/types/entities";
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -105,6 +111,7 @@ export const PosPage = () => {
     bankAccounts,
     originBanks,
     installmentPlans,
+    posSettings,
     mercadoPagoSettings,
     mercadoPagoStatus,
     selectedCustomerId,
@@ -144,19 +151,39 @@ export const PosPage = () => {
   } = usePosSale(tenantId);
 
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState("");
+  const [visibleBarcodeValue, setVisibleBarcodeValue] = useState("");
   const [rightPanelTab, setRightPanelTab] = useState<"cart" | "receipts">("cart");
   const [recentReceipts, setRecentReceipts] = useState<PosRecentReceiptItem[]>([]);
   const [isLoadingReceipts, setIsLoadingReceipts] = useState(false);
   const [receiptModal, setReceiptModal] = useState<PosReceiptModalState | null>(null);
   const [printMenuReceiptId, setPrintMenuReceiptId] = useState<string | null>(null);
   const [customerModalState, setCustomerModalState] = useState<PosCustomerModalState | null>(null);
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+  const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   const [isCustomerModalSubmitting, setIsCustomerModalSubmitting] = useState(false);
   const [clientLogoUrl, setClientLogoUrl] = useState<string | null>(null);
   const [clientDisplayName, setClientDisplayName] = useState("POS");
   const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const [openCashSessionId, setOpenCashSessionId] = useState<string | null>(null);
+  const [resolvedOperatorUserId, setResolvedOperatorUserId] = useState<string | null>(null);
+  const [isResolvingOperatorUser, setIsResolvingOperatorUser] = useState(false);
+  const [hasResolvedOperatorUser, setHasResolvedOperatorUser] = useState(false);
+  const [hasResolvedCashGate, setHasResolvedCashGate] = useState(false);
+  const [isCheckingCashSession, setIsCheckingCashSession] = useState(false);
+  const [isOpeningCashSession, setIsOpeningCashSession] = useState(false);
+  const [cashDefaultOpeningAmount, setCashDefaultOpeningAmount] = useState(0);
+  const [hasLoadedCashDefaults, setHasLoadedCashDefaults] = useState(false);
+  const [cashGateFeedback, setCashGateFeedback] = useState<string | null>(null);
   const scannerCaptureRef = useRef<HTMLInputElement | null>(null);
+  const cartPanelId = "pos-cart-panel";
   const checkoutPanelId = "pos-checkout-panel";
   const checkoutFormId = "pos-checkout-form";
+  const isCashGateResolving =
+    !hasResolvedCashGate || isResolvingOperatorUser || isCheckingCashSession;
+  const isCashGateBlocking =
+    canWritePos && (isOpeningCashSession || !openCashSessionId);
+  const shouldShowCashOpeningModal =
+    canWritePos && !isCashGateResolving && !isOpeningCashSession && !openCashSessionId;
 
   useEffect(() => {
     if (!paymentMethods.length) {
@@ -169,14 +196,22 @@ export const PosPage = () => {
         return current;
       }
 
+      const defaultPaymentMethodId = posSettings.default_payment_method_id;
+      if (
+        defaultPaymentMethodId &&
+        paymentMethods.some((method) => method.id === defaultPaymentMethodId)
+      ) {
+        return defaultPaymentMethodId;
+      }
+
       return paymentMethods[0].id;
     });
-  }, [paymentMethods]);
+  }, [paymentMethods, posSettings.default_payment_method_id]);
 
   useEffect(() => {
     const selectedMethod =
       paymentMethods.find((method) => method.id === selectedPaymentMethodId) ?? null;
-    if (!selectedMethod || selectedMethod.type !== "mercado_pago") {
+    if (!selectedMethod || normalizePaymentMethodCode(selectedMethod.code) !== "mercado_pago") {
       clearMercadoPagoIntent();
     }
   }, [clearMercadoPagoIntent, paymentMethods, selectedPaymentMethodId]);
@@ -189,16 +224,18 @@ export const PosPage = () => {
   const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
     if (!tenantId || !selectedCustomer) return null;
 
-    const profile = posCustomerProfilesService.getProfile(tenantId, selectedCustomer.id);
+    const legacyProfile = posCustomerProfilesService.getProfile(tenantId, selectedCustomer.id);
+    const enabled = selectedCustomer.current_account_enabled ?? legacyProfile.enabled;
+    const limit = selectedCustomer.current_account_limit ?? legacyProfile.limit;
     const debt = Number((selectedCustomer.current_balance ?? 0).toFixed(2));
     const available =
-      profile.enabled && profile.limit != null
-        ? Number((profile.limit - debt).toFixed(2))
+      enabled && limit != null
+        ? Number((limit - debt).toFixed(2))
         : null;
 
     return {
-      enabled: profile.enabled,
-      limit: profile.limit,
+      enabled,
+      limit,
       debt,
       available,
     };
@@ -243,6 +280,166 @@ export const PosPage = () => {
     }
   }, [tenantId, toastError]);
 
+  const loadCashSessionGate = useCallback(async () => {
+    if (!tenantId) {
+      setOpenCashSessionId(null);
+      setCashDefaultOpeningAmount(0);
+      setHasLoadedCashDefaults(false);
+      setCashGateFeedback(null);
+      setHasResolvedCashGate(false);
+      return;
+    }
+
+    if (!resolvedOperatorUserId) {
+      if (!hasResolvedOperatorUser || isResolvingOperatorUser || isLoading) {
+        setCashGateFeedback(null);
+        setHasResolvedCashGate(false);
+        return;
+      }
+
+      setOpenCashSessionId(null);
+      setCashDefaultOpeningAmount(0);
+      setCashGateFeedback(
+        user
+          ? "Tu sesion no esta vinculada a un usuario del tenant. Inicia sesion nuevamente o verifica el usuario."
+          : null
+      );
+      setHasResolvedCashGate(true);
+      return;
+    }
+
+    setIsCheckingCashSession(true);
+    try {
+      const [tenantSettings, openSession] = await Promise.all([
+        hasLoadedCashDefaults ? Promise.resolve(null) : settingsService.getByTenant(tenantId),
+        cashService.getOpenSessionByUser(tenantId, resolvedOperatorUserId),
+      ]);
+
+      if (tenantSettings) {
+        setCashDefaultOpeningAmount(tenantSettings.caja?.default_opening_amount ?? 0);
+        setHasLoadedCashDefaults(true);
+      }
+      setOpenCashSessionId(openSession?.id ?? null);
+      setCashGateFeedback(null);
+      setHasResolvedCashGate(true);
+    } catch {
+      setOpenCashSessionId(null);
+      setCashGateFeedback("No se pudo validar la caja abierta del usuario.");
+      setHasResolvedCashGate(true);
+    } finally {
+      setIsCheckingCashSession(false);
+    }
+  }, [
+    hasLoadedCashDefaults,
+    hasResolvedOperatorUser,
+    isLoading,
+    isResolvingOperatorUser,
+    resolvedOperatorUserId,
+    tenantId,
+    user,
+  ]);
+
+  const resolveOperatorUser = useCallback(async () => {
+    if (!tenantId || !user?.id) {
+      setResolvedOperatorUserId(null);
+      setIsResolvingOperatorUser(false);
+      setHasResolvedOperatorUser(true);
+      return;
+    }
+
+    const cacheKey = `pos-operator-user:${tenantId}:${user.id}`;
+    const cachedResolvedUserId = window.sessionStorage.getItem(cacheKey)?.trim() ?? "";
+    if (cachedResolvedUserId) {
+      setResolvedOperatorUserId(cachedResolvedUserId);
+      setIsResolvingOperatorUser(false);
+      setHasResolvedOperatorUser(true);
+      return;
+    }
+
+    const persistResolvedUser = (resolvedId: string | null, useCache = true) => {
+      if (useCache && resolvedId) {
+        window.sessionStorage.setItem(cacheKey, resolvedId);
+      } else {
+        window.sessionStorage.removeItem(cacheKey);
+      }
+      setResolvedOperatorUserId(resolvedId);
+    };
+
+    setIsResolvingOperatorUser(true);
+    setHasResolvedOperatorUser(false);
+    try {
+      const byId = await usersService.getById(tenantId, user.id);
+      if (byId?.is_active) {
+        persistResolvedUser(byId.id);
+        return;
+      }
+
+      const lookupValue = user.email?.trim() || user.username?.trim() || "";
+      if (lookupValue) {
+        const byIdentity = await usersService.getByEmailOrUsername(tenantId, lookupValue);
+        if (byIdentity?.is_active) {
+          persistResolvedUser(byIdentity.id);
+          return;
+        }
+      }
+
+      const openSession = await cashService.getOpenSession(tenantId);
+      if (openSession?.opened_by_user_id) {
+        persistResolvedUser(openSession.opened_by_user_id, false);
+        return;
+      }
+
+      const allUsers = await usersService.getAllByTenant(tenantId);
+      const normalizedFullName = user.fullName?.trim().toLowerCase() ?? "";
+      if (normalizedFullName) {
+        const byFullName =
+          allUsers.find(
+            (candidate) =>
+              candidate.is_active &&
+              candidate.full_name.trim().toLowerCase() === normalizedFullName
+          ) ?? null;
+        if (byFullName) {
+          persistResolvedUser(byFullName.id);
+          return;
+        }
+      }
+
+      persistResolvedUser(null);
+    } catch {
+      window.sessionStorage.removeItem(cacheKey);
+      setResolvedOperatorUserId(null);
+    } finally {
+      setIsResolvingOperatorUser(false);
+      setHasResolvedOperatorUser(true);
+    }
+  }, [tenantId, user?.email, user?.fullName, user?.id, user?.username]);
+
+  useEffect(() => {
+    setHasResolvedCashGate(false);
+    setHasResolvedOperatorUser(false);
+    setHasLoadedCashDefaults(false);
+    setCashGateFeedback(null);
+  }, [tenantId, user?.id]);
+
+  useEffect(() => {
+    void resolveOperatorUser();
+  }, [resolveOperatorUser]);
+
+  useEffect(() => {
+    void loadCashSessionGate();
+  }, [loadCashSessionGate]);
+
+  useEffect(() => {
+    const onFocus = () => {
+      void loadCashSessionGate();
+    };
+
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [loadCashSessionGate]);
+
   useEffect(() => {
     if (!feedback) return;
 
@@ -263,10 +460,101 @@ export const PosPage = () => {
   const handleConfirmSale = useCallback(
     async (values: PosCheckoutValues) => {
       if (!canWritePos) return;
+      if (isOpeningCashSession) {
+        toastError("Estamos abriendo la caja. Intenta nuevamente en unos segundos.");
+        return;
+      }
+      if (!openCashSessionId) {
+        if (isCashGateResolving) {
+          toastError("Estamos validando caja y usuario. Intenta nuevamente en unos segundos.");
+          return;
+        }
+        toastError("Debes abrir caja para registrar movimientos contables.");
+        return;
+      }
+      if (!resolvedOperatorUserId) {
+        toastError(
+          "No encontramos un usuario de sistema asociado a tu sesion. Volve a iniciar sesion."
+        );
+        return;
+      }
       clearFeedback();
-      await confirmSale(values, user?.id ?? null);
+      await confirmSale(values, resolvedOperatorUserId, { openCashSessionId });
+      setIsCheckoutModalOpen(false);
     },
-    [canWritePos, clearFeedback, confirmSale, user?.id]
+    [
+      canWritePos,
+      clearFeedback,
+      confirmSale,
+      isCashGateResolving,
+      isOpeningCashSession,
+      openCashSessionId,
+      resolvedOperatorUserId,
+      toastError,
+    ]
+  );
+
+  const handleOpenCashFromPos = useCallback(
+    async (values: OpenCashValues) => {
+      if (!tenantId || !resolvedOperatorUserId) {
+        setCashGateFeedback(
+          "No encontramos un usuario de sistema asociado a tu sesion. Volve a iniciar sesion."
+        );
+        return;
+      }
+
+      setIsOpeningCashSession(true);
+      try {
+        const existingOpen = await cashService.getOpenSessionByUser(tenantId, resolvedOperatorUserId);
+        if (existingOpen) {
+          setOpenCashSessionId(existingOpen.id);
+          setCashGateFeedback(null);
+          setHasResolvedCashGate(true);
+          return;
+        }
+
+        const createdSession = await cashService.create(tenantId, {
+          branch_id: null,
+          opened_by_user_id: resolvedOperatorUserId,
+          closed_by_user_id: null,
+          status: "open",
+          opened_at: new Date().toISOString(),
+          closed_at: null,
+          opening_amount: values.openingAmount,
+          closing_amount: null,
+          expected_closing_amount: null,
+          closing_difference: null,
+          notes: values.notes?.trim() || null,
+        });
+
+        await auditService.createSafe(tenantId, {
+          user_id: resolvedOperatorUserId,
+          module: "caja",
+          action: "open",
+          entity_type: "cash_session",
+          entity_id: createdSession.id,
+          description: "Apertura de caja desde POS",
+          metadata: {
+            opening_amount: values.openingAmount,
+            notes: values.notes?.trim() || null,
+          },
+        });
+
+        setOpenCashSessionId(createdSession.id);
+        setCashGateFeedback(null);
+        setHasResolvedCashGate(true);
+        toastSuccess("Caja abierta correctamente.");
+
+        await Promise.allSettled([reload(), loadRecentReceipts()]);
+      } catch {
+        setCashGateFeedback("No se pudo abrir la caja desde POS.");
+        setHasResolvedCashGate(true);
+        toastError("No se pudo abrir la caja.");
+      } finally {
+        setIsOpeningCashSession(false);
+      }
+    },
+    [loadRecentReceipts, reload, resolvedOperatorUserId, tenantId, toastError, toastSuccess]
   );
 
   const focusScannerCapture = useCallback(() => {
@@ -276,14 +564,24 @@ export const PosPage = () => {
   }, []);
 
   const handleBarcodeScan = useCallback(
-    async (barcode: string) => {
-      if (!canWritePos || isSubmitting) return;
+    async (barcode: string): Promise<boolean> => {
+      if (!canWritePos || isSubmitting || isCashGateBlocking) return false;
 
       try {
         const result = await addProductByBarcode(barcode);
-        if (!result.ok || !result.product) {
+        if (!result.ok || (!result.product && !result.promotion)) {
           toastError(result.error ?? `No se encontro producto para ${barcode}`);
-          return;
+          return false;
+        }
+
+        if (result.promotion) {
+          toastSuccess(`Promo: ${result.promotion.name}`);
+          return true;
+        }
+        const scannedProduct = result.product;
+        if (!scannedProduct) {
+          toastError(result.error ?? `No se encontro producto para ${barcode}`);
+          return false;
         }
 
         const isScaleScan = Boolean(result.parsedScale);
@@ -296,20 +594,29 @@ export const PosPage = () => {
 
         if (isScaleScan) {
           toastSuccess(
-            `Balanza: ${result.product.name}${scaleSuffix}${
+            `Balanza: ${scannedProduct.name}${scaleSuffix}${
               result.parsedScale?.productCode ? ` | PLU ${result.parsedScale.productCode}` : ""
             }`
           );
         } else {
-          toastSuccess(`Escaneado: ${result.product.name}`);
+          toastSuccess(`Escaneado: ${scannedProduct.name}`);
         }
+        return true;
       } finally {
         window.setTimeout(() => {
           focusScannerCapture();
         }, 0);
       }
     },
-    [addProductByBarcode, canWritePos, focusScannerCapture, isSubmitting, toastError, toastSuccess]
+    [
+      addProductByBarcode,
+      canWritePos,
+      focusScannerCapture,
+      isCashGateBlocking,
+      isSubmitting,
+      toastError,
+      toastSuccess,
+    ]
   );
 
   const onBarcodeScannerScan = useCallback(
@@ -319,25 +626,62 @@ export const PosPage = () => {
     [handleBarcodeScan]
   );
 
+  const handleVisibleBarcodeSubmit = useCallback(() => {
+    const barcode = visibleBarcodeValue.trim();
+    if (!barcode) return;
+
+    void handleBarcodeScan(barcode).then((ok) => {
+      if (ok) {
+        setVisibleBarcodeValue("");
+      }
+    });
+  }, [handleBarcodeScan, visibleBarcodeValue]);
+
   useBarcodeScanner({
     enabled: Boolean(
-      tenantId && canReadPos && canWritePos && !isSubmitting && !customerModalState && !receiptModal
+      tenantId &&
+        canReadPos &&
+        canWritePos &&
+        !isCashGateBlocking &&
+        !isSubmitting &&
+        !customerModalState &&
+        !receiptModal &&
+        !isCameraScannerOpen
     ),
     onScan: onBarcodeScannerScan,
   });
 
   useEffect(() => {
+    if (isCashGateBlocking) return;
     if (isSubmitting) return;
     if (customerModalState || receiptModal) return;
+    if (isCameraScannerOpen) return;
     focusScannerCapture();
-  }, [customerModalState, focusScannerCapture, isSubmitting, receiptModal]);
+  }, [
+    customerModalState,
+    focusScannerCapture,
+    isCameraScannerOpen,
+    isCashGateBlocking,
+    isSubmitting,
+    receiptModal,
+  ]);
 
   useEffect(() => {
+    if (isCashGateBlocking) return;
     if (rightPanelTab !== "cart") return;
     if (isSubmitting) return;
     if (customerModalState || receiptModal) return;
+    if (isCameraScannerOpen) return;
     focusScannerCapture();
-  }, [customerModalState, focusScannerCapture, isSubmitting, receiptModal, rightPanelTab]);
+  }, [
+    customerModalState,
+    focusScannerCapture,
+    isCameraScannerOpen,
+    isCashGateBlocking,
+    isSubmitting,
+    receiptModal,
+    rightPanelTab,
+  ]);
 
   useEffect(() => {
     if (!generatedReceipt) return;
@@ -353,10 +697,12 @@ export const PosPage = () => {
     });
 
     clearGeneratedReceipt();
-    window.setTimeout(() => {
-      focusScannerCapture();
-    }, 0);
-  }, [clearGeneratedReceipt, focusScannerCapture, generatedInvoice, generatedReceipt]);
+    if (!isCashGateBlocking) {
+      window.setTimeout(() => {
+        focusScannerCapture();
+      }, 0);
+    }
+  }, [clearGeneratedReceipt, focusScannerCapture, generatedInvoice, generatedReceipt, isCashGateBlocking]);
 
   const closeReceiptModal = useCallback(() => {
     setReceiptModal(null);
@@ -386,6 +732,8 @@ export const PosPage = () => {
         customer && tenantId
           ? posCustomerProfilesService.getProfile(tenantId, customer.id)
           : { enabled: false, limit: null };
+      const accountEnabled = customer?.current_account_enabled ?? profile.enabled;
+      const accountLimit = customer?.current_account_limit ?? profile.limit;
       const names = splitCustomerName(customer?.full_name ?? "");
 
       return {
@@ -400,9 +748,9 @@ export const PosPage = () => {
         fiscalAddress: customer?.fiscal_address ?? "",
         fiscalCondition: customer?.fiscal_condition ?? "",
         fiscalCuit: customer?.document_type === "cuit" ? customer.document_number : "",
-        currentAccountEnabled: profile.enabled,
+        currentAccountEnabled: accountEnabled,
         currentAccountLimit:
-          profile.limit != null && Number.isFinite(profile.limit) ? profile.limit.toString() : "",
+          accountLimit != null && Number.isFinite(accountLimit) ? accountLimit.toString() : "",
       };
     },
     [tenantId]
@@ -480,6 +828,8 @@ export const PosPage = () => {
             address: normalizeOptional(values.address),
             observations: null,
             current_balance: 0,
+            current_account_enabled: values.currentAccountEnabled,
+            current_account_limit: currentAccountLimit,
             is_active: true,
           });
 
@@ -527,6 +877,8 @@ export const PosPage = () => {
           address: normalizeOptional(values.address),
           observations: existing.observations,
           current_balance: existing.current_balance,
+          current_account_enabled: values.currentAccountEnabled,
+          current_account_limit: currentAccountLimit,
           is_active: existing.is_active,
         });
 
@@ -616,6 +968,11 @@ export const PosPage = () => {
   }, [receiptModal]);
 
   useEffect(() => {
+    if (!isCheckoutModalOpen || cart.length) return;
+    setIsCheckoutModalOpen(false);
+  }, [cart.length, isCheckoutModalOpen]);
+
+  useEffect(() => {
     if (!receiptModal && !printMenuReceiptId) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -632,6 +989,58 @@ export const PosPage = () => {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [closeReceiptModal, printMenuReceiptId, receiptModal]);
+
+  useEffect(() => {
+    if (!isCheckoutModalOpen) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsCheckoutModalOpen(false);
+        window.setTimeout(() => {
+          focusScannerCapture();
+        }, 0);
+        return;
+      }
+
+      if (event.key !== "Enter") return;
+      if (event.defaultPrevented) return;
+      if (!cart.length || !paymentMethods.length) return;
+      if (!canWritePos || isLoading || isSubmitting || isCashGateBlocking) return;
+
+      const activeElement = document.activeElement;
+      const isEditableElement =
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement instanceof HTMLSelectElement ||
+        Boolean((activeElement as HTMLElement | null)?.isContentEditable);
+      const scannerCaptureActive = Boolean(
+        activeElement instanceof HTMLElement &&
+          activeElement.closest("[data-scanner-capture='true']")
+      );
+
+      if (isEditableElement && !scannerCaptureActive) return;
+
+      const form = document.getElementById(checkoutFormId);
+      if (!(form instanceof HTMLFormElement)) return;
+
+      event.preventDefault();
+      form.requestSubmit();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [
+    canWritePos,
+    cart.length,
+    focusScannerCapture,
+    isCashGateBlocking,
+    isCheckoutModalOpen,
+    isLoading,
+    isSubmitting,
+    paymentMethods.length,
+  ]);
 
   useEffect(() => {
     if (!printMenuReceiptId) return;
@@ -653,9 +1062,10 @@ export const PosPage = () => {
     const handleCheckoutEnter = (event: KeyboardEvent) => {
       if (event.key !== "Enter") return;
       if (event.defaultPrevented) return;
-      if (customerModalState || receiptModal) return;
+      if (customerModalState || receiptModal || isCheckoutModalOpen) return;
       if (rightPanelTab !== "cart") return;
       if (!canWritePos || isLoading || isSubmitting) return;
+      if (isCashGateBlocking) return;
       if (!cart.length || !paymentMethods.length) return;
 
       const activeElement = document.activeElement;
@@ -672,13 +1082,8 @@ export const PosPage = () => {
 
       if (isEditableElement && !scannerCaptureActive) return;
 
-      const checkoutForm = document.getElementById(checkoutFormId);
-      if (!(checkoutForm instanceof HTMLFormElement)) return;
-      const submitButton = checkoutForm.querySelector("button[type='submit']");
-      if (submitButton instanceof HTMLButtonElement && submitButton.disabled) return;
-
       event.preventDefault();
-      checkoutForm.requestSubmit();
+      setIsCheckoutModalOpen(true);
     };
 
     window.addEventListener("keydown", handleCheckoutEnter);
@@ -689,7 +1094,9 @@ export const PosPage = () => {
     canWritePos,
     cart.length,
     customerModalState,
+    isCashGateBlocking,
     isLoading,
+    isCheckoutModalOpen,
     isSubmitting,
     paymentMethods.length,
     receiptModal,
@@ -742,7 +1149,12 @@ export const PosPage = () => {
     clearSyncError();
 
     try {
-      const results = await Promise.allSettled([syncNow(), reload(), loadRecentReceipts()]);
+      const results = await Promise.allSettled([
+        syncNow(),
+        reload(),
+        loadRecentReceipts(),
+        loadCashSessionGate(),
+      ]);
       const hasError = results.some((result) => result.status === "rejected");
 
       if (hasError) {
@@ -758,6 +1170,7 @@ export const PosPage = () => {
     clearSyncError,
     isManualSyncing,
     loadRecentReceipts,
+    loadCashSessionGate,
     reload,
     syncNow,
     toastError,
@@ -859,6 +1272,14 @@ export const PosPage = () => {
             >
               {isManualSyncing || isSyncing ? "Sincronizando..." : "Sincronizar"}
             </button>
+            <button
+              type="button"
+              className="ui-btn-ghost"
+              onClick={() => setIsCameraScannerOpen(true)}
+              disabled={isSubmitting || !canWritePos || isCashGateBlocking}
+            >
+              Escanear camara
+            </button>
             {isInstallSupported && canInstall ? (
               <button
                 type="button"
@@ -875,7 +1296,7 @@ export const PosPage = () => {
               type="button"
               onClick={clearCart}
               className="ui-btn-ghost"
-              disabled={isSubmitting || !canWritePos}
+              disabled={isSubmitting || !canWritePos || isCashGateBlocking}
             >
               Limpiar carrito
             </button>
@@ -898,17 +1319,32 @@ export const PosPage = () => {
             {lastSyncMessage}
           </p>
         ) : null}
+        <p
+          className={`text-xs ${
+            isCashGateResolving
+              ? "text-slate-500"
+              : openCashSessionId
+                ? "text-emerald-700"
+                : "text-amber-700"
+          }`}
+        >
+          {isCashGateResolving && !openCashSessionId
+            ? "Validando usuario y caja..."
+            : openCashSessionId
+              ? `Caja abierta para este usuario: ${openCashSessionId}`
+              : "Caja pendiente de apertura. El POS queda bloqueado para registrar movimientos contables."}
+        </p>
+        {isCashGateResolving && !openCashSessionId ? (
+          <div className="inline-flex items-center gap-2 text-xs text-slate-500">
+            <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+            Cargando informacion de caja...
+          </div>
+        ) : null}
 
         {selectedCustomer && appliedPriceList && !appliedPriceList.is_active ? (
           <p className="text-xs text-amber-700">
             El cliente tiene una lista inactiva asignada. Se mantiene por compatibilidad.
           </p>
-        ) : null}
-
-        {feedback ? (
-          <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>
-            {feedback.message}
-          </div>
         ) : null}
 
         {!paymentMethods.length ? (
@@ -925,12 +1361,12 @@ export const PosPage = () => {
               products={products}
               favoriteProducts={favoriteProducts}
               primaryBarcodes={primaryBarcodes}
-              checkoutAnchorId={checkoutPanelId}
+              checkoutAnchorId={cartPanelId}
               onOpenCheckout={() => setRightPanelTab("cart")}
               canWrite={canWritePos}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isCashGateBlocking}
               onAddProduct={async (product, quantity) => {
-                if (!canWritePos) return;
+                if (!canWritePos || isCashGateBlocking) return;
                 const added = await addProductToCart(product, quantity);
                 if (added) {
                   window.setTimeout(() => {
@@ -970,68 +1406,26 @@ export const PosPage = () => {
               {rightPanelTab === "cart" ? (
                 <>
                   <PosCart
+                    id={cartPanelId}
                     items={cart}
+                    barcodeValue={visibleBarcodeValue}
                     subtotalBeforePromotions={subtotalBeforePromotions}
                     promotionDiscountTotal={promotionDiscountTotal}
                     cartPromotionDiscountTotal={cartPromotionDiscountTotal}
                     subtotal={checkoutSummary.subtotal}
-                    surchargeTotal={checkoutSummary.surchargeTotal}
-                    paymentDiscountTotal={checkoutSummary.discountTotal}
-                    paymentAdjustment={checkoutSummary.paymentAdjustment}
-                    total={checkoutSummary.total}
+                    surchargeTotal={0}
+                    paymentDiscountTotal={0}
+                    paymentAdjustment={0}
+                    total={checkoutSummary.subtotal}
                     canWrite={canWritePos}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isCashGateBlocking}
+                    onBarcodeChange={setVisibleBarcodeValue}
+                    onBarcodeSubmit={handleVisibleBarcodeSubmit}
                     onIncrease={increaseQuantity}
                     onDecrease={decreaseQuantity}
                     onSetQuantity={setCartItemQuantity}
                     onRemove={removeFromCart}
-                  />
-
-                  <PosCheckoutPanel
-                    panelId={checkoutPanelId}
-                    formId={checkoutFormId}
-                    customers={customers}
-                    paymentMethods={paymentMethods}
-                    bankAccounts={bankAccounts}
-                    originBanks={originBanks}
-                    installmentPlans={installmentPlans}
-                    selectedCustomerId={selectedCustomerId}
-                    selectedPaymentMethodId={selectedPaymentMethodId}
-                    isOnline={isOnline}
-                    checkoutTotal={checkoutSummary.total}
-                    mercadoPagoIntent={mercadoPagoIntent}
-                    mercadoPagoSettings={mercadoPagoSettings}
-                    mercadoPagoStatus={mercadoPagoStatus}
-                    isMercadoPagoLoading={isMercadoPagoLoading}
-                    canWrite={canWritePos}
-                    canManageCustomers={canWriteCustomers}
-                    currentAccountSnapshot={currentAccountSnapshot}
-                    disabled={isSubmitting}
-                    onCustomerChange={setSelectedCustomer}
-                    onPaymentMethodChange={setSelectedPaymentMethodId}
-                    onCreateOriginBank={handleCreateOriginBank}
-                    onOpenCustomerModal={openCustomerModal}
-                    onStartMercadoPago={() => {
-                      void startMercadoPagoPayment({
-                        paymentMethodId: selectedPaymentMethodId,
-                        amount: checkoutSummary.total,
-                        currencyCode: "ARS",
-                        customerId: selectedCustomerId || null,
-                      });
-                    }}
-                    onRefreshMercadoPago={() => {
-                      void refreshMercadoPagoPayment();
-                    }}
-                    onApproveMercadoPago={() => {
-                      void approveMercadoPagoPayment();
-                    }}
-                    onRejectMercadoPago={() => {
-                      void rejectMercadoPagoPayment();
-                    }}
-                    onCancelMercadoPago={() => {
-                      void cancelMercadoPagoPayment();
-                    }}
-                    onSubmit={handleConfirmSale}
+                    onCheckout={() => setIsCheckoutModalOpen(true)}
                   />
                 </>
               ) : (
@@ -1149,25 +1543,143 @@ export const PosPage = () => {
         )}
       </section>
 
-      {!isLoading && cart.length ? (
+      {!isLoading && cart.length && !isCashGateBlocking ? (
         <div className="pos-mobile-dock">
           <div>
             <p className="text-xs uppercase tracking-[0.12em] text-slate-500">Carrito</p>
             <p className="text-sm font-semibold text-slate-900">
-              {cart.length} items | {currency.format(checkoutSummary.total)}
+              {cart.length} items | {currency.format(checkoutSummary.subtotal)}
             </p>
           </div>
-          <a
-            href={`#${checkoutPanelId}`}
+          <button
+            type="button"
             className="ui-btn-primary whitespace-nowrap"
             onClick={() => {
               setRightPanelTab("cart");
+              setIsCheckoutModalOpen(true);
             }}
           >
-            Ir a cobrar
-          </a>
+            Confirmar venta
+          </button>
         </div>
       ) : null}
+
+      {shouldShowCashOpeningModal ? (
+        <section className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/55 p-4">
+          <div className="w-full max-w-xl space-y-3 rounded-2xl bg-white p-4 shadow-panel">
+            <div className="space-y-1">
+              <h2 className="text-base font-semibold text-slate-900">Apertura de caja obligatoria</h2>
+              <p className="text-sm text-slate-600">
+                Para iniciar el POS y registrar movimientos contables, primero debes abrir caja.
+              </p>
+            </div>
+
+            {resolvedOperatorUserId ? (
+              <CashOpenForm
+                canWrite={canWritePos}
+                disabled={isOpeningCashSession || isSubmitting}
+                defaultOpeningAmount={cashDefaultOpeningAmount}
+                onSubmit={handleOpenCashFromPos}
+              />
+            ) : (
+              <div className="ui-error-state">No hay usuario activo para abrir caja.</div>
+            )}
+
+            {hasResolvedCashGate && !isResolvingOperatorUser && !isCheckingCashSession && cashGateFeedback ? (
+              <div className="ui-error-state">{cashGateFeedback}</div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {isCheckoutModalOpen ? (
+        <section className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-3 sm:p-4">
+          <button
+            type="button"
+            aria-label="Cerrar confirmacion de venta"
+            className="absolute inset-0"
+            onClick={() => {
+              setIsCheckoutModalOpen(false);
+              window.setTimeout(() => {
+                focusScannerCapture();
+              }, 0);
+            }}
+          />
+          <div className="relative z-10 w-full max-w-4xl rounded-2xl bg-white p-4 shadow-panel">
+            <div className="max-h-[88vh] overflow-auto pr-1">
+              <PosCheckoutPanel
+                panelId={checkoutPanelId}
+                formId={checkoutFormId}
+                layout="modal"
+                customers={customers}
+                paymentMethods={paymentMethods}
+                bankAccounts={bankAccounts}
+                originBanks={originBanks}
+                installmentPlans={installmentPlans}
+                selectedCustomerId={selectedCustomerId}
+                selectedPaymentMethodId={selectedPaymentMethodId}
+                isOnline={isOnline}
+                checkoutTotal={checkoutSummary.total}
+                mercadoPagoIntent={mercadoPagoIntent}
+                mercadoPagoSettings={mercadoPagoSettings}
+                mercadoPagoStatus={mercadoPagoStatus}
+                isMercadoPagoLoading={isMercadoPagoLoading}
+                canWrite={canWritePos}
+                canManageCustomers={canWriteCustomers}
+                currentAccountSnapshot={currentAccountSnapshot}
+                disabled={isSubmitting || isCashGateBlocking}
+                onCustomerChange={setSelectedCustomer}
+                onPaymentMethodChange={setSelectedPaymentMethodId}
+                onCreateOriginBank={handleCreateOriginBank}
+                onOpenCustomerModal={openCustomerModal}
+                onStartMercadoPago={() => {
+                  void startMercadoPagoPayment({
+                    paymentMethodId: selectedPaymentMethodId,
+                    amount: checkoutSummary.total,
+                    currencyCode: "ARS",
+                    customerId: selectedCustomerId || null,
+                  });
+                }}
+                onRefreshMercadoPago={() => {
+                  void refreshMercadoPagoPayment();
+                }}
+                onApproveMercadoPago={() => {
+                  void approveMercadoPagoPayment();
+                }}
+                onRejectMercadoPago={() => {
+                  void rejectMercadoPagoPayment();
+                }}
+                onCancelMercadoPago={() => {
+                  void cancelMercadoPagoPayment();
+                }}
+                onClose={() => {
+                  setIsCheckoutModalOpen(false);
+                  window.setTimeout(() => {
+                    focusScannerCapture();
+                  }, 0);
+                }}
+                onSubmit={handleConfirmSale}
+              />
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <BarcodeScannerModal
+        open={isCameraScannerOpen}
+        title="Escanear producto con camara"
+        description="Escanea un codigo para agregar el producto al carrito."
+        onClose={() => {
+          setIsCameraScannerOpen(false);
+          window.setTimeout(() => {
+            focusScannerCapture();
+          }, 0);
+        }}
+        onDetected={(barcode) => {
+          setIsCameraScannerOpen(false);
+          void handleBarcodeScan(barcode);
+        }}
+      />
 
       {receiptModal ? (
         <section className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">

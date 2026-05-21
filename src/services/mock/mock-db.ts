@@ -5,6 +5,8 @@ import type {
   Customer,
   PaymentMethod,
   PermissionProfileRecord,
+  PromotionBarcode,
+  PromotionItem,
   Promotion,
   PriceList,
   PriceListItem,
@@ -45,6 +47,8 @@ export interface MockDatabase {
   origin_banks: OriginBank[];
   installment_plans: InstallmentPlan[];
   promotions: Promotion[];
+  promotion_items: PromotionItem[];
+  promotion_barcodes: PromotionBarcode[];
   price_lists: PriceList[];
   price_list_items: PriceListItem[];
   purchases: Purchase[];
@@ -76,6 +80,8 @@ const createEmptyMockDatabase = (): MockDatabase => ({
   origin_banks: [],
   installment_plans: [],
   promotions: [],
+  promotion_items: [],
+  promotion_barcodes: [],
   price_lists: [],
   price_list_items: [],
   purchases: [],

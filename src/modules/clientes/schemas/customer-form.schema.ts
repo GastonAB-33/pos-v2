@@ -12,6 +12,8 @@ export const customerFormSchema = z.object({
   email: z.string().email("Email invalido").optional().or(z.literal("")),
   address: z.string().max(200, "Maximo 200 caracteres").optional().or(z.literal("")),
   observations: z.string().max(500, "Maximo 500 caracteres").optional().or(z.literal("")),
+  currentAccountEnabled: z.boolean().default(false),
+  currentAccountLimit: z.string().optional().or(z.literal("")),
 });
 
 export type CustomerFormValues = z.infer<typeof customerFormSchema>;

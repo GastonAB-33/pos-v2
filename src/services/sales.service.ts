@@ -21,7 +21,15 @@ export const salesService = {
   create: (tenantId: string, input: CreateSaleInput) => salesCrud.create(tenantId, input),
   update: (tenantId: string, id: string, input: UpdateSaleInput) => salesCrud.update(tenantId, id, input),
   delete: (tenantId: string, id: string) => salesCrud.delete(tenantId, id),
-  createItem: (tenantId: string, input: CreateSaleItemInput) => saleItemsCrud.create(tenantId, input),
+  createItem: (tenantId: string, input: CreateSaleItemInput) => {
+    // Compatibilidad con esquemas legacy que todavia exigen columnas `price` y `subtotal`.
+    const payload = {
+      ...input,
+      price: input.unit_price,
+      subtotal: input.line_total,
+    };
+    return saleItemsCrud.create(tenantId, payload);
+  },
   createPayment: (tenantId: string, input: CreateSalePaymentInput) =>
     salePaymentsCrud.create(tenantId, input),
 

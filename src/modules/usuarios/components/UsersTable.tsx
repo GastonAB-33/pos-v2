@@ -44,7 +44,7 @@ export const UsersTable = ({
     }),
     columnHelper.display({
       id: "access",
-      header: "Email / Username",
+      header: "Datos de acceso",
       cell: (info) => (
         <div className="space-y-1">
           <p>{info.row.original.user.email ?? "-"}</p>
@@ -54,7 +54,7 @@ export const UsersTable = ({
     }),
     columnHelper.accessor((row) => row.profileName, {
       id: "profile",
-      header: "Perfil",
+      header: "Perfil de permisos",
       cell: (info) => info.getValue(),
     }),
     columnHelper.accessor((row) => row.user.is_active, {

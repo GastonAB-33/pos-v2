@@ -16,6 +16,11 @@ export const appModules = [
   "reportes",
   "auditoria",
   "configuracion",
+  "configuracion_agenda",
+  "configuracion_catalogo",
+  "configuracion_analisis",
+  "configuracion_sistema",
+  "configuracion_contable",
   "usuarios",
 ] as const;
 
@@ -29,7 +34,7 @@ export const appModuleLabels: Record<AppModule, string> = {
   cuentas_corrientes: "Cuentas corrientes",
   stock: "Stock",
   caja: "Caja",
-  compras: "Compras",
+  compras: "Compras a proveedores",
   proveedores: "Proveedores",
   listas_precios: "Listas de precios",
   promociones: "Promociones",
@@ -39,5 +44,10 @@ export const appModuleLabels: Record<AppModule, string> = {
   reportes: "Reportes",
   auditoria: "Auditoria",
   configuracion: "Configuracion",
+  configuracion_agenda: "Config. Agenda",
+  configuracion_catalogo: "Config. Catalogo",
+  configuracion_analisis: "Config. Analisis",
+  configuracion_sistema: "Config. Sistema",
+  configuracion_contable: "Config. Contable",
   usuarios: "Usuarios",
 };

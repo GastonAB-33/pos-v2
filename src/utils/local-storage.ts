@@ -6,4 +6,10 @@
   offlineSyncMeta: "pos-v2-offline-sync-meta",
   mercadoPagoIntents: "pos-v2-mercadopago-intents",
   posCustomerProfiles: "pos-v2-pos-customer-profiles",
+  topbarSupportOutbox: "pos-v2-topbar-support-outbox",
+  supportTickets: "pos-v2-support-tickets",
+  supportSeenByUser: "pos-v2-support-seen-by-user",
+  topbarTasks: "pos-v2-topbar-tasks",
+  topbarChatMessages: "pos-v2-topbar-chat-messages",
+  topbarPresence: "pos-v2-topbar-presence",
 } as const;

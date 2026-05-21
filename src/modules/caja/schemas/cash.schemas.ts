@@ -12,6 +12,7 @@ export const closeCashSchema = z.object({
 
 export const cashMovementSchema = z.object({
   amount: z.coerce.number().positive("El monto debe ser mayor a 0"),
+  paymentMethodId: z.string().optional(),
   notes: z.string().max(240, "Maximo 240 caracteres").optional().or(z.literal("")),
 });
 

@@ -1,12 +1,10 @@
-import type { ProductFormValues } from "@/modules/productos/schemas/product-form.schema";
-
 export interface ProductImageSuggestions {
   name: string | null;
   description: string | null;
   category: string | null;
   subcategory: string | null;
   brand: string | null;
-  sale_mode: ProductFormValues["saleMode"] | null;
+  sale_mode: "unit" | "weight" | null;
   barcode: string | null;
   suggested_price: number | null;
 }
@@ -150,7 +148,7 @@ const inferMockSuggestions = (fileName: string): ProductImageSuggestions => {
     terms: string[];
     category: string;
     subcategory: string;
-    saleMode: ProductFormValues["saleMode"];
+    saleMode: "unit" | "weight";
     price: number;
   }> = [
     {

@@ -8,6 +8,7 @@ import type { CashSession } from "@/types/entities";
 
 interface CashSessionHistoryTableProps {
   sessions: CashSession[];
+  usersById?: Record<string, string>;
 }
 
 const columnHelper = createColumnHelper<CashSession>();
@@ -18,7 +19,7 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
-export const CashSessionHistoryTable = ({ sessions }: CashSessionHistoryTableProps) => {
+export const CashSessionHistoryTable = ({ sessions, usersById = {} }: CashSessionHistoryTableProps) => {
   const columns = [
     columnHelper.accessor("opened_at", {
       header: "Apertura",
@@ -31,6 +32,14 @@ export const CashSessionHistoryTable = ({ sessions }: CashSessionHistoryTablePro
     columnHelper.accessor("status", {
       header: "Estado",
       cell: (info) => info.getValue(),
+    }),
+    columnHelper.accessor("opened_by_user_id", {
+      header: "Abierta por",
+      cell: (info) => usersById[info.getValue()] ?? info.getValue(),
+    }),
+    columnHelper.accessor("closed_by_user_id", {
+      header: "Cerrada por",
+      cell: (info) => (info.getValue() ? usersById[info.getValue()!] ?? info.getValue() : "-"),
     }),
     columnHelper.accessor("opening_amount", {
       header: "Inicial",
@@ -91,4 +100,3 @@ export const CashSessionHistoryTable = ({ sessions }: CashSessionHistoryTablePro
     </div>
   );
 };
-

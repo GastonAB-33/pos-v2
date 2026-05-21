@@ -13,7 +13,15 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(APP_CACHE)
-      .then((cache) => cache.addAll(APP_SHELL_ASSETS))
+      .then((cache) =>
+        Promise.all(
+          APP_SHELL_ASSETS.map((asset) =>
+            cache.add(asset).catch(() => {
+              // Ignore assets that cannot be cached during install.
+            })
+          )
+        )
+      )
       .then(() => self.skipWaiting())
   );
 });
@@ -57,7 +65,11 @@ const cacheFirstWithRefresh = async (request) => {
   const fetchPromise = fetch(request)
     .then((response) => {
       if (response && response.ok) {
-        cache.put(request, response.clone());
+        try {
+          cache.put(request, response.clone());
+        } catch {
+          // Skip caching if response body is already consumed.
+        }
       }
       return response;
     })
@@ -86,8 +98,12 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const cloned = response.clone();
-          caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, cloned));
+          try {
+            const cloned = response.clone();
+            caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, cloned));
+          } catch {
+            // Skip caching if response body is already consumed.
+          }
           return response;
         })
         .catch(async () => {
@@ -127,7 +143,11 @@ self.addEventListener("fetch", (event) => {
     fetch(request)
       .then((response) => {
         if (response && response.ok) {
-          caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, response.clone()));
+          try {
+            caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, response.clone()));
+          } catch {
+            // Skip caching if response body is already consumed.
+          }
         }
         return response;
       })

@@ -1,8 +1,10 @@
 import { dbTables } from "@/lib/database/tables";
+import { supabase } from "@/lib/supabase/client";
 import {
   TenantCrudService,
   type CreateEntityInput,
 } from "@/services/base/tenant-crud.service";
+import { nowIso } from "@/services/base/entity-factory";
 import { dataProvider } from "@/services/config/data-provider";
 import type {
   AppearanceSettings,
@@ -41,6 +43,7 @@ const createDefaultBusinessSettings = (): BusinessSettings => ({
 
 const createDefaultPosSettings = (): PosSettings => ({
   default_customer_id: null,
+  default_payment_method_id: null,
   auto_print_receipt: false,
   allow_sale_without_customer: true,
   allow_negative_stock: false,
@@ -92,14 +95,17 @@ const createDefaultFacturacionSettings = (): FacturacionSettings => ({
 
 const createDefaultBarcodeScaleSettings = (): BarcodeScaleSettings => ({
   scale_parser_enabled: false,
+  scale_mode: "total_price",
   scale_prefix: "20",
   code_length: 13,
   plu_start: 3,
   plu_length: 4,
   weight_start: 7,
   weight_length: 5,
+  weight_decimals: 3,
   amount_start: 7,
-  amount_length: 5,
+  amount_length: 6,
+  amount_decimals: 2,
   ean13_enabled: true,
 });
 
@@ -275,12 +281,79 @@ const mergeSettingsPayload = (
   },
 });
 
+const upsertTenantSettings = async (
+  tenantId: string,
+  input: CreateEntityInput<TenantSettings>,
+  preferredId?: string
+): Promise<TenantSettings> => {
+  if (dataProvider === "mock") {
+    const existing = await crud.getAllByTenant(tenantId);
+    const current = existing[0] ?? null;
+
+    if (current) {
+      const updated = await crud.update(tenantId, current.id, input);
+      if (updated) return updated;
+    }
+
+    return crud.create(tenantId, input);
+  }
+
+  const timestamp = nowIso();
+  const row = {
+    id: preferredId ?? `settings-${tenantId}`,
+    tenant_id: tenantId,
+    ...input,
+    created_at: timestamp,
+    updated_at: timestamp,
+  };
+
+  const firstAttempt = await supabase
+    .from("tenant_settings")
+    .upsert(row, { onConflict: "id" })
+    .select()
+    .single();
+
+  if (!firstAttempt.error) {
+    return firstAttempt.data as TenantSettings;
+  }
+
+  const conflictText = `${firstAttempt.error.message ?? ""} ${firstAttempt.error.details ?? ""}`.toLowerCase();
+  const isTenantUniqueConflict =
+    firstAttempt.error.code === "23505" && conflictText.includes("tenant_id");
+
+  if (!isTenantUniqueConflict) {
+    throw firstAttempt.error;
+  }
+
+  const existingByTenant = await supabase
+    .from("tenant_settings")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
+  if (existingByTenant.error) throw existingByTenant.error;
+
+  const retryRow = {
+    ...row,
+    id: existingByTenant.data?.id ?? row.id,
+  };
+
+  const retryAttempt = await supabase
+    .from("tenant_settings")
+    .upsert(retryRow, { onConflict: "id" })
+    .select()
+    .single();
+
+  if (retryAttempt.error) throw retryAttempt.error;
+  return retryAttempt.data as TenantSettings;
+};
+
 const readOrCreateTenantSettings = async (tenantId: string): Promise<TenantSettings> => {
   const allRows = await crud.getAllByTenant(tenantId);
   const existing = allRows[0] ?? null;
   if (existing) return normalizeTenantSettings(existing);
 
-  const created = await crud.create(tenantId, createDefaultSettingsInput());
+  const created = await upsertTenantSettings(tenantId, createDefaultSettingsInput());
   return normalizeTenantSettings(created);
 };
 
@@ -295,14 +368,8 @@ export const settingsService = {
   ): Promise<TenantSettings> => {
     const current = await readOrCreateTenantSettings(tenantId);
     const merged = mergeSettingsPayload(current, patch);
-
-    const updated = await crud.update(tenantId, current.id, merged);
-    if (!updated) {
-      const created = await crud.create(tenantId, merged);
-      return normalizeTenantSettings(created);
-    }
-
-    return normalizeTenantSettings(updated);
+    const upserted = await upsertTenantSettings(tenantId, merged, current.id);
+    return normalizeTenantSettings(upserted);
   },
 
   updateSection: async <TSection extends TenantSettingsSectionKey>(

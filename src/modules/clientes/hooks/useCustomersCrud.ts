@@ -32,6 +32,19 @@ const toServiceInput = (
   values: CustomerFormValues,
   options?: { existingCode?: string; isActive?: boolean; currentBalance?: number }
 ) => ({
+  ...(() => {
+    const rawLimit = values.currentAccountLimit ?? "";
+    const parsedLimit = Number(rawLimit);
+    const currentAccountLimit =
+      rawLimit.trim() && Number.isFinite(parsedLimit) && parsedLimit >= 0
+        ? Number(parsedLimit.toFixed(2))
+        : null;
+
+    return {
+      current_account_enabled: values.currentAccountEnabled,
+      current_account_limit: currentAccountLimit,
+    };
+  })(),
   code: options?.existingCode ?? buildCustomerCode(values.fullName),
   full_name: values.fullName,
   document_type: values.documentType,
@@ -86,7 +99,7 @@ export const useCustomersCrud = (tenantId: string | null, userId: string | null)
   }, [loadCustomers]);
 
   const createCustomer = async (values: CustomerFormValues) => {
-    if (!tenantId) return;
+    if (!tenantId) return null;
 
     setIsSubmitting(true);
     try {
@@ -106,8 +119,10 @@ export const useCustomersCrud = (tenantId: string | null, userId: string | null)
       });
       setFeedback({ type: "success", message: "Cliente creado" });
       await loadCustomers();
+      return created;
     } catch {
       setFeedback({ type: "error", message: "Error al crear cliente" });
+      return null;
     } finally {
       setIsSubmitting(false);
     }

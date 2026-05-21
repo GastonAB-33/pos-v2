@@ -3,17 +3,37 @@ import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
-import { CustomerCurrentAccountPanel } from "@/modules/clientes/components/CustomerCurrentAccountPanel";
+import { routePaths } from "@/config/routes";
 import { CustomerForm } from "@/modules/clientes/components/CustomerForm";
 import { CustomersTable } from "@/modules/clientes/components/CustomersTable";
 import { CustomersToolbar } from "@/modules/clientes/components/CustomersToolbar";
 import { useCustomersCrud } from "@/modules/clientes/hooks/useCustomersCrud";
+import { PosCustomerModal, type PosCustomerModalValues } from "@/modules/pos/components/PosCustomerModal";
+import { posCustomerProfilesService } from "@/services/pos-customer-profiles.service";
 import type { Customer } from "@/types/entities";
 import type { CustomerFormValues } from "@/modules/clientes/schemas/customer-form.schema";
+import { useNavigate } from "react-router-dom";
 
 type FormMode = "create" | "edit";
 
+const defaultPosModalValues: PosCustomerModalValues = {
+  firstName: "",
+  lastName: "",
+  documentType: "dni",
+  documentNumber: "",
+  phone: "",
+  email: "",
+  address: "",
+  fiscalBusinessName: "",
+  fiscalAddress: "",
+  fiscalCondition: "",
+  fiscalCuit: "",
+  currentAccountEnabled: false,
+  currentAccountLimit: "",
+};
+
 export const ClientesPage = () => {
+  const navigate = useNavigate();
   const { tenantId } = useTenant();
   const user = useAuthStore((state) => state.user);
   const { canRead, canWrite } = usePermissions();
@@ -51,13 +71,12 @@ export const ClientesPage = () => {
   const [formMode, setFormMode] = useState<FormMode>("create");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | undefined>(undefined);
   const [currentAccountCustomer, setCurrentAccountCustomer] = useState<Customer | null>(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const handleCreateClick = () => {
     if (!canWriteClientes) return;
     clearFeedback();
-    setFormMode("create");
-    setSelectedCustomer(undefined);
-    setFormOpen(true);
+    setCreateModalOpen(true);
   };
 
   const handleEditClick = (customer: Customer) => {
@@ -93,12 +112,57 @@ export const ClientesPage = () => {
     setSelectedCustomer(undefined);
   };
 
+  const handleCreateFromPosModal = async (values: PosCustomerModalValues) => {
+    const normalizeNamePart = (part: string) => part.trim();
+    const firstName = normalizeNamePart(values.firstName);
+    const lastName = normalizeNamePart(values.lastName);
+    const fullName = `${firstName} ${lastName}`.replace(/\s+/g, " ").trim();
+    const fiscalCuit = (values.fiscalCuit ?? "").trim();
+    const parsedLimit = Number(values.currentAccountLimit ?? "");
+    const currentAccountLimit =
+      (values.currentAccountLimit ?? "").trim() &&
+      Number.isFinite(parsedLimit) &&
+      parsedLimit >= 0
+        ? Number(parsedLimit.toFixed(2))
+        : null;
+
+    const created = await createCustomer({
+      fullName,
+      documentType: fiscalCuit ? "cuit" : values.documentType,
+      documentNumber: fiscalCuit || values.documentNumber.trim(),
+      fiscalBusinessName: values.fiscalBusinessName,
+      fiscalAddress: values.fiscalAddress,
+      fiscalCondition: values.fiscalCondition,
+      priceListId: "",
+      phone: values.phone,
+      email: values.email,
+      address: values.address,
+      observations: "",
+      currentAccountEnabled: values.currentAccountEnabled,
+      currentAccountLimit: values.currentAccountLimit,
+    });
+
+    if (!tenantId || !created) return;
+
+    posCustomerProfilesService.saveProfile(tenantId, created.id, {
+      enabled: values.currentAccountEnabled,
+      limit: currentAccountLimit,
+    });
+
+    setCreateModalOpen(false);
+  };
+
   const handleOpenCurrentAccount = (customer: Customer) => {
     setCurrentAccountCustomer(customer);
   };
 
-  const refreshAfterMovement = async () => {
-    await reload();
+  const goToCurrentAccountModule = (customer: Customer) => {
+    const searchParams = new URLSearchParams({
+      clienteId: customer.id,
+      from: "clientes",
+    });
+
+    navigate(`${routePaths.cuentasCorrientes}?${searchParams.toString()}`);
   };
 
   if (!tenantId) {
@@ -131,18 +195,7 @@ export const ClientesPage = () => {
           onReload={() => void reload()}
         />
 
-        {feedback ? (
-          <div
-            className={[
-              "rounded-lg border px-3 py-2 text-sm",
-              feedback.type === "success"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-red-200 bg-red-50 text-red-700",
-            ].join(" ")}
-          >
-            {feedback.message}
-          </div>
-        ) : null}
+        {feedback ? <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>{feedback.message}</div> : null}
 
         {isLoading ? (
           <div className="rounded-lg border border-slate-200 p-8 text-center text-sm text-slate-600">
@@ -161,15 +214,10 @@ export const ClientesPage = () => {
         )}
 
         {currentAccountCustomer ? (
-          <CustomerCurrentAccountPanel
-            tenantId={tenantId}
-            userId={user?.id ?? null}
+          <CustomerCurrentAccountSummary
             customer={currentAccountCustomer}
-            canWrite={canWriteClientes}
+            onOpenModule={() => goToCurrentAccountModule(currentAccountCustomer)}
             onClose={() => setCurrentAccountCustomer(null)}
-            onBalanceUpdated={() => {
-              void refreshAfterMovement();
-            }}
           />
         ) : null}
 
@@ -191,7 +239,85 @@ export const ClientesPage = () => {
             />
           </section>
         ) : null}
+
+        {createModalOpen ? (
+          <PosCustomerModal
+            mode="create"
+            initialValues={defaultPosModalValues}
+            currentBalance={0}
+            disabled={isSubmitting}
+            onCancel={() => setCreateModalOpen(false)}
+            onSubmit={handleCreateFromPosModal}
+          />
+        ) : null}
       </div>
     </PagePlaceholder>
+  );
+};
+
+interface CustomerCurrentAccountSummaryProps {
+  customer: Customer;
+  onOpenModule: () => void;
+  onClose: () => void;
+}
+
+const currency = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  maximumFractionDigits: 2,
+});
+
+const CustomerCurrentAccountSummary = ({
+  customer,
+  onOpenModule,
+  onClose,
+}: CustomerCurrentAccountSummaryProps) => {
+  const enabled = customer.current_account_enabled === true;
+  const limit = customer.current_account_limit ?? null;
+  const debt = Number((customer.current_balance ?? 0).toFixed(2));
+  const available = enabled && limit != null ? Number((limit - debt).toFixed(2)) : null;
+
+  return (
+    <section className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-slate-900">Estado de cuenta corriente</h3>
+          <p className="text-sm text-slate-600">{customer.full_name}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button type="button" className="ui-btn-primary" onClick={onOpenModule}>
+            Ver cuenta corriente
+          </button>
+          <button type="button" className="ui-btn-ghost" onClick={onClose}>
+            Cerrar
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <div className="rounded-lg bg-white p-3">
+          <p className="text-xs text-slate-500">Estado</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">
+            {enabled ? "Habilitada" : "Deshabilitada"}
+          </p>
+        </div>
+        <div className="rounded-lg bg-white p-3">
+          <p className="text-xs text-slate-500">Total adeudado</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">{currency.format(debt)}</p>
+        </div>
+        <div className="rounded-lg bg-white p-3">
+          <p className="text-xs text-slate-500">Limite</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">
+            {enabled ? (limit == null ? "Sin limite" : currency.format(limit)) : "-"}
+          </p>
+        </div>
+        <div className="rounded-lg bg-white p-3">
+          <p className="text-xs text-slate-500">Disponible</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">
+            {enabled ? (available == null ? "Sin tope" : currency.format(available)) : "-"}
+          </p>
+        </div>
+      </div>
+    </section>
   );
 };

@@ -8,8 +8,10 @@ import { useAccountingCatalogs } from "@/modules/configuracion/hooks/useAccounti
 import { useConfiguracionModule } from "@/modules/configuracion/hooks/useConfiguracionModule";
 import { dataProvider } from "@/services/config/data-provider";
 import { useUiStore } from "@/store/ui.store";
+import type { AppModule } from "@/types/modules";
 import type {
   AppearanceSettings,
+  BarcodeScaleMode,
   FacturacionSettings,
   MercadoPagoMode,
   BankAccount,
@@ -32,12 +34,142 @@ const bankAccountTypeOptions: Array<{
   { value: "otro", label: "Otro" },
 ];
 
-export const ConfiguracionPage = () => {
+type ConfiguracionModuleScope = "all" | "agenda" | "catalogo" | "analisis" | "sistema" | "contable";
+
+interface ConfiguracionScopePreset {
+  title: string;
+  description: string;
+  permissionModule: AppModule;
+  allowSaveAll: boolean;
+  visibleSections: {
+    negocio: boolean;
+    pos: boolean;
+    stock: boolean;
+    caja: boolean;
+    facturacion: boolean;
+    contableCatalogos: boolean;
+    codigos_balanza: boolean;
+    apariencia: boolean;
+    sistema: boolean;
+  };
+}
+
+const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionScopePreset> = {
+  all: {
+    title: "Configuracion",
+    description: "Parametros centrales del negocio listos para escalar",
+    permissionModule: "configuracion",
+    allowSaveAll: true,
+    visibleSections: {
+      negocio: true,
+      pos: true,
+      stock: true,
+      caja: true,
+      facturacion: true,
+      contableCatalogos: true,
+      codigos_balanza: true,
+      apariencia: true,
+      sistema: true,
+    },
+  },
+  agenda: {
+    title: "Configuracion de Agenda",
+    description: "Configuraciones relacionadas con agenda y datos base del negocio",
+    permissionModule: "configuracion_agenda",
+    allowSaveAll: false,
+    visibleSections: {
+      negocio: true,
+      pos: false,
+      stock: false,
+      caja: false,
+      facturacion: false,
+      contableCatalogos: false,
+      codigos_balanza: false,
+      apariencia: false,
+      sistema: false,
+    },
+  },
+  catalogo: {
+    title: "Configuracion de Catalogo",
+    description: "Configuraciones operativas para catalogo, stock y codigos",
+    permissionModule: "configuracion_catalogo",
+    allowSaveAll: false,
+    visibleSections: {
+      negocio: false,
+      pos: true,
+      stock: true,
+      caja: false,
+      facturacion: false,
+      contableCatalogos: false,
+      codigos_balanza: true,
+      apariencia: false,
+      sistema: false,
+    },
+  },
+  analisis: {
+    title: "Configuracion de Analisis",
+    description: "Configuraciones del modulo de analisis",
+    permissionModule: "configuracion_analisis",
+    allowSaveAll: false,
+    visibleSections: {
+      negocio: false,
+      pos: false,
+      stock: false,
+      caja: false,
+      facturacion: false,
+      contableCatalogos: false,
+      codigos_balanza: false,
+      apariencia: false,
+      sistema: false,
+    },
+  },
+  sistema: {
+    title: "Configuracion de Sistema",
+    description: "Preferencias de sistema, integraciones y apariencia",
+    permissionModule: "configuracion_sistema",
+    allowSaveAll: false,
+    visibleSections: {
+      negocio: false,
+      pos: false,
+      stock: false,
+      caja: false,
+      facturacion: false,
+      contableCatalogos: false,
+      codigos_balanza: false,
+      apariencia: true,
+      sistema: true,
+    },
+  },
+  contable: {
+    title: "Configuracion Contable",
+    description: "Configuraciones de caja, facturacion y catalogos contables",
+    permissionModule: "configuracion_contable",
+    allowSaveAll: false,
+    visibleSections: {
+      negocio: false,
+      pos: false,
+      stock: false,
+      caja: true,
+      facturacion: true,
+      contableCatalogos: true,
+      codigos_balanza: false,
+      apariencia: false,
+      sistema: false,
+    },
+  },
+};
+
+interface ConfiguracionPageProps {
+  scope?: ConfiguracionModuleScope;
+}
+
+export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => {
+  const scopePreset = configuracionScopePresets[scope];
   const { tenantId } = useTenant();
   const user = useAuthStore((state) => state.user);
   const { canRead, canWrite } = usePermissions();
-  const canReadConfiguracion = canRead("configuracion");
-  const canWriteConfiguracion = canWrite("configuracion");
+  const canReadConfiguracion = canRead(scopePreset.permissionModule);
+  const canWriteConfiguracion = canWrite(scopePreset.permissionModule);
 
   const setTheme = useUiStore((state) => state.setTheme);
   const setAccentColor = useUiStore((state) => state.setAccentColor);
@@ -47,6 +179,7 @@ export const ConfiguracionPage = () => {
     draft,
     setDraft,
     customers,
+    paymentMethods,
     isLoading,
     isSavingAll,
     savingSection,
@@ -194,7 +327,7 @@ export const ConfiguracionPage = () => {
   if (!tenantId) {
     return (
       <PagePlaceholder
-        title="Configuracion"
+        title={scopePreset.title}
         description="No hay tenant activo para operar el modulo"
       />
     );
@@ -203,7 +336,7 @@ export const ConfiguracionPage = () => {
   if (!canReadConfiguracion) {
     return (
       <PagePlaceholder
-        title="Configuracion"
+        title={scopePreset.title}
         description="No tenes permisos de lectura para este modulo"
       />
     );
@@ -212,8 +345,8 @@ export const ConfiguracionPage = () => {
   if (isLoading || !draft) {
     return (
       <PagePlaceholder
-        title="Configuracion"
-        description="Parametros centrales del negocio"
+        title={scopePreset.title}
+        description={scopePreset.description}
       >
         <LoadingState message="Cargando configuracion..." />
       </PagePlaceholder>
@@ -228,11 +361,12 @@ export const ConfiguracionPage = () => {
     mercadoPagoConfig.enabled &&
     (mercadoPagoConfig.mode === "mock" || hasMercadoPagoCredentials) &&
     !mercadoPagoConfig.force_unavailable;
+  const hasVisibleSettings = Object.values(scopePreset.visibleSections).some(Boolean);
 
   return (
     <PagePlaceholder
-      title="Configuracion"
-      description="Parametros centrales del negocio listos para escalar"
+      title={scopePreset.title}
+      description={scopePreset.description}
     >
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -253,16 +387,18 @@ export const ConfiguracionPage = () => {
               Recargar
             </button>
 
-            <button
-              type="button"
-              className="ui-btn-primary"
-              onClick={() => {
-                void handleSaveAll();
-              }}
-              disabled={!canWriteConfiguracion || isSavingAll}
-            >
-              {isSavingAll ? "Guardando..." : "Guardar todo"}
-            </button>
+            {scopePreset.allowSaveAll ? (
+              <button
+                type="button"
+                className="ui-btn-primary"
+                onClick={() => {
+                  void handleSaveAll();
+                }}
+                disabled={!canWriteConfiguracion || isSavingAll}
+              >
+                {isSavingAll ? "Guardando..." : "Guardar todo"}
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -272,7 +408,7 @@ export const ConfiguracionPage = () => {
           </div>
         ) : null}
 
-        {accountingFeedback ? (
+        {scopePreset.visibleSections.contableCatalogos && accountingFeedback ? (
           <div
             className={
               accountingFeedback.type === "success" ? "ui-success-state" : "ui-error-state"
@@ -291,7 +427,15 @@ export const ConfiguracionPage = () => {
           </div>
         ) : null}
 
-        <section className="ui-card space-y-3">
+        {!hasVisibleSettings ? (
+          <section className="ui-card">
+            <p className="text-sm text-slate-600">
+              Este modulo todavia no tiene configuraciones disponibles.
+            </p>
+          </section>
+        ) : null}
+
+        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.negocio}>
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-slate-900">Negocio</h2>
             <div className="flex items-center gap-2">
@@ -331,7 +475,7 @@ export const ConfiguracionPage = () => {
           </div>
         </section>
 
-        <section className="ui-card space-y-3">
+        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.pos}>
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-slate-900">POS</h2>
             <div className="flex items-center gap-2">
@@ -345,6 +489,13 @@ export const ConfiguracionPage = () => {
               <option value="">Sin cliente por defecto</option>
               {customers.map((customer) => (
                 <option key={customer.id} value={customer.id}>{customer.full_name}</option>
+              ))}
+            </select>
+
+            <select className="ui-input" value={draft.pos.default_payment_method_id ?? ""} onChange={(event) => updateSection("pos", { default_payment_method_id: event.target.value || null })} disabled={!canWriteConfiguracion}>
+              <option value="">Medio de pago por defecto: automatico</option>
+              {paymentMethods.map((method) => (
+                <option key={method.id} value={method.id}>{method.name}</option>
               ))}
             </select>
 
@@ -389,10 +540,13 @@ export const ConfiguracionPage = () => {
             <p className="text-xs text-slate-500 md:col-span-2">
               Cliente por defecto: {draft.pos.default_customer_id ? customerNameById.get(draft.pos.default_customer_id) ?? "Cliente no encontrado" : "No configurado"}
             </p>
+            <p className="text-xs text-slate-500 md:col-span-2">
+              Medio de pago por defecto: {draft.pos.default_payment_method_id ? paymentMethods.find((method) => method.id === draft.pos.default_payment_method_id)?.name ?? "Medio no encontrado" : "Automatico"}
+            </p>
           </div>
         </section>
 
-        <section className="ui-card space-y-3">
+        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.stock}>
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-slate-900">Stock</h2>
             <div className="flex items-center gap-2">
@@ -444,7 +598,7 @@ export const ConfiguracionPage = () => {
           </div>
         </section>
 
-        <section className="ui-card space-y-3">
+        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.caja}>
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-slate-900">Caja</h2>
             <div className="flex items-center gap-2">
@@ -488,7 +642,7 @@ export const ConfiguracionPage = () => {
           </div>
         </section>
 
-        <section className="ui-card space-y-3">
+        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.facturacion}>
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-slate-900">Facturacion</h2>
             <div className="flex items-center gap-2">
@@ -703,7 +857,7 @@ export const ConfiguracionPage = () => {
           </div>
         </section>
 
-        <section className="ui-card space-y-3">
+        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.contableCatalogos}>
           <div className="flex items-center justify-between gap-2">
             <div>
               <h2 className="text-base font-semibold text-slate-900">Contable y cobranzas</h2>
@@ -1076,7 +1230,7 @@ export const ConfiguracionPage = () => {
           </div>
         </section>
 
-        <section className="ui-card space-y-3">
+        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.codigos_balanza}>
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-slate-900">Codigos de barras y balanza</h2>
             <div className="flex items-center gap-2">
@@ -1094,18 +1248,24 @@ export const ConfiguracionPage = () => {
               <input type="checkbox" checked={draft.codigos_balanza.ean13_enabled} onChange={(event) => updateSection("codigos_balanza", { ean13_enabled: event.target.checked })} disabled={!canWriteConfiguracion} />
               Compatibilidad EAN13
             </label>
+            <select className="ui-input" value={draft.codigos_balanza.scale_mode} onChange={(event) => updateSection("codigos_balanza", { scale_mode: event.target.value as BarcodeScaleMode })} disabled={!canWriteConfiguracion}>
+              <option value="total_price">Codigo con importe total</option>
+              <option value="weight">Codigo con peso</option>
+            </select>
             <input className="ui-input" value={draft.codigos_balanza.scale_prefix} onChange={(event) => updateSection("codigos_balanza", { scale_prefix: event.target.value })} placeholder="Prefijo de balanza" disabled={!canWriteConfiguracion} />
             <input className="ui-input" type="number" min="8" max="18" value={draft.codigos_balanza.code_length} onChange={(event) => updateSection("codigos_balanza", { code_length: Math.max(8, Math.floor(toNumber(event.target.value, draft.codigos_balanza.code_length))) })} placeholder="Longitud total" disabled={!canWriteConfiguracion} />
             <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.plu_start} onChange={(event) => updateSection("codigos_balanza", { plu_start: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.plu_start))) })} placeholder="Inicio PLU" disabled={!canWriteConfiguracion} />
             <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.plu_length} onChange={(event) => updateSection("codigos_balanza", { plu_length: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.plu_length))) })} placeholder="Largo PLU" disabled={!canWriteConfiguracion} />
             <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.weight_start} onChange={(event) => updateSection("codigos_balanza", { weight_start: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.weight_start))) })} placeholder="Inicio peso" disabled={!canWriteConfiguracion} />
             <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.weight_length} onChange={(event) => updateSection("codigos_balanza", { weight_length: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.weight_length))) })} placeholder="Largo peso" disabled={!canWriteConfiguracion} />
+            <input className="ui-input" type="number" min="0" max="4" value={draft.codigos_balanza.weight_decimals} onChange={(event) => updateSection("codigos_balanza", { weight_decimals: Math.max(0, Math.floor(toNumber(event.target.value, draft.codigos_balanza.weight_decimals))) })} placeholder="Decimales peso" disabled={!canWriteConfiguracion} />
             <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.amount_start} onChange={(event) => updateSection("codigos_balanza", { amount_start: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.amount_start))) })} placeholder="Inicio importe" disabled={!canWriteConfiguracion} />
             <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.amount_length} onChange={(event) => updateSection("codigos_balanza", { amount_length: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.amount_length))) })} placeholder="Largo importe" disabled={!canWriteConfiguracion} />
+            <input className="ui-input" type="number" min="0" max="4" value={draft.codigos_balanza.amount_decimals} onChange={(event) => updateSection("codigos_balanza", { amount_decimals: Math.max(0, Math.floor(toNumber(event.target.value, draft.codigos_balanza.amount_decimals))) })} placeholder="Decimales importe" disabled={!canWriteConfiguracion} />
           </div>
         </section>
 
-        <section className="ui-card space-y-3">
+        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.apariencia}>
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-slate-900">Apariencia</h2>
             <div className="flex items-center gap-2">
@@ -1137,7 +1297,7 @@ export const ConfiguracionPage = () => {
           </button>
         </section>
 
-        <section className="ui-card space-y-3">
+        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.sistema}>
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-slate-900">Sistema</h2>
             <div className="flex items-center gap-2">

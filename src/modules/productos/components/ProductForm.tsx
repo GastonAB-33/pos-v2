@@ -1,12 +1,19 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { VoiceDictationButton } from "@/components/form/VoiceDictationButton";
 import type { Product } from "@/types/entities";
 import {
   productFormSchema,
   type ProductFormValues,
 } from "@/modules/productos/schemas/product-form.schema";
+import {
+  computePricingBackward,
+  computePricingForward,
+  DEFAULT_IVA_PERCENT,
+  derivePricingFromStoredProduct,
+} from "@/modules/productos/utils/product-pricing";
 
 interface ProductFormProps {
   mode: "create" | "edit";
@@ -18,18 +25,21 @@ interface ProductFormProps {
   onSubmit: (values: ProductFormValues) => Promise<void>;
 }
 
+type CalcMode = "forward" | "backward";
+
 const defaultValues: ProductFormValues = {
-  name: "",
-  brand: "",
-  supplier: "",
-  barcode: "",
-  description: "",
-  price: 0,
-  cost: 0,
-  stockInitial: 0,
-  category: "",
-  subcategory: "",
+  nombre: "",
   saleMode: "unit",
+  codigoBarras: "",
+  codigoProducto: "",
+  stock: 0,
+  categoria: "",
+  subcategoria: "",
+  precioCosto: 0,
+  porcentajeGanancia: 0,
+  precioSinIva: 0,
+  porcentajeIva: DEFAULT_IVA_PERCENT,
+  precioFinal: 0,
 };
 
 export const ProductForm = ({
@@ -47,11 +57,15 @@ export const ProductForm = ({
     reset,
     watch,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
     defaultValues,
   });
+
+  const [calcMode, setCalcMode] = useState<CalcMode>("forward");
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   useEffect(() => {
     if (!product) {
@@ -59,26 +73,76 @@ export const ProductForm = ({
         ...defaultValues,
         ...prefillValues,
       });
+      setCalcMode("forward");
       return;
     }
 
-    reset({
-      name: product.name,
-      brand: product.brand ?? "",
-      supplier: product.supplier ?? "",
-      barcode: primaryBarcode ?? "",
-      description: product.description ?? "",
-      price: product.price,
-      cost: product.cost_price,
-      stockInitial: product.stock_current,
-      category: product.category,
-      subcategory: product.subcategory ?? "",
-      saleMode: product.sale_mode,
+    const derivedPricing = derivePricingFromStoredProduct({
+      precioCosto: product.cost_price,
+      precioFinal: product.price,
+      porcentajeIva: product.vat_percent,
+      porcentajeGanancia: product.profit_percent,
+      precioSinIva: product.price_without_vat,
     });
+
+    reset({
+      nombre: product.name,
+      saleMode: product.sale_mode,
+      codigoBarras: primaryBarcode ?? "",
+      codigoProducto: product.code,
+      stock: product.stock_current,
+      categoria: product.category,
+      subcategoria: product.subcategory ?? "",
+      precioCosto: product.cost_price,
+      porcentajeGanancia: derivedPricing.porcentajeGanancia,
+      precioSinIva: derivedPricing.precioSinIva,
+      porcentajeIva: derivedPricing.porcentajeIva,
+      precioFinal: product.price,
+    });
+    setCalcMode("forward");
   }, [prefillValues, primaryBarcode, product, reset]);
 
-  const nameValue = watch("name");
-  const descriptionValue = watch("description");
+  const nombre = watch("nombre");
+  const saleMode = watch("saleMode");
+  const precioCosto = watch("precioCosto");
+  const porcentajeGanancia = watch("porcentajeGanancia");
+  const porcentajeIva = watch("porcentajeIva");
+  const precioFinal = watch("precioFinal");
+
+  useEffect(() => {
+    const setIfChangedNumber = (
+      field: "precioSinIva" | "porcentajeGanancia" | "precioFinal",
+      nextValue: number
+    ) => {
+      const current = getValues(field);
+      if (Math.abs(current - nextValue) < 0.005) return;
+      setValue(field, nextValue, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    };
+
+    if (calcMode === "backward") {
+      const computed = computePricingBackward({
+        precioCosto,
+        precioFinal,
+        porcentajeIva,
+      });
+
+      setIfChangedNumber("precioSinIva", computed.precioSinIva);
+      setIfChangedNumber("porcentajeGanancia", computed.porcentajeGanancia);
+      return;
+    }
+
+    const computed = computePricingForward({
+      precioCosto,
+      porcentajeGanancia,
+      porcentajeIva,
+    });
+
+    setIfChangedNumber("precioSinIva", computed.precioSinIva);
+    setIfChangedNumber("precioFinal", computed.precioFinal);
+  }, [calcMode, getValues, porcentajeGanancia, porcentajeIva, precioCosto, precioFinal, setValue]);
 
   return (
     <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
@@ -86,9 +150,9 @@ export const ProductForm = ({
         <div className="mb-1 flex items-center justify-between gap-2">
           <label className="block text-sm font-medium text-slate-700">Nombre</label>
           <VoiceDictationButton
-            value={nameValue ?? ""}
+            value={nombre ?? ""}
             onValueChange={(nextValue) =>
-              setValue("name", nextValue, { shouldDirty: true, shouldValidate: true })
+              setValue("nombre", nextValue, { shouldDirty: true, shouldValidate: true })
             }
             insertMode="replace"
             disabled={disabled}
@@ -96,141 +160,202 @@ export const ProductForm = ({
           />
         </div>
         <input
-          {...register("name")}
+          {...register("nombre")}
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           disabled={disabled}
         />
-        {errors.name ? <p className="mt-1 text-xs text-red-600">{errors.name.message}</p> : null}
-      </div>
-
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">Marca</label>
-        <input
-          {...register("brand")}
-          placeholder="Opcional"
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          disabled={disabled}
-        />
-        {errors.brand ? <p className="mt-1 text-xs text-red-600">{errors.brand.message}</p> : null}
-      </div>
-
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">Proveedor</label>
-        <input
-          {...register("supplier")}
-          placeholder="Opcional"
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          disabled={disabled}
-        />
-        {errors.supplier ? <p className="mt-1 text-xs text-red-600">{errors.supplier.message}</p> : null}
-      </div>
-
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">Codigo de barras principal</label>
-        <input
-          {...register("barcode")}
-          placeholder="Opcional"
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          disabled={disabled}
-        />
-        {errors.barcode ? <p className="mt-1 text-xs text-red-600">{errors.barcode.message}</p> : null}
-      </div>
-
-      <div>
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <label className="block text-sm font-medium text-slate-700">Descripcion</label>
-          <VoiceDictationButton
-            value={descriptionValue ?? ""}
-            onValueChange={(nextValue) =>
-              setValue("description", nextValue, { shouldDirty: true, shouldValidate: true })
-            }
-            insertMode="append"
-            disabled={disabled}
-            label="Dictar descripcion de producto"
-          />
-        </div>
-        <textarea
-          {...register("description")}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          rows={3}
-          disabled={disabled}
-        />
+        {errors.nombre ? <p className="mt-1 text-xs text-red-600">{errors.nombre.message}</p> : null}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Precio</label>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <label className="block text-sm font-medium text-slate-700">Codigo de barras</label>
+            <button
+              type="button"
+              className="ui-btn-ghost px-2 py-1 text-xs"
+              onClick={() => setScannerOpen(true)}
+              disabled={disabled}
+            >
+              Escanear camara
+            </button>
+          </div>
           <input
-            type="number"
-            step="0.01"
-            {...register("price")}
+            {...register("codigoBarras")}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
-          {errors.price ? <p className="mt-1 text-xs text-red-600">{errors.price.message}</p> : null}
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Costo</label>
-          <input
-            type="number"
-            step="0.01"
-            {...register("cost")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            disabled={disabled}
-          />
-          {errors.cost ? <p className="mt-1 text-xs text-red-600">{errors.cost.message}</p> : null}
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Stock inicial</label>
-          <input
-            type="number"
-            step="0.001"
-            {...register("stockInitial")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            disabled={disabled}
-          />
-          {errors.stockInitial ? (
-            <p className="mt-1 text-xs text-red-600">{errors.stockInitial.message}</p>
+          {errors.codigoBarras ? (
+            <p className="mt-1 text-xs text-red-600">{errors.codigoBarras.message}</p>
           ) : null}
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Unidad o peso</label>
-          <select
-            {...register("saleMode")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            disabled={disabled}
-          >
-            <option value="unit">Unidad</option>
-            <option value="weight">Peso</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Categoria</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Codigo de producto</label>
           <input
-            {...register("category")}
+            {...register("codigoProducto")}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
-          {errors.category ? <p className="mt-1 text-xs text-red-600">{errors.category.message}</p> : null}
+          {errors.codigoProducto ? (
+            <p className="mt-1 text-xs text-red-600">{errors.codigoProducto.message}</p>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            {saleMode === "weight" ? "Stock en kg" : "Stock en unidades"}
+          </label>
+          <input
+            type="number"
+            step="0.001"
+            {...register("stock", {
+              onChange: () => setCalcMode("forward"),
+            })}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            disabled={disabled}
+          />
+          {errors.stock ? <p className="mt-1 text-xs text-red-600">{errors.stock.message}</p> : null}
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Categoria</label>
+          <input
+            {...register("categoria")}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            disabled={disabled}
+          />
+          {errors.categoria ? (
+            <p className="mt-1 text-xs text-red-600">{errors.categoria.message}</p>
+          ) : null}
         </div>
 
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Subcategoria</label>
           <input
-            {...register("subcategory")}
+            {...register("subcategoria")}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
+          {errors.subcategoria ? (
+            <p className="mt-1 text-xs text-red-600">{errors.subcategoria.message}</p>
+          ) : null}
         </div>
       </div>
+
+      <div>
+        <label className="mb-2 block text-sm font-medium text-slate-700">Tipo de venta</label>
+        <div className="grid gap-2 md:grid-cols-2">
+          <label className="flex items-start gap-3 rounded-lg border border-slate-200 p-3 text-sm">
+            <input type="radio" value="unit" {...register("saleMode")} disabled={disabled} />
+            <span>
+              <span className="block font-semibold text-slate-900">Por unidad</span>
+              <span className="text-xs text-slate-500">Precio y stock por unidades.</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3 rounded-lg border border-slate-200 p-3 text-sm">
+            <input type="radio" value="weight" {...register("saleMode")} disabled={disabled} />
+            <span>
+              <span className="block font-semibold text-slate-900">Pesable</span>
+              <span className="text-xs text-slate-500">Precio por kg, stock en kg y venta por gramos.</span>
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            {saleMode === "weight" ? "Precio costo por kg" : "Precio costo"}
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            {...register("precioCosto", {
+              onChange: () => setCalcMode("forward"),
+            })}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            disabled={disabled}
+          />
+          {errors.precioCosto ? (
+            <p className="mt-1 text-xs text-red-600">{errors.precioCosto.message}</p>
+          ) : null}
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Porcentaje ganancia (%)</label>
+          <input
+            type="number"
+            step="0.01"
+            {...register("porcentajeGanancia", {
+              onChange: () => setCalcMode("forward"),
+            })}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            disabled={disabled}
+          />
+          {errors.porcentajeGanancia ? (
+            <p className="mt-1 text-xs text-red-600">{errors.porcentajeGanancia.message}</p>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Precio sin IVA</label>
+          <input
+            type="number"
+            step="0.01"
+            {...register("precioSinIva")}
+            readOnly
+            className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm"
+            disabled={disabled}
+          />
+          {errors.precioSinIva ? (
+            <p className="mt-1 text-xs text-red-600">{errors.precioSinIva.message}</p>
+          ) : null}
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Porcentaje IVA (%)</label>
+          <input
+            type="number"
+            step="0.01"
+            {...register("porcentajeIva", {
+              onChange: () => setCalcMode("forward"),
+            })}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            disabled={disabled}
+          />
+          {errors.porcentajeIva ? (
+            <p className="mt-1 text-xs text-red-600">{errors.porcentajeIva.message}</p>
+          ) : null}
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            {saleMode === "weight" ? "Precio final por kg" : "Precio final"}
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            {...register("precioFinal", {
+              onChange: () => setCalcMode("backward"),
+            })}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            disabled={disabled}
+          />
+          {errors.precioFinal ? (
+            <p className="mt-1 text-xs text-red-600">{errors.precioFinal.message}</p>
+          ) : null}
+        </div>
+      </div>
+
+      <p className="rounded-lg border border-blue-200 bg-blue-50 p-2 text-xs text-blue-700">
+        Si modificas costo, ganancia o IVA se recalculan precio sin IVA y precio final. Si editas precio final manualmente,
+        se recalcula la ganancia en forma inversa respetando el IVA.
+      </p>
 
       <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4">
         <button
@@ -249,6 +374,16 @@ export const ProductForm = ({
           {mode === "create" ? "Crear producto" : "Guardar cambios"}
         </button>
       </div>
+
+      <BarcodeScannerModal
+        open={scannerOpen}
+        title="Escanear codigo de barras del producto"
+        onClose={() => setScannerOpen(false)}
+        onDetected={(barcode) => {
+          setValue("codigoBarras", barcode, { shouldDirty: true, shouldValidate: true });
+          setScannerOpen(false);
+        }}
+      />
     </form>
   );
 };

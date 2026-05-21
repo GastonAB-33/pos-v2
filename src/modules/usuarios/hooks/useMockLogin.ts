@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { permissionProfilesService } from "@/services/permission-profiles.service";
+import { authService } from "@/services/auth.service";
 import { dataProvider } from "@/services/config/data-provider";
 import { tenantsService } from "@/services/tenants.service";
 import { usersService } from "@/services/users.service";
@@ -196,6 +197,16 @@ export const useMockLogin = () => {
   );
 
   const loadTenants = useCallback(async () => {
+    if (dataProvider !== "mock") {
+      setTenants([]);
+      setUsers([]);
+      setProfilesById(new Map());
+      setTenantId("");
+      setUserId("");
+      setError(null);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -230,6 +241,13 @@ export const useMockLogin = () => {
 
   const loadUsersAndProfiles = useCallback(
     async (selectedTenantId: string) => {
+      if (dataProvider !== "mock") {
+        setUsers([]);
+        setProfilesById(new Map());
+        setUserId("");
+        return;
+      }
+
       if (!selectedTenantId) {
         setUsers([]);
         setProfilesById(new Map());
@@ -338,14 +356,25 @@ export const useMockLogin = () => {
   };
 
   const loginWithCredentials = async (): Promise<boolean> => {
-    if (dataProvider !== "mock") {
-      setError("El login por credenciales demo solo esta disponible en modo mock");
-      return false;
-    }
-
     const normalizedTenant = tenantInput.trim().toLowerCase();
     const normalizedUsername = usernameInput.trim().toLowerCase();
     const password = passwordInput;
+
+    if (dataProvider !== "mock") {
+      if (!normalizedUsername || !password.trim()) {
+        setError("Completa email y contrasena para iniciar sesion");
+        return false;
+      }
+
+      if (!normalizedUsername.includes("@")) {
+        setError("En modo Supabase debes ingresar el email del usuario");
+        return false;
+      }
+
+      const session = await authService.signInWithPassword(normalizedUsername, password);
+      setSession(session);
+      return true;
+    }
 
     if (
       normalizedTenant !== DEV_TENANT_LOGIN ||

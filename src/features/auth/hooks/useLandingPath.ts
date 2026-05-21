@@ -14,12 +14,14 @@ export const useLandingPath = () => {
       return routePaths.login;
     }
 
+    const canAccessMainMenu = moduleRoutes.some((route) => route.path === routePaths.menuPrincipal);
+    if (canAccessMainMenu) {
+      return routePaths.menuPrincipal;
+    }
+
     const firstAllowed = moduleRoutes.find((route) => {
       if (!route.requiredPermission) return true;
-      return hasPermission(
-        route.requiredPermission.module,
-        route.requiredPermission.level ?? "read"
-      );
+      return hasPermission(route.requiredPermission.module, route.requiredPermission.level ?? "read");
     });
 
     return firstAllowed?.path ?? routePaths.unauthorized;

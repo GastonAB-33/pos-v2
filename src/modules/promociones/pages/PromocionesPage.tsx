@@ -4,10 +4,11 @@ import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { PromotionForm } from "@/modules/promociones/components/PromotionForm";
+import { PromotionBarcodeModal } from "@/modules/promociones/components/PromotionBarcodeModal";
 import { PromotionsTable } from "@/modules/promociones/components/PromotionsTable";
 import { PromotionsToolbar } from "@/modules/promociones/components/PromotionsToolbar";
 import { usePromotionsCrud } from "@/modules/promociones/hooks/usePromotionsCrud";
-import type { Promotion } from "@/types/entities";
+import type { PromotionWithDetails } from "@/services/promotions.service";
 import type { PromotionFormValues } from "@/modules/promociones/schemas/promotion-form.schema";
 
 export const PromocionesPage = () => {
@@ -35,7 +36,8 @@ export const PromocionesPage = () => {
 
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
-  const [selectedPromotion, setSelectedPromotion] = useState<Promotion | undefined>(undefined);
+  const [selectedPromotion, setSelectedPromotion] = useState<PromotionWithDetails | undefined>(undefined);
+  const [barcodePromotion, setBarcodePromotion] = useState<PromotionWithDetails | null>(null);
 
   const productNameById = useMemo(
     () => new Map(products.map((product) => [product.id, product.name])),
@@ -50,7 +52,7 @@ export const PromocionesPage = () => {
     setFormOpen(true);
   };
 
-  const handleEditClick = (promotion: Promotion) => {
+  const handleEditClick = (promotion: PromotionWithDetails) => {
     if (!canWritePromociones) return;
     clearFeedback();
     setFormMode("edit");
@@ -58,7 +60,7 @@ export const PromocionesPage = () => {
     setFormOpen(true);
   };
 
-  const handleDeleteClick = async (promotion: Promotion) => {
+  const handleDeleteClick = async (promotion: PromotionWithDetails) => {
     if (!canWritePromociones) return;
 
     const confirmed = window.confirm(`Eliminar promocion ${promotion.name}?`);
@@ -67,7 +69,7 @@ export const PromocionesPage = () => {
     await deletePromotion(promotion.id);
   };
 
-  const handleToggleClick = async (promotion: Promotion) => {
+  const handleToggleClick = async (promotion: PromotionWithDetails) => {
     if (!canWritePromociones) return;
     await togglePromotionActive(promotion.id);
   };
@@ -129,6 +131,7 @@ export const PromocionesPage = () => {
             onEdit={handleEditClick}
             onDelete={handleDeleteClick}
             onToggleActive={handleToggleClick}
+            onBarcode={setBarcodePromotion}
           />
         )}
 
@@ -151,6 +154,11 @@ export const PromocionesPage = () => {
             />
           </section>
         ) : null}
+
+        <PromotionBarcodeModal
+          promotion={barcodePromotion}
+          onClose={() => setBarcodePromotion(null)}
+        />
       </div>
     </PagePlaceholder>
   );

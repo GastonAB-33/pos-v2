@@ -15,6 +15,9 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
+const stockLabel = (product: Product) =>
+  `${product.stock_current.toLocaleString("es-AR")} ${product.sale_mode === "weight" ? "kg" : "u."}`;
+
 export const PurchaseProductList = ({
   products,
   search,
@@ -51,9 +54,12 @@ export const PurchaseProductList = ({
             <div>
               <p className="text-sm font-semibold text-slate-900">{product.name}</p>
               <p className="text-xs text-slate-500">{product.category}</p>
-              <p className="text-sm text-slate-700">Costo: {currency.format(product.cost_price)}</p>
+              <p className="text-sm text-slate-700">
+                Costo: {currency.format(product.cost_price)}
+                {product.sale_mode === "weight" ? " / kg" : ""}
+              </p>
               <p className="text-xs text-slate-500">
-                Stock actual: {product.stock_current.toLocaleString("es-AR")}
+                Stock actual: {stockLabel(product)}
               </p>
             </div>
             <div className="flex items-center">

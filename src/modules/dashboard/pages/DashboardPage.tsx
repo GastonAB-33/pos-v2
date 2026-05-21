@@ -84,6 +84,53 @@ export const DashboardPage = () => {
           </article>
         </section>
 
+        <section className="ui-card space-y-3">
+          <header className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Caja real</h2>
+              <p className="text-sm text-slate-500">
+                Movimientos registrados desde ventas, cuenta corriente e ingresos/egresos manuales.
+              </p>
+            </div>
+            <span className="ui-badge ui-badge--info">
+              Cajas abiertas: {number.format(data.kpis.openCashSessions)}
+            </span>
+          </header>
+
+          <div className="grid gap-3 md:grid-cols-5">
+            <article className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="ui-summary-label">Ingresos hoy</p>
+              <p className="mt-2 font-kpi text-lg font-semibold text-emerald-700">
+                {currency.format(data.kpis.cashIncomeToday)}
+              </p>
+            </article>
+            <article className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="ui-summary-label">Egresos hoy</p>
+              <p className="mt-2 font-kpi text-lg font-semibold text-red-700">
+                {currency.format(data.kpis.cashExpenseToday)}
+              </p>
+            </article>
+            <article className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="ui-summary-label">Neto hoy</p>
+              <p className="mt-2 font-kpi text-lg font-semibold text-slate-900">
+                {currency.format(data.kpis.cashNetToday)}
+              </p>
+            </article>
+            <article className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="ui-summary-label">Ingresos mes</p>
+              <p className="mt-2 font-kpi text-lg font-semibold text-slate-900">
+                {currency.format(data.kpis.cashIncomeMonth)}
+              </p>
+            </article>
+            <article className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="ui-summary-label">Manual hoy</p>
+              <p className="mt-2 font-kpi text-lg font-semibold text-slate-900">
+                {number.format(data.kpis.manualCashMovementsToday)}
+              </p>
+            </article>
+          </div>
+        </section>
+
         {isLoading ? <LoadingState message="Cargando estadisticas..." /> : null}
 
         {!isLoading ? (
@@ -107,6 +154,35 @@ export const DashboardPage = () => {
                         <span className="text-[11px] text-slate-500">{formatCompact(point.value)}</span>
                         <div className="w-full rounded-md bg-brand-600/80" style={{ height: `${height}%` }} />
                         <span className="text-[11px] font-mono text-slate-500">{point.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </article>
+
+            <article className="ui-card">
+              <header className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-semibold uppercase tracking-[0.1em] text-slate-500">
+                  Caja por origen (mes)
+                </h2>
+              </header>
+              {!data.cashMovementsBySource.length ? (
+                <EmptyState message="Sin movimientos de caja registrados en el mes." />
+              ) : (
+                <div className="space-y-2">
+                  {data.cashMovementsBySource.map((row) => {
+                    const max = Math.max(...data.cashMovementsBySource.map((item) => item.value), 1);
+                    const width = Math.max(4, (row.value / max) * 100);
+                    return (
+                      <div key={row.label}>
+                        <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+                          <span className="truncate text-slate-600">{row.label}</span>
+                          <span className="font-mono text-slate-700">{currency.format(row.value)}</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-slate-200">
+                          <div className="h-2 rounded-full bg-sky-500" style={{ width: `${width}%` }} />
+                        </div>
                       </div>
                     );
                   })}

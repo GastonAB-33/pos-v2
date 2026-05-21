@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { routePaths } from "@/config/routes";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
+import { useAuthStore } from "@/features/auth/store/auth.store";
+import { isSupportOperator } from "@/features/support/support-operator";
 import type { AppModule } from "@/types/modules";
 import { cn } from "@/utils/cn";
 
@@ -34,6 +36,7 @@ const sidebarGroups: SidebarGroup[] = [
     items: [
       { label: "Clientes", to: routePaths.clientes, module: "clientes" },
       { label: "Proveedores", to: routePaths.proveedores, module: "proveedores" },
+      { label: "Configuracion", to: routePaths.configuracionAgenda, module: "configuracion_agenda" },
     ],
   },
   {
@@ -46,7 +49,8 @@ const sidebarGroups: SidebarGroup[] = [
       { label: "Stock", to: routePaths.stock, module: "stock" },
       { label: "Listas de precios", to: routePaths.listasPrecios, module: "listas_precios" },
       { label: "Promociones", to: routePaths.promociones, module: "promociones" },
-      { label: "Compras", to: routePaths.compras, module: "compras" },
+      { label: "Compras a proveedores", to: routePaths.compras, module: "compras" },
+      { label: "Configuracion", to: routePaths.configuracionCatalogo, module: "configuracion_catalogo" },
     ],
   },
   {
@@ -60,6 +64,7 @@ const sidebarGroups: SidebarGroup[] = [
       { label: "Comprobantes", to: routePaths.comprobantes, module: "comprobantes" },
       { label: "Medios de pago", to: routePaths.mediosPago, module: "medios_pago" },
       { label: "Facturacion", to: routePaths.facturacion, module: "facturacion" },
+      { label: "Configuracion", to: routePaths.configuracionContable, module: "configuracion_contable" },
     ],
   },
   {
@@ -71,6 +76,7 @@ const sidebarGroups: SidebarGroup[] = [
       { label: "Estadisticas", to: routePaths.dashboard, module: "dashboard" },
       { label: "Reportes", to: routePaths.reportes, module: "reportes" },
       { label: "Auditoria", to: routePaths.auditoria, module: "auditoria" },
+      { label: "Configuracion", to: routePaths.configuracionAnalisis, module: "configuracion_analisis" },
     ],
   },
   {
@@ -80,17 +86,22 @@ const sidebarGroups: SidebarGroup[] = [
     defaultExpanded: true,
     items: [
       { label: "Usuarios", to: routePaths.usuarios, module: "usuarios" },
-      { label: "Configuracion", to: routePaths.configuracion, module: "configuracion" },
+      { label: "Centro soporte", to: routePaths.centroSoporte, module: "configuracion_sistema" },
+      { label: "Mis consultas", to: routePaths.misConsultas, module: "configuracion_sistema" },
+      { label: "Configuracion", to: routePaths.configuracionSistema, module: "configuracion_sistema" },
     ],
   },
 ];
 
 export const Sidebar = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
   const { canRead } = usePermissions();
+  const supportOperator = isSupportOperator(user);
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(sidebarGroups.map((group) => [group.id, group.defaultExpanded]))
+    Object.fromEntries(sidebarGroups.map((group) => [group.id, false]))
   );
 
   const openPosInNewTab = () => {
@@ -137,20 +148,30 @@ export const Sidebar = () => {
       sidebarGroups
         .map((group) => ({
           ...group,
-          items: group.items.filter((item) => canRead(item.module)),
+          items: group.items.filter((item) => {
+            const isSupportCenterItem = item.to === routePaths.centroSoporte;
+            if (isSupportCenterItem && !supportOperator) return false;
+            return canRead(item.module);
+          }),
         }))
         .filter((group) => group.items.length > 0),
-    [canRead]
+    [canRead, supportOperator]
   );
 
   const canReadPos = canRead(quickAccessItem.module);
 
   return (
     <aside className="app-sidebar">
-      <div className="border-b border-slate-200 px-5 py-4">
+      <button
+        type="button"
+        className="w-full border-b border-slate-200 px-5 py-4 text-left transition hover:bg-slate-50"
+        onClick={() => {
+          navigate(routePaths.menuPrincipal);
+        }}
+      >
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">POS V2</p>
         <p className="mt-1 text-lg font-semibold text-slate-900">Panel Operativo</p>
-      </div>
+      </button>
 
       <nav className="space-y-5 p-3">
         {canReadPos ? (
@@ -185,7 +206,7 @@ export const Sidebar = () => {
                 onClick={() => {
                   if (!group.collapsible) return;
                   setExpandedGroups((previous) => ({
-                    ...previous,
+                    ...Object.fromEntries(sidebarGroups.map((entry) => [entry.id, false])),
                     [group.id]: !previous[group.id],
                   }));
                 }}
@@ -203,8 +224,15 @@ export const Sidebar = () => {
                 </span>
               </button>
 
-              {isExpanded ? (
-                <div className="space-y-1 pl-2">
+              <div
+                className={cn(
+                  "overflow-hidden transition-[max-height,opacity,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[max-height,opacity,transform]",
+                  isExpanded
+                    ? "max-h-[520px] translate-y-0 opacity-100"
+                    : "max-h-0 -translate-y-1 opacity-0"
+                )}
+              >
+                <div className="space-y-1 pl-2 pt-1">
                   {group.items.map((item) => (
                     <NavLink
                       key={item.to}
@@ -222,7 +250,7 @@ export const Sidebar = () => {
                     </NavLink>
                   ))}
                 </div>
-              ) : null}
+              </div>
             </section>
           );
         })}

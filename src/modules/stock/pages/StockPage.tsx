@@ -1,11 +1,65 @@
+﻿import { useRef, useState } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
-import { StockAdjustmentForm } from "@/modules/stock/components/StockAdjustmentForm";
+import { StockAdjustmentModal } from "@/modules/stock/components/StockAdjustmentModal";
 import { StockMovementsTable } from "@/modules/stock/components/StockMovementsTable";
+import { StockTrackingTable } from "@/modules/stock/components/StockTrackingTable";
 import { StockSummaryCards } from "@/modules/stock/components/StockSummaryCards";
 import { useStockModule } from "@/modules/stock/hooks/useStockModule";
+import { movementTypeLabel } from "@/modules/stock/utils/stock-labels";
+import { downloadXlsx } from "@/utils/xlsx";
+import type { StockMovement } from "@/types/entities";
+
+interface DateFilterInputProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+const DateFilterInput = ({ label, value, onChange }: DateFilterInputProps) => {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const openPicker = () => {
+    const input = inputRef.current;
+    if (!input) return;
+
+    const pickerInput = input as HTMLInputElement & { showPicker?: () => void };
+    if (typeof pickerInput.showPicker === "function") {
+      pickerInput.showPicker();
+      return;
+    }
+
+    input.focus();
+    input.click();
+  };
+
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-slate-600">{label}</label>
+      <input
+        ref={inputRef}
+        type="date"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onClick={openPicker}
+        className="ui-input ui-input--date cursor-pointer"
+      />
+    </div>
+  );
+};
+
+const movementTypeOptions: Array<{ value: "all" | StockMovement["movement_type"]; label: string }> = [
+  { value: "all", label: "Todos los tipos" },
+  { value: "sale", label: movementTypeLabel.sale },
+  { value: "purchase", label: movementTypeLabel.purchase },
+  { value: "adjustment", label: movementTypeLabel.adjustment },
+  { value: "in", label: movementTypeLabel.in },
+  { value: "out", label: movementTypeLabel.out },
+];
+
+const formatCsvDateStamp = (): string => new Date().toISOString().slice(0, 10);
 
 export const StockPage = () => {
   const { tenantId } = useTenant();
@@ -13,14 +67,15 @@ export const StockPage = () => {
   const { canRead, canWrite } = usePermissions();
   const canReadStock = canRead("stock");
   const canWriteStock = canWrite("stock");
+  const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
 
   const {
     products,
     stockSettings,
     productsById,
-    alertRows,
     movementRows,
     summary,
+    categoryOptions,
     movementTypeFilter,
     setMovementTypeFilter,
     dateFrom,
@@ -32,13 +87,35 @@ export const StockPage = () => {
     feedback,
     clearFeedback,
     reload,
-    applyManualAdjustment,
+    applyManualAdjustmentsBulk,
+    updateStockThreshold,
+    updateStockThresholdBulk,
   } = useStockModule(tenantId, user?.id ?? null);
 
   const movementViewRows = movementRows.map((movement) => ({
     movement,
     product: productsById.get(movement.product_id) ?? null,
   }));
+
+  const handleDownloadMovementHistory = async () => {
+    const reportRows = movementViewRows.map(({ movement, product }) => ({
+      fecha: new Date(movement.created_at).toLocaleString("es-AR"),
+      producto: product?.name ?? "Producto eliminado",
+      codigo: product?.code ?? "",
+      tipo_movimiento: movementTypeLabel[movement.movement_type] ?? movement.movement_type,
+      cantidad: Number(movement.quantity.toFixed(3)),
+      tipo_referencia: movement.reference_type,
+      referencia: movement.reference_id ?? "",
+      usuario: movement.created_by ?? "",
+      observacion: movement.notes ?? "",
+    }));
+
+    void downloadXlsx(
+      `historial-stock-${formatCsvDateStamp()}.xlsx`,
+      "Historial stock",
+      reportRows
+    );
+  };
 
   if (!tenantId) {
     return (
@@ -59,128 +136,90 @@ export const StockPage = () => {
   }
 
   return (
-    <PagePlaceholder title="Stock" description="Movimientos reales y ajustes manuales">
-      <div className="space-y-4">
+    <PagePlaceholder title="Stock">
+      <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-slate-600">
-            Movimientos: {movementRows.length} | Productos activos: {summary.activeProducts}
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              clearFeedback();
-              void reload();
-            }}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            disabled={isLoading || isSubmitting}
-          >
-            Recargar
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <StockSummaryCards
+              activeProducts={summary.activeProducts}
+              lowStock={summary.lowStock}
+              noStock={summary.noStock}
+              overMax={summary.overMax}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            {canWriteStock && stockSettings.allow_manual_adjustments ? (
+              <button
+                type="button"
+                onClick={() => {
+                  clearFeedback();
+                  setIsAdjustmentModalOpen(true);
+                }}
+                className="ui-btn-primary"
+                disabled={isLoading || isSubmitting}
+              >
+                Ajustar stock
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                clearFeedback();
+                void reload();
+              }}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              disabled={isLoading || isSubmitting}
+            >
+              Recargar
+            </button>
+          </div>
         </div>
 
-        <p className="text-xs text-slate-500">
-          Politica: {stockSettings.alerts_active ? "alertas activas" : "alertas desactivadas"} |{" "}
-          {stockSettings.allow_negative_stock ? "stock negativo permitido" : "stock negativo bloqueado"} |{" "}
-          {stockSettings.allow_manual_adjustments ? "ajustes manuales habilitados" : "ajustes manuales deshabilitados"}
-        </p>
+        {feedback ? <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>{feedback.message}</div> : null}
 
-        <StockSummaryCards
-          activeProducts={summary.activeProducts}
-          lowStock={summary.lowStock}
-          noStock={summary.noStock}
-          overMax={summary.overMax}
+        <StockTrackingTable
+          products={products}
+          categories={categoryOptions}
+          disabled={isSubmitting || !canWriteStock}
+          onUpdateOne={updateStockThreshold}
+          onUpdateBulk={updateStockThresholdBulk}
         />
 
-        {feedback ? (
-          <div
-            className={[
-              "rounded-lg border px-3 py-2 text-sm",
-              feedback.type === "success"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-red-200 bg-red-50 text-red-700",
-            ].join(" ")}
-          >
-            {feedback.message}
-          </div>
-        ) : null}
-
-        {canWriteStock && stockSettings.allow_manual_adjustments ? (
-          <StockAdjustmentForm
-            products={products}
-            canWrite={canWriteStock}
-            disabled={isSubmitting}
-            onSubmit={applyManualAdjustment}
-          />
-        ) : null}
-
-        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
-          <h2 className="text-base font-semibold text-slate-900">Alertas de stock</h2>
-          {!alertRows.length ? (
-            <p className="text-sm text-slate-500">No hay alertas activas.</p>
-          ) : (
-            <div className="space-y-2">
-              {alertRows.map(({ product, isNoStock, isLow, isOver }) => (
-                <article
-                  key={product.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">{product.name}</p>
-                    <p className="text-xs text-slate-500">
-                      Stock actual: {product.stock_current.toLocaleString("es-AR")}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {isNoStock ? (
-                      <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-medium text-red-700">
-                        Sin stock
-                      </span>
-                    ) : null}
-                    {isLow ? (
-                      <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700">
-                        Bajo minimo
-                      </span>
-                    ) : null}
-                    {isOver ? (
-                      <span className="rounded-full bg-sky-100 px-2 py-1 text-xs font-medium text-sky-700">
-                        Sobre maximo
-                      </span>
-                    ) : null}
-                  </div>
-                </article>
-              ))}
+        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-panel">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Historial</h2>
+              <p className="text-xs text-slate-500">{movementRows.length} movimientos</p>
             </div>
-          )}
-        </section>
+            <div className="grid flex-1 gap-2 md:max-w-2xl md:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Tipo</label>
+                <select
+                  value={movementTypeFilter}
+                  onChange={(event) =>
+                    setMovementTypeFilter(event.target.value as typeof movementTypeFilter)
+                  }
+                  className="ui-input"
+                >
+                  {movementTypeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <DateFilterInput label="Desde" value={dateFrom} onChange={setDateFrom} />
+              <DateFilterInput label="Hasta" value={dateTo} onChange={setDateTo} />
+            </div>
 
-        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
-          <div className="grid gap-3 md:grid-cols-3">
-            <select
-              value={movementTypeFilter}
-              onChange={(event) =>
-                setMovementTypeFilter(event.target.value as typeof movementTypeFilter)
-              }
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            <button
+              type="button"
+              className="ui-btn-ghost px-3 py-2 text-sm"
+              onClick={handleDownloadMovementHistory}
+              disabled={!movementViewRows.length}
             >
-              <option value="all">Todos los tipos</option>
-              <option value="sale">Sale</option>
-              <option value="purchase">Purchase</option>
-              <option value="adjustment">Adjustment</option>
-              <option value="in">In</option>
-              <option value="out">Out</option>
-            </select>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(event) => setDateFrom(event.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(event) => setDateTo(event.target.value)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
+              Descargar historial
+            </button>
           </div>
 
           {isLoading ? (
@@ -192,6 +231,15 @@ export const StockPage = () => {
           )}
         </section>
       </div>
+
+      <StockAdjustmentModal
+        open={isAdjustmentModalOpen}
+        products={products}
+        canWrite={canWriteStock}
+        disabled={isSubmitting}
+        onClose={() => setIsAdjustmentModalOpen(false)}
+        onSubmit={applyManualAdjustmentsBulk}
+      />
     </PagePlaceholder>
   );
 };

@@ -17,10 +17,10 @@ const ToastItem = ({ toast, onClose }: ToastItemProps) => {
 
   const variantClass =
     toast.type === "success"
-      ? "border-emerald-300/60 bg-emerald-500/10 text-emerald-200"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
       : toast.type === "error"
-        ? "border-red-300/60 bg-red-500/10 text-red-200"
-        : "border-brand-300/60 bg-brand-500/10 text-brand-100";
+        ? "border-red-200 bg-red-50 text-red-700"
+        : "border-sky-200 bg-sky-50 text-sky-700";
 
   return (
     <article className={`pointer-events-auto w-full rounded-xl border px-3 py-2 shadow-panel ${variantClass}`}>
