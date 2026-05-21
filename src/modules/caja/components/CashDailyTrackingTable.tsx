@@ -23,15 +23,27 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
   const columns = [
     columnHelper.accessor("date", {
       header: "Fecha",
-      cell: (info) => new Date(`${info.getValue()}T00:00:00`).toLocaleDateString("es-AR"),
+      cell: (info) => (
+        <span className="whitespace-nowrap font-medium text-slate-900">
+          {new Date(`${info.getValue()}T00:00:00`).toLocaleDateString("es-AR")}
+        </span>
+      ),
     }),
     columnHelper.accessor("sessionsCount", {
-      header: "Cajas",
-      cell: (info) => info.getValue(),
-    }),
-    columnHelper.accessor("openSessionsCount", {
-      header: "Abiertas",
-      cell: (info) => info.getValue(),
+      header: "Estado",
+      cell: (info) => {
+        const row = info.row.original;
+        return (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="ui-badge ui-badge--info">{info.getValue()} caja(s)</span>
+            {row.openSessionsCount ? (
+              <span className="ui-badge ui-badge--success">{row.openSessionsCount} abierta(s)</span>
+            ) : (
+              <span className="ui-badge">cerrada</span>
+            )}
+          </div>
+        );
+      },
     }),
     columnHelper.accessor("openingAmount", {
       header: "Apertura",
@@ -46,19 +58,37 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
       cell: (info) => currency.format(info.getValue()),
     }),
     columnHelper.accessor("realClosingAmount", {
-      header: "Cierre real",
-      cell: (info) => currency.format(info.getValue()),
+      header: "Cierre",
+      cell: (info) => {
+        const row = info.row.original;
+        if (row.openSessionsCount && !info.getValue()) return <span className="text-slate-500">Pendiente</span>;
+        return currency.format(info.getValue());
+      },
     }),
     columnHelper.accessor("differenceAmount", {
       header: "Diferencia",
-      cell: (info) => currency.format(info.getValue()),
+      cell: (info) => {
+        const value = info.getValue();
+        const className =
+          value === 0
+            ? "font-kpi text-slate-700"
+            : value > 0
+              ? "font-kpi text-emerald-700"
+              : "font-kpi text-red-700";
+        return <span className={className}>{currency.format(value)}</span>;
+      },
     }),
     columnHelper.display({
       id: "movements",
       header: "Movimientos",
       cell: (info) => {
         const row = info.row.original;
-        return `Venta: ${row.saleMovementsCount} | Manuales: ${row.manualMovementsCount}`;
+        return (
+          <div className="flex flex-wrap gap-1.5">
+            <span className="ui-badge ui-badge--info">Ventas {row.saleMovementsCount}</span>
+            <span className="ui-badge">Manual {row.manualMovementsCount}</span>
+          </div>
+        );
       },
     }),
     columnHelper.display({

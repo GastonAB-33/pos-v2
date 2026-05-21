@@ -111,6 +111,7 @@ export const PosPage = () => {
     bankAccounts,
     originBanks,
     installmentPlans,
+    posSettings,
     mercadoPagoSettings,
     mercadoPagoStatus,
     selectedCustomerId,
@@ -150,12 +151,14 @@ export const PosPage = () => {
   } = usePosSale(tenantId);
 
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState("");
+  const [visibleBarcodeValue, setVisibleBarcodeValue] = useState("");
   const [rightPanelTab, setRightPanelTab] = useState<"cart" | "receipts">("cart");
   const [recentReceipts, setRecentReceipts] = useState<PosRecentReceiptItem[]>([]);
   const [isLoadingReceipts, setIsLoadingReceipts] = useState(false);
   const [receiptModal, setReceiptModal] = useState<PosReceiptModalState | null>(null);
   const [printMenuReceiptId, setPrintMenuReceiptId] = useState<string | null>(null);
   const [customerModalState, setCustomerModalState] = useState<PosCustomerModalState | null>(null);
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   const [isCustomerModalSubmitting, setIsCustomerModalSubmitting] = useState(false);
   const [clientLogoUrl, setClientLogoUrl] = useState<string | null>(null);
@@ -172,6 +175,7 @@ export const PosPage = () => {
   const [hasLoadedCashDefaults, setHasLoadedCashDefaults] = useState(false);
   const [cashGateFeedback, setCashGateFeedback] = useState<string | null>(null);
   const scannerCaptureRef = useRef<HTMLInputElement | null>(null);
+  const cartPanelId = "pos-cart-panel";
   const checkoutPanelId = "pos-checkout-panel";
   const checkoutFormId = "pos-checkout-form";
   const isCashGateResolving =
@@ -192,9 +196,17 @@ export const PosPage = () => {
         return current;
       }
 
+      const defaultPaymentMethodId = posSettings.default_payment_method_id;
+      if (
+        defaultPaymentMethodId &&
+        paymentMethods.some((method) => method.id === defaultPaymentMethodId)
+      ) {
+        return defaultPaymentMethodId;
+      }
+
       return paymentMethods[0].id;
     });
-  }, [paymentMethods]);
+  }, [paymentMethods, posSettings.default_payment_method_id]);
 
   useEffect(() => {
     const selectedMethod =
@@ -212,16 +224,18 @@ export const PosPage = () => {
   const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
     if (!tenantId || !selectedCustomer) return null;
 
-    const profile = posCustomerProfilesService.getProfile(tenantId, selectedCustomer.id);
+    const legacyProfile = posCustomerProfilesService.getProfile(tenantId, selectedCustomer.id);
+    const enabled = selectedCustomer.current_account_enabled ?? legacyProfile.enabled;
+    const limit = selectedCustomer.current_account_limit ?? legacyProfile.limit;
     const debt = Number((selectedCustomer.current_balance ?? 0).toFixed(2));
     const available =
-      profile.enabled && profile.limit != null
-        ? Number((profile.limit - debt).toFixed(2))
+      enabled && limit != null
+        ? Number((limit - debt).toFixed(2))
         : null;
 
     return {
-      enabled: profile.enabled,
-      limit: profile.limit,
+      enabled,
+      limit,
       debt,
       available,
     };
@@ -466,6 +480,7 @@ export const PosPage = () => {
       }
       clearFeedback();
       await confirmSale(values, resolvedOperatorUserId, { openCashSessionId });
+      setIsCheckoutModalOpen(false);
     },
     [
       canWritePos,
@@ -549,14 +564,24 @@ export const PosPage = () => {
   }, []);
 
   const handleBarcodeScan = useCallback(
-    async (barcode: string) => {
-      if (!canWritePos || isSubmitting || isCashGateBlocking) return;
+    async (barcode: string): Promise<boolean> => {
+      if (!canWritePos || isSubmitting || isCashGateBlocking) return false;
 
       try {
         const result = await addProductByBarcode(barcode);
-        if (!result.ok || !result.product) {
+        if (!result.ok || (!result.product && !result.promotion)) {
           toastError(result.error ?? `No se encontro producto para ${barcode}`);
-          return;
+          return false;
+        }
+
+        if (result.promotion) {
+          toastSuccess(`Promo: ${result.promotion.name}`);
+          return true;
+        }
+        const scannedProduct = result.product;
+        if (!scannedProduct) {
+          toastError(result.error ?? `No se encontro producto para ${barcode}`);
+          return false;
         }
 
         const isScaleScan = Boolean(result.parsedScale);
@@ -569,13 +594,14 @@ export const PosPage = () => {
 
         if (isScaleScan) {
           toastSuccess(
-            `Balanza: ${result.product.name}${scaleSuffix}${
+            `Balanza: ${scannedProduct.name}${scaleSuffix}${
               result.parsedScale?.productCode ? ` | PLU ${result.parsedScale.productCode}` : ""
             }`
           );
         } else {
-          toastSuccess(`Escaneado: ${result.product.name}`);
+          toastSuccess(`Escaneado: ${scannedProduct.name}`);
         }
+        return true;
       } finally {
         window.setTimeout(() => {
           focusScannerCapture();
@@ -599,6 +625,17 @@ export const PosPage = () => {
     },
     [handleBarcodeScan]
   );
+
+  const handleVisibleBarcodeSubmit = useCallback(() => {
+    const barcode = visibleBarcodeValue.trim();
+    if (!barcode) return;
+
+    void handleBarcodeScan(barcode).then((ok) => {
+      if (ok) {
+        setVisibleBarcodeValue("");
+      }
+    });
+  }, [handleBarcodeScan, visibleBarcodeValue]);
 
   useBarcodeScanner({
     enabled: Boolean(
@@ -695,6 +732,8 @@ export const PosPage = () => {
         customer && tenantId
           ? posCustomerProfilesService.getProfile(tenantId, customer.id)
           : { enabled: false, limit: null };
+      const accountEnabled = customer?.current_account_enabled ?? profile.enabled;
+      const accountLimit = customer?.current_account_limit ?? profile.limit;
       const names = splitCustomerName(customer?.full_name ?? "");
 
       return {
@@ -709,9 +748,9 @@ export const PosPage = () => {
         fiscalAddress: customer?.fiscal_address ?? "",
         fiscalCondition: customer?.fiscal_condition ?? "",
         fiscalCuit: customer?.document_type === "cuit" ? customer.document_number : "",
-        currentAccountEnabled: profile.enabled,
+        currentAccountEnabled: accountEnabled,
         currentAccountLimit:
-          profile.limit != null && Number.isFinite(profile.limit) ? profile.limit.toString() : "",
+          accountLimit != null && Number.isFinite(accountLimit) ? accountLimit.toString() : "",
       };
     },
     [tenantId]
@@ -789,6 +828,8 @@ export const PosPage = () => {
             address: normalizeOptional(values.address),
             observations: null,
             current_balance: 0,
+            current_account_enabled: values.currentAccountEnabled,
+            current_account_limit: currentAccountLimit,
             is_active: true,
           });
 
@@ -836,6 +877,8 @@ export const PosPage = () => {
           address: normalizeOptional(values.address),
           observations: existing.observations,
           current_balance: existing.current_balance,
+          current_account_enabled: values.currentAccountEnabled,
+          current_account_limit: currentAccountLimit,
           is_active: existing.is_active,
         });
 
@@ -925,6 +968,11 @@ export const PosPage = () => {
   }, [receiptModal]);
 
   useEffect(() => {
+    if (!isCheckoutModalOpen || cart.length) return;
+    setIsCheckoutModalOpen(false);
+  }, [cart.length, isCheckoutModalOpen]);
+
+  useEffect(() => {
     if (!receiptModal && !printMenuReceiptId) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -941,6 +989,58 @@ export const PosPage = () => {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [closeReceiptModal, printMenuReceiptId, receiptModal]);
+
+  useEffect(() => {
+    if (!isCheckoutModalOpen) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsCheckoutModalOpen(false);
+        window.setTimeout(() => {
+          focusScannerCapture();
+        }, 0);
+        return;
+      }
+
+      if (event.key !== "Enter") return;
+      if (event.defaultPrevented) return;
+      if (!cart.length || !paymentMethods.length) return;
+      if (!canWritePos || isLoading || isSubmitting || isCashGateBlocking) return;
+
+      const activeElement = document.activeElement;
+      const isEditableElement =
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement instanceof HTMLSelectElement ||
+        Boolean((activeElement as HTMLElement | null)?.isContentEditable);
+      const scannerCaptureActive = Boolean(
+        activeElement instanceof HTMLElement &&
+          activeElement.closest("[data-scanner-capture='true']")
+      );
+
+      if (isEditableElement && !scannerCaptureActive) return;
+
+      const form = document.getElementById(checkoutFormId);
+      if (!(form instanceof HTMLFormElement)) return;
+
+      event.preventDefault();
+      form.requestSubmit();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [
+    canWritePos,
+    cart.length,
+    focusScannerCapture,
+    isCashGateBlocking,
+    isCheckoutModalOpen,
+    isLoading,
+    isSubmitting,
+    paymentMethods.length,
+  ]);
 
   useEffect(() => {
     if (!printMenuReceiptId) return;
@@ -962,7 +1062,7 @@ export const PosPage = () => {
     const handleCheckoutEnter = (event: KeyboardEvent) => {
       if (event.key !== "Enter") return;
       if (event.defaultPrevented) return;
-      if (customerModalState || receiptModal) return;
+      if (customerModalState || receiptModal || isCheckoutModalOpen) return;
       if (rightPanelTab !== "cart") return;
       if (!canWritePos || isLoading || isSubmitting) return;
       if (isCashGateBlocking) return;
@@ -982,13 +1082,8 @@ export const PosPage = () => {
 
       if (isEditableElement && !scannerCaptureActive) return;
 
-      const checkoutForm = document.getElementById(checkoutFormId);
-      if (!(checkoutForm instanceof HTMLFormElement)) return;
-      const submitButton = checkoutForm.querySelector("button[type='submit']");
-      if (submitButton instanceof HTMLButtonElement && submitButton.disabled) return;
-
       event.preventDefault();
-      checkoutForm.requestSubmit();
+      setIsCheckoutModalOpen(true);
     };
 
     window.addEventListener("keydown", handleCheckoutEnter);
@@ -1001,6 +1096,7 @@ export const PosPage = () => {
     customerModalState,
     isCashGateBlocking,
     isLoading,
+    isCheckoutModalOpen,
     isSubmitting,
     paymentMethods.length,
     receiptModal,
@@ -1265,7 +1361,7 @@ export const PosPage = () => {
               products={products}
               favoriteProducts={favoriteProducts}
               primaryBarcodes={primaryBarcodes}
-              checkoutAnchorId={checkoutPanelId}
+              checkoutAnchorId={cartPanelId}
               onOpenCheckout={() => setRightPanelTab("cart")}
               canWrite={canWritePos}
               disabled={isSubmitting || isCashGateBlocking}
@@ -1310,68 +1406,26 @@ export const PosPage = () => {
               {rightPanelTab === "cart" ? (
                 <>
                   <PosCart
+                    id={cartPanelId}
                     items={cart}
+                    barcodeValue={visibleBarcodeValue}
                     subtotalBeforePromotions={subtotalBeforePromotions}
                     promotionDiscountTotal={promotionDiscountTotal}
                     cartPromotionDiscountTotal={cartPromotionDiscountTotal}
                     subtotal={checkoutSummary.subtotal}
-                    surchargeTotal={checkoutSummary.surchargeTotal}
-                    paymentDiscountTotal={checkoutSummary.discountTotal}
-                    paymentAdjustment={checkoutSummary.paymentAdjustment}
-                    total={checkoutSummary.total}
+                    surchargeTotal={0}
+                    paymentDiscountTotal={0}
+                    paymentAdjustment={0}
+                    total={checkoutSummary.subtotal}
                     canWrite={canWritePos}
                     disabled={isSubmitting || isCashGateBlocking}
+                    onBarcodeChange={setVisibleBarcodeValue}
+                    onBarcodeSubmit={handleVisibleBarcodeSubmit}
                     onIncrease={increaseQuantity}
                     onDecrease={decreaseQuantity}
                     onSetQuantity={setCartItemQuantity}
                     onRemove={removeFromCart}
-                  />
-
-                  <PosCheckoutPanel
-                    panelId={checkoutPanelId}
-                    formId={checkoutFormId}
-                    customers={customers}
-                    paymentMethods={paymentMethods}
-                    bankAccounts={bankAccounts}
-                    originBanks={originBanks}
-                    installmentPlans={installmentPlans}
-                    selectedCustomerId={selectedCustomerId}
-                    selectedPaymentMethodId={selectedPaymentMethodId}
-                    isOnline={isOnline}
-                    checkoutTotal={checkoutSummary.total}
-                    mercadoPagoIntent={mercadoPagoIntent}
-                    mercadoPagoSettings={mercadoPagoSettings}
-                    mercadoPagoStatus={mercadoPagoStatus}
-                    isMercadoPagoLoading={isMercadoPagoLoading}
-                    canWrite={canWritePos}
-                    canManageCustomers={canWriteCustomers}
-                    currentAccountSnapshot={currentAccountSnapshot}
-                    disabled={isSubmitting || isCashGateBlocking}
-                    onCustomerChange={setSelectedCustomer}
-                    onPaymentMethodChange={setSelectedPaymentMethodId}
-                    onCreateOriginBank={handleCreateOriginBank}
-                    onOpenCustomerModal={openCustomerModal}
-                    onStartMercadoPago={() => {
-                      void startMercadoPagoPayment({
-                        paymentMethodId: selectedPaymentMethodId,
-                        amount: checkoutSummary.total,
-                        currencyCode: "ARS",
-                        customerId: selectedCustomerId || null,
-                      });
-                    }}
-                    onRefreshMercadoPago={() => {
-                      void refreshMercadoPagoPayment();
-                    }}
-                    onApproveMercadoPago={() => {
-                      void approveMercadoPagoPayment();
-                    }}
-                    onRejectMercadoPago={() => {
-                      void rejectMercadoPagoPayment();
-                    }}
-                    onCancelMercadoPago={() => {
-                      void cancelMercadoPagoPayment();
-                    }}
-                    onSubmit={handleConfirmSale}
+                    onCheckout={() => setIsCheckoutModalOpen(true)}
                   />
                 </>
               ) : (
@@ -1494,18 +1548,19 @@ export const PosPage = () => {
           <div>
             <p className="text-xs uppercase tracking-[0.12em] text-slate-500">Carrito</p>
             <p className="text-sm font-semibold text-slate-900">
-              {cart.length} items | {currency.format(checkoutSummary.total)}
+              {cart.length} items | {currency.format(checkoutSummary.subtotal)}
             </p>
           </div>
-          <a
-            href={`#${checkoutPanelId}`}
+          <button
+            type="button"
             className="ui-btn-primary whitespace-nowrap"
             onClick={() => {
               setRightPanelTab("cart");
+              setIsCheckoutModalOpen(true);
             }}
           >
-            Ir a cobrar
-          </a>
+            Confirmar venta
+          </button>
         </div>
       ) : null}
 
@@ -1533,6 +1588,79 @@ export const PosPage = () => {
             {hasResolvedCashGate && !isResolvingOperatorUser && !isCheckingCashSession && cashGateFeedback ? (
               <div className="ui-error-state">{cashGateFeedback}</div>
             ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {isCheckoutModalOpen ? (
+        <section className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-3 sm:p-4">
+          <button
+            type="button"
+            aria-label="Cerrar confirmacion de venta"
+            className="absolute inset-0"
+            onClick={() => {
+              setIsCheckoutModalOpen(false);
+              window.setTimeout(() => {
+                focusScannerCapture();
+              }, 0);
+            }}
+          />
+          <div className="relative z-10 w-full max-w-4xl rounded-2xl bg-white p-4 shadow-panel">
+            <div className="max-h-[88vh] overflow-auto pr-1">
+              <PosCheckoutPanel
+                panelId={checkoutPanelId}
+                formId={checkoutFormId}
+                layout="modal"
+                customers={customers}
+                paymentMethods={paymentMethods}
+                bankAccounts={bankAccounts}
+                originBanks={originBanks}
+                installmentPlans={installmentPlans}
+                selectedCustomerId={selectedCustomerId}
+                selectedPaymentMethodId={selectedPaymentMethodId}
+                isOnline={isOnline}
+                checkoutTotal={checkoutSummary.total}
+                mercadoPagoIntent={mercadoPagoIntent}
+                mercadoPagoSettings={mercadoPagoSettings}
+                mercadoPagoStatus={mercadoPagoStatus}
+                isMercadoPagoLoading={isMercadoPagoLoading}
+                canWrite={canWritePos}
+                canManageCustomers={canWriteCustomers}
+                currentAccountSnapshot={currentAccountSnapshot}
+                disabled={isSubmitting || isCashGateBlocking}
+                onCustomerChange={setSelectedCustomer}
+                onPaymentMethodChange={setSelectedPaymentMethodId}
+                onCreateOriginBank={handleCreateOriginBank}
+                onOpenCustomerModal={openCustomerModal}
+                onStartMercadoPago={() => {
+                  void startMercadoPagoPayment({
+                    paymentMethodId: selectedPaymentMethodId,
+                    amount: checkoutSummary.total,
+                    currencyCode: "ARS",
+                    customerId: selectedCustomerId || null,
+                  });
+                }}
+                onRefreshMercadoPago={() => {
+                  void refreshMercadoPagoPayment();
+                }}
+                onApproveMercadoPago={() => {
+                  void approveMercadoPagoPayment();
+                }}
+                onRejectMercadoPago={() => {
+                  void rejectMercadoPagoPayment();
+                }}
+                onCancelMercadoPago={() => {
+                  void cancelMercadoPagoPayment();
+                }}
+                onClose={() => {
+                  setIsCheckoutModalOpen(false);
+                  window.setTimeout(() => {
+                    focusScannerCapture();
+                  }, 0);
+                }}
+                onSubmit={handleConfirmSale}
+              />
+            </div>
           </div>
         </section>
       ) : null}

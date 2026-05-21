@@ -50,6 +50,11 @@ export const productsService = {
   getById: (tenantId: string, id: string) => crud.getById(tenantId, id),
   create: (tenantId: string, input: CreateProductInput) => crud.create(tenantId, input),
   update: (tenantId: string, id: string, input: UpdateProductInput) => crud.update(tenantId, id, input),
+  updateStock: async (tenantId: string, id: string, stockCurrent: number) =>
+    crud.update(tenantId, id, {
+      stock_current: stockCurrent,
+      stock: stockCurrent,
+    } as UpdateProductInput & { stock: number }),
   delete: (tenantId: string, id: string) => crud.delete(tenantId, id),
   getBarcodesByTenant: (tenantId: string) => barcodeCrud.getAllByTenant(tenantId),
 

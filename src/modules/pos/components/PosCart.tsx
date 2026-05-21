@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 interface PosCartItemView {
   product_id: string;
   name: string;
@@ -16,7 +18,9 @@ interface PosCartItemView {
 }
 
 interface PosCartProps {
+  id?: string;
   items: PosCartItemView[];
+  barcodeValue: string;
   subtotalBeforePromotions: number;
   promotionDiscountTotal: number;
   cartPromotionDiscountTotal: number;
@@ -27,10 +31,13 @@ interface PosCartProps {
   total: number;
   canWrite: boolean;
   disabled?: boolean;
+  onBarcodeChange: (value: string) => void;
+  onBarcodeSubmit: () => void;
   onIncrease: (productId: string) => void;
   onDecrease: (productId: string) => void;
   onSetQuantity: (productId: string, quantity: number) => void;
   onRemove: (productId: string) => void;
+  onCheckout: () => void;
 }
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -39,8 +46,21 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
+const kgToGrams = (quantityKg: number): number => Number((quantityKg * 1000).toFixed(3));
+const gramsToKg = (quantityGrams: number): number => Number((quantityGrams / 1000).toFixed(3));
+
+const quantityToInputValue = (item: PosCartItemView): string => {
+  const quantity = item.sale_mode === "weight" ? kgToGrams(item.quantity) : item.quantity;
+  return Number.isInteger(quantity) ? String(quantity) : String(quantity);
+};
+
+const productUnitLabel = (item: PosCartItemView): string =>
+  item.sale_mode === "weight" ? "kg" : "u.";
+
 export const PosCart = ({
+  id,
   items,
+  barcodeValue,
   subtotalBeforePromotions,
   promotionDiscountTotal,
   cartPromotionDiscountTotal,
@@ -51,11 +71,15 @@ export const PosCart = ({
   total,
   canWrite,
   disabled,
+  onBarcodeChange,
+  onBarcodeSubmit,
   onIncrease,
   onDecrease,
   onSetQuantity,
   onRemove,
+  onCheckout,
 }: PosCartProps) => {
+  const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
   const hasProductPromotions = promotionDiscountTotal > 0;
   const hasCartPromotions = cartPromotionDiscountTotal > 0;
   const hasAnyPromotion = hasProductPromotions || hasCartPromotions;
@@ -64,14 +88,75 @@ export const PosCart = ({
   const hasPaymentAdjustment = paymentAdjustment !== 0;
   const showDetailedSubtotal = hasAnyPromotion || hasSurcharge || hasPaymentDiscount;
 
+  useEffect(() => {
+    setQuantityDrafts((current) => {
+      const itemIds = new Set(items.map((item) => item.product_id));
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([productId]) => itemIds.has(productId))
+      );
+
+      return Object.keys(next).length === Object.keys(current).length ? current : next;
+    });
+  }, [items]);
+
+  const commitQuantityDraft = (item: PosCartItemView) => {
+    const rawValue = quantityDrafts[item.product_id];
+    if (rawValue == null) return;
+
+    const parsedInput = Number(rawValue);
+    if (Number.isFinite(parsedInput) && parsedInput > 0) {
+      onSetQuantity(
+        item.product_id,
+        item.sale_mode === "weight" ? gramsToKg(parsedInput) : parsedInput
+      );
+    }
+
+    setQuantityDrafts((current) => {
+      const { [item.product_id]: _discard, ...next } = current;
+      return next;
+    });
+  };
+
   return (
-    <section className="pos-surface space-y-3">
+    <section id={id} className="pos-surface space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-slate-900">Cart ({items.length} items)</h2>
         <span className="text-xs uppercase tracking-[0.12em] text-slate-500">
           Venta activa
         </span>
       </div>
+
+      <form
+        className="rounded-xl border border-slate-200 bg-slate-50 p-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onBarcodeSubmit();
+        }}
+      >
+        <label htmlFor="pos-visible-barcode" className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+          Codigo de barras
+        </label>
+        <div className="mt-1 flex gap-2">
+          <input
+            id="pos-visible-barcode"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            value={barcodeValue}
+            onChange={(event) => onBarcodeChange(event.target.value)}
+            placeholder="Escanear o escribir codigo"
+            className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            disabled={disabled || !canWrite}
+          />
+          <button
+            type="submit"
+            className="ui-btn-primary px-3 py-2 text-sm disabled:opacity-50"
+            disabled={disabled || !canWrite || !barcodeValue.trim()}
+          >
+            Leer
+          </button>
+        </div>
+      </form>
 
       {!items.length ? (
         <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
@@ -80,21 +165,23 @@ export const PosCart = ({
       ) : (
         <div className="max-h-[320px] space-y-1.5 overflow-auto pr-1">
           {items.map((item) => {
-            const qtyStep = item.sale_mode === "weight" ? 0.1 : 1;
+            const qtyStep = item.sale_mode === "weight" ? 1 : 1;
 
             return (
               <article key={item.product_id} className="pos-cart-item pos-cart-item--compact">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-slate-900" title={item.name}>{item.name}</p>
                   <p className="truncate text-[11px] text-slate-500">{item.category}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">{currency.format(item.unit_price)} c/u</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {currency.format(item.unit_price)} / {productUnitLabel(item)}
+                  </p>
                   {item.applied_promotion_name ? (
                     <p className="text-[11px] text-emerald-700">Promo: {item.applied_promotion_name}</p>
                   ) : null}
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  {item.sale_mode === "weight" ? <span className="ui-badge ui-badge--info">kg</span> : null}
+                  {item.sale_mode === "weight" ? <span className="ui-badge ui-badge--info">g</span> : null}
                   {item.is_scale_item ? <span className="ui-badge ui-badge--info">balanza</span> : null}
                 </div>
 
@@ -111,10 +198,28 @@ export const PosCart = ({
                     type="number"
                     step={qtyStep}
                     min={0}
-                    value={item.quantity}
-                    onChange={(event) =>
-                      onSetQuantity(item.product_id, Number(event.target.value))
-                    }
+                    title={item.sale_mode === "weight" ? "Cantidad en gramos. Ej: 300 = 300 g" : "Cantidad en unidades"}
+                    value={quantityDrafts[item.product_id] ?? quantityToInputValue(item)}
+                    onChange={(event) => {
+                      const nextValue = event.target.value;
+                      setQuantityDrafts((current) => ({
+                        ...current,
+                        [item.product_id]: nextValue,
+                      }));
+
+                      const parsedInput = Number(nextValue);
+                      if (nextValue.trim() && Number.isFinite(parsedInput) && parsedInput > 0) {
+                        onSetQuantity(
+                          item.product_id,
+                          item.sale_mode === "weight" ? gramsToKg(parsedInput) : parsedInput
+                        );
+                      }
+                    }}
+                    onBlur={() => commitQuantityDraft(item)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") return;
+                      event.currentTarget.blur();
+                    }}
                     className="w-16 rounded-lg border border-slate-300 px-1.5 py-1 text-center text-xs"
                     disabled={disabled || !canWrite}
                   />
@@ -216,6 +321,15 @@ export const PosCart = ({
           <span className="font-kpi text-2xl font-semibold text-brand-700">{currency.format(total)}</span>
         </div>
       </div>
+
+      <button
+        type="button"
+        className="ui-btn-primary w-full py-3 text-base disabled:opacity-50"
+        disabled={disabled || !canWrite || !items.length}
+        onClick={onCheckout}
+      >
+        Confirmar venta
+      </button>
     </section>
   );
 };

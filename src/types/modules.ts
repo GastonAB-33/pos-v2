@@ -34,7 +34,7 @@ export const appModuleLabels: Record<AppModule, string> = {
   cuentas_corrientes: "Cuentas corrientes",
   stock: "Stock",
   caja: "Caja",
-  compras: "Compras",
+  compras: "Compras a proveedores",
   proveedores: "Proveedores",
   listas_precios: "Listas de precios",
   promociones: "Promociones",

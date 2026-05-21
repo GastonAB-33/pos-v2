@@ -22,6 +22,8 @@ const toPositiveNumber = (value: string): number => {
   return Number(parsed.toFixed(3));
 };
 
+const unitLabel = (product: Product): string => (product.sale_mode === "weight" ? "kg" : "u.");
+
 export const StockAdjustmentModal = ({
   open,
   products,
@@ -104,12 +106,10 @@ export const StockAdjustmentModal = ({
   return (
     <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-4">
       <div className="flex max-h-[90vh] w-full max-w-6xl flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
           <div>
-            <h3 className="text-base font-semibold text-slate-900">Ajuste manual de stock</h3>
-            <p className="text-xs text-slate-500">
-              Defini por producto cuanto ingresa y cuanto sale. Se aplicaran solo filas con cambios.
-            </p>
+            <h3 className="text-base font-semibold text-slate-900">Ajustar stock</h3>
+            <p className="text-xs text-slate-500">Cargar ingresos o salidas manuales.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" className="ui-btn-ghost" onClick={resetDrafts} disabled={busy}>
@@ -121,7 +121,7 @@ export const StockAdjustmentModal = ({
           </div>
         </div>
 
-        <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_280px]">
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -149,10 +149,9 @@ export const StockAdjustmentModal = ({
                 <thead>
                   <tr>
                     <th className="px-3 py-2 text-left">Producto</th>
-                    <th className="px-3 py-2 text-left">Categoria</th>
                     <th className="px-3 py-2 text-left">Stock actual</th>
-                    <th className="px-3 py-2 text-left">Ingresan</th>
-                    <th className="px-3 py-2 text-left">Salen</th>
+                    <th className="px-3 py-2 text-left">Entra</th>
+                    <th className="px-3 py-2 text-left">Sale</th>
                     <th className="px-3 py-2 text-left">Neto</th>
                   </tr>
                 </thead>
@@ -169,8 +168,9 @@ export const StockAdjustmentModal = ({
                           <p className="font-medium">{product.name}</p>
                           <p className="text-xs text-slate-500">{product.code}</p>
                         </td>
-                        <td className="px-3 py-2 text-slate-700">{product.category}</td>
-                        <td className="px-3 py-2 text-slate-700">{product.stock_current.toLocaleString("es-AR")}</td>
+                        <td className="px-3 py-2 text-slate-700">
+                          {product.stock_current.toLocaleString("es-AR")} {unitLabel(product)}
+                        </td>
                         <td className="px-3 py-2">
                           <input
                             type="number"
@@ -180,6 +180,7 @@ export const StockAdjustmentModal = ({
                             onChange={(event) => updateDraft(product.id, { quantityIn: event.target.value })}
                             className="ui-input"
                             placeholder="0"
+                            title={product.sale_mode === "weight" ? "Cantidad en kg" : "Cantidad en unidades"}
                             disabled={busy || !canWrite}
                           />
                         </td>
@@ -192,11 +193,12 @@ export const StockAdjustmentModal = ({
                             onChange={(event) => updateDraft(product.id, { quantityOut: event.target.value })}
                             className="ui-input"
                             placeholder="0"
+                            title={product.sale_mode === "weight" ? "Cantidad en kg" : "Cantidad en unidades"}
                             disabled={busy || !canWrite}
                           />
                         </td>
                         <td className="px-3 py-2 text-slate-700">
-                          {net === 0 ? "-" : net > 0 ? `+${net.toLocaleString("es-AR")}` : net.toLocaleString("es-AR")}
+                          {net === 0 ? "-" : `${net > 0 ? "+" : ""}${net.toLocaleString("es-AR")} ${unitLabel(product)}`}
                         </td>
                       </tr>
                     );

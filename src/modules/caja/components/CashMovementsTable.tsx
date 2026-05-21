@@ -70,6 +70,20 @@ const formatReference = (
   return `${label} | ${shortId}`;
 };
 
+const getSignedAmount = (movement: CashMovement): number => {
+  const amount = Math.abs(movement.amount);
+  if (movement.movement_type === "expense") return -amount;
+  if (movement.movement_type === "adjustment" && movement.amount < 0) return -amount;
+  return amount;
+};
+
+const getMovementBadgeClass = (movementType: CashMovement["movement_type"]) => {
+  if (movementType === "expense") return "ui-badge ui-badge--danger";
+  if (movementType === "income") return "ui-badge ui-badge--success";
+  if (movementType === "sale_payment") return "ui-badge ui-badge--info";
+  return "ui-badge ui-badge--warn";
+};
+
 export const CashMovementsTable = ({
   movements,
   usersById = {},
@@ -80,22 +94,42 @@ export const CashMovementsTable = ({
     () => [
     columnHelper.accessor("created_at", {
       header: "Fecha",
-      cell: (info) => new Date(info.getValue()).toLocaleString("es-AR"),
+      cell: (info) => (
+        <span className="whitespace-nowrap text-xs">{new Date(info.getValue()).toLocaleString("es-AR")}</span>
+      ),
     }),
     columnHelper.accessor("movement_type", {
       header: "Tipo",
-      cell: (info) => movementTypeLabel[info.getValue()] ?? info.getValue(),
+      cell: (info) => (
+        <span className={getMovementBadgeClass(info.getValue())}>
+          {movementTypeLabel[info.getValue()] ?? info.getValue()}
+        </span>
+      ),
     }),
     columnHelper.accessor("amount", {
-      header: "Monto",
-      cell: (info) => currency.format(info.getValue()),
+      header: "Importe",
+      cell: (info) => {
+        const movement = info.row.original;
+        const signedAmount = getSignedAmount(movement);
+        return (
+          <span
+            className={
+              signedAmount < 0
+                ? "font-kpi text-sm font-semibold text-red-700"
+                : "font-kpi text-sm font-semibold text-emerald-700"
+            }
+          >
+            {currency.format(signedAmount)}
+          </span>
+        );
+      },
     }),
     columnHelper.display({
       id: "reference",
-      header: "Referencia",
+      header: "Origen",
       cell: (info) => {
         const movement = info.row.original;
-        return formatReference(movement, saleNumbersById);
+        return <span className="text-sm text-slate-700">{formatReference(movement, saleNumbersById)}</span>;
       },
     }),
     columnHelper.accessor("created_by", {
@@ -103,7 +137,7 @@ export const CashMovementsTable = ({
       cell: (info) => {
         const userId = info.getValue();
         if (!userId) return "Sin usuario";
-        return usersById[userId] ?? userId;
+        return <span className="text-sm">{usersById[userId] ?? userId}</span>;
       },
     }),
     columnHelper.display({
@@ -144,9 +178,9 @@ export const CashMovementsTable = ({
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200">
+    <div className="max-h-[58vh] overflow-auto rounded-lg border border-slate-200">
       <table className="min-w-full divide-y divide-slate-200 text-sm">
-        <thead className="bg-slate-50">
+        <thead className="sticky top-0 z-10 bg-slate-50">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => (

@@ -117,11 +117,15 @@ export const UsuariosPage = () => {
   };
 
   const handleSubmitUserForm = async (values: UserFormValues) => {
+    let success = false;
+
     if (userFormMode === "create") {
-      await createUser(values);
+      success = await createUser(values);
     } else if (selectedUser) {
-      await updateUser(selectedUser.id, values);
+      success = await updateUser(selectedUser.id, values);
     }
+
+    if (!success) return;
 
     setUserFormOpen(false);
     setSelectedUser(undefined);

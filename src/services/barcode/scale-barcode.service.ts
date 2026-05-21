@@ -3,6 +3,7 @@
 export interface ParsedScaleBarcode {
   raw: string;
   productCode: string;
+  mode: "weight" | "total_price";
   weight: number | null;
   totalPrice: number | null;
 }
@@ -16,23 +17,32 @@ const safeSlice = (value: string, start: number, length: number): string => {
   return value.slice(start, start + length);
 };
 
-const parseWeight = (raw: string): number | null => {
+const isValidEan13 = (value: string): boolean => {
+  if (!/^\d{13}$/.test(value)) return false;
+
+  const digits = [...value].map(Number);
+  const checkDigit = digits[12];
+  const checksumBase = digits
+    .slice(0, 12)
+    .reduce((sum, digit, index) => sum + digit * (index % 2 === 0 ? 1 : 3), 0);
+  const expectedCheckDigit = (10 - (checksumBase % 10)) % 10;
+  return checkDigit === expectedCheckDigit;
+};
+
+const parseDecimalValue = (raw: string, decimals: number): number | null => {
   if (!raw) return null;
   const numeric = Number.parseInt(raw, 10);
   if (!Number.isFinite(numeric) || numeric <= 0) return null;
 
-  // Convencion base EAN13 balanza: gramos en 3 decimales.
-  return round(numeric / 1000, 3);
+  const divisor = 10 ** Math.max(0, decimals);
+  return round(numeric / divisor, decimals);
 };
 
-const parseTotalPrice = (raw: string): number | null => {
-  if (!raw) return null;
-  const numeric = Number.parseInt(raw, 10);
-  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+const parseWeight = (raw: string, decimals: number): number | null =>
+  parseDecimalValue(raw, decimals);
 
-  // Convencion base: importe con 2 decimales.
-  return round(numeric / 100, 2);
-};
+const parseTotalPrice = (raw: string, decimals: number): number | null =>
+  parseDecimalValue(raw, decimals);
 
 export const parseScaleBarcode = (
   barcode: string,
@@ -44,6 +54,10 @@ export const parseScaleBarcode = (
   if (!normalized) return null;
 
   if (settings.ean13_enabled && normalized.length !== 13) {
+    return null;
+  }
+
+  if (settings.ean13_enabled && !isValidEan13(normalized)) {
     return null;
   }
 
@@ -65,13 +79,22 @@ export const parseScaleBarcode = (
 
   const weightRaw = safeSlice(normalized, weightStart, settings.weight_length);
   const amountRaw = safeSlice(normalized, amountStart, settings.amount_length);
+  const mode = settings.scale_mode ?? "weight";
 
-  const weight = parseWeight(weightRaw);
-  const totalPrice = parseTotalPrice(amountRaw);
+  const weight =
+    mode === "weight" ? parseWeight(weightRaw, settings.weight_decimals ?? 3) : null;
+  const totalPrice =
+    mode === "total_price" || amountRaw !== weightRaw
+      ? parseTotalPrice(amountRaw, settings.amount_decimals ?? 2)
+      : null;
+
+  if (mode === "weight" && weight == null) return null;
+  if (mode === "total_price" && totalPrice == null) return null;
 
   return {
     raw: normalized,
     productCode,
+    mode,
     weight,
     totalPrice,
   };

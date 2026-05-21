@@ -4,12 +4,24 @@ import {
   type CreateEntityInput,
   type UpdateEntityInput,
 } from "@/services/base/tenant-crud.service";
-import type { Promotion } from "@/types/entities";
+import type { Promotion, PromotionBarcode, PromotionItem } from "@/types/entities";
 
 const crud = new TenantCrudService<Promotion>(dbTables.promotions);
+const itemsCrud = new TenantCrudService<PromotionItem>(dbTables.promotion_items);
+const barcodesCrud = new TenantCrudService<PromotionBarcode>(dbTables.promotion_barcodes);
 
 export type CreatePromotionInput = CreateEntityInput<Promotion>;
 export type UpdatePromotionInput = UpdateEntityInput<Promotion>;
+
+export interface PromotionWithDetails extends Promotion {
+  items?: PromotionItem[];
+  barcodes?: PromotionBarcode[];
+}
+
+export interface SavePromotionDetailsInput {
+  items?: Array<Pick<PromotionItem, "product_id" | "quantity">>;
+  barcode?: string | null;
+}
 
 export interface PromotionResolverItem {
   product_id: string;
@@ -47,6 +59,86 @@ export interface PromotionResolution {
 
 const roundAmount = (value: number) => Number(value.toFixed(2));
 const normalizeCode = (value: string) => value.trim().toLowerCase().replace(/\s+/g, "_");
+const normalizeBarcode = (value: string) => value.trim().replace(/\s+/g, "");
+export const buildPromotionBarcode = (code: string) =>
+  `PROMO-${normalizeCode(code).replace(/_/g, "-").toUpperCase()}`;
+
+const isMissingRelationError = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") return false;
+  const maybeError = error as { code?: string; message?: string };
+  return maybeError.code === "42P01" || /does not exist/i.test(maybeError.message ?? "");
+};
+
+const safeGetItemsByTenant = async (tenantId: string): Promise<PromotionItem[]> => {
+  try {
+    return await itemsCrud.getAllByTenant(tenantId);
+  } catch (error) {
+    if (isMissingRelationError(error)) return [];
+    throw error;
+  }
+};
+
+const safeGetBarcodesByTenant = async (tenantId: string): Promise<PromotionBarcode[]> => {
+  try {
+    return await barcodesCrud.getAllByTenant(tenantId);
+  } catch (error) {
+    if (isMissingRelationError(error)) return [];
+    throw error;
+  }
+};
+
+const attachDetails = (
+  promotions: Promotion[],
+  items: PromotionItem[],
+  barcodes: PromotionBarcode[]
+): PromotionWithDetails[] =>
+  promotions.map((promotion) => ({
+    ...promotion,
+    items: items.filter((item) => item.promotion_id === promotion.id),
+    barcodes: barcodes.filter((barcode) => barcode.promotion_id === promotion.id),
+  }));
+
+const replacePromotionItems = async (
+  tenantId: string,
+  promotionId: string,
+  items: SavePromotionDetailsInput["items"] = []
+) => {
+  const existingItems = (await safeGetItemsByTenant(tenantId)).filter(
+    (item) => item.promotion_id === promotionId
+  );
+  await Promise.all(existingItems.map((item) => itemsCrud.delete(tenantId, item.id)));
+
+  const validItems = items.filter((item) => item.product_id && item.quantity > 0);
+  await Promise.all(
+    validItems.map((item) =>
+      itemsCrud.create(tenantId, {
+        promotion_id: promotionId,
+        product_id: item.product_id,
+        quantity: item.quantity,
+      })
+    )
+  );
+};
+
+const replacePromotionBarcode = async (
+  tenantId: string,
+  promotionId: string,
+  rawBarcode: string | null | undefined
+) => {
+  const existingBarcodes = (await safeGetBarcodesByTenant(tenantId)).filter(
+    (barcode) => barcode.promotion_id === promotionId
+  );
+  await Promise.all(existingBarcodes.map((barcode) => barcodesCrud.delete(tenantId, barcode.id)));
+
+  const barcode = rawBarcode ? normalizeBarcode(rawBarcode) : "";
+  if (!barcode) return;
+
+  await barcodesCrud.create(tenantId, {
+    promotion_id: promotionId,
+    barcode,
+    is_primary: true,
+  });
+};
 
 const toDateValue = (value: string | Date): number => {
   if (value instanceof Date) return value.getTime();
@@ -124,19 +216,88 @@ const calculateCartPromotionDiscount = (promotion: Promotion, subtotal: number) 
 export const promotionsService = {
   getAllByTenant: (tenantId: string) => crud.getAllByTenant(tenantId),
 
+  getAllByTenantWithDetails: async (tenantId: string): Promise<PromotionWithDetails[]> => {
+    const [promotions, items, barcodes] = await Promise.all([
+      crud.getAllByTenant(tenantId),
+      safeGetItemsByTenant(tenantId),
+      safeGetBarcodesByTenant(tenantId),
+    ]);
+    return attachDetails(promotions, items, barcodes);
+  },
+
   getActiveByTenant: async (tenantId: string) => {
     const all = await crud.getAllByTenant(tenantId);
     return all.filter((promotion) => promotion.is_active);
   },
 
+  getActiveByTenantWithDetails: async (tenantId: string): Promise<PromotionWithDetails[]> => {
+    const all = await promotionsService.getAllByTenantWithDetails(tenantId);
+    return all.filter((promotion) => promotion.is_active);
+  },
+
+  getBarcodesByTenant: (tenantId: string) => safeGetBarcodesByTenant(tenantId),
+
+  findActiveByBarcode: async (
+    tenantId: string,
+    rawBarcode: string
+  ): Promise<PromotionWithDetails | null> => {
+    const barcode = normalizeBarcode(rawBarcode).toLowerCase();
+    if (!barcode) return null;
+
+    const activePromotions = await promotionsService.getActiveByTenantWithDetails(tenantId);
+    return (
+      activePromotions.find((promotion) => {
+        if (normalizeBarcode(promotion.code).toLowerCase() === barcode) return true;
+        if (normalizeBarcode(buildPromotionBarcode(promotion.code)).toLowerCase() === barcode) {
+          return true;
+        }
+        return (promotion.barcodes ?? []).some(
+          (row) => normalizeBarcode(row.barcode).toLowerCase() === barcode
+        );
+      }) ?? null
+    );
+  },
+
   getById: (tenantId: string, id: string) => crud.getById(tenantId, id),
   create: (tenantId: string, input: CreatePromotionInput) =>
     crud.create(tenantId, { ...input, code: normalizeCode(input.code) }),
+  createWithDetails: async (
+    tenantId: string,
+    input: CreatePromotionInput,
+    details: SavePromotionDetailsInput = {}
+  ) => {
+    const created = await crud.create(tenantId, { ...input, code: normalizeCode(input.code) });
+    await replacePromotionItems(tenantId, created.id, details.items);
+    await replacePromotionBarcode(
+      tenantId,
+      created.id,
+      details.barcode ?? buildPromotionBarcode(created.code)
+    );
+    return created;
+  },
   update: (tenantId: string, id: string, input: UpdatePromotionInput) =>
     crud.update(tenantId, id, {
       ...input,
       code: typeof input.code === "string" ? normalizeCode(input.code) : input.code,
     }),
+  updateWithDetails: async (
+    tenantId: string,
+    id: string,
+    input: UpdatePromotionInput,
+    details: SavePromotionDetailsInput = {}
+  ) => {
+    const updated = await crud.update(tenantId, id, {
+      ...input,
+      code: typeof input.code === "string" ? normalizeCode(input.code) : input.code,
+    });
+    await replacePromotionItems(tenantId, id, details.items);
+    await replacePromotionBarcode(
+      tenantId,
+      id,
+      details.barcode ?? buildPromotionBarcode(String(input.code ?? updated?.code ?? id))
+    );
+    return updated;
+  },
   delete: (tenantId: string, id: string) => crud.delete(tenantId, id),
 
   toggleActive: async (tenantId: string, id: string) => {
@@ -151,7 +312,7 @@ export const promotionsService = {
   resolveApplicablePromotions: (
     cartItems: PromotionResolverItem[],
     now: string | Date,
-    promotions: Promotion[] = []
+    promotions: PromotionWithDetails[] = []
   ): PromotionResolution => {
     const nowValue = toDateValue(now);
     const activePromotions = promotions.filter((promotion) => isPromotionInRange(promotion, nowValue));
@@ -163,6 +324,12 @@ export const promotionsService = {
       (promotion) =>
         promotion.scope === "cart" &&
         (promotion.type === "percentage_discount" || promotion.type === "fixed_discount")
+    );
+    const activeBundlePromotions = activePromotions.filter(
+      (promotion) =>
+        promotion.scope === "bundle" &&
+        promotion.type === "combo_price" &&
+        (promotion.items?.length ?? 0) > 0
     );
 
     const items = cartItems.map<PromotionResolvedItem>((item) => {
@@ -201,13 +368,38 @@ export const promotionsService = {
 
     const subtotalBefore = roundAmount(items.reduce((acc, item) => acc + item.line_subtotal, 0));
     const productDiscountTotal = roundAmount(items.reduce((acc, item) => acc + item.discount_total, 0));
-    let bestCartPromotion: Promotion | null = null;
+    let bestCartPromotion: PromotionWithDetails | null = null;
     let cartDiscount = 0;
 
     const subtotalAfterProductPromotions = roundAmount(subtotalBefore - productDiscountTotal);
 
     for (const promotion of activeCartPromotions) {
       const discount = calculateCartPromotionDiscount(promotion, subtotalAfterProductPromotions);
+      if (discount > cartDiscount) {
+        cartDiscount = discount;
+        bestCartPromotion = promotion;
+      }
+    }
+
+    for (const promotion of activeBundlePromotions) {
+      const bundleItems = promotion.items ?? [];
+      const bundleCount = Math.min(
+        ...bundleItems.map((bundleItem) => {
+          const cartItem = cartItems.find((item) => item.product_id === bundleItem.product_id);
+          if (!cartItem || bundleItem.quantity <= 0) return 0;
+          return Math.floor(cartItem.quantity / bundleItem.quantity);
+        })
+      );
+
+      if (!Number.isFinite(bundleCount) || bundleCount <= 0) continue;
+
+      const bundleBaseTotal = bundleItems.reduce((acc, bundleItem) => {
+        const cartItem = cartItems.find((item) => item.product_id === bundleItem.product_id);
+        return acc + (cartItem?.unit_price ?? 0) * bundleItem.quantity * bundleCount;
+      }, 0);
+      const bundleComboTotal = Math.max(0, promotion.combo_price ?? bundleBaseTotal) * bundleCount;
+      const discount = roundAmount(Math.max(0, bundleBaseTotal - bundleComboTotal));
+
       if (discount > cartDiscount) {
         cartDiscount = discount;
         bestCartPromotion = promotion;

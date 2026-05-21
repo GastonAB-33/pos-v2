@@ -35,6 +35,8 @@ const normalizeQty = (value: number): string => {
   return Number(value.toFixed(3)).toString();
 };
 
+const unitLabel = (product: Product): string => (product.sale_mode === "weight" ? "kg" : "u.");
+
 const buildReportDateStamp = (): string => new Date().toISOString().slice(0, 10);
 
 const getStatusBadgeClassName = (status: StockStatus): string => {
@@ -272,16 +274,16 @@ export const StockTrackingTable = ({
   };
 
   return (
-    <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-panel">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">Seguimiento de stock</h2>
-          <p className="text-xs text-slate-500">
-            Defini minimos/maximos por producto y aplica cambios masivos por seleccion o categoria.
-          </p>
+          <h2 className="text-base font-semibold text-slate-900">Productos</h2>
+          <p className="text-xs text-slate-500">Mostrando {rows.length} de {products.filter((product) => product.is_active).length}</p>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <div className="text-xs text-slate-500">Mostrando: {rows.length} producto(s)</div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
+            Seleccionados: {selectedVisibleIds.length}
+          </span>
           <div className="relative" ref={reportMenuRef}>
             <button
               type="button"
@@ -289,7 +291,7 @@ export const StockTrackingTable = ({
               onClick={() => setIsReportMenuOpen((current) => !current)}
               disabled={!reportCandidates.length}
             >
-              Descargar informe de estado v
+              Exportar
             </button>
 
             {isReportMenuOpen ? (
@@ -315,7 +317,7 @@ export const StockTrackingTable = ({
 
       {reportMessage ? <div className="ui-info-state">{reportMessage}</div> : null}
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_180px]">
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
@@ -341,13 +343,13 @@ export const StockTrackingTable = ({
             </option>
           ))}
         </select>
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          Seleccionados: {selectedVisibleIds.length}
-        </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-        <div className="grid gap-2 md:grid-cols-6">
+      <details className="rounded-xl border border-slate-200 bg-slate-50">
+        <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-700">
+          Cambios masivos de minimo/maximo
+        </summary>
+        <div className="grid gap-2 border-t border-slate-200 p-3 md:grid-cols-6">
           <select
             value={bulkScope}
             onChange={(event) => setBulkScope(event.target.value as BulkScope)}
@@ -394,12 +396,12 @@ export const StockTrackingTable = ({
             Limpiar seleccion
           </button>
         </div>
-      </div>
+      </details>
 
       {rows.length === 0 ? (
         <div className="ui-empty-state">No hay productos para los filtros elegidos.</div>
       ) : (
-        <div className="ui-table-wrap max-h-[420px] overflow-auto">
+        <div className="ui-table-wrap max-h-[520px] overflow-auto">
           <table className="min-w-full table-auto text-sm">
             <thead>
               <tr>
@@ -440,7 +442,9 @@ export const StockTrackingTable = ({
                       <p className="text-xs text-slate-500">{product.code}</p>
                     </td>
                     <td className="px-3 py-2 text-slate-700">{product.category}</td>
-                    <td className="px-3 py-2 text-slate-700">{product.stock_current.toLocaleString("es-AR")}</td>
+                    <td className="px-3 py-2 text-slate-700">
+                      {product.stock_current.toLocaleString("es-AR")} {unitLabel(product)}
+                    </td>
                     <td className="px-3 py-2">
                       <input
                         type="number"

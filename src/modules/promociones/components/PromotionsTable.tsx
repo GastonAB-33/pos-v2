@@ -5,17 +5,19 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import type { Promotion } from "@/types/entities";
+import type { PromotionWithDetails } from "@/services/promotions.service";
 
 interface PromotionsTableProps {
-  promotions: Promotion[];
+  promotions: PromotionWithDetails[];
   productNameById: Map<string, string>;
   canWrite: boolean;
-  onEdit: (promotion: Promotion) => void;
-  onDelete: (promotion: Promotion) => void;
-  onToggleActive: (promotion: Promotion) => void;
+  onEdit: (promotion: PromotionWithDetails) => void;
+  onDelete: (promotion: PromotionWithDetails) => void;
+  onToggleActive: (promotion: PromotionWithDetails) => void;
+  onBarcode: (promotion: PromotionWithDetails) => void;
 }
 
-const columnHelper = createColumnHelper<Promotion>();
+const columnHelper = createColumnHelper<PromotionWithDetails>();
 
 const getTypeLabel = (type: Promotion["type"]) => {
   switch (type) {
@@ -32,6 +34,7 @@ const getTypeLabel = (type: Promotion["type"]) => {
 
 const getScopeLabel = (scope: Promotion["scope"]) => {
   if (scope === "product") return "Producto";
+  if (scope === "bundle") return "Combo";
   return "Carrito";
 };
 
@@ -59,6 +62,7 @@ export const PromotionsTable = ({
   onEdit,
   onDelete,
   onToggleActive,
+  onBarcode,
 }: PromotionsTableProps) => {
   const columns = [
     columnHelper.accessor("name", {
@@ -80,6 +84,10 @@ export const PromotionsTable = ({
     columnHelper.accessor("product_id", {
       header: "Producto",
       cell: (info) => {
+        if (info.row.original.scope === "bundle") {
+          const quantity = info.row.original.items?.length ?? 0;
+          return `${quantity} productos`;
+        }
         const productId = info.getValue();
         if (!productId) return "-";
         return productNameById.get(productId) ?? "Producto no encontrado";
@@ -113,6 +121,9 @@ export const PromotionsTable = ({
           <div className="flex items-center gap-2">
             <button type="button" onClick={() => onEdit(promotion)} className="ui-btn-ghost px-2 py-1 text-xs">
               Editar
+            </button>
+            <button type="button" onClick={() => onBarcode(promotion)} className="ui-btn-ghost px-2 py-1 text-xs">
+              Barcode
             </button>
             <button
               type="button"

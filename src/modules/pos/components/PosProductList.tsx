@@ -21,6 +21,14 @@ const currency = new Intl.NumberFormat("es-AR", {
 
 const normalizeSearchText = (value: string): string => value.trim().toLowerCase();
 
+const productUnitLabel = (product: Product): string =>
+  product.sale_mode === "weight" ? "kg" : "u.";
+
+const productStockLabel = (product: Product): string =>
+  `${product.stock_current.toLocaleString("es-AR")} ${productUnitLabel(product)}`;
+
+const gramsToKg = (quantityGrams: number): number => Number((quantityGrams / 1000).toFixed(3));
+
 export const PosProductList = ({
   products,
   favoriteProducts,
@@ -88,9 +96,9 @@ export const PosProductList = ({
   }, [primaryBarcodes, products, productsSearch, selectedCategory]);
 
   const resolveWeightQuantity = (productId: string) => {
-    const raw = weightInputs[productId] ?? "0.5";
+    const raw = weightInputs[productId] ?? "500";
     const parsed = Number(raw);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    return Number.isFinite(parsed) && parsed > 0 ? gramsToKg(parsed) : 0;
   };
 
   const quickAddProduct = async (product: Product) => {
@@ -101,16 +109,22 @@ export const PosProductList = ({
   };
 
   const renderAddProductAction = (product: Product, compact = false) => {
-    const weightValue = weightInputs[product.id] ?? "0.5";
-    const weightQty = Number(weightValue);
+    const weightValue = weightInputs[product.id] ?? "500";
+    const weightGrams = Number(weightValue);
+    const weightQty = Number.isFinite(weightGrams) ? gramsToKg(weightGrams) : 0;
 
     return (
-      <div className="flex items-center gap-2">
+      <div
+        className={cn(
+          "flex min-w-0 items-center gap-2",
+          compact ? "max-w-full justify-end" : "justify-end"
+        )}
+      >
         {product.sale_mode === "weight" ? (
           <input
             type="number"
-            step="0.001"
-            min="0.001"
+            step="1"
+            min="1"
             value={weightValue}
             onChange={(event) =>
               setWeightInputs((prev) => ({
@@ -120,10 +134,11 @@ export const PosProductList = ({
             }
             className={
               compact
-                ? "w-20 rounded-xl border border-slate-300 px-2 py-1 text-xs"
+                ? "w-16 rounded-xl border border-slate-300 px-2 py-1 text-xs"
                 : "w-24 rounded-xl border border-slate-300 px-2 py-1 text-sm"
             }
             disabled={disabled || !canWrite}
+            title="Cantidad en gramos. Ej: 300 = 300 g"
           />
         ) : null}
 
@@ -137,7 +152,7 @@ export const PosProductList = ({
           disabled={disabled || !canWrite}
           className={cn(
             "rounded-xl bg-brand-600 font-semibold text-white disabled:opacity-50",
-            compact ? "px-2.5 py-1.5 text-xs" : "px-3 py-2 text-sm"
+            compact ? "shrink-0 px-2 py-1.5 text-xs" : "px-3 py-2 text-sm"
           )}
         >
           {compact ? "Agregar" : product.sale_mode === "weight" ? "Agregar" : "+"}
@@ -243,14 +258,17 @@ export const PosProductList = ({
                     </p>
                     <p className="mt-1 text-xs text-slate-600">{product.brand ?? product.category}</p>
                   </div>
-                  <div className="mt-auto flex items-end justify-between gap-2">
-                    <div>
-                      <p className="text-lg font-semibold text-brand-700">{currency.format(product.price)}</p>
+                  <div className="mt-auto flex min-w-0 flex-wrap items-end justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-lg font-semibold text-brand-700">
+                        {currency.format(product.price)}
+                        {product.sale_mode === "weight" ? " / kg" : ""}
+                      </p>
                       <p className="text-xs text-slate-500">
-                        Stock: {product.stock_current.toLocaleString("es-AR")}
+                        Stock: {productStockLabel(product)}
                       </p>
                     </div>
-                    <div>{renderAddProductAction(product, true)}</div>
+                    <div className="min-w-0 max-w-full">{renderAddProductAction(product, true)}</div>
                   </div>
                 </article>
               ))}
@@ -342,9 +360,12 @@ export const PosProductList = ({
 
                   <div className="flex items-center gap-3">
                     <div className="text-right">
-                      <p className="text-xl font-semibold text-slate-900">{currency.format(product.price)}</p>
+                      <p className="text-xl font-semibold text-slate-900">
+                        {currency.format(product.price)}
+                        {product.sale_mode === "weight" ? " / kg" : ""}
+                      </p>
                       <p className="text-xs text-brand-700">
-                        {product.stock_current.toLocaleString("es-AR")} en stock
+                        {productStockLabel(product)} en stock
                       </p>
                     </div>
                     {renderAddProductAction(product)}

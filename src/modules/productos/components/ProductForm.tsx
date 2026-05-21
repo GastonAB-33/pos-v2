@@ -29,6 +29,7 @@ type CalcMode = "forward" | "backward";
 
 const defaultValues: ProductFormValues = {
   nombre: "",
+  saleMode: "unit",
   codigoBarras: "",
   codigoProducto: "",
   stock: 0,
@@ -86,6 +87,7 @@ export const ProductForm = ({
 
     reset({
       nombre: product.name,
+      saleMode: product.sale_mode,
       codigoBarras: primaryBarcode ?? "",
       codigoProducto: product.code,
       stock: product.stock_current,
@@ -101,6 +103,7 @@ export const ProductForm = ({
   }, [prefillValues, primaryBarcode, product, reset]);
 
   const nombre = watch("nombre");
+  const saleMode = watch("saleMode");
   const precioCosto = watch("precioCosto");
   const porcentajeGanancia = watch("porcentajeGanancia");
   const porcentajeIva = watch("porcentajeIva");
@@ -202,7 +205,9 @@ export const ProductForm = ({
 
       <div className="grid gap-4 md:grid-cols-3">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Stock</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            {saleMode === "weight" ? "Stock en kg" : "Stock en unidades"}
+          </label>
           <input
             type="number"
             step="0.001"
@@ -240,9 +245,31 @@ export const ProductForm = ({
         </div>
       </div>
 
+      <div>
+        <label className="mb-2 block text-sm font-medium text-slate-700">Tipo de venta</label>
+        <div className="grid gap-2 md:grid-cols-2">
+          <label className="flex items-start gap-3 rounded-lg border border-slate-200 p-3 text-sm">
+            <input type="radio" value="unit" {...register("saleMode")} disabled={disabled} />
+            <span>
+              <span className="block font-semibold text-slate-900">Por unidad</span>
+              <span className="text-xs text-slate-500">Precio y stock por unidades.</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3 rounded-lg border border-slate-200 p-3 text-sm">
+            <input type="radio" value="weight" {...register("saleMode")} disabled={disabled} />
+            <span>
+              <span className="block font-semibold text-slate-900">Pesable</span>
+              <span className="text-xs text-slate-500">Precio por kg, stock en kg y venta por gramos.</span>
+            </span>
+          </label>
+        </div>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Precio costo</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            {saleMode === "weight" ? "Precio costo por kg" : "Precio costo"}
+          </label>
           <input
             type="number"
             step="0.01"
@@ -307,7 +334,9 @@ export const ProductForm = ({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Precio final</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            {saleMode === "weight" ? "Precio final por kg" : "Precio final"}
+          </label>
           <input
             type="number"
             step="0.01"

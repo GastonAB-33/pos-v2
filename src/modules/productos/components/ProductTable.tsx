@@ -66,6 +66,7 @@ export const ProductTable = ({
           {products.map((product) => {
             const isSelected = selectedSet.has(product.entity.id);
             const isFavorite = product.favorito;
+            const isWeight = product.saleMode === "weight";
 
             return (
               <tr key={product.entity.id}>
@@ -83,8 +84,13 @@ export const ProductTable = ({
                 </td>
                 <td className="px-3 py-3">{product.categoria}</td>
                 <td className="px-3 py-3">{product.subcategoria || "-"}</td>
-                <td className="px-3 py-3 font-medium text-slate-900">{currency.format(product.precioFinal)}</td>
-                <td className="px-3 py-3">{product.stock.toLocaleString("es-AR")}</td>
+                <td className="px-3 py-3 font-medium text-slate-900">
+                  {currency.format(product.precioFinal)}
+                  {isWeight ? " / kg" : ""}
+                </td>
+                <td className="px-3 py-3">
+                  {product.stock.toLocaleString("es-AR")} {isWeight ? "kg" : "u."}
+                </td>
                 <td className="px-3 py-3">
                   <div className="inline-flex items-center gap-2">
                     <button

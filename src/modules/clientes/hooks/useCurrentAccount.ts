@@ -3,6 +3,7 @@ import { auditService } from "@/services/audit.service";
 import { bankAccountsService } from "@/services/bank-accounts.service";
 import { cashService } from "@/services/cash.service";
 import { currentAccountsService } from "@/services/current-accounts.service";
+import { customersService } from "@/services/customers.service";
 import { installmentPlansService } from "@/services/installment-plans.service";
 import { originBanksService } from "@/services/origin-banks.service";
 import {
@@ -15,6 +16,7 @@ import { salesService } from "@/services/sales.service";
 import type {
   BankAccount,
   CurrentAccountMovement,
+  CurrentAccountPricingMode,
   Customer,
   InstallmentPlan,
   OriginBank,
@@ -74,68 +76,123 @@ export interface CurrentAccountDebtSaleOption {
   items: CurrentAccountSaleItemDetail[];
 }
 
+export interface CurrentAccountPricingRule {
+  mode: CurrentAccountPricingMode;
+  surcharge_percent: number | null;
+  surcharge_amount: number | null;
+  updated_at: string | null;
+}
+
+export interface CurrentAccountSummary {
+  initialDebtTotal: number;
+  paymentsTotal: number;
+  adjustmentsTotal: number;
+  accountingBalance: number;
+  updatedDebtTotal: number;
+  updatedBalance: number;
+  pricingRule: CurrentAccountPricingRule;
+}
+
 export interface RegisterCurrentAccountPaymentValues {
   amount: number;
   payment_method_id: string;
   notes?: string;
   payment_details?: Record<string, unknown> | null;
+  pricing_rule?: RegisterCurrentAccountAdjustmentValues | null;
 }
 
 export type CurrentAccountAdjustmentMode =
+  | "original"
   | "update_to_today_price"
   | "surcharge_percentage"
   | "surcharge_fixed";
 
 export interface RegisterCurrentAccountAdjustmentValues {
-  sale_id: string;
   mode: CurrentAccountAdjustmentMode;
   surcharge_percent?: number;
   surcharge_amount?: number;
   notes?: string;
 }
 
-const resolveAdjustmentFromInput = (
-  input: RegisterCurrentAccountAdjustmentValues,
-  saleDetail: CurrentAccountSaleDetail
-): {
-  amount: number;
-  modeLabel: string;
-  modeData: Record<string, unknown>;
-} | null => {
-  if (input.mode === "update_to_today_price") {
-    if (saleDetail.current_total == null) return null;
-    return {
-      amount: roundAmount(saleDetail.current_total - saleDetail.sale_total),
-      modeLabel: "Actualizacion a precio de hoy",
-      modeData: {
-        sale_total_original: saleDetail.sale_total,
-        sale_total_today: saleDetail.current_total,
-      },
-    };
+const adjustmentModeToPricingMode = (
+  mode: CurrentAccountAdjustmentMode
+): CurrentAccountPricingMode => {
+  if (mode === "original") return "original";
+  if (mode === "update_to_today_price") return "today_prices";
+  return mode;
+};
+
+const resolveCustomerPricingRule = (customer: Customer | null): CurrentAccountPricingRule => ({
+  mode: customer?.current_account_pricing_mode ?? "original",
+  surcharge_percent: customer?.current_account_surcharge_percent ?? null,
+  surcharge_amount: customer?.current_account_surcharge_amount ?? null,
+  updated_at: customer?.current_account_pricing_updated_at ?? null,
+});
+
+const calculateUpdatedDebtTotal = (
+  debtMovements: CurrentAccountMovement[],
+  saleDetailsById: Record<string, CurrentAccountSaleDetail>,
+  pricingRule: CurrentAccountPricingRule
+): number => {
+  const initialDebtTotal = roundAmount(
+    debtMovements.reduce((sum, movement) => sum + Math.abs(movement.amount), 0)
+  );
+
+  if (pricingRule.mode === "today_prices") {
+    return roundAmount(
+      debtMovements.reduce((sum, movement) => {
+        const saleDetail = movement.sale_id ? saleDetailsById[movement.sale_id] : null;
+        return sum + (saleDetail?.current_total ?? Math.abs(movement.amount));
+      }, 0)
+    );
   }
 
-  if (input.mode === "surcharge_percentage") {
-    const percent = Number(input.surcharge_percent ?? 0);
-    if (!Number.isFinite(percent) || percent <= 0) return null;
-    return {
-      amount: roundAmount(saleDetail.sale_total * (percent / 100)),
-      modeLabel: `Recargo ${percent}%`,
-      modeData: {
-        surcharge_percent: percent,
-        base_total: saleDetail.sale_total,
-      },
-    };
+  if (pricingRule.mode === "surcharge_percentage") {
+    const percent = Number(pricingRule.surcharge_percent ?? 0);
+    if (!Number.isFinite(percent) || percent <= 0) return initialDebtTotal;
+    return roundAmount(initialDebtTotal * (1 + percent / 100));
   }
 
-  const fixedAmount = Number(input.surcharge_amount ?? 0);
-  if (!Number.isFinite(fixedAmount) || fixedAmount <= 0) return null;
+  if (pricingRule.mode === "surcharge_fixed") {
+    const amount = Number(pricingRule.surcharge_amount ?? 0);
+    if (!Number.isFinite(amount) || amount <= 0) return initialDebtTotal;
+    return roundAmount(initialDebtTotal + amount);
+  }
+
+  return initialDebtTotal;
+};
+
+const buildAccountSummary = (
+  customer: Customer | null,
+  movements: CurrentAccountMovement[],
+  saleDetailsById: Record<string, CurrentAccountSaleDetail>
+): CurrentAccountSummary => {
+  const pricingRule = resolveCustomerPricingRule(customer);
+  const debtMovements = movements.filter((movement) => movement.type === "debt");
+  const paymentMovements = movements.filter((movement) => movement.type === "payment");
+  const adjustmentMovements = movements.filter((movement) => movement.type === "adjustment");
+
+  const initialDebtTotal = roundAmount(
+    debtMovements.reduce((sum, movement) => sum + Math.abs(movement.amount), 0)
+  );
+  const paymentsTotal = roundAmount(
+    paymentMovements.reduce((sum, movement) => sum + Math.abs(movement.amount), 0)
+  );
+  const adjustmentsTotal = roundAmount(
+    adjustmentMovements.reduce((sum, movement) => sum + movement.amount, 0)
+  );
+  const accountingBalance = roundAmount(initialDebtTotal + adjustmentsTotal - paymentsTotal);
+  const updatedDebtTotal = calculateUpdatedDebtTotal(debtMovements, saleDetailsById, pricingRule);
+  const updatedBalance = roundAmount(updatedDebtTotal + adjustmentsTotal - paymentsTotal);
+
   return {
-    amount: roundAmount(fixedAmount),
-    modeLabel: "Recargo fijo",
-    modeData: {
-      surcharge_amount: fixedAmount,
-      base_total: saleDetail.sale_total,
-    },
+    initialDebtTotal,
+    paymentsTotal,
+    adjustmentsTotal,
+    accountingBalance,
+    updatedDebtTotal,
+    updatedBalance,
+    pricingRule,
   };
 };
 
@@ -152,6 +209,9 @@ export const useCurrentAccount = (
   const [installmentPlans, setInstallmentPlans] = useState<InstallmentPlan[]>([]);
   const [saleDetailsById, setSaleDetailsById] = useState<Record<string, CurrentAccountSaleDetail>>({});
   const [debtSales, setDebtSales] = useState<CurrentAccountDebtSaleOption[]>([]);
+  const [accountSummary, setAccountSummary] = useState<CurrentAccountSummary>(() =>
+    buildAccountSummary(null, [], {})
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasOpenCashSession, setHasOpenCashSession] = useState(false);
@@ -170,6 +230,7 @@ export const useCurrentAccount = (
       setInstallmentPlans([]);
       setSaleDetailsById({});
       setDebtSales([]);
+      setAccountSummary(buildAccountSummary(null, [], {}));
       setHasOpenCashSession(false);
       setOpenCashSessionId(null);
       return;
@@ -311,6 +372,7 @@ export const useCurrentAccount = (
       );
       setSaleDetailsById(nextSaleDetailsById);
       setDebtSales(nextDebtSales);
+      setAccountSummary(buildAccountSummary(customer, list, nextSaleDetailsById));
       setHasOpenCashSession(Boolean(openSession));
       setOpenCashSessionId(openSession?.id ?? null);
     } catch {
@@ -323,6 +385,7 @@ export const useCurrentAccount = (
       setInstallmentPlans([]);
       setSaleDetailsById({});
       setDebtSales([]);
+      setAccountSummary(buildAccountSummary(customer, [], {}));
       setHasOpenCashSession(false);
       setOpenCashSessionId(null);
     } finally {
@@ -333,6 +396,76 @@ export const useCurrentAccount = (
   useEffect(() => {
     void loadCurrentAccount();
   }, [loadCurrentAccount]);
+
+  const updatePricingRule = async (
+    values: RegisterCurrentAccountAdjustmentValues
+  ): Promise<boolean> => {
+    if (!tenantId || !customer) return false;
+    if (!userId) {
+      setFeedback({ type: "error", message: "No se pudo identificar el usuario responsable" });
+      return false;
+    }
+
+    const pricingMode = adjustmentModeToPricingMode(values.mode);
+    const percent = Number(values.surcharge_percent ?? 0);
+    const fixedAmount = Number(values.surcharge_amount ?? 0);
+
+    if (
+      pricingMode === "surcharge_percentage" &&
+      (!Number.isFinite(percent) || percent <= 0)
+    ) {
+      setFeedback({ type: "error", message: "Ingresa un porcentaje de recargo valido" });
+      return false;
+    }
+
+    if (
+      pricingMode === "surcharge_fixed" &&
+      (!Number.isFinite(fixedAmount) || fixedAmount <= 0)
+    ) {
+      setFeedback({ type: "error", message: "Ingresa un recargo fijo valido" });
+      return false;
+    }
+
+    const surchargePercentValue = pricingMode === "surcharge_percentage" ? percent : null;
+    const surchargeAmountValue = pricingMode === "surcharge_fixed" ? fixedAmount : null;
+
+    setIsSubmitting(true);
+    try {
+      const updatedAt = new Date().toISOString();
+      await customersService.update(tenantId, customer.id, {
+        current_account_pricing_mode: pricingMode,
+        current_account_surcharge_percent: surchargePercentValue,
+        current_account_surcharge_amount: surchargeAmountValue,
+        current_account_pricing_updated_at: updatedAt,
+      });
+
+      await auditService.createSafe(tenantId, {
+        user_id: userId,
+        module: "cuentas_corrientes",
+        action: "pricing_rule_update",
+        entity_type: "customer",
+        entity_id: customer.id,
+        description: `Regla de saldo actualizado en cuenta corriente: ${customer.full_name}`,
+        metadata: {
+          customer_id: customer.id,
+          pricing_mode: pricingMode,
+          surcharge_percent: surchargePercentValue,
+          surcharge_amount: surchargeAmountValue,
+          notes: values.notes?.trim() || null,
+          updated_at: updatedAt,
+        },
+      });
+
+      setFeedback({ type: "success", message: "Regla de saldo actualizado guardada" });
+      await loadCurrentAccount();
+      return true;
+    } catch {
+      setFeedback({ type: "error", message: "No se pudo guardar la regla de saldo actualizado" });
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const registerPayment = async (values: RegisterCurrentAccountPaymentValues): Promise<boolean> => {
     if (!tenantId || !customer) return false;
@@ -358,9 +491,16 @@ export const useCurrentAccount = (
       return false;
     }
 
-    const amount = Math.abs(Number(values.amount ?? 0));
-    if (!Number.isFinite(amount) || amount <= 0) {
+    const chargedAmount = Math.abs(Number(values.amount ?? 0));
+    if (!Number.isFinite(chargedAmount) || chargedAmount <= 0) {
       setFeedback({ type: "error", message: "El monto del pago debe ser mayor a 0" });
+      return false;
+    }
+    const accountingBalanceToPay = Math.max(0, accountSummary.accountingBalance);
+    const accountPaymentAmount = Math.min(chargedAmount, accountingBalanceToPay);
+
+    if (accountPaymentAmount <= 0) {
+      setFeedback({ type: "error", message: "La cuenta corriente no tiene saldo contable para cancelar" });
       return false;
     }
 
@@ -375,18 +515,23 @@ export const useCurrentAccount = (
         return false;
       }
 
+      if (values.pricing_rule) {
+        const ruleSaved = await updatePricingRule(values.pricing_rule);
+        if (!ruleSaved) return false;
+      }
+
       const movement = await currentAccountsService.createMovement(tenantId, {
         customer_id: customer.id,
         sale_id: null,
         type: "payment",
-        amount,
+        amount: accountPaymentAmount,
         notes: values.notes?.trim() || null,
         created_by: userId,
       });
       const cashMovement = await cashService.createMovement(tenantId, {
         cash_session_id: openSession.id,
         movement_type: "income",
-        amount,
+        amount: chargedAmount,
         currency_code: "ARS",
         reference_type: normalizedMethodCode,
         reference_id: movement.id,
@@ -403,7 +548,10 @@ export const useCurrentAccount = (
         description: `Pago registrado en cuenta corriente: ${customer.full_name}`,
         metadata: {
           customer_id: customer.id,
-          amount,
+          amount: accountPaymentAmount,
+          charged_amount: chargedAmount,
+          updated_balance_reference: accountSummary.updatedBalance,
+          updated_amount_difference: roundAmount(chargedAmount - accountPaymentAmount),
           balance_after: movement.balance_after,
           payment_method_id: paymentMethod.id,
           payment_method_code: normalizedMethodCode,
@@ -423,7 +571,9 @@ export const useCurrentAccount = (
         metadata: {
           customer_id: customer.id,
           current_account_movement_id: movement.id,
-          amount,
+          amount: chargedAmount,
+          account_payment_amount: accountPaymentAmount,
+          updated_amount_difference: roundAmount(chargedAmount - accountPaymentAmount),
           payment_method_code: normalizedMethodCode,
           payment_method_name: paymentMethod.name,
           payment_details: values.payment_details ?? null,
@@ -444,113 +594,7 @@ export const useCurrentAccount = (
   const registerAdjustment = async (
     values: RegisterCurrentAccountAdjustmentValues
   ): Promise<boolean> => {
-    if (!tenantId || !customer) return false;
-    if (!userId) {
-      setFeedback({ type: "error", message: "No se pudo identificar el usuario responsable" });
-      return false;
-    }
-
-    const saleDetail = saleDetailsById[values.sale_id];
-    if (!saleDetail) {
-      setFeedback({ type: "error", message: "Selecciona un comprobante valido para ajustar" });
-      return false;
-    }
-
-    const resolvedAdjustment = resolveAdjustmentFromInput(values, saleDetail);
-    if (!resolvedAdjustment) {
-      setFeedback({
-        type: "error",
-        message: "Completa correctamente los datos del ajuste",
-      });
-      return false;
-    }
-
-    if (resolvedAdjustment.amount === 0) {
-      setFeedback({
-        type: "error",
-        message: "No hay diferencia para registrar en el ajuste",
-      });
-      return false;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const openSession = await cashService.getOpenSessionByUser(tenantId, userId);
-      if (!openSession) {
-        setFeedback({
-          type: "error",
-          message: "Debes abrir caja para registrar movimientos contables",
-        });
-        return false;
-      }
-
-      const movement = await currentAccountsService.createMovement(tenantId, {
-        customer_id: customer.id,
-        sale_id: saleDetail.sale_id,
-        type: "adjustment",
-        amount: resolvedAdjustment.amount,
-        notes:
-          values.notes?.trim() ||
-          `${resolvedAdjustment.modeLabel} - ${saleDetail.sale_number} - ${customer.full_name}`,
-        created_by: userId,
-      });
-      const cashMovement = await cashService.createMovement(tenantId, {
-        cash_session_id: openSession.id,
-        movement_type: "adjustment",
-        amount: resolvedAdjustment.amount,
-        currency_code: "ARS",
-        reference_type: "current_account_adjustment",
-        reference_id: movement.id,
-        notes:
-          values.notes?.trim() ||
-          `Ajuste de cuenta corriente - ${saleDetail.sale_number} - ${customer.full_name}`,
-        created_by: userId,
-      });
-      await auditService.createSafe(tenantId, {
-        user_id: userId,
-        module: "cuentas_corrientes",
-        action: "adjustment",
-        entity_type: "current_account_movement",
-        entity_id: movement.id,
-        description: `Ajuste registrado en cuenta corriente: ${customer.full_name}`,
-        metadata: {
-          customer_id: customer.id,
-          sale_id: saleDetail.sale_id,
-          sale_number: saleDetail.sale_number,
-          amount: resolvedAdjustment.amount,
-          balance_after: movement.balance_after,
-          mode: values.mode,
-          mode_data: resolvedAdjustment.modeData,
-          cash_session_id: openSession.id,
-          cash_movement_id: cashMovement.id,
-        },
-      });
-      await auditService.createSafe(tenantId, {
-        user_id: userId,
-        module: "caja",
-        action: "adjustment",
-        entity_type: "cash_movement",
-        entity_id: cashMovement.id,
-        description: `Ajuste de caja por cuenta corriente: ${customer.full_name}`,
-        metadata: {
-          customer_id: customer.id,
-          sale_id: saleDetail.sale_id,
-          sale_number: saleDetail.sale_number,
-          current_account_movement_id: movement.id,
-          amount: resolvedAdjustment.amount,
-          mode: values.mode,
-        },
-      });
-
-      setFeedback({ type: "success", message: "Ajuste registrado" });
-      await loadCurrentAccount();
-      return true;
-    } catch {
-      setFeedback({ type: "error", message: "No se pudo registrar el ajuste" });
-      return false;
-    } finally {
-      setIsSubmitting(false);
-    }
+    return updatePricingRule(values);
   };
 
   return {
@@ -562,6 +606,7 @@ export const useCurrentAccount = (
     installmentPlans,
     saleDetailsById,
     debtSales,
+    accountSummary,
     isLoading,
     isSubmitting,
     hasOpenCashSession,

@@ -11,6 +11,7 @@ import { useUiStore } from "@/store/ui.store";
 import type { AppModule } from "@/types/modules";
 import type {
   AppearanceSettings,
+  BarcodeScaleMode,
   FacturacionSettings,
   MercadoPagoMode,
   BankAccount,
@@ -178,6 +179,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     draft,
     setDraft,
     customers,
+    paymentMethods,
     isLoading,
     isSavingAll,
     savingSection,
@@ -490,6 +492,13 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               ))}
             </select>
 
+            <select className="ui-input" value={draft.pos.default_payment_method_id ?? ""} onChange={(event) => updateSection("pos", { default_payment_method_id: event.target.value || null })} disabled={!canWriteConfiguracion}>
+              <option value="">Medio de pago por defecto: automatico</option>
+              {paymentMethods.map((method) => (
+                <option key={method.id} value={method.id}>{method.name}</option>
+              ))}
+            </select>
+
             <select className="ui-input" value={draft.pos.cart_behavior} onChange={(event) => updateSection("pos", { cart_behavior: event.target.value as TenantSettings["pos"]["cart_behavior"] })} disabled={!canWriteConfiguracion}>
               <option value="merge_same_product">Carrito: fusionar items iguales</option>
               <option value="separate_lines">Carrito: lineas separadas</option>
@@ -530,6 +539,9 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
 
             <p className="text-xs text-slate-500 md:col-span-2">
               Cliente por defecto: {draft.pos.default_customer_id ? customerNameById.get(draft.pos.default_customer_id) ?? "Cliente no encontrado" : "No configurado"}
+            </p>
+            <p className="text-xs text-slate-500 md:col-span-2">
+              Medio de pago por defecto: {draft.pos.default_payment_method_id ? paymentMethods.find((method) => method.id === draft.pos.default_payment_method_id)?.name ?? "Medio no encontrado" : "Automatico"}
             </p>
           </div>
         </section>
@@ -1236,14 +1248,20 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               <input type="checkbox" checked={draft.codigos_balanza.ean13_enabled} onChange={(event) => updateSection("codigos_balanza", { ean13_enabled: event.target.checked })} disabled={!canWriteConfiguracion} />
               Compatibilidad EAN13
             </label>
+            <select className="ui-input" value={draft.codigos_balanza.scale_mode} onChange={(event) => updateSection("codigos_balanza", { scale_mode: event.target.value as BarcodeScaleMode })} disabled={!canWriteConfiguracion}>
+              <option value="total_price">Codigo con importe total</option>
+              <option value="weight">Codigo con peso</option>
+            </select>
             <input className="ui-input" value={draft.codigos_balanza.scale_prefix} onChange={(event) => updateSection("codigos_balanza", { scale_prefix: event.target.value })} placeholder="Prefijo de balanza" disabled={!canWriteConfiguracion} />
             <input className="ui-input" type="number" min="8" max="18" value={draft.codigos_balanza.code_length} onChange={(event) => updateSection("codigos_balanza", { code_length: Math.max(8, Math.floor(toNumber(event.target.value, draft.codigos_balanza.code_length))) })} placeholder="Longitud total" disabled={!canWriteConfiguracion} />
             <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.plu_start} onChange={(event) => updateSection("codigos_balanza", { plu_start: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.plu_start))) })} placeholder="Inicio PLU" disabled={!canWriteConfiguracion} />
             <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.plu_length} onChange={(event) => updateSection("codigos_balanza", { plu_length: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.plu_length))) })} placeholder="Largo PLU" disabled={!canWriteConfiguracion} />
             <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.weight_start} onChange={(event) => updateSection("codigos_balanza", { weight_start: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.weight_start))) })} placeholder="Inicio peso" disabled={!canWriteConfiguracion} />
             <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.weight_length} onChange={(event) => updateSection("codigos_balanza", { weight_length: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.weight_length))) })} placeholder="Largo peso" disabled={!canWriteConfiguracion} />
+            <input className="ui-input" type="number" min="0" max="4" value={draft.codigos_balanza.weight_decimals} onChange={(event) => updateSection("codigos_balanza", { weight_decimals: Math.max(0, Math.floor(toNumber(event.target.value, draft.codigos_balanza.weight_decimals))) })} placeholder="Decimales peso" disabled={!canWriteConfiguracion} />
             <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.amount_start} onChange={(event) => updateSection("codigos_balanza", { amount_start: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.amount_start))) })} placeholder="Inicio importe" disabled={!canWriteConfiguracion} />
             <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.amount_length} onChange={(event) => updateSection("codigos_balanza", { amount_length: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.amount_length))) })} placeholder="Largo importe" disabled={!canWriteConfiguracion} />
+            <input className="ui-input" type="number" min="0" max="4" value={draft.codigos_balanza.amount_decimals} onChange={(event) => updateSection("codigos_balanza", { amount_decimals: Math.max(0, Math.floor(toNumber(event.target.value, draft.codigos_balanza.amount_decimals))) })} placeholder="Decimales importe" disabled={!canWriteConfiguracion} />
           </div>
         </section>
 

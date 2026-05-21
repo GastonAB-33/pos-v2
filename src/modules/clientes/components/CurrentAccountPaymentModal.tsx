@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { PaymentMethodSelector } from "@/components/payments/PaymentMethodSelector";
 import {
   getPaymentMethodPosConfig,
   normalizePaymentMethodCode,
@@ -10,7 +11,10 @@ import type {
   OriginBank,
   PaymentMethod,
 } from "@/types/entities";
-import type { RegisterCurrentAccountPaymentValues } from "@/modules/clientes/hooks/useCurrentAccount";
+import type {
+  CurrentAccountSummary,
+  RegisterCurrentAccountPaymentValues,
+} from "@/modules/clientes/hooks/useCurrentAccount";
 
 interface CurrentAccountPaymentModalProps {
   open: boolean;
@@ -18,6 +22,7 @@ interface CurrentAccountPaymentModalProps {
   bankAccounts: BankAccount[];
   originBanks: OriginBank[];
   installmentPlans: InstallmentPlan[];
+  accountSummary: CurrentAccountSummary;
   disabled?: boolean;
   onClose: () => void;
   onSubmit: (values: RegisterCurrentAccountPaymentValues) => Promise<boolean>;
@@ -65,7 +70,48 @@ const getPaymentMethodLabel = (paymentMethod: PaymentMethod): string => {
   return paymentMethod.name;
 };
 
+const currency = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  maximumFractionDigits: 2,
+});
+
 const roundAmount = (value: number): number => Number(value.toFixed(2));
+
+type PaymentPricingMode = "original" | "update_to_today_price" | "surcharge_percentage" | "surcharge_fixed";
+
+const resolvePreviewBalance = (
+  mode: PaymentPricingMode,
+  accountSummary: CurrentAccountSummary,
+  surchargePercent: string,
+  surchargeAmount: string
+): number => {
+  if (mode === "original") return accountSummary.accountingBalance;
+  if (mode === "update_to_today_price") {
+    return roundAmount(
+      accountSummary.updatedDebtTotal + accountSummary.adjustmentsTotal - accountSummary.paymentsTotal
+    );
+  }
+
+  if (mode === "surcharge_percentage") {
+    const percent = Number(surchargePercent.trim().replace(",", "."));
+    if (!Number.isFinite(percent) || percent <= 0) return accountSummary.updatedBalance;
+    return roundAmount(
+      accountSummary.initialDebtTotal * (1 + percent / 100) +
+        accountSummary.adjustmentsTotal -
+        accountSummary.paymentsTotal
+    );
+  }
+
+  const fixedAmount = Number(surchargeAmount.trim().replace(",", "."));
+  if (!Number.isFinite(fixedAmount) || fixedAmount <= 0) return accountSummary.updatedBalance;
+  return roundAmount(
+    accountSummary.initialDebtTotal +
+      fixedAmount +
+      accountSummary.adjustmentsTotal -
+      accountSummary.paymentsTotal
+  );
+};
 
 export const CurrentAccountPaymentModal = ({
   open,
@@ -73,6 +119,7 @@ export const CurrentAccountPaymentModal = ({
   bankAccounts,
   originBanks,
   installmentPlans,
+  accountSummary,
   disabled,
   onClose,
   onSubmit,
@@ -80,11 +127,22 @@ export const CurrentAccountPaymentModal = ({
   const [selectedMethodId, setSelectedMethodId] = useState("");
   const [amountInput, setAmountInput] = useState("");
   const [notes, setNotes] = useState("");
+  const [applyPricingRule, setApplyPricingRule] = useState(false);
+  const [pricingMode, setPricingMode] = useState<PaymentPricingMode>("update_to_today_price");
+  const [surchargePercent, setSurchargePercent] = useState("");
+  const [surchargeAmount, setSurchargeAmount] = useState("");
   const [detailsDraft, setDetailsDraft] = useState<PaymentDetailsDraft>(getInitialDetailsDraft());
   const [isSubmittingLocal, setIsSubmittingLocal] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const busy = Boolean(disabled || isSubmittingLocal);
+  const previewUpdatedBalance = useMemo(
+    () =>
+      applyPricingRule
+        ? resolvePreviewBalance(pricingMode, accountSummary, surchargePercent, surchargeAmount)
+        : accountSummary.updatedBalance,
+    [accountSummary, applyPricingRule, pricingMode, surchargeAmount, surchargePercent]
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -93,11 +151,15 @@ export const CurrentAccountPaymentModal = ({
         (method) => normalizePaymentMethodCode(method.code) !== "current_account"
       ) ?? paymentMethods[0];
     setSelectedMethodId(firstAllowedMethod?.id ?? "");
-    setAmountInput("");
+    setAmountInput(accountSummary.updatedBalance > 0 ? accountSummary.updatedBalance.toFixed(2) : "");
     setNotes("");
+    setApplyPricingRule(false);
+    setPricingMode("update_to_today_price");
+    setSurchargePercent("");
+    setSurchargeAmount("");
     setDetailsDraft(getInitialDetailsDraft());
     setErrorMessage(null);
-  }, [open, paymentMethods]);
+  }, [accountSummary.updatedBalance, open, paymentMethods]);
 
   const selectedMethod = useMemo(
     () => paymentMethods.find((method) => method.id === selectedMethodId) ?? null,
@@ -351,6 +413,21 @@ export const CurrentAccountPaymentModal = ({
       return;
     }
 
+    const parsedSurchargePercent = Number(surchargePercent.trim().replace(",", "."));
+    const parsedSurchargeAmount = Number(surchargeAmount.trim().replace(",", "."));
+    if (applyPricingRule && pricingMode === "surcharge_percentage") {
+      if (!Number.isFinite(parsedSurchargePercent) || parsedSurchargePercent <= 0) {
+        setErrorMessage("Ingresa un porcentaje de recargo mayor a 0");
+        return;
+      }
+    }
+    if (applyPricingRule && pricingMode === "surcharge_fixed") {
+      if (!Number.isFinite(parsedSurchargeAmount) || parsedSurchargeAmount <= 0) {
+        setErrorMessage("Ingresa un recargo fijo mayor a 0");
+        return;
+      }
+    }
+
     setIsSubmittingLocal(true);
     try {
       const ok = await onSubmit({
@@ -358,6 +435,16 @@ export const CurrentAccountPaymentModal = ({
         amount: roundAmount(parsedAmount),
         notes: notes.trim() || undefined,
         payment_details: resolved.details,
+        pricing_rule: applyPricingRule
+          ? {
+              mode: pricingMode,
+              surcharge_percent:
+                pricingMode === "surcharge_percentage" ? parsedSurchargePercent : undefined,
+              surcharge_amount:
+                pricingMode === "surcharge_fixed" ? parsedSurchargeAmount : undefined,
+              notes: "Regla aplicada antes de registrar pago",
+            }
+          : null,
       });
       if (!ok) return;
       onClose();
@@ -391,48 +478,20 @@ export const CurrentAccountPaymentModal = ({
         <div className="mt-4 space-y-4">
           <div>
             <p className="mb-2 text-sm font-medium text-slate-800">Medio de pago</p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {paymentMethods.map((method) => {
-                const code = normalizePaymentMethodCode(method.code);
-                const isDisabledMethod = code === "current_account";
-                const isSelected = method.id === selectedMethodId;
-
-                return (
-                  <button
-                    key={method.id}
-                    type="button"
-                    className={[
-                      "rounded-xl border p-3 text-left transition",
-                      isSelected
-                        ? "border-brand-300 bg-brand-50"
-                        : "border-slate-200 bg-slate-50 hover:bg-slate-100",
-                      isDisabledMethod ? "cursor-not-allowed opacity-70" : "",
-                    ].join(" ")}
-                    onClick={() => {
-                      if (isDisabledMethod || busy) return;
-                      setSelectedMethodId(method.id);
-                      setErrorMessage(null);
-                    }}
-                    disabled={busy}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-slate-900">{getPaymentMethodLabel(method)}</p>
-                      {isSelected && !isDisabledMethod ? (
-                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                          Seleccionado
-                        </span>
-                      ) : null}
-                      {isDisabledMethod ? (
-                        <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700">
-                          No permitido
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500">{method.name}</p>
-                  </button>
-                );
-              })}
-            </div>
+            <PaymentMethodSelector
+              paymentMethods={paymentMethods}
+              selectedPaymentMethodId={selectedMethodId}
+              disabled={busy}
+              columns={2}
+              isMethodDisabled={(method) => normalizePaymentMethodCode(method.code) === "current_account"}
+              getMethodBadges={(method) =>
+                normalizePaymentMethodCode(method.code) === "current_account" ? ["No permitido"] : []
+              }
+              onChange={(methodId) => {
+                setSelectedMethodId(methodId);
+                setErrorMessage(null);
+              }}
+            />
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -463,6 +522,110 @@ export const CurrentAccountPaymentModal = ({
                 disabled={busy}
               />
             </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <label className="flex items-start gap-2 text-sm font-medium text-slate-800">
+              <input
+                type="checkbox"
+                checked={applyPricingRule}
+                onChange={(event) => {
+                  setApplyPricingRule(event.target.checked);
+                  if (event.target.checked) {
+                    const nextPreview = resolvePreviewBalance(
+                      pricingMode,
+                      accountSummary,
+                      surchargePercent,
+                      surchargeAmount
+                    );
+                    if (nextPreview > 0) setAmountInput(nextPreview.toFixed(2));
+                  } else if (accountSummary.updatedBalance > 0) {
+                    setAmountInput(accountSummary.updatedBalance.toFixed(2));
+                  }
+                  setErrorMessage(null);
+                }}
+                disabled={busy}
+              />
+              <span>Desea aplicar algun recargo o actualizacion antes del pago?</span>
+            </label>
+            <p className="mt-1 text-xs text-slate-500" title="El recargo o actualizacion vigente reemplaza al anterior; no se suma varias veces.">
+              El recargo o actualizacion reemplaza al anterior; no se acumula.
+            </p>
+
+            {applyPricingRule ? (
+              <div className="mt-3 grid gap-2">
+                <select
+                  className="ui-input"
+                  value={pricingMode}
+                  onChange={(event) => {
+                    const nextMode = event.target.value as PaymentPricingMode;
+                    setPricingMode(nextMode);
+                    const nextPreview = resolvePreviewBalance(
+                      nextMode,
+                      accountSummary,
+                      surchargePercent,
+                      surchargeAmount
+                    );
+                    if (nextPreview > 0) setAmountInput(nextPreview.toFixed(2));
+                    setErrorMessage(null);
+                  }}
+                  disabled={busy}
+                >
+                  <option value="original">Volver a precio original</option>
+                  <option value="update_to_today_price">Actualizar a precio de hoy</option>
+                  <option value="surcharge_percentage">Recargo porcentual final</option>
+                  <option value="surcharge_fixed">Recargo fijo final</option>
+                </select>
+
+                {pricingMode === "surcharge_percentage" ? (
+                  <input
+                    className="ui-input"
+                    type="number"
+                    step="0.01"
+                    value={surchargePercent}
+                    onChange={(event) => {
+                      setSurchargePercent(event.target.value);
+                      const nextPreview = resolvePreviewBalance(
+                        "surcharge_percentage",
+                        accountSummary,
+                        event.target.value,
+                        surchargeAmount
+                      );
+                      if (nextPreview > 0) setAmountInput(nextPreview.toFixed(2));
+                      setErrorMessage(null);
+                    }}
+                    placeholder="Porcentaje de recargo final"
+                    disabled={busy}
+                  />
+                ) : null}
+
+                {pricingMode === "surcharge_fixed" ? (
+                  <input
+                    className="ui-input"
+                    type="number"
+                    step="0.01"
+                    value={surchargeAmount}
+                    onChange={(event) => {
+                      setSurchargeAmount(event.target.value);
+                      const nextPreview = resolvePreviewBalance(
+                        "surcharge_fixed",
+                        accountSummary,
+                        surchargePercent,
+                        event.target.value
+                      );
+                      if (nextPreview > 0) setAmountInput(nextPreview.toFixed(2));
+                      setErrorMessage(null);
+                    }}
+                    placeholder="Monto fijo de recargo final"
+                    disabled={busy}
+                  />
+                ) : null}
+
+                <p className="text-xs text-slate-500">
+                  Saldo actualizado a cobrar: <strong>{currency.format(previewUpdatedBalance)}</strong>
+                </p>
+              </div>
+            ) : null}
           </div>
 
           {selectedMethod && selectedMethodConfig ? (

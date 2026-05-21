@@ -193,9 +193,7 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
             appendMovementInState(movementOut);
           }
 
-          await productsService.update(tenantId, product.id, {
-            stock_current: nextStock,
-          });
+          await productsService.updateStock(tenantId, product.id, nextStock);
 
           patchProductInState(product.id, { stock_current: nextStock });
 

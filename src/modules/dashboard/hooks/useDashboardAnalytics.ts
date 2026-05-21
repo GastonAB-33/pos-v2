@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { cashService } from "@/services/cash.service";
 import { customersService } from "@/services/customers.service";
 import { paymentMethodsService } from "@/services/payment-methods.service";
 import { productsService } from "@/services/products.service";
 import { purchasesService } from "@/services/purchases.service";
 import { salesService } from "@/services/sales.service";
-import type { Product } from "@/types/entities";
+import type { CashMovement, Product } from "@/types/entities";
 
 interface DashboardKpis {
   salesToday: number;
@@ -15,6 +16,12 @@ interface DashboardKpis {
   lowStockProducts: number;
   customersInDebt: number;
   purchasesMonth: number;
+  cashIncomeToday: number;
+  cashExpenseToday: number;
+  cashNetToday: number;
+  cashIncomeMonth: number;
+  manualCashMovementsToday: number;
+  openCashSessions: number;
 }
 
 interface SeriesPoint {
@@ -45,6 +52,7 @@ interface DashboardAnalyticsData {
   topProducts: TopProductRow[];
   stockCritical: StockCriticalRow[];
   purchasesByPeriod: SeriesPoint[];
+  cashMovementsBySource: SeriesPoint[];
 }
 
 interface DashboardAnalyticsState {
@@ -83,12 +91,46 @@ const initialData: DashboardAnalyticsData = {
     lowStockProducts: 0,
     customersInDebt: 0,
     purchasesMonth: 0,
+    cashIncomeToday: 0,
+    cashExpenseToday: 0,
+    cashNetToday: 0,
+    cashIncomeMonth: 0,
+    manualCashMovementsToday: 0,
+    openCashSessions: 0,
   },
   salesLast7Days: [],
   salesByPaymentMethod: [],
   topProducts: [],
   stockCritical: [],
   purchasesByPeriod: [],
+  cashMovementsBySource: [],
+};
+
+const normalizeKey = (value: string | null | undefined) => (value ?? "").trim().toLowerCase();
+
+const defaultPaymentMethodLabels: Record<string, string> = {
+  cash: "Efectivo",
+  card_debit: "Tarjeta de debito",
+  card_credit: "Tarjeta de credito",
+  transfer: "Transferencia bancaria",
+  mercado_pago: "Mercado Pago",
+  cheque: "Cheque",
+  current_account: "Cuenta corriente",
+  manual_income: "Ingreso manual",
+  manual_expense: "Egreso manual",
+};
+
+const isCashIncome = (movement: CashMovement): boolean => {
+  if (movement.movement_type === "expense") return false;
+  if (movement.movement_type === "adjustment") return movement.amount > 0;
+  return true;
+};
+
+const getCashSignedAmount = (movement: CashMovement): number => {
+  const amount = Math.abs(movement.amount);
+  if (movement.movement_type === "expense") return -amount;
+  if (movement.movement_type === "adjustment" && movement.amount < 0) return -amount;
+  return amount;
 };
 
 const buildStockCriticalRows = (products: Product[]): StockCriticalRow[] => {
@@ -126,7 +168,17 @@ export const useDashboardAnalytics = (tenantId: string | null): DashboardAnalyti
     setError(null);
 
     try {
-      const [sales, saleItems, salePayments, products, customers, purchases, paymentMethods] = await Promise.all([
+      const [
+        sales,
+        saleItems,
+        salePayments,
+        products,
+        customers,
+        purchases,
+        paymentMethods,
+        cashSessions,
+        cashMovements,
+      ] = await Promise.all([
         salesService.getAllByTenant(tenantId),
         salesService.getAllItemsByTenant(tenantId),
         salesService.getAllPaymentsByTenant(tenantId),
@@ -134,6 +186,8 @@ export const useDashboardAnalytics = (tenantId: string | null): DashboardAnalyti
         customersService.getAllByTenant(tenantId),
         purchasesService.getAllByTenant(tenantId),
         paymentMethodsService.getAllByTenant(tenantId),
+        cashService.getAllByTenant(tenantId),
+        cashService.getAllMovementsByTenant(tenantId),
       ]);
 
       const now = new Date();
@@ -163,6 +217,31 @@ export const useDashboardAnalytics = (tenantId: string | null): DashboardAnalyti
       const purchasesMonth = roundAmount(
         confirmedPurchasesMonth.reduce((acc, purchase) => acc + purchase.total, 0)
       );
+
+      const cashMovementsToday = cashMovements.filter((movement) => isOnOrAfter(movement.created_at, startToday));
+      const cashMovementsMonth = cashMovements.filter((movement) => isOnOrAfter(movement.created_at, startMonth));
+      const cashIncomeToday = roundAmount(
+        cashMovementsToday
+          .filter(isCashIncome)
+          .reduce((acc, movement) => acc + Math.abs(movement.amount), 0)
+      );
+      const cashExpenseToday = roundAmount(
+        cashMovementsToday
+          .filter((movement) => !isCashIncome(movement))
+          .reduce((acc, movement) => acc + Math.abs(movement.amount), 0)
+      );
+      const cashNetToday = roundAmount(
+        cashMovementsToday.reduce((acc, movement) => acc + getCashSignedAmount(movement), 0)
+      );
+      const cashIncomeMonth = roundAmount(
+        cashMovementsMonth
+          .filter(isCashIncome)
+          .reduce((acc, movement) => acc + Math.abs(movement.amount), 0)
+      );
+      const manualCashMovementsToday = cashMovementsToday.filter(
+        (movement) => movement.movement_type === "income" || movement.movement_type === "expense"
+      ).length;
+      const openCashSessions = cashSessions.filter((session) => session.status === "open").length;
 
       const last7Dates = Array.from({ length: 7 }).map((_, offset) => {
         const date = new Date(startToday);
@@ -205,6 +284,25 @@ export const useDashboardAnalytics = (tenantId: string | null): DashboardAnalyti
         .map(([label, amount]) => ({ label, value: roundAmount(amount) }))
         .sort((a, b) => b.value - a.value)
         .slice(0, 6);
+
+      const cashMovementsBySourceMap = new Map<string, number>();
+      for (const movement of cashMovementsMonth) {
+        if (!isCashIncome(movement)) continue;
+        const referenceKey = normalizeKey(movement.reference_type);
+        const label =
+          paymentMethodNameByCode.get(referenceKey) ??
+          defaultPaymentMethodLabels[referenceKey] ??
+          (referenceKey ? referenceKey : "Ingreso");
+        cashMovementsBySourceMap.set(
+          label,
+          (cashMovementsBySourceMap.get(label) ?? 0) + Math.abs(movement.amount)
+        );
+      }
+
+      const cashMovementsBySource = [...cashMovementsBySourceMap.entries()]
+        .map(([label, amount]) => ({ label, value: roundAmount(amount) }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 8);
 
       const monthItems = saleItems.filter((item) => monthSaleIds.has(item.sale_id));
       const topProductsMap = new Map<string, TopProductRow>();
@@ -270,12 +368,19 @@ export const useDashboardAnalytics = (tenantId: string | null): DashboardAnalyti
           lowStockProducts,
           customersInDebt,
           purchasesMonth,
+          cashIncomeToday,
+          cashExpenseToday,
+          cashNetToday,
+          cashIncomeMonth,
+          manualCashMovementsToday,
+          openCashSessions,
         },
         salesLast7Days,
         salesByPaymentMethod,
         topProducts,
         stockCritical,
         purchasesByPeriod,
+        cashMovementsBySource,
       });
     } catch {
       setError("No se pudieron cargar las estadisticas");

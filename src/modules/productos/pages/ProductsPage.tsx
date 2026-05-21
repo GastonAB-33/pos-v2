@@ -145,6 +145,7 @@ export const ProductsPage = () => {
           loading={products.isSubmitting}
           onClose={() => setImportOpen(false)}
           onDownloadTemplate={products.downloadImportTemplate}
+          onDownloadErrors={products.downloadImportErrors}
           onParseFile={products.parseImportFile}
           onConfirmImport={products.applyImportPreview}
         />

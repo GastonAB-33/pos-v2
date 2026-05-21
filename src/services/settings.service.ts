@@ -43,6 +43,7 @@ const createDefaultBusinessSettings = (): BusinessSettings => ({
 
 const createDefaultPosSettings = (): PosSettings => ({
   default_customer_id: null,
+  default_payment_method_id: null,
   auto_print_receipt: false,
   allow_sale_without_customer: true,
   allow_negative_stock: false,
@@ -94,14 +95,17 @@ const createDefaultFacturacionSettings = (): FacturacionSettings => ({
 
 const createDefaultBarcodeScaleSettings = (): BarcodeScaleSettings => ({
   scale_parser_enabled: false,
+  scale_mode: "total_price",
   scale_prefix: "20",
   code_length: 13,
   plu_start: 3,
   plu_length: 4,
   weight_start: 7,
   weight_length: 5,
+  weight_decimals: 3,
   amount_start: 7,
-  amount_length: 5,
+  amount_length: 6,
+  amount_decimals: 2,
   ean13_enabled: true,
 });
 

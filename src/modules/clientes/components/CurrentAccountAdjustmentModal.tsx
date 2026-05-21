@@ -3,6 +3,7 @@ import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import type {
+  CurrentAccountSummary,
   CurrentAccountDebtSaleOption,
   RegisterCurrentAccountAdjustmentValues,
 } from "@/modules/clientes/hooks/useCurrentAccount";
@@ -10,6 +11,7 @@ import type {
 interface CurrentAccountAdjustmentModalProps {
   open: boolean;
   debtSales: CurrentAccountDebtSaleOption[];
+  accountSummary: CurrentAccountSummary;
   disabled?: boolean;
   onClose: () => void;
   onSubmit: (values: RegisterCurrentAccountAdjustmentValues) => Promise<boolean>;
@@ -33,8 +35,7 @@ const parseOptionalNumber = (value: unknown): number | undefined => {
 
 const schema = z
   .object({
-    sale_id: z.string().min(1, "Selecciona un comprobante"),
-    mode: z.enum(["update_to_today_price", "surcharge_percentage", "surcharge_fixed"]),
+    mode: z.enum(["original", "update_to_today_price", "surcharge_percentage", "surcharge_fixed"]),
     surcharge_percent: z.preprocess(parseOptionalNumber, z.number().optional()),
     surcharge_amount: z.preprocess(parseOptionalNumber, z.number().optional()),
     notes: z.string().max(300, "Maximo 300 caracteres").optional().or(z.literal("")),
@@ -68,6 +69,7 @@ const roundAmount = (value: number): number => Number(value.toFixed(2));
 export const CurrentAccountAdjustmentModal = ({
   open,
   debtSales,
+  accountSummary,
   disabled,
   onClose,
   onSubmit,
@@ -82,7 +84,6 @@ export const CurrentAccountAdjustmentModal = ({
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      sale_id: "",
       mode: "update_to_today_price",
       surcharge_percent: undefined,
       surcharge_amount: undefined,
@@ -91,40 +92,45 @@ export const CurrentAccountAdjustmentModal = ({
   });
 
   const busy = Boolean(disabled || isSubmitting);
-  const selectedSaleId = watch("sale_id");
   const selectedMode = watch("mode");
   const surchargePercent = watch("surcharge_percent");
   const surchargeAmount = watch("surcharge_amount");
 
   useEffect(() => {
     if (!open) return;
-    setValue("sale_id", debtSales[0]?.sale_id ?? "", { shouldValidate: true });
-  }, [debtSales, open, setValue]);
-
-  const selectedDebt = useMemo(
-    () => debtSales.find((sale) => sale.sale_id === selectedSaleId) ?? null,
-    [debtSales, selectedSaleId]
-  );
+    const rule = accountSummary.pricingRule;
+    const nextMode =
+      rule.mode === "today_prices"
+        ? "update_to_today_price"
+        : rule.mode === "surcharge_percentage" || rule.mode === "surcharge_fixed" || rule.mode === "original"
+          ? rule.mode
+          : "update_to_today_price";
+    setValue("mode", nextMode, { shouldValidate: true });
+    setValue("surcharge_percent", rule.surcharge_percent ?? undefined);
+    setValue("surcharge_amount", rule.surcharge_amount ?? undefined);
+  }, [accountSummary.pricingRule, open, setValue]);
 
   const adjustmentPreview = useMemo(() => {
-    if (!selectedDebt) return null;
+    if (selectedMode === "original") {
+      return 0;
+    }
 
     if (selectedMode === "update_to_today_price") {
-      if (selectedDebt.current_total == null) return null;
-      return roundAmount(selectedDebt.current_total - selectedDebt.sale_total);
+      return roundAmount(accountSummary.updatedDebtTotal - accountSummary.initialDebtTotal);
     }
 
     if (selectedMode === "surcharge_percentage") {
       const percent = Number(surchargePercent ?? 0);
       if (!Number.isFinite(percent) || percent <= 0) return null;
-      return roundAmount(selectedDebt.sale_total * (percent / 100));
+      return roundAmount(accountSummary.initialDebtTotal * (percent / 100));
     }
 
     const fixed = Number(surchargeAmount ?? 0);
     if (!Number.isFinite(fixed) || fixed <= 0) return null;
     return roundAmount(fixed);
   }, [
-    selectedDebt,
+    accountSummary.initialDebtTotal,
+    accountSummary.updatedDebtTotal,
     selectedMode,
     surchargeAmount,
     surchargePercent,
@@ -132,7 +138,6 @@ export const CurrentAccountAdjustmentModal = ({
 
   const submit = async (values: FormValues) => {
     const ok = await onSubmit({
-      sale_id: values.sale_id,
       mode: values.mode,
       surcharge_percent: values.surcharge_percent,
       surcharge_amount: values.surcharge_amount,
@@ -142,7 +147,6 @@ export const CurrentAccountAdjustmentModal = ({
     if (!ok) return;
 
     reset({
-      sale_id: debtSales[0]?.sale_id ?? "",
       mode: "update_to_today_price",
       surcharge_percent: undefined,
       surcharge_amount: undefined,
@@ -160,7 +164,7 @@ export const CurrentAccountAdjustmentModal = ({
           <div>
             <h3 className="text-base font-semibold text-slate-900">Realizar ajuste</h3>
             <p className="text-xs text-slate-500">
-              Ajusta la deuda desde una compra previa por precio actualizado o recargo.
+              Define una regla global para mostrar el saldo actualizado sin crear movimientos contables.
             </p>
           </div>
           <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={onClose} disabled={busy}>
@@ -170,25 +174,24 @@ export const CurrentAccountAdjustmentModal = ({
 
         {!debtSales.length ? (
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-            No hay compras en cuenta corriente con productos para aplicar ajustes.
+            No hay compras en cuenta corriente con productos para calcular saldo actualizado.
           </div>
         ) : (
           <form className="mt-4 grid gap-4" onSubmit={handleSubmit(submit)}>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700">Comprobante a ajustar</label>
-              <select className="ui-input" {...register("sale_id")} disabled={busy}>
-                {debtSales.map((sale) => (
-                  <option key={sale.movement_id} value={sale.sale_id}>
-                    {sale.sale_number}
-                    {sale.receipt_number ? ` | Ticket ${sale.receipt_number}` : ""}
-                    {` | ${currency.format(sale.sale_total)}`}
-                  </option>
-                ))}
-              </select>
-              {errors.sale_id ? <p className="mt-1 text-xs text-red-600">{errors.sale_id.message}</p> : null}
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              El recargo o actualizacion vigente reemplaza al anterior; no se suma varias veces.
             </div>
 
             <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <label className="flex items-start gap-2 text-sm text-slate-700">
+                <input
+                  type="radio"
+                  value="original"
+                  {...register("mode")}
+                  disabled={busy}
+                />
+                <span>Volver a precio original</span>
+              </label>
               <label className="flex items-start gap-2 text-sm text-slate-700">
                 <input
                   type="radio"
@@ -249,17 +252,16 @@ export const CurrentAccountAdjustmentModal = ({
               ) : null}
             </div>
 
-            {selectedDebt ? (
+            {debtSales.length ? (
               <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
                 <p className="text-xs text-slate-500">
-                  Compra original: <strong>{currency.format(selectedDebt.sale_total)}</strong>
-                  {selectedDebt.current_total != null
-                    ? ` | Total a precio de hoy: ${currency.format(selectedDebt.current_total)}`
-                    : ""}
+                  Deuda original: <strong>{currency.format(accountSummary.initialDebtTotal)}</strong>
+                  {" | "}
+                  Deuda actualizada: <strong>{currency.format(accountSummary.updatedDebtTotal)}</strong>
                 </p>
                 {adjustmentPreview != null ? (
                   <p className="text-sm font-medium text-slate-800">
-                    Ajuste a registrar: {currency.format(adjustmentPreview)}
+                    Diferencia de referencia: {currency.format(adjustmentPreview)}
                   </p>
                 ) : null}
                 <div className="max-h-44 overflow-y-auto rounded-md border border-slate-200">
@@ -273,20 +275,22 @@ export const CurrentAccountAdjustmentModal = ({
                       </tr>
                     </thead>
                     <tbody>
-                      {selectedDebt.items.map((item) => (
-                        <tr key={`${item.product_id}-${item.product_name}`}>
-                          <td className="px-2 py-1 text-slate-700">{item.product_name}</td>
-                          <td className="px-2 py-1 text-slate-700">
-                            {item.quantity.toLocaleString("es-AR")}
-                          </td>
-                          <td className="px-2 py-1 text-slate-700">{currency.format(item.unit_price)}</td>
-                          <td className="px-2 py-1 text-slate-700">
-                            {item.current_unit_price == null
-                              ? "-"
-                              : currency.format(item.current_unit_price)}
-                          </td>
-                        </tr>
-                      ))}
+                      {debtSales.flatMap((sale) =>
+                        sale.items.map((item) => (
+                          <tr key={`${sale.sale_id}-${item.product_id}-${item.product_name}`}>
+                            <td className="px-2 py-1 text-slate-700">{item.product_name}</td>
+                            <td className="px-2 py-1 text-slate-700">
+                              {item.quantity.toLocaleString("es-AR")}
+                            </td>
+                            <td className="px-2 py-1 text-slate-700">{currency.format(item.unit_price)}</td>
+                            <td className="px-2 py-1 text-slate-700">
+                              {item.current_unit_price == null
+                                ? "-"
+                                : currency.format(item.current_unit_price)}
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>

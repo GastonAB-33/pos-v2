@@ -89,7 +89,7 @@ export const CustomersTable = ({
               onClick={() => onViewCurrentAccount(row)}
               className="rounded-md border border-slate-300 px-2 py-1 text-xs"
             >
-              Ver cta cte
+              Estado cta cte
             </button>
 
             {canWrite ? (

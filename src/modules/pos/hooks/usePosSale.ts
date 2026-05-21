@@ -24,12 +24,12 @@ import {
 import { posCustomerProfilesService } from "@/services/pos-customer-profiles.service";
 import { priceListsService } from "@/services/price-lists.service";
 import { productsService } from "@/services/products.service";
-import { promotionsService } from "@/services/promotions.service";
+import { buildPromotionBarcode, promotionsService, type PromotionWithDetails } from "@/services/promotions.service";
 import { receiptsService } from "@/services/receipts.service";
 import { salesService } from "@/services/sales.service";
 import { settingsService } from "@/services/settings.service";
 import { stockService } from "@/services/stock.service";
-import type { ArcaSettings, BankAccount, BarcodeScaleSettings, Customer, InstallmentPlan, Invoice, InvoiceDocumentType, MercadoPagoSettings, OriginBank, PaymentMethod, PaymentMethodType, PosSettings, PriceList, Product, ProductBarcode, Promotion, Receipt, Sale } from "@/types/entities";
+import type { ArcaSettings, BankAccount, BarcodeScaleSettings, Customer, InstallmentPlan, Invoice, InvoiceDocumentType, MercadoPagoSettings, OriginBank, PaymentMethod, PaymentMethodType, PosSettings, PriceList, Product, ProductBarcode, Receipt, Sale } from "@/types/entities";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
 
 interface PosCartItem {
@@ -79,6 +79,7 @@ interface BarcodeScanResult {
   ok: boolean;
   barcode: string;
   product?: Product;
+  promotion?: PromotionWithDetails;
   parsedScale?: ParsedScaleBarcode | null;
   error?: string;
 }
@@ -113,6 +114,7 @@ const getBackendErrorMessage = (error: unknown): string | null => {
 
 const defaultPosSettings: PosSettings = {
   default_customer_id: null,
+  default_payment_method_id: null,
   auto_print_receipt: false,
   allow_sale_without_customer: true,
   allow_negative_stock: false,
@@ -122,14 +124,17 @@ const defaultPosSettings: PosSettings = {
 
 const defaultBarcodeScaleSettings: BarcodeScaleSettings = {
   scale_parser_enabled: false,
+  scale_mode: "total_price",
   scale_prefix: "20",
   code_length: 13,
   plu_start: 3,
   plu_length: 4,
   weight_start: 7,
   weight_length: 5,
+  weight_decimals: 3,
   amount_start: 7,
-  amount_length: 5,
+  amount_length: 6,
+  amount_decimals: 2,
   ean13_enabled: true,
 };
 
@@ -192,6 +197,8 @@ const paymentMethodPriority = (method: PaymentMethod): number => {
   return 7;
 };
 
+const normalizeBarcodeValue = (value: string): string => value.trim().replace(/\s+/g, "");
+
 export const usePosSale = (tenantId: string | null) => {
   const { isOnline, refreshPending } = useOffline();
   const [products, setProducts] = useState<Product[]>([]);
@@ -203,7 +210,7 @@ export const usePosSale = (tenantId: string | null) => {
   const [originBanks, setOriginBanks] = useState<OriginBank[]>([]);
   const [installmentPlans, setInstallmentPlans] = useState<InstallmentPlan[]>([]);
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
-  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [promotions, setPromotions] = useState<PromotionWithDetails[]>([]);
   const [posSettings, setPosSettings] = useState<PosSettings>(defaultPosSettings);
   const [scaleSettings, setScaleSettings] = useState<BarcodeScaleSettings>(defaultBarcodeScaleSettings);
   const [mercadoPagoSettings, setMercadoPagoSettings] = useState<MercadoPagoSettings>(
@@ -288,7 +295,7 @@ export const usePosSale = (tenantId: string | null) => {
         originBanksService.getActiveByTenant(tenantId),
         installmentPlansService.getActiveByTenant(tenantId),
         priceListsService.getAllByTenant(tenantId),
-        promotionsService.getActiveByTenant(tenantId),
+        promotionsService.getActiveByTenantWithDetails(tenantId),
         settingsService.getByTenant(tenantId),
       ]);
 
@@ -682,6 +689,58 @@ export const usePosSale = (tenantId: string | null) => {
     return true;
   };
 
+  const findPromotionByBarcode = useCallback(
+    (rawBarcode: string): PromotionWithDetails | null => {
+      const barcode = normalizeBarcodeValue(rawBarcode).toLowerCase();
+      if (!barcode) return null;
+
+      return (
+        promotions.find((promotion) => {
+          if (normalizeBarcodeValue(promotion.code).toLowerCase() === barcode) return true;
+          if (normalizeBarcodeValue(buildPromotionBarcode(promotion.code)).toLowerCase() === barcode) {
+            return true;
+          }
+          return (promotion.barcodes ?? []).some(
+            (row) => normalizeBarcodeValue(row.barcode).toLowerCase() === barcode
+          );
+        }) ?? null
+      );
+    },
+    [promotions]
+  );
+
+  const addPromotionToCart = useCallback(
+    async (promotion: PromotionWithDetails, rawBarcode: string): Promise<BarcodeScanResult> => {
+      if (promotion.scope !== "bundle" || !promotion.items?.length) {
+        const message = `La promocion ${promotion.name} no es un combo escaneable`;
+        setFeedback({ type: "error", message });
+        return { ok: false, barcode: rawBarcode, promotion, error: message };
+      }
+
+      for (const promoItem of promotion.items) {
+        const product = products.find((candidate) => candidate.id === promoItem.product_id);
+        if (!product || !product.is_active) {
+          const message = `Producto no disponible en promo ${promotion.name}`;
+          setFeedback({ type: "error", message });
+          return { ok: false, barcode: rawBarcode, promotion, error: message };
+        }
+      }
+
+      for (const promoItem of promotion.items) {
+        const product = products.find((candidate) => candidate.id === promoItem.product_id);
+        if (!product) continue;
+        const added = await addProductToCart(product, promoItem.quantity);
+        if (!added) {
+          return { ok: false, barcode: rawBarcode, promotion, error: "No se pudo agregar promo" };
+        }
+      }
+
+      setFeedback({ type: "success", message: `Promo agregada: ${promotion.name}` });
+      return { ok: true, barcode: rawBarcode, promotion, parsedScale: null };
+    },
+    [products]
+  );
+
   const normalizePluCode = (value: string): string => value.replace(/^0+/, "");
 
   const findProductByPluCode = useCallback(
@@ -707,9 +766,27 @@ export const usePosSale = (tenantId: string | null) => {
     [productBarcodes, products]
   );
 
+  const findProductByUnitBarcode = useCallback(
+    (barcode: string): Product | null => {
+      const normalizedBarcode = normalizeBarcodeValue(barcode);
+      if (!normalizedBarcode) return null;
+
+      const barcodeRow =
+        productBarcodes.find(
+          (row) => normalizeBarcodeValue(row.barcode) === normalizedBarcode && row.is_primary
+        ) ??
+        productBarcodes.find((row) => normalizeBarcodeValue(row.barcode) === normalizedBarcode) ??
+        null;
+
+      if (!barcodeRow) return null;
+      return products.find((candidate) => candidate.id === barcodeRow.product_id) ?? null;
+    },
+    [productBarcodes, products]
+  );
+
   const addProductByBarcode = useCallback(
     async (rawBarcode: string): Promise<BarcodeScanResult> => {
-      const barcode = rawBarcode.trim();
+      const barcode = normalizeBarcodeValue(rawBarcode);
       if (!tenantId || !barcode) {
         return { ok: false, barcode, error: "Codigo de barras invalido" };
       }
@@ -723,19 +800,27 @@ export const usePosSale = (tenantId: string | null) => {
           return { ok: false, barcode, parsedScale, error: message };
         }
 
-        const detectedWeight =
-          parsedScale.weight != null && parsedScale.weight > 0
-            ? parsedScale.weight
-            : Math.max(0.001, posSettings.barcode_scan_quantity || 1);
-
         const hasAssignedPriceList = Boolean(
           getCustomerPriceList(selectedCustomerId || null)
         );
+        const pricing = await resolvePricingForProduct(scaleProduct, selectedCustomerId || null);
+        const pricePerWeightUnit = pricing.unitPrice > 0 ? pricing.unitPrice : scaleProduct.price;
+
+        const detectedWeight =
+          parsedScale.weight != null && parsedScale.weight > 0
+            ? parsedScale.weight
+            : parsedScale.mode === "total_price" &&
+                parsedScale.totalPrice != null &&
+                parsedScale.totalPrice > 0 &&
+                pricePerWeightUnit > 0
+              ? roundQty(parsedScale.totalPrice / pricePerWeightUnit)
+              : Math.max(0.001, posSettings.barcode_scan_quantity || 1);
 
         const overrideUnitPrice =
           !hasAssignedPriceList &&
           parsedScale.totalPrice != null &&
           parsedScale.totalPrice > 0 &&
+          parsedScale.mode === "weight" &&
           detectedWeight > 0
             ? roundAmount(parsedScale.totalPrice / detectedWeight)
             : null;
@@ -758,19 +843,17 @@ export const usePosSale = (tenantId: string | null) => {
       }
 
       try {
-        let product = await productsService.getByBarcode(tenantId, barcode);
-
-        if (!product && !isOnline) {
-          const barcodeRow = productBarcodes.find(
-            (row) => row.barcode.trim() === barcode
-          );
-          product =
-            barcodeRow != null
-              ? products.find((candidate) => candidate.id === barcodeRow.product_id) ?? null
-              : null;
+        let product = findProductByUnitBarcode(barcode);
+        if (!product && isOnline) {
+          product = await productsService.getByBarcode(tenantId, barcode);
         }
 
         if (!product || !product.is_active) {
+          const promotion = findPromotionByBarcode(barcode);
+          if (promotion) {
+            return addPromotionToCart(promotion, barcode);
+          }
+
           const message = `No se encontro producto para el codigo ${barcode}`;
           setFeedback({ type: "error", message });
           return { ok: false, barcode, error: message };
@@ -784,22 +867,18 @@ export const usePosSale = (tenantId: string | null) => {
 
         return { ok: true, barcode, product, parsedScale: null };
       } catch {
-        if (!isOnline) {
-          const barcodeRow = productBarcodes.find(
-            (row) => row.barcode.trim() === barcode
-          );
-          const fallbackProduct =
-            barcodeRow != null
-              ? products.find((candidate) => candidate.id === barcodeRow.product_id) ?? null
-              : null;
-
-          if (fallbackProduct && fallbackProduct.is_active) {
-            const scanQuantity = Math.max(0.001, posSettings.barcode_scan_quantity || 1);
-            const added = await addProductToCart(fallbackProduct, scanQuantity);
-            if (added) {
-              return { ok: true, barcode, product: fallbackProduct, parsedScale: null };
-            }
+        const fallbackProduct = findProductByUnitBarcode(barcode);
+        if (fallbackProduct && fallbackProduct.is_active) {
+          const scanQuantity = Math.max(0.001, posSettings.barcode_scan_quantity || 1);
+          const added = await addProductToCart(fallbackProduct, scanQuantity);
+          if (added) {
+            return { ok: true, barcode, product: fallbackProduct, parsedScale: null };
           }
+        }
+
+        const fallbackPromotion = findPromotionByBarcode(barcode);
+        if (fallbackPromotion) {
+          return addPromotionToCart(fallbackPromotion, barcode);
         }
 
         const message = "Error al leer codigo de barras";
@@ -809,7 +888,10 @@ export const usePosSale = (tenantId: string | null) => {
     },
     [
       addProductToCart,
+      addPromotionToCart,
+      findPromotionByBarcode,
       findProductByPluCode,
+      findProductByUnitBarcode,
       getCustomerPriceList,
       isOnline,
       posSettings.allow_negative_stock,
@@ -830,7 +912,7 @@ export const usePosSale = (tenantId: string | null) => {
     }
 
     if (normalizedQty <= 0) {
-      removeFromCart(productId);
+      setFeedback({ type: "error", message: "La cantidad debe ser mayor a 0" });
       return;
     }
 
@@ -1235,10 +1317,18 @@ export const usePosSale = (tenantId: string | null) => {
     const requiresCashMovementRegistration = !isCurrentAccountMethod;
 
     if (isCurrentAccountMethod && normalizedCustomerId) {
-      const currentAccountProfile = posCustomerProfilesService.getProfile(
+      const legacyCurrentAccountProfile = posCustomerProfilesService.getProfile(
         tenantId,
         normalizedCustomerId
       );
+      const currentAccountProfile = {
+        enabled:
+          selectedCustomerForSale?.current_account_enabled ??
+          legacyCurrentAccountProfile.enabled,
+        limit:
+          selectedCustomerForSale?.current_account_limit ??
+          legacyCurrentAccountProfile.limit,
+      };
 
       if (!currentAccountProfile.enabled) {
         setFeedback({
@@ -1473,9 +1563,7 @@ export const usePosSale = (tenantId: string | null) => {
         const nextStock = posSettings.allow_negative_stock
           ? roundQty(item.stock_available - item.quantity)
           : roundQty(Math.max(0, item.stock_available - item.quantity));
-        await productsService.update(tenantId, item.product_id, {
-          stock_current: nextStock,
-        });
+        await productsService.updateStock(tenantId, item.product_id, nextStock);
         updatedStockByProductId.set(item.product_id, nextStock);
       }
 

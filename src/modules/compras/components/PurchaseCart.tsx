@@ -1,6 +1,9 @@
+import { useEffect, useState } from "react";
+
 interface PurchaseCartItemView {
   product_id: string;
   name: string;
+  sale_mode: "unit" | "weight";
   quantity: number;
   unit_cost: number;
 }
@@ -30,6 +33,49 @@ export const PurchaseCart = ({
   onSetUnitCost,
   onRemove,
 }: PurchaseCartProps) => {
+  const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
+  const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
+  const getUnitLabel = (item: PurchaseCartItemView) =>
+    item.sale_mode === "weight" ? "kg" : "unidades";
+  const getCostLabel = (item: PurchaseCartItemView) =>
+    item.sale_mode === "weight" ? "Costo por kg" : "Costo unitario";
+
+  useEffect(() => {
+    const ids = new Set(items.map((item) => item.product_id));
+    setQuantityDrafts((current) =>
+      Object.fromEntries(Object.entries(current).filter(([id]) => ids.has(id)))
+    );
+    setCostDrafts((current) =>
+      Object.fromEntries(Object.entries(current).filter(([id]) => ids.has(id)))
+    );
+  }, [items]);
+
+  const commitQuantity = (item: PurchaseCartItemView) => {
+    const raw = quantityDrafts[item.product_id];
+    if (raw == null) return;
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) {
+      onSetQuantity(item.product_id, parsed);
+    }
+    setQuantityDrafts((current) => {
+      const { [item.product_id]: _discard, ...next } = current;
+      return next;
+    });
+  };
+
+  const commitCost = (item: PurchaseCartItemView) => {
+    const raw = costDrafts[item.product_id];
+    if (raw == null) return;
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) {
+      onSetUnitCost(item.product_id, parsed);
+    }
+    setCostDrafts((current) => {
+      const { [item.product_id]: _discard, ...next } = current;
+      return next;
+    });
+  };
+
   return (
     <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
       <h2 className="text-base font-semibold text-slate-900">Items de compra</h2>
@@ -47,6 +93,7 @@ export const PurchaseCart = ({
                   <p className="text-sm font-semibold text-slate-900">{item.name}</p>
                   <p className="text-xs text-slate-500">
                     Total linea: {currency.format(item.quantity * item.unit_cost)}
+                    {item.sale_mode === "weight" ? " | Pesable" : ""}
                   </p>
                 </div>
                 <button
@@ -61,29 +108,55 @@ export const PurchaseCart = ({
 
               <div className="mt-2 grid gap-2 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-700">Cantidad</label>
+                  <label className="mb-1 block text-xs font-medium text-slate-700">
+                    Cantidad ({getUnitLabel(item)})
+                  </label>
                   <input
                     type="number"
-                    step="0.001"
-                    min="0.001"
-                    value={item.quantity}
-                    onChange={(event) =>
-                      onSetQuantity(item.product_id, Number(event.target.value))
-                    }
+                    step={item.sale_mode === "weight" ? "0.001" : "1"}
+                    min="0"
+                    value={quantityDrafts[item.product_id] ?? String(item.quantity)}
+                    onChange={(event) => {
+                      const nextValue = event.target.value;
+                      setQuantityDrafts((current) => ({
+                        ...current,
+                        [item.product_id]: nextValue,
+                      }));
+
+                      if (!nextValue.trim()) return;
+                      const parsed = Number(nextValue);
+                      if (Number.isFinite(parsed)) {
+                        onSetQuantity(item.product_id, parsed);
+                      }
+                    }}
+                    onBlur={() => commitQuantity(item)}
                     className="w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
                     disabled={disabled || !canWrite}
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-700">Costo unitario</label>
+                  <label className="mb-1 block text-xs font-medium text-slate-700">
+                    {getCostLabel(item)}
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
-                    value={item.unit_cost}
-                    onChange={(event) =>
-                      onSetUnitCost(item.product_id, Number(event.target.value))
-                    }
+                    value={costDrafts[item.product_id] ?? String(item.unit_cost)}
+                    onChange={(event) => {
+                      const nextValue = event.target.value;
+                      setCostDrafts((current) => ({
+                        ...current,
+                        [item.product_id]: nextValue,
+                      }));
+
+                      if (!nextValue.trim()) return;
+                      const parsed = Number(nextValue);
+                      if (Number.isFinite(parsed)) {
+                        onSetUnitCost(item.product_id, parsed);
+                      }
+                    }}
+                    onBlur={() => commitCost(item)}
                     className="w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
                     disabled={disabled || !canWrite}
                   />

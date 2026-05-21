@@ -20,6 +20,50 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
+interface CashMetricCardProps {
+  label: string;
+  value: string;
+  tone?: "neutral" | "success" | "danger" | "accent";
+  actionLabel?: string;
+  onAction?: () => void;
+  disabled?: boolean;
+}
+
+const toneClasses: Record<NonNullable<CashMetricCardProps["tone"]>, string> = {
+  neutral: "border-slate-200 bg-slate-50 text-slate-900",
+  success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  danger: "border-rose-200 bg-rose-50 text-rose-700",
+  accent: "border-sky-200 bg-sky-50 text-sky-700",
+};
+
+const CashMetricCard = ({
+  label,
+  value,
+  tone = "neutral",
+  actionLabel,
+  onAction,
+  disabled,
+}: CashMetricCardProps) => (
+  <article className={`rounded-xl border px-3 py-2.5 ${toneClasses[tone]}`}>
+    <div className="flex items-start justify-between gap-2">
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">{label}</p>
+        <p className="mt-1 truncate font-kpi text-lg font-semibold">{value}</p>
+      </div>
+      {actionLabel && onAction ? (
+        <button
+          type="button"
+          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 disabled:opacity-50"
+          disabled={disabled}
+          onClick={onAction}
+        >
+          {actionLabel}
+        </button>
+      ) : null}
+    </div>
+  </article>
+);
+
 export const CajaPage = () => {
   const { tenantId } = useTenant();
   const user = useAuthStore((state) => state.user);
@@ -48,6 +92,7 @@ export const CajaPage = () => {
     currentSession,
     sessionHistory,
     dailyTracking,
+    paymentMethods,
     usersById,
     saleNumbersById,
     cashSettings,
@@ -80,6 +125,12 @@ export const CajaPage = () => {
     () => getSessionBreakdown(dailySession?.id ?? null),
     [dailySession?.id, getSessionBreakdown]
   );
+  const dailySessionTotals = dailySessionBreakdown?.totalCash ?? {
+    openingAmount: dailySession?.opening_amount ?? 0,
+    incomes: 0,
+    expenses: 0,
+    expectedBalance: dailySession?.opening_amount ?? 0,
+  };
   const detailMovements = useMemo(
     () => getDailyMovements(activeDetailDate, movementTypeFilter),
     [activeDetailDate, getDailyMovements, movementTypeFilter]
@@ -176,21 +227,65 @@ export const CajaPage = () => {
   return (
     <PagePlaceholder title="Caja" description="Control diario y cierre de caja">
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-slate-600">
-            Sesion actual del usuario: {currentSession ? "Abierta" : "Sin sesion abierta"}
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              void handleRefresh();
-            }}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            disabled={isLoading || isSubmitting || isRefreshing}
-          >
-            {isRefreshing ? "Actualizando..." : "Actualizar"}
-          </button>
-        </div>
+        <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-panel">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={currentSession ? "ui-badge ui-badge--success" : "ui-badge ui-badge--warn"}>
+                {currentSession ? "Caja abierta" : "Sin caja abierta"}
+              </span>
+              <span className="ui-badge ui-badge--info">
+                {cashSettings.require_open_session_for_sale ? "Venta exige caja" : "Venta con caja opcional"}
+              </span>
+              {cashSettings.allow_manual_movements ? (
+                <span className="ui-badge">Manual habilitado</span>
+              ) : (
+                <span className="ui-badge ui-badge--danger">Manual bloqueado</span>
+              )}
+              {cashSettings.require_notes_on_manual_movements ? (
+                <span className="ui-badge ui-badge--warn">Observacion obligatoria</span>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="ui-btn-ghost"
+                disabled={isSubmitting || !dailySession}
+                onClick={() => setIsCurrentAccountModalOpen(true)}
+              >
+                Cuenta corriente
+              </button>
+              <button
+                type="button"
+                className="ui-btn-primary"
+                disabled={
+                  isSubmitting || !canWriteCaja || !currentSession || !cashSettings.allow_manual_movements
+                }
+                onClick={() => setIsManualMovementModalOpen(true)}
+              >
+                Movimiento manual
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                disabled={isSubmitting || !canWriteCaja || !currentSession}
+                onClick={() => setIsCloseCashModalOpen(true)}
+              >
+                Cerrar caja
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void handleRefresh();
+                }}
+                className="ui-btn-ghost"
+                disabled={isLoading || isSubmitting || isRefreshing}
+              >
+                {isRefreshing ? "Actualizando..." : "Actualizar"}
+              </button>
+            </div>
+          </div>
+        </section>
         {(isRefreshing || lastUpdatedAt || isRefreshConfirmed) && (
           <div className="flex items-center gap-2 text-xs">
             {isRefreshing ? (
@@ -206,12 +301,6 @@ export const CajaPage = () => {
             )}
           </div>
         )}
-
-        <p className="text-xs text-slate-500">
-          Politica: {cashSettings.require_open_session_for_sale ? "caja obligatoria para venta" : "caja opcional para venta"} |{" "}
-          {cashSettings.allow_manual_movements ? "movimientos manuales habilitados" : "movimientos manuales deshabilitados"}
-          {cashSettings.require_notes_on_manual_movements ? " | observacion obligatoria" : ""}
-        </p>
 
         {feedback ? (
           <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>{feedback.message}</div>
@@ -231,132 +320,61 @@ export const CajaPage = () => {
             <div className="space-y-1">
               <h2 className="text-base font-semibold text-slate-900">Caja diaria</h2>
               <p className="text-sm text-slate-600">
-                Resumen de apertura y cierre de la caja diaria con acceso al detalle de movimientos.
+                Resumen operativo de la caja seleccionada, ordenado para controlar apertura, cobros, egresos y cierre.
               </p>
             </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50"
-                disabled={isSubmitting || !dailySession}
-                onClick={() => setIsCurrentAccountModalOpen(true)}
-              >
-                Cuenta corriente
-              </button>
-              <button
-                type="button"
-                className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                disabled={
-                  isSubmitting || !canWriteCaja || !currentSession || !cashSettings.allow_manual_movements
-                }
-                onClick={() => setIsManualMovementModalOpen(true)}
-              >
-                Movimiento manual
-              </button>
-              <button
-                type="button"
-                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-                disabled={isSubmitting || !canWriteCaja || !currentSession}
-                onClick={() => setIsCloseCashModalOpen(true)}
-              >
-                Cerrar caja
-              </button>
-            </div>
+            {dailySession ? (
+              <span className={dailySession.status === "open" ? "ui-badge ui-badge--success" : "ui-badge"}>
+                {dailySession.status === "open" ? "En curso" : "Cerrada"}
+              </span>
+            ) : null}
           </div>
 
           {dailySession ? (
             <>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <article className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <p className="text-xs text-slate-500">Fecha y hora apertura</p>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {new Date(dailySession.opened_at).toLocaleString("es-AR")}
-                  </p>
-                </article>
-                <article className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <p className="text-xs text-slate-500">Fecha y hora cierre</p>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {dailySession.closed_at
+                <CashMetricCard
+                  label="Apertura"
+                  value={new Date(dailySession.opened_at).toLocaleString("es-AR")}
+                />
+                <CashMetricCard
+                  label="Cierre"
+                  value={
+                    dailySession.closed_at
                       ? new Date(dailySession.closed_at).toLocaleString("es-AR")
-                      : "Caja abierta"}
-                  </p>
-                </article>
-                <article className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <p className="text-xs text-slate-500">Monto apertura</p>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {currency.format(dailySession.opening_amount)}
-                  </p>
-                </article>
-                <article className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <p className="text-xs text-slate-500">Monto cierre</p>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {dailySession.closing_amount != null
-                      ? currency.format(dailySession.closing_amount)
-                      : "Pendiente"}
-                  </p>
-                </article>
+                      : "Pendiente"
+                  }
+                />
+                <CashMetricCard label="Monto apertura" value={currency.format(dailySession.opening_amount)} />
+                <CashMetricCard
+                  label="Monto cierre"
+                  value={dailySession.closing_amount != null ? currency.format(dailySession.closing_amount) : "Pendiente"}
+                />
               </div>
 
               <div className="grid gap-3 md:grid-cols-4">
-                <article className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-xs text-emerald-700">Ingresos acumulados</p>
-                      <p className="text-sm font-semibold text-emerald-900">
-                        {currency.format(currentSessionSummary.incomes)}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="rounded-md border border-emerald-300 bg-white px-2 py-1 text-xs text-emerald-800 disabled:opacity-50"
-                      disabled={!dailySession}
-                      onClick={() => setOpenSummaryModal("incomes")}
-                    >
-                      Ver
-                    </button>
-                  </div>
-                </article>
-                <article className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-xs text-rose-700">Egresos acumulados</p>
-                      <p className="text-sm font-semibold text-rose-900">
-                        {currency.format(currentSessionSummary.expenses)}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="rounded-md border border-rose-300 bg-white px-2 py-1 text-xs text-rose-800 disabled:opacity-50"
-                      disabled={!dailySession}
-                      onClick={() => setOpenSummaryModal("expenses")}
-                    >
-                      Ver
-                    </button>
-                  </div>
-                </article>
-                <article className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-xs text-sky-700">Total caja esperado</p>
-                      <p className="text-sm font-semibold text-sky-900">
-                        {currency.format(currentSessionSummary.expectedBalance)}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="rounded-md border border-sky-300 bg-white px-2 py-1 text-xs text-sky-800 disabled:opacity-50"
-                      disabled={!dailySession}
-                      onClick={() => setOpenSummaryModal("total")}
-                    >
-                      Ver
-                    </button>
-                  </div>
-                </article>
-                <article className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <p className="text-xs text-slate-500">Responsable de apertura</p>
-                  <p className="truncate text-sm font-semibold text-slate-900">{dailySessionResponsible}</p>
-                </article>
+                <CashMetricCard
+                  label="Ingresos"
+                  value={currency.format(dailySessionTotals.incomes)}
+                  tone="success"
+                  actionLabel="Ver"
+                  onAction={() => setOpenSummaryModal("incomes")}
+                />
+                <CashMetricCard
+                  label="Egresos"
+                  value={currency.format(dailySessionTotals.expenses)}
+                  tone="danger"
+                  actionLabel="Ver"
+                  onAction={() => setOpenSummaryModal("expenses")}
+                />
+                <CashMetricCard
+                  label="Caja esperada"
+                  value={currency.format(dailySessionTotals.expectedBalance)}
+                  tone="accent"
+                  actionLabel="Ver"
+                  onAction={() => setOpenSummaryModal("total")}
+                />
+                <CashMetricCard label="Responsable" value={dailySessionResponsible} />
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -413,7 +431,7 @@ export const CajaPage = () => {
             className="absolute inset-0"
             onClick={() => setIsManualMovementModalOpen(false)}
           />
-          <div className="relative z-10 w-full max-w-5xl space-y-3 rounded-2xl bg-white p-4 shadow-panel">
+          <div className="relative z-10 max-h-[92vh] w-full max-w-5xl space-y-3 overflow-auto rounded-2xl bg-white p-4 shadow-panel">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-base font-semibold text-slate-900">Movimiento manual</h3>
               <button
@@ -425,11 +443,12 @@ export const CajaPage = () => {
               </button>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-3 lg:grid-cols-2">
               <div className="space-y-2">
                 <p className="text-sm font-medium text-slate-700">Ingreso</p>
                 <CashMovementForm
                   mode="income"
+                  paymentMethods={paymentMethods}
                   canWrite={canWriteCaja}
                   disabled={isSubmitting}
                   onSubmit={async (values) => {
@@ -794,7 +813,7 @@ export const CajaPage = () => {
             </div>
 
             <p className="text-xs text-slate-500">
-              Fecha:{" "}
+              Caja abierta el:{" "}
               {activeDetailDate
                 ? new Date(`${activeDetailDate}T00:00:00`).toLocaleDateString("es-AR")
                 : "-"}

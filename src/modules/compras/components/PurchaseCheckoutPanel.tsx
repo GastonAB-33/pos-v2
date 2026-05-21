@@ -10,7 +10,7 @@ interface PurchaseCheckoutPanelProps {
   suppliers: Supplier[];
   canWrite: boolean;
   disabled?: boolean;
-  onSubmit: (values: PurchaseCheckoutValues) => Promise<void>;
+  onSubmit: (values: PurchaseCheckoutValues) => Promise<boolean>;
 }
 
 export const PurchaseCheckoutPanel = ({
@@ -33,11 +33,13 @@ export const PurchaseCheckoutPanel = ({
   });
 
   const submit = async (values: PurchaseCheckoutValues) => {
-    await onSubmit(values);
-    reset({
-      supplierId: "",
-      notes: "",
-    });
+    const saved = await onSubmit(values);
+    if (saved) {
+      reset({
+        supplierId: "",
+        notes: "",
+      });
+    }
   };
 
   return (

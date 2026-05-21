@@ -31,6 +31,7 @@ interface ProductFormModalProps {
 
 const createBaseDefaults = (): ProductFormValues => ({
   nombre: "",
+  saleMode: "unit",
   codigoBarras: "",
   codigoProducto: "",
   stock: 0,
@@ -237,6 +238,7 @@ export const ProductFormModal = ({
 
     reset({
       nombre: product.nombre,
+      saleMode: product.saleMode,
       codigoBarras: product.codigoBarras,
       codigoProducto: product.codigoProducto,
       stock: product.stock,
@@ -262,6 +264,7 @@ export const ProductFormModal = ({
   }, [open, product, reset]);
 
   const nombre = watch("nombre");
+  const saleMode = watch("saleMode");
   const codigoBarras = watch("codigoBarras");
   const codigoProducto = watch("codigoProducto");
   const stock = watch("stock");
@@ -429,6 +432,7 @@ export const ProductFormModal = ({
 
     await onSubmit({
       ...values,
+      saleMode: values.saleMode,
       codigoBarras: values.codigoBarras?.trim() ?? "",
       codigoProducto: values.codigoProducto?.trim() ?? "",
       categoria: values.categoria?.trim() ?? "",
@@ -492,7 +496,9 @@ export const ProductFormModal = ({
 
                 <div>
                   <div className="mb-1 flex items-center justify-between gap-2">
-                    <label className="block text-sm font-medium text-slate-700">Stock</label>
+                    <label className="block text-sm font-medium text-slate-700">
+                      {saleMode === "weight" ? "Stock en kg" : "Stock en unidades"}
+                    </label>
                     <VoiceDictationButton
                       value={String(stock ?? "")}
                       onValueChange={handleStockVoiceChange}
@@ -512,7 +518,48 @@ export const ProductFormModal = ({
                     className="ui-input"
                     disabled={disabled}
                   />
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    {saleMode === "weight"
+                      ? "Para pesables, el stock se guarda en kg. Ej: 10 kg disponibles = 10,000 kg."
+                      : "Para unitarios, el stock se guarda como unidades."}
+                  </p>
                   {errors.stock ? <p className="mt-1 text-xs text-red-600">{errors.stock.message}</p> : null}
+                </div>
+
+                <div className="xl:col-span-3">
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Tipo de venta</label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm">
+                      <input
+                        type="radio"
+                        value="unit"
+                        {...register("saleMode")}
+                        disabled={disabled}
+                        className="mt-1"
+                      />
+                      <span>
+                        <span className="block font-semibold text-slate-900">Por unidad</span>
+                        <span className="block text-xs text-slate-500">
+                          Precio por unidad y stock en unidades.
+                        </span>
+                      </span>
+                    </label>
+                    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm">
+                      <input
+                        type="radio"
+                        value="weight"
+                        {...register("saleMode")}
+                        disabled={disabled}
+                        className="mt-1"
+                      />
+                      <span>
+                        <span className="block font-semibold text-slate-900">Pesable</span>
+                        <span className="block text-xs text-slate-500">
+                          Precio por kg, compras en kg y ventas por kg/gramos.
+                        </span>
+                      </span>
+                    </label>
+                  </div>
                 </div>
 
                 <div>
@@ -719,7 +766,9 @@ export const ProductFormModal = ({
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
               <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <label className="mb-1 block text-sm font-medium text-slate-700">Precio de costo</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  {saleMode === "weight" ? "Precio de costo por kg" : "Precio de costo"}
+                </label>
                 <input
                   type="number"
                   step="0.01"
@@ -794,7 +843,9 @@ export const ProductFormModal = ({
 
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
                 <div className="mb-1 flex items-center gap-2">
-                  <label className="block text-sm font-medium text-slate-700">Precio final</label>
+                  <label className="block text-sm font-medium text-slate-700">
+                    {saleMode === "weight" ? "Precio final por kg" : "Precio final"}
+                  </label>
                   <span className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-700">
                     Principal
                   </span>
@@ -817,7 +868,9 @@ export const ProductFormModal = ({
             </div>
 
             <p className="mt-3 text-xs text-slate-500">
-              El cálculo se actualiza automáticamente al escribir y al salir de cada campo.
+              {saleMode === "weight"
+                ? "En productos pesables, costo, precio sin IVA y precio final se interpretan por kg."
+                : "El cálculo se actualiza automáticamente al escribir y al salir de cada campo."}
             </p>
           </div>
 

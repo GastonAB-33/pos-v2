@@ -51,6 +51,7 @@ export interface ProductViewModel {
   nombre: string;
   codigoProducto: string;
   codigoBarras: string;
+  saleMode: "unit" | "weight";
   categoria: string;
   subcategoria: string;
   proveedor: string;

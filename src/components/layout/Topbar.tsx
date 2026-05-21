@@ -9,6 +9,7 @@ import { usePwa } from "@/features/pwa/hooks/usePwa";
 import { supportCenterStorage, type SupportTicket } from "@/features/support/support-center.storage";
 import { isSupportOperator } from "@/features/support/support-operator";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
+import { authService } from "@/services/auth.service";
 import { productsService } from "@/services/products.service";
 import { usersService } from "@/services/users.service";
 import { useUiStore } from "@/store/ui.store";
@@ -74,7 +75,7 @@ const routeLabels: Array<{ path: string; label: string }> = [
   { path: routePaths.stock, label: "Stock" },
   { path: routePaths.listasPrecios, label: "Listas de precios" },
   { path: routePaths.promociones, label: "Promociones" },
-  { path: routePaths.compras, label: "Compras" },
+  { path: routePaths.compras, label: "Compras a proveedores" },
   { path: routePaths.caja, label: "Caja" },
   { path: routePaths.cuentasCorrientes, label: "Cuentas corrientes" },
   { path: routePaths.comprobantes, label: "Comprobantes" },
@@ -1111,6 +1112,7 @@ export const Topbar = () => {
             <button
               type="button"
               onClick={() => {
+                void authService.signOut();
                 clearSession();
                 navigate(routePaths.login, { replace: true });
               }}

@@ -137,11 +137,15 @@ export const StockPage = () => {
 
   return (
     <PagePlaceholder title="Stock">
-      <div className="space-y-2">
+      <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="ui-badge ui-badge--info">Movimientos: {movementRows.length}</span>
-            <span className="ui-badge ui-badge--success">Activos: {summary.activeProducts}</span>
+            <StockSummaryCards
+              activeProducts={summary.activeProducts}
+              lowStock={summary.lowStock}
+              noStock={summary.noStock}
+              overMax={summary.overMax}
+            />
           </div>
           <div className="flex items-center gap-2">
             {canWriteStock && stockSettings.allow_manual_adjustments ? (
@@ -154,7 +158,7 @@ export const StockPage = () => {
                 className="ui-btn-primary"
                 disabled={isLoading || isSubmitting}
               >
-                Ajuste manual
+                Ajustar stock
               </button>
             ) : null}
             <button
@@ -171,13 +175,6 @@ export const StockPage = () => {
           </div>
         </div>
 
-        <StockSummaryCards
-          activeProducts={summary.activeProducts}
-          lowStock={summary.lowStock}
-          noStock={summary.noStock}
-          overMax={summary.overMax}
-        />
-
         {feedback ? <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>{feedback.message}</div> : null}
 
         <StockTrackingTable
@@ -188,11 +185,15 @@ export const StockPage = () => {
           onUpdateBulk={updateStockThresholdBulk}
         />
 
-        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
+        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-panel">
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <div className="grid flex-1 gap-3 md:grid-cols-3">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Historial</h2>
+              <p className="text-xs text-slate-500">{movementRows.length} movimientos</p>
+            </div>
+            <div className="grid flex-1 gap-2 md:max-w-2xl md:grid-cols-3">
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">Tipo de movimiento</label>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Tipo</label>
                 <select
                   value={movementTypeFilter}
                   onChange={(event) =>
@@ -213,7 +214,7 @@ export const StockPage = () => {
 
             <button
               type="button"
-              className="ui-btn-ghost"
+              className="ui-btn-ghost px-3 py-2 text-sm"
               onClick={handleDownloadMovementHistory}
               disabled={!movementViewRows.length}
             >

@@ -13,6 +13,7 @@ import type {
   CashSettings,
   CurrentAccountMovement,
   Customer,
+  PaymentMethod,
   Sale,
 } from "@/types/entities";
 import type {
@@ -152,6 +153,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     []
   );
   const [customersById, setCustomersById] = useState<Record<string, Customer>>({});
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [paymentMethodsByCode, setPaymentMethodsByCode] = useState<Record<string, string>>({});
   const [salesById, setSalesById] = useState<Record<string, Sale>>({});
   const [usersById, setUsersById] = useState<Record<string, string>>({});
@@ -172,6 +174,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       setMovements([]);
       setCurrentAccountMovements([]);
       setCustomersById({});
+      setPaymentMethods([]);
       setPaymentMethodsByCode({});
       setSalesById({});
       setUsersById({});
@@ -221,6 +224,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
           return acc;
         }, {})
       );
+      setPaymentMethods(allPaymentMethods);
       setSalesById(
         allSales.reduce<Record<string, Sale>>((acc, sale) => {
           acc[sale.id] = sale;
@@ -343,7 +347,11 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
           saleMovementsCount += 1;
         }
 
-        if (movement.reference_type.startsWith("manual_")) {
+        if (
+          movement.reference_type.startsWith("manual_") ||
+          movement.movement_type === "income" ||
+          movement.movement_type === "expense"
+        ) {
           manualMovementsCount += 1;
         }
       }
@@ -859,14 +867,20 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
     setIsSubmitting(true);
     try {
+      const paymentMethod = paymentMethods.find((method) => method.id === values.paymentMethodId);
+      if (!paymentMethod) {
+        setFeedback({ type: "error", message: "Selecciona un medio de pago para el ingreso" });
+        return false;
+      }
+      const paymentMethodCode = normalizeKey(paymentMethod.code) || "manual_income";
       const movement = await cashService.createMovement(tenantId, {
         cash_session_id: currentSession.id,
         movement_type: "income",
         amount: values.amount,
         currency_code: "ARS",
-        reference_type: "manual_income",
-        reference_id: null,
-        notes: values.notes?.trim() || null,
+        reference_type: paymentMethodCode,
+        reference_id: paymentMethod.id,
+        notes: values.notes?.trim() || `Ingreso manual - ${paymentMethod.name}`,
         created_by: userId,
       });
       await auditService.createSafe(tenantId, {
@@ -879,6 +893,9 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         metadata: {
           cash_session_id: currentSession.id,
           amount: values.amount,
+          payment_method_id: paymentMethod.id,
+          payment_method_code: paymentMethodCode,
+          payment_method_name: paymentMethod.name,
           notes: values.notes?.trim() || null,
         },
       });
@@ -959,6 +976,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     sessionHistory,
     currentSessionMovements: selectedSessionMovements,
     selectedSessionMovements,
+    paymentMethods,
     dailyTracking,
     usersById,
     cashSettings,

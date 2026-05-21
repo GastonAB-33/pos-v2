@@ -32,6 +32,19 @@ const toServiceInput = (
   values: CustomerFormValues,
   options?: { existingCode?: string; isActive?: boolean; currentBalance?: number }
 ) => ({
+  ...(() => {
+    const rawLimit = values.currentAccountLimit ?? "";
+    const parsedLimit = Number(rawLimit);
+    const currentAccountLimit =
+      rawLimit.trim() && Number.isFinite(parsedLimit) && parsedLimit >= 0
+        ? Number(parsedLimit.toFixed(2))
+        : null;
+
+    return {
+      current_account_enabled: values.currentAccountEnabled,
+      current_account_limit: currentAccountLimit,
+    };
+  })(),
   code: options?.existingCode ?? buildCustomerCode(values.fullName),
   full_name: values.fullName,
   document_type: values.documentType,

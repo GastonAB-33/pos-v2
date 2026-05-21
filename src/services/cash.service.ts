@@ -20,6 +20,10 @@ type CashMovementDbCompat = CashMovement & {
   type?: CashMovement["movement_type"] | null;
 };
 
+type CashMovementInsertCompat = Omit<CashMovement, never> & {
+  type: CashMovement["movement_type"];
+};
+
 const normalizeMovement = (row: CashMovementDbCompat): CashMovement => {
   const movementType = row.movement_type ?? row.type ?? "adjustment";
 
@@ -42,12 +46,13 @@ const normalizeMovement = (row: CashMovementDbCompat): CashMovement => {
 const createMovementRow = (
   tenantId: string,
   input: CreateCashMovementInput
-): Omit<CashMovement, never> => {
+): CashMovementInsertCompat => {
   const timestamp = nowIso();
   return {
     id: generateEntityId(),
     tenant_id: tenantId,
     cash_session_id: input.cash_session_id,
+    type: input.movement_type,
     movement_type: input.movement_type,
     amount: input.amount,
     currency_code: input.currency_code,

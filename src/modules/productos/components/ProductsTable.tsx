@@ -78,11 +78,18 @@ export const ProductsTable = ({
     }),
     columnHelper.accessor("stock_current", {
       header: "Stock",
-      cell: (info) => info.getValue().toLocaleString("es-AR"),
+      cell: (info) => {
+        const product = info.row.original;
+        const unit = product.sale_mode === "weight" ? "kg" : "u.";
+        return `${info.getValue().toLocaleString("es-AR")} ${unit}`;
+      },
     }),
     columnHelper.accessor("cost_price", {
       header: "Costo",
-      cell: (info) => currency.format(info.getValue()),
+      cell: (info) => {
+        const product = info.row.original;
+        return `${currency.format(info.getValue())}${product.sale_mode === "weight" ? " / kg" : ""}`;
+      },
     }),
     columnHelper.accessor("profit_percent", {
       header: "Ganancia %",
@@ -111,7 +118,10 @@ export const ProductsTable = ({
     }),
     columnHelper.accessor("price", {
       header: "Precio final",
-      cell: (info) => currency.format(info.getValue()),
+      cell: (info) => {
+        const product = info.row.original;
+        return `${currency.format(info.getValue())}${product.sale_mode === "weight" ? " / kg" : ""}`;
+      },
     }),
     columnHelper.accessor("category", {
       header: "Categoria",

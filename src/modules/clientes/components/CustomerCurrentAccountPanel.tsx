@@ -40,6 +40,7 @@ export const CustomerCurrentAccountPanel = ({
     installmentPlans,
     saleDetailsById,
     debtSales,
+    accountSummary,
     isLoading,
     isSubmitting,
     hasOpenCashSession,
@@ -56,6 +57,12 @@ export const CustomerCurrentAccountPanel = ({
     payment_method_id: string;
     notes?: string;
     payment_details?: Record<string, unknown> | null;
+    pricing_rule?: {
+      mode: "original" | "update_to_today_price" | "surcharge_percentage" | "surcharge_fixed";
+      surcharge_percent?: number;
+      surcharge_amount?: number;
+      notes?: string;
+    } | null;
   }) => {
     const success = await registerPayment(values);
     if (!success) return false;
@@ -64,8 +71,7 @@ export const CustomerCurrentAccountPanel = ({
   };
 
   const submitAdjustment = async (values: {
-    sale_id: string;
-    mode: "update_to_today_price" | "surcharge_percentage" | "surcharge_fixed";
+    mode: "original" | "update_to_today_price" | "surcharge_percentage" | "surcharge_fixed";
     surcharge_percent?: number;
     surcharge_amount?: number;
     notes?: string;
@@ -76,7 +82,8 @@ export const CustomerCurrentAccountPanel = ({
     return true;
   };
 
-  const canOperateMovements = canWrite && Boolean(userId) && hasOpenCashSession;
+  const canRegisterPayment = canWrite && Boolean(userId) && hasOpenCashSession;
+  const canUpdatePricingRule = canWrite && Boolean(userId);
 
   return (
     <section className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -85,6 +92,9 @@ export const CustomerCurrentAccountPanel = ({
           <h3 className="text-base font-semibold text-slate-900">Cuenta corriente</h3>
           <p className="text-sm text-slate-600">{customer.full_name}</p>
           <p className="text-sm font-medium text-slate-900">Saldo actual: {currency.format(balance)}</p>
+          <p className="text-sm font-medium text-brand-700">
+            Saldo actualizado: {currency.format(accountSummary.updatedBalance)}
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -116,8 +126,8 @@ export const CustomerCurrentAccountPanel = ({
         </div>
       ) : canWrite && !hasOpenCashSession ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          No hay caja abierta para el usuario actual. Puedes consultar movimientos, pero para registrar pagos o
-          ajustes debes abrir caja.
+          No hay caja abierta para el usuario actual. Puedes consultar movimientos y actualizar la regla de saldo,
+          pero para registrar pagos debes abrir caja.
         </div>
       ) : openCashSessionId ? (
         <p className="text-xs text-slate-500">Caja activa para movimientos contables: {openCashSessionId}</p>
@@ -129,7 +139,7 @@ export const CustomerCurrentAccountPanel = ({
             type="button"
             className="ui-btn-primary"
             onClick={() => setIsPaymentModalOpen(true)}
-            disabled={isSubmitting || !canOperateMovements}
+            disabled={isSubmitting || !canRegisterPayment}
           >
             Registrar pago
           </button>
@@ -137,7 +147,7 @@ export const CustomerCurrentAccountPanel = ({
             type="button"
             className="ui-btn-ghost"
             onClick={() => setIsAdjustmentModalOpen(true)}
-            disabled={isSubmitting || !canOperateMovements}
+            disabled={isSubmitting || !canUpdatePricingRule}
           >
             Realizar ajuste
           </button>
@@ -154,6 +164,7 @@ export const CustomerCurrentAccountPanel = ({
         <CurrentAccountMovementsTable
           movements={movements}
           saleDetailsById={saleDetailsById}
+          accountSummary={accountSummary}
         />
       )}
 
@@ -163,6 +174,7 @@ export const CustomerCurrentAccountPanel = ({
         bankAccounts={bankAccounts}
         originBanks={originBanks}
         installmentPlans={installmentPlans}
+        accountSummary={accountSummary}
         disabled={isSubmitting}
         onClose={() => setIsPaymentModalOpen(false)}
         onSubmit={submitPayment}
@@ -171,6 +183,7 @@ export const CustomerCurrentAccountPanel = ({
       <CurrentAccountAdjustmentModal
         open={isAdjustmentModalOpen}
         debtSales={debtSales}
+        accountSummary={accountSummary}
         disabled={isSubmitting}
         onClose={() => setIsAdjustmentModalOpen(false)}
         onSubmit={submitAdjustment}

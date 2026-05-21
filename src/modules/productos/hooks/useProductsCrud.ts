@@ -57,6 +57,7 @@ export interface ProductImportParsedRow {
   category: string;
   subcategory: string | null;
   barcode: string | null;
+  sale_mode: "unit" | "weight";
   price_final: number;
   price_without_vat: number;
   cost_price: number;
@@ -149,7 +150,7 @@ const toServiceInput = (
     stock_max: options?.existingStockMax ?? null,
     category: values.categoria || options?.existingCategory || "General",
     subcategory: values.subcategoria?.trim() ? values.subcategoria.trim() : options?.existingSubcategory ?? null,
-    sale_mode: options?.existingSaleMode ?? "unit",
+    sale_mode: values.saleMode ?? options?.existingSaleMode ?? "unit",
     currency_code: "ARS",
     price_without_vat: roundMoney(values.precioSinIva),
     vat_percent: roundPercent(values.porcentajeIva),
@@ -160,6 +161,13 @@ const toServiceInput = (
 
 const toTrimmedString = (value: unknown): string =>
   typeof value === "string" ? value.trim() : String(value ?? "").trim();
+
+const normalizeImportKey = (value: string): string =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
 
 const normalizeBarcode = (value: string | null): string | null => {
   if (!value) return null;
@@ -198,18 +206,19 @@ const parseBoolean = (value: unknown): boolean | null => {
 
 const getRowValueByAlias = (row: XlsxRow, aliases: string[]): unknown => {
   for (const alias of aliases) {
-    const normalizedAlias = alias.toLowerCase().trim();
+    const normalizedAlias = normalizeImportKey(alias);
     if (normalizedAlias in row) return row[normalizedAlias];
   }
   return undefined;
 };
 
 const importFieldAliases = {
-  code: ["code", "codigo", "codigo_producto", "codigo de producto", "código de producto"],
+  code: ["code", "codigo", "codigo_producto", "codigo de producto", "código de producto", "cÃ³digo de producto", "c?digo de producto"],
   name: ["name", "nombre", "nombre (obligatorio)"],
-  category: ["category", "categoria", "categoría", "categoria (obligatoria)"],
-  subcategory: ["subcategory", "subcategoria", "subcategoría"],
-  barcode: ["barcode", "codigo_barras", "codigo de barras", "código de barras"],
+  category: ["category", "categoria", "categoría", "categorÃ­a", "categor?a", "categoria (obligatoria)", "categoría (obligatoria)", "categorÃ­a (obligatoria)", "categor?a (obligatoria)"],
+  subcategory: ["subcategory", "subcategoria", "subcategoría", "subcategorÃ­a", "subcategor?a"],
+  barcode: ["barcode", "codigo_barras", "codigo de barras", "código de barras", "cÃ³digo de barras", "c?digo de barras"],
+  sale_mode: ["sale_mode", "tipo_venta", "tipo de venta", "modo_venta", "modo de venta", "unidad de venta"],
   stock_current: ["stock_current", "stock"],
   cost_price: ["cost_price", "precio_costo", "precio costo", "precio de costo", "costo"],
   profit_percent: ["profit_percent", "porcentaje_ganancia", "% ganancia", "ganancia", "porcentaje de ganancia"],
@@ -225,13 +234,14 @@ const rowSchema = z
   .object({
     code: z.string().max(80),
     name: z.string().min(1, "Nombre obligatorio"),
-    category: z.string().min(1, "Categoria obligatoria"),
+    category: z.string().min(1, "Categoría obligatoria"),
     subcategory: z.string().max(120).nullable(),
     barcode: z
       .string()
       .max(64)
-      .regex(/^$|^[A-Za-z0-9\-\._]*$/, "Codigo de barras invalido")
+      .regex(/^$|^[A-Za-z0-9\-\._]*$/, "Código de barras inválido")
       .nullable(),
+    sale_mode: z.enum(["unit", "weight"]),
     price_final: z.number().min(0, "Precio final >= 0"),
     price_without_vat: z.number().min(0, "Precio sin IVA >= 0"),
     cost_price: z.number().min(0, "Costo >= 0"),
@@ -247,9 +257,63 @@ const toNullableString = (value: unknown): string | null => {
   return normalized || null;
 };
 
+const parseSaleMode = (value: unknown): "unit" | "weight" => {
+  const raw = toTrimmedString(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  return ["weight", "peso", "pesable", "kg", "kilo", "kilos", "gramo", "gramos"].includes(raw)
+    ? "weight"
+    : "unit";
+};
+
 type ProductImportRowParseResult =
   | { ok: true; row: ProductImportParsedRow }
   | { ok: false; errors: ProductImportErrorRow[] };
+
+const validateImportFileDuplicates = (rows: ProductImportParsedRow[]): ProductImportErrorRow[] => {
+  const errors: ProductImportErrorRow[] = [];
+  const rowsByCode = new Map<string, ProductImportParsedRow[]>();
+  const rowsByBarcode = new Map<string, ProductImportParsedRow[]>();
+
+  for (const row of rows) {
+    const normalizedCode = row.code.trim().toUpperCase();
+    if (normalizedCode) {
+      rowsByCode.set(normalizedCode, [...(rowsByCode.get(normalizedCode) ?? []), row]);
+    }
+
+    const normalizedBarcode = normalizeBarcode(row.barcode);
+    if (normalizedBarcode) {
+      rowsByBarcode.set(normalizedBarcode, [...(rowsByBarcode.get(normalizedBarcode) ?? []), row]);
+    }
+  }
+
+  const pushDuplicateErrors = (
+    entries: Map<string, ProductImportParsedRow[]>,
+    label: string,
+    column: string
+  ) => {
+    for (const [value, duplicatedRows] of entries) {
+      if (duplicatedRows.length < 2) continue;
+      const rowNumbers = duplicatedRows.map((row) => row.rowNumber).join(", ");
+      for (const row of duplicatedRows) {
+        errors.push({
+          rowNumber: row.rowNumber,
+          message: `${label} duplicado dentro del archivo`,
+          column,
+          value,
+          expected: `Debe aparecer una sola vez. Filas repetidas: ${rowNumbers}`,
+        });
+      }
+    }
+  };
+
+  pushDuplicateErrors(rowsByCode, "Código de producto", "codigo de producto");
+  pushDuplicateErrors(rowsByBarcode, "Código de barras", "codigo de barras");
+
+  return errors;
+};
 
 const parseImportRow = (row: XlsxRow, rowNumber: number): ProductImportRowParseResult => {
   const errors: ProductImportErrorRow[] = [];
@@ -326,6 +390,7 @@ const parseImportRow = (row: XlsxRow, rowNumber: number): ProductImportRowParseR
     category,
     subcategory: toNullableString(getRowValueByAlias(row, [...importFieldAliases.subcategory])),
     barcode: normalizeBarcode(toNullableString(getRowValueByAlias(row, [...importFieldAliases.barcode]))),
+    sale_mode: parseSaleMode(getRowValueByAlias(row, [...importFieldAliases.sale_mode])),
     price_final: resolvedPriceFinal,
     price_without_vat: resolvedPriceWithoutVat,
     cost_price: costPrice,
@@ -813,10 +878,27 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       "% iva": 21,
       "precio final": 1742.4,
       stock: 20,
+      "tipo de venta": "unit",
       "lista de precio": "BASE (solo lectura - no editar)",
     };
 
     return downloadXlsx("plantilla-productos", "Plantilla Productos", [templateRow]);
+  };
+
+  const downloadImportErrors = async (errors: ProductImportErrorRow[]): Promise<boolean> => {
+    if (!errors.length) return false;
+
+    return downloadXlsx(
+      `errores-importacion-productos-${new Date().toISOString().slice(0, 10)}`,
+      "Errores Importacion",
+      errors.map((error) => ({
+        fila: error.rowNumber,
+        error: error.message,
+        columna: error.column ?? "",
+        valor: error.value ?? "",
+        esperado: error.expected ?? "",
+      }))
+    );
   };
 
   const parseImportFile = async (file: File): Promise<ProductImportPreview> => {
@@ -830,7 +912,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       const normalized: XlsxRow = {};
 
       for (const [key, value] of Object.entries(row)) {
-        normalized[key.toLowerCase().trim()] = value;
+        normalized[normalizeImportKey(key)] = value;
       }
 
       const parsed = parseImportRow(normalized, rowNumber);
@@ -841,6 +923,11 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
 
       validRows.push(parsed.row);
     });
+
+    const duplicateErrors = validateImportFileDuplicates(validRows);
+    if (duplicateErrors.length > 0) {
+      errorRows.push(...duplicateErrors);
+    }
 
     return {
       fileName: file.name,
@@ -888,6 +975,68 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
     }
 
     try {
+      if (preview.errorRows.length > 0) {
+        const result = {
+          created: 0,
+          updated: 0,
+          skipped: 0,
+          errors: preview.errorRows.length,
+          errorRows: preview.errorRows,
+        };
+
+        setFeedback({
+          type: "error",
+          message: `Importación bloqueada. Corregí ${preview.errorRows.length} errores antes de importar.`,
+        });
+
+        return result;
+      }
+
+      for (const row of preview.validRows) {
+        const normalizedCode = row.code.trim().toUpperCase();
+        const normalizedBarcode = normalizeBarcode(row.barcode);
+        const codeMatch = normalizedCode ? codeToProductId.get(normalizedCode) ?? null : null;
+        const barcodeMatch = normalizedBarcode
+          ? barcodeToProductId.get(normalizedBarcode) ?? null
+          : null;
+
+        if (codeMatch && barcodeMatch && codeMatch !== barcodeMatch) {
+          importErrors.push({
+            rowNumber: row.rowNumber,
+            message: "Conflicto entre código y código de barras: apuntan a productos distintos",
+          });
+          continue;
+        }
+
+        const matchedProductId = codeMatch ?? barcodeMatch;
+        if (mode === "upsert" && matchedProductId) {
+          const existing = products.find((product) => product.id === matchedProductId);
+          if (!existing) {
+            importErrors.push({
+              rowNumber: row.rowNumber,
+              message: "No se encontró el producto para actualizar",
+            });
+          }
+        }
+      }
+
+      if (importErrors.length > 0) {
+        const result = {
+          created: 0,
+          updated: 0,
+          skipped: 0,
+          errors: importErrors.length,
+          errorRows: importErrors,
+        };
+
+        setFeedback({
+          type: "error",
+          message: `Importación bloqueada. No se creó ni actualizó ningún producto. Errores: ${importErrors.length}`,
+        });
+
+        return result;
+      }
+
       for (const row of preview.validRows) {
         const normalizedCode = row.code.trim().toUpperCase();
         const normalizedBarcode = normalizeBarcode(row.barcode);
@@ -900,7 +1049,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
         if (codeMatch && barcodeMatch && codeMatch !== barcodeMatch) {
           importErrors.push({
             rowNumber: row.rowNumber,
-            message: "Conflicto entre code y barcode: apuntan a productos distintos",
+            message: "Conflicto entre código y código de barras: apuntan a productos distintos",
           });
           continue;
         }
@@ -918,7 +1067,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
             if (!existing) {
               importErrors.push({
                 rowNumber: row.rowNumber,
-                message: "No se encontro el producto para actualizar",
+                message: "No se encontró el producto para actualizar",
               });
               continue;
             }
@@ -932,7 +1081,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
               description: existing.description,
               category: row.category,
               subcategory: row.subcategory,
-              sale_mode: existing.sale_mode,
+              sale_mode: row.sale_mode,
               price: row.price_final,
               cost_price: row.cost_price,
               stock_current: row.stock_current,
@@ -972,7 +1121,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
             stock_max: null,
             category: row.category,
             subcategory: row.subcategory,
-            sale_mode: "unit",
+            sale_mode: row.sale_mode,
             currency_code: "ARS",
             price_without_vat: row.price_without_vat,
             vat_percent: row.vat_percent,
@@ -1127,6 +1276,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
     toggleProductActive,
     toggleProductFavorite,
     downloadImportTemplate,
+    downloadImportErrors,
     parseImportFile,
     applyImportPreview,
     exportProducts,

@@ -11,6 +11,7 @@ interface ProductImportModalProps {
   loading: boolean;
   onClose: () => void;
   onDownloadTemplate: () => Promise<boolean>;
+  onDownloadErrors: (errors: ProductImportErrorRow[]) => Promise<boolean>;
   onParseFile: (file: File) => Promise<ProductImportPreview>;
   onConfirmImport: (preview: ProductImportPreview, mode: ProductImportMode) => Promise<ProductImportResult>;
 }
@@ -40,6 +41,7 @@ export const ProductImportModal = ({
   loading,
   onClose,
   onDownloadTemplate,
+  onDownloadErrors,
   onParseFile,
   onConfirmImport,
 }: ProductImportModalProps) => {
@@ -51,7 +53,8 @@ export const ProductImportModal = ({
   const [activeTab, setActiveTab] = useState<PreviewTab>("valid");
 
   const busy = loading || isParsing;
-  const hasImportableRows = (preview?.validRows.length ?? 0) > 0;
+  const hasBlockingErrors = (preview?.errorRows.length ?? 0) > 0;
+  const hasImportableRows = (preview?.validRows.length ?? 0) > 0 && !hasBlockingErrors;
 
   const topErrors = useMemo(() => {
     if (!preview) return [];
@@ -167,7 +170,26 @@ export const ProductImportModal = ({
             >
               {loading ? "Importando..." : "Confirmar importación"}
             </button>
+
+            {preview?.errorRows.length ? (
+              <button
+                type="button"
+                className="ui-btn-ghost"
+                disabled={busy}
+                onClick={() => {
+                  void onDownloadErrors(preview.errorRows);
+                }}
+              >
+                Descargar errores XLSX
+              </button>
+            ) : null}
           </div>
+
+          {hasBlockingErrors ? (
+            <div className="ui-error-state">
+              Corregí las filas con error antes de confirmar la importación. No se crearán productos hasta que el archivo esté limpio.
+            </div>
+          ) : null}
 
           {isParsing ? <div className="ui-loading">Analizando archivo...</div> : null}
           {error ? <div className="ui-error-state">{error}</div> : null}
@@ -224,6 +246,7 @@ export const ProductImportModal = ({
                           <th className="px-2 py-2 text-left">Nombre</th>
                           <th className="px-2 py-2 text-left">Categoría</th>
                           <th className="px-2 py-2 text-left">Subcategoría</th>
+                          <th className="px-2 py-2 text-left">Tipo</th>
                           <th className="px-2 py-2 text-left">Precio final</th>
                           <th className="px-2 py-2 text-left">Stock</th>
                         </tr>
@@ -235,8 +258,14 @@ export const ProductImportModal = ({
                             <td className="px-2 py-2 text-slate-800">{row.name}</td>
                             <td className="px-2 py-2 text-slate-700">{row.category}</td>
                             <td className="px-2 py-2 text-slate-700">{row.subcategory ?? "-"}</td>
-                            <td className="px-2 py-2 text-slate-700">{row.price_final.toLocaleString("es-AR")}</td>
-                            <td className="px-2 py-2 text-slate-700">{row.stock_current.toLocaleString("es-AR")}</td>
+                            <td className="px-2 py-2 text-slate-700">{row.sale_mode === "weight" ? "Pesable" : "Unidad"}</td>
+                            <td className="px-2 py-2 text-slate-700">
+                              {row.price_final.toLocaleString("es-AR")}
+                              {row.sale_mode === "weight" ? " / kg" : ""}
+                            </td>
+                            <td className="px-2 py-2 text-slate-700">
+                              {row.stock_current.toLocaleString("es-AR")} {row.sale_mode === "weight" ? "kg" : "u."}
+                            </td>
                           </tr>
                         ))}
                       </tbody>

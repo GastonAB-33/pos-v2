@@ -1,7 +1,9 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
-import type { Product, Promotion } from "@/types/entities";
+import { useFieldArray, useForm } from "react-hook-form";
+import { buildPromotionBarcode } from "@/services/promotions.service";
+import type { PromotionWithDetails } from "@/services/promotions.service";
+import type { Product } from "@/types/entities";
 import {
   promotionFormSchema,
   promotionScopeOptions,
@@ -11,7 +13,7 @@ import {
 
 interface PromotionFormProps {
   mode: "create" | "edit";
-  promotion?: Promotion;
+  promotion?: PromotionWithDetails;
   products: Product[];
   disabled?: boolean;
   onCancel: () => void;
@@ -21,6 +23,7 @@ interface PromotionFormProps {
 const defaultValues: PromotionFormValues = {
   name: "",
   code: "",
+  barcode: "",
   description: "",
   type: "percentage_discount",
   scope: "product",
@@ -31,6 +34,7 @@ const defaultValues: PromotionFormValues = {
   comboPrice: "",
   startsAt: "",
   endsAt: "",
+  bundleItems: [],
 };
 
 const toDatetimeLocal = (value: string | null) => {
@@ -61,6 +65,7 @@ const getTypeLabel = (type: PromotionFormValues["type"]) => {
 
 const getScopeLabel = (scope: PromotionFormValues["scope"]) => {
   if (scope === "product") return "Producto";
+  if (scope === "bundle") return "Combo";
   return "Carrito";
 };
 
@@ -75,6 +80,8 @@ export const PromotionForm = ({
   const {
     register,
     watch,
+    setValue,
+    control,
     handleSubmit,
     reset,
     formState: { errors },
@@ -92,6 +99,7 @@ export const PromotionForm = ({
     reset({
       name: promotion.name,
       code: promotion.code,
+      barcode: promotion.barcodes?.[0]?.barcode ?? buildPromotionBarcode(promotion.code),
       description: promotion.description ?? "",
       type: promotion.type,
       scope: promotion.scope,
@@ -102,11 +110,29 @@ export const PromotionForm = ({
       comboPrice: promotion.combo_price ?? "",
       startsAt: toDatetimeLocal(promotion.starts_at),
       endsAt: toDatetimeLocal(promotion.ends_at),
+      bundleItems:
+        promotion.items?.map((item) => ({
+          productId: item.product_id,
+          quantity: item.quantity,
+        })) ?? [],
     });
   }, [promotion, reset]);
 
   const selectedType = watch("type");
   const selectedScope = watch("scope");
+  const selectedCode = watch("code");
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: "bundleItems",
+  });
+
+  useEffect(() => {
+    if (!selectedCode.trim()) return;
+    setValue("barcode", buildPromotionBarcode(selectedCode), {
+      shouldDirty: mode === "create",
+      shouldValidate: true,
+    });
+  }, [mode, selectedCode, setValue]);
 
   return (
     <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
@@ -121,6 +147,11 @@ export const PromotionForm = ({
           <label className="mb-1 block text-sm font-medium text-slate-700">Codigo</label>
           <input {...register("code")} className="ui-input" disabled={disabled} />
           {errors.code ? <p className="mt-1 text-xs text-red-600">{errors.code.message}</p> : null}
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Barcode promo</label>
+          <input {...register("barcode")} className="ui-input font-mono text-sm" disabled={disabled} />
         </div>
       </div>
 
@@ -170,7 +201,62 @@ export const PromotionForm = ({
         </div>
       ) : null}
 
+      {selectedScope === "bundle" ? (
+        <div className="rounded-lg border border-slate-200 bg-white p-3">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <label className="text-sm font-medium text-slate-700">Productos del combo</label>
+            <button
+              type="button"
+              className="ui-btn-ghost px-2 py-1 text-xs"
+              disabled={disabled}
+              onClick={() => append({ productId: "", quantity: 1 })}
+            >
+              Agregar producto
+            </button>
+          </div>
+
+          <div className="grid gap-2">
+            {fields.map((field, index) => (
+              <div key={field.id} className="grid gap-2 md:grid-cols-[1fr_120px_auto]">
+                <select
+                  {...register(`bundleItems.${index}.productId`)}
+                  className="ui-input"
+                  disabled={disabled}
+                >
+                  <option value="">Seleccionar producto</option>
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min="0.001"
+                  step="0.001"
+                  {...register(`bundleItems.${index}.quantity`)}
+                  className="ui-input"
+                  disabled={disabled}
+                />
+                <button
+                  type="button"
+                  className="ui-btn-ghost px-2 py-1 text-xs"
+                  disabled={disabled}
+                  onClick={() => remove(index)}
+                >
+                  Quitar
+                </button>
+              </div>
+            ))}
+          </div>
+          {errors.bundleItems ? (
+            <p className="mt-2 text-xs text-red-600">{errors.bundleItems.message}</p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-2">
+        {selectedScope !== "bundle" ? (
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Cantidad minima</label>
           <input type="number" min="1" step="1" {...register("minQuantity")} className="ui-input" disabled={disabled} />
@@ -178,6 +264,7 @@ export const PromotionForm = ({
             <p className="mt-1 text-xs text-red-600">{errors.minQuantity.message}</p>
           ) : null}
         </div>
+        ) : null}
 
         {selectedType === "percentage_discount" ? (
           <div>

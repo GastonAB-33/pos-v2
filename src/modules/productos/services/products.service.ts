@@ -142,6 +142,7 @@ export const mapEntityToProductViewModel = (
     nombre: product.name,
     codigoProducto: product.code,
     codigoBarras: barcode ?? "",
+    saleMode: product.sale_mode,
     categoria: product.category,
     subcategoria: product.subcategory ?? "",
     proveedor: product.supplier ?? "",

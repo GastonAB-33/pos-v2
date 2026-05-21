@@ -3,7 +3,7 @@ import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
-import { CustomerCurrentAccountPanel } from "@/modules/clientes/components/CustomerCurrentAccountPanel";
+import { routePaths } from "@/config/routes";
 import { CustomerForm } from "@/modules/clientes/components/CustomerForm";
 import { CustomersTable } from "@/modules/clientes/components/CustomersTable";
 import { CustomersToolbar } from "@/modules/clientes/components/CustomersToolbar";
@@ -12,6 +12,7 @@ import { PosCustomerModal, type PosCustomerModalValues } from "@/modules/pos/com
 import { posCustomerProfilesService } from "@/services/pos-customer-profiles.service";
 import type { Customer } from "@/types/entities";
 import type { CustomerFormValues } from "@/modules/clientes/schemas/customer-form.schema";
+import { useNavigate } from "react-router-dom";
 
 type FormMode = "create" | "edit";
 
@@ -32,6 +33,7 @@ const defaultPosModalValues: PosCustomerModalValues = {
 };
 
 export const ClientesPage = () => {
+  const navigate = useNavigate();
   const { tenantId } = useTenant();
   const user = useAuthStore((state) => state.user);
   const { canRead, canWrite } = usePermissions();
@@ -136,6 +138,8 @@ export const ClientesPage = () => {
       email: values.email,
       address: values.address,
       observations: "",
+      currentAccountEnabled: values.currentAccountEnabled,
+      currentAccountLimit: values.currentAccountLimit,
     });
 
     if (!tenantId || !created) return;
@@ -152,8 +156,13 @@ export const ClientesPage = () => {
     setCurrentAccountCustomer(customer);
   };
 
-  const refreshAfterMovement = async () => {
-    await reload();
+  const goToCurrentAccountModule = (customer: Customer) => {
+    const searchParams = new URLSearchParams({
+      clienteId: customer.id,
+      from: "clientes",
+    });
+
+    navigate(`${routePaths.cuentasCorrientes}?${searchParams.toString()}`);
   };
 
   if (!tenantId) {
@@ -205,15 +214,10 @@ export const ClientesPage = () => {
         )}
 
         {currentAccountCustomer ? (
-          <CustomerCurrentAccountPanel
-            tenantId={tenantId}
-            userId={user?.id ?? null}
+          <CustomerCurrentAccountSummary
             customer={currentAccountCustomer}
-            canWrite={canWriteClientes}
+            onOpenModule={() => goToCurrentAccountModule(currentAccountCustomer)}
             onClose={() => setCurrentAccountCustomer(null)}
-            onBalanceUpdated={() => {
-              void refreshAfterMovement();
-            }}
           />
         ) : null}
 
@@ -248,5 +252,72 @@ export const ClientesPage = () => {
         ) : null}
       </div>
     </PagePlaceholder>
+  );
+};
+
+interface CustomerCurrentAccountSummaryProps {
+  customer: Customer;
+  onOpenModule: () => void;
+  onClose: () => void;
+}
+
+const currency = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  maximumFractionDigits: 2,
+});
+
+const CustomerCurrentAccountSummary = ({
+  customer,
+  onOpenModule,
+  onClose,
+}: CustomerCurrentAccountSummaryProps) => {
+  const enabled = customer.current_account_enabled === true;
+  const limit = customer.current_account_limit ?? null;
+  const debt = Number((customer.current_balance ?? 0).toFixed(2));
+  const available = enabled && limit != null ? Number((limit - debt).toFixed(2)) : null;
+
+  return (
+    <section className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-slate-900">Estado de cuenta corriente</h3>
+          <p className="text-sm text-slate-600">{customer.full_name}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button type="button" className="ui-btn-primary" onClick={onOpenModule}>
+            Ver cuenta corriente
+          </button>
+          <button type="button" className="ui-btn-ghost" onClick={onClose}>
+            Cerrar
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <div className="rounded-lg bg-white p-3">
+          <p className="text-xs text-slate-500">Estado</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">
+            {enabled ? "Habilitada" : "Deshabilitada"}
+          </p>
+        </div>
+        <div className="rounded-lg bg-white p-3">
+          <p className="text-xs text-slate-500">Total adeudado</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">{currency.format(debt)}</p>
+        </div>
+        <div className="rounded-lg bg-white p-3">
+          <p className="text-xs text-slate-500">Limite</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">
+            {enabled ? (limit == null ? "Sin limite" : currency.format(limit)) : "-"}
+          </p>
+        </div>
+        <div className="rounded-lg bg-white p-3">
+          <p className="text-xs text-slate-500">Disponible</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">
+            {enabled ? (available == null ? "Sin tope" : currency.format(available)) : "-"}
+          </p>
+        </div>
+      </div>
+    </section>
   );
 };

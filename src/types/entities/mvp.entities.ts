@@ -18,6 +18,7 @@ export interface TenantRecord {
 }
 
 export interface UserRecord extends TenantScopedEntity {
+  auth_user_id?: string | null;
   email: string | null;
   username: string | null;
   full_name: string;
@@ -76,6 +77,12 @@ export interface Customer extends TenantScopedEntity {
   address: string | null;
   observations: string | null;
   current_balance: number;
+  current_account_enabled?: boolean | null;
+  current_account_limit?: number | null;
+  current_account_pricing_mode?: CurrentAccountPricingMode | null;
+  current_account_surcharge_percent?: number | null;
+  current_account_surcharge_amount?: number | null;
+  current_account_pricing_updated_at?: string | null;
   is_active: boolean;
 }
 
@@ -160,7 +167,7 @@ export interface PriceListItem extends TenantScopedEntity {
 }
 
 export type PromotionType = "percentage_discount" | "fixed_discount" | "combo_price";
-export type PromotionScope = "product" | "cart";
+export type PromotionScope = "product" | "cart" | "bundle";
 
 export interface Promotion extends TenantScopedEntity {
   name: string;
@@ -176,6 +183,18 @@ export interface Promotion extends TenantScopedEntity {
   starts_at: string | null;
   ends_at: string | null;
   is_active: boolean;
+}
+
+export interface PromotionItem extends TenantScopedEntity {
+  promotion_id: string;
+  product_id: string;
+  quantity: number;
+}
+
+export interface PromotionBarcode extends TenantScopedEntity {
+  promotion_id: string;
+  barcode: string;
+  is_primary: boolean;
 }
 
 export type PurchaseStatus = "confirmed" | "cancelled";
@@ -202,6 +221,11 @@ export interface PurchaseItem extends TenantScopedEntity {
 }
 
 export type CurrentAccountMovementType = "debt" | "payment" | "adjustment";
+export type CurrentAccountPricingMode =
+  | "original"
+  | "today_prices"
+  | "surcharge_percentage"
+  | "surcharge_fixed";
 
 export interface CurrentAccountMovement extends TenantScopedEntity {
   customer_id: string;
@@ -314,6 +338,7 @@ export type PosCartBehavior = "merge_same_product" | "separate_lines";
 
 export interface PosSettings {
   default_customer_id: string | null;
+  default_payment_method_id: string | null;
   auto_print_receipt: boolean;
   allow_sale_without_customer: boolean;
   allow_negative_stock: boolean;
@@ -366,16 +391,21 @@ export interface ArcaSettings {
   allow_internal_fallback: boolean;
 }
 
+export type BarcodeScaleMode = "weight" | "total_price";
+
 export interface BarcodeScaleSettings {
   scale_parser_enabled: boolean;
+  scale_mode: BarcodeScaleMode;
   scale_prefix: string;
   code_length: number;
   plu_start: number;
   plu_length: number;
   weight_start: number;
   weight_length: number;
+  weight_decimals: number;
   amount_start: number;
   amount_length: number;
+  amount_decimals: number;
   ean13_enabled: boolean;
 }
 

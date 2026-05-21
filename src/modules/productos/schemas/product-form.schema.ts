@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const productFormSchema = z.object({
   nombre: z.string().trim().min(1, "El nombre es obligatorio"),
+  saleMode: z.enum(["unit", "weight"]).default("unit"),
   codigoBarras: z
     .string()
     .max(64, "Maximo 64 caracteres")

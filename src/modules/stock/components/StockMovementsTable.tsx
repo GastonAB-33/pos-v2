@@ -28,6 +28,7 @@ const referenceTypeLabelMap: Record<string, string> = {
 };
 
 const getReferenceTypeLabel = (value: string): string => referenceTypeLabelMap[value] ?? value;
+const unitLabel = (product: Product | null): string => product?.sale_mode === "weight" ? "kg" : "u.";
 
 export const StockMovementsTable = ({ rows }: StockMovementsTableProps) => {
   const columns = [
@@ -49,21 +50,16 @@ export const StockMovementsTable = ({ rows }: StockMovementsTableProps) => {
     columnHelper.accessor((row) => row.movement.quantity, {
       id: "quantity",
       header: "Cantidad",
-      cell: (info) => info.getValue().toLocaleString("es-AR"),
+      cell: (info) =>
+        `${info.getValue().toLocaleString("es-AR")} ${unitLabel(info.row.original.product)}`,
     }),
     columnHelper.display({
       id: "reference",
       header: "Referencia",
       cell: (info) => {
         const movement = info.row.original.movement;
-        const referenceType = getReferenceTypeLabel(movement.reference_type);
-        return movement.reference_id ? `${referenceType} (${movement.reference_id})` : referenceType;
+        return getReferenceTypeLabel(movement.reference_type);
       },
-    }),
-    columnHelper.accessor((row) => row.movement.created_by ?? "-", {
-      id: "user",
-      header: "Usuario",
-      cell: (info) => info.getValue(),
     }),
   ];
 

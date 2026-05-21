@@ -5,6 +5,7 @@ import type {
   MercadoPagoOperationalStatus,
   MercadoPagoPaymentIntent,
 } from "@/services/mercadopago/mercadopago-payments.service";
+import { PaymentMethodSelector } from "@/components/payments/PaymentMethodSelector";
 import type {
   BankAccount,
   Customer,
@@ -15,7 +16,6 @@ import type {
 } from "@/types/entities";
 import {
   getPaymentMethodPosConfig,
-  getPaymentMethodTypeLabel,
   normalizePaymentMethodCode,
   type PaymentMethodPosConfig,
 } from "@/services/payment-methods.service";
@@ -27,6 +27,7 @@ import {
 interface PosCheckoutPanelProps {
   panelId?: string;
   formId?: string;
+  layout?: "panel" | "modal";
   customers: Customer[];
   paymentMethods: PaymentMethod[];
   bankAccounts: BankAccount[];
@@ -58,20 +59,9 @@ interface PosCheckoutPanelProps {
   onApproveMercadoPago: () => void;
   onRejectMercadoPago: () => void;
   onCancelMercadoPago: () => void;
+  onClose?: () => void;
   onSubmit: (values: PosCheckoutValues) => Promise<void>;
 }
-
-const getPaymentMethodLabel = (paymentMethod: PaymentMethod) => {
-  const code = normalizePaymentMethodCode(paymentMethod.code);
-  if (code === "cash") return "Efectivo";
-  if (code === "card_debit") return "Tarjeta de debito";
-  if (code === "card_credit") return "Tarjeta de credito";
-  if (code === "transfer") return "Transferencia bancaria";
-  if (code === "mercado_pago") return "Mercado Pago";
-  if (code === "cheque") return "Cheque";
-  if (code === "current_account") return "Cuenta corriente";
-  return getPaymentMethodTypeLabel(paymentMethod.type);
-};
 
 const normalizeSearchText = (value: string) => value.trim().toLowerCase();
 
@@ -124,6 +114,7 @@ interface ChequeDetails {
 export const PosCheckoutPanel = ({
   panelId,
   formId,
+  layout = "panel",
   customers,
   paymentMethods,
   bankAccounts,
@@ -150,6 +141,7 @@ export const PosCheckoutPanel = ({
   onApproveMercadoPago,
   onRejectMercadoPago,
   onCancelMercadoPago,
+  onClose,
   onSubmit,
 }: PosCheckoutPanelProps) => {
   const [customerQuery, setCustomerQuery] = useState("");
@@ -893,6 +885,7 @@ export const PosCheckoutPanel = ({
   }, [mercadoPagoStatus.mode]);
 
   const customerActionLabel = selectedCustomer ? "Editar cliente" : "Nuevo cliente";
+  const isModalLayout = layout === "modal";
 
   const paymentDetailsSummary = useMemo(() => {
     if (!requiresPaymentDetails || !selectedMethodConfig) return null;
@@ -996,16 +989,30 @@ export const PosCheckoutPanel = ({
   ]);
 
   return (
-    <section id={panelId} className="pos-surface space-y-3">
+    <section id={panelId} className={isModalLayout ? "space-y-3" : "pos-surface space-y-3"}>
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold text-slate-900">Checkout</h2>
-        <span className="font-kpi text-2xl font-semibold text-brand-700">
-          {new Intl.NumberFormat("es-AR", {
-            style: "currency",
-            currency: "ARS",
-            maximumFractionDigits: 2,
-          }).format(checkoutTotal)}
-        </span>
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">
+            {isModalLayout ? "Confirmar venta" : "Checkout"}
+          </h2>
+          {isModalLayout ? (
+            <p className="text-xs text-slate-500">Elegi cliente, medio de pago y datos contables.</p>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-kpi text-2xl font-semibold text-brand-700">
+            {new Intl.NumberFormat("es-AR", {
+              style: "currency",
+              currency: "ARS",
+              maximumFractionDigits: 2,
+            }).format(checkoutTotal)}
+          </span>
+          {onClose ? (
+            <button type="button" className="ui-btn-ghost px-2.5 py-1.5 text-xs" onClick={onClose}>
+              Cerrar
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="pos-summary-panel text-xs">
@@ -1125,61 +1132,30 @@ export const PosCheckoutPanel = ({
 
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Medio de pago</label>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {paymentMethodsOrdered.map((method) => {
-              const selected = method.id === watchedPaymentMethodId;
+          <PaymentMethodSelector
+            paymentMethods={paymentMethodsOrdered}
+            selectedPaymentMethodId={watchedPaymentMethodId}
+            disabled={disabled || !canWrite}
+            columns={isModalLayout ? 3 : 2}
+            isMethodDisabled={(method) => {
               const isCurrentAccount = normalizePaymentMethodCode(method.code) === "current_account";
-              const isDisabled =
-                disabled ||
-                !canWrite ||
-                (isCurrentAccount && (!canUseCurrentAccount || !isCurrentAccountEnabled || isCurrentAccountNoFunds));
-
-              return (
-                <button
-                  key={method.id}
-                  type="button"
-                  disabled={isDisabled}
-                  onClick={() => {
-                    if (isDisabled) return;
-                    setValue("paymentMethodId", method.id, {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    });
-                  }}
-                  className={
-                    selected
-                      ? "rounded-xl bg-brand-600/10 px-3 py-2 text-left shadow-sm ring-1 ring-brand-500/40"
-                      : "rounded-xl bg-slate-50 px-3 py-2 text-left"
-                  }
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className={selected ? "text-sm font-semibold text-slate-900" : "text-sm font-medium text-slate-800"}>
-                      {method.name}
-                    </p>
-                    {selected ? <span className="ui-badge ui-badge--info">Seleccionado</span> : null}
-                  </div>
-                  <p className="text-xs text-slate-500">{getPaymentMethodLabel(method)}</p>
-                  <div className="mt-1 flex flex-wrap items-center gap-1">
-                    {method.surcharge_percent > 0 ? (
-                      <span className="ui-badge ui-badge--warn">+{method.surcharge_percent}%</span>
-                    ) : null}
-                    {method.discount_percent > 0 ? (
-                      <span className="ui-badge ui-badge--success">-{method.discount_percent}%</span>
-                    ) : null}
-                    {isCurrentAccount && !canUseCurrentAccount ? (
-                      <span className="ui-badge ui-badge--danger">Requiere cliente</span>
-                    ) : null}
-                    {isCurrentAccount && canUseCurrentAccount && !isCurrentAccountEnabled ? (
-                      <span className="ui-badge ui-badge--danger">Credito deshabilitado</span>
-                    ) : null}
-                    {isCurrentAccount && canUseCurrentAccount && isCurrentAccountNoFunds ? (
-                      <span className="ui-badge ui-badge--warn">Sin fondo</span>
-                    ) : null}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+              return isCurrentAccount && (!canUseCurrentAccount || !isCurrentAccountEnabled || isCurrentAccountNoFunds);
+            }}
+            getMethodBadges={(method) => {
+              const isCurrentAccount = normalizePaymentMethodCode(method.code) === "current_account";
+              if (!isCurrentAccount) return [];
+              if (!canUseCurrentAccount) return ["Requiere cliente"];
+              if (!isCurrentAccountEnabled) return ["Credito deshabilitado"];
+              if (isCurrentAccountNoFunds) return ["Sin fondo"];
+              return [];
+            }}
+            onChange={(methodId) => {
+              setValue("paymentMethodId", methodId, {
+                shouldDirty: true,
+                shouldValidate: true,
+              });
+            }}
+          />
           {errors.paymentMethodId ? (
             <p className="mt-1 text-xs text-red-600">{errors.paymentMethodId.message}</p>
           ) : null}
