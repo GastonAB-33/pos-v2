@@ -59,7 +59,7 @@ export const LoginPage = () => {
         {dataProvider === "mock" ? (
           <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
           <p className="font-semibold">Acceso de desarrollo</p>
-          <p className="mt-1">Tenant: <span className="font-kpi">{demoCredentials.tenant}</span></p>
+          <p className="mt-1">Comercio: <span className="font-kpi">{demoCredentials.tenant}</span></p>
           <p>Usuario: <span className="font-kpi">{demoCredentials.username}</span></p>
           <p>Contrasena: <span className="font-kpi">{demoCredentials.password}</span></p>
           <button
@@ -99,7 +99,8 @@ export const LoginPage = () => {
             <h2 className="text-sm font-semibold text-slate-900">
               {dataProvider === "supabase" ? "Ingreso con email" : "Ingreso manual"}
             </h2>
-            {dataProvider === "mock" ? (
+            <label className="grid gap-1 text-xs font-medium text-slate-600" htmlFor="tenantInput">
+              Comercio
               <input
                 id="tenantInput"
                 value={tenantInput}
@@ -109,32 +110,38 @@ export const LoginPage = () => {
                 }}
                 className="ui-input"
                 disabled={isLoading || isSubmitting}
-                placeholder="Tenant"
+                placeholder="Comercio"
               />
-            ) : null}
-            <input
-              id="usernameInput"
-              value={usernameInput}
-              onChange={(event) => {
-                clearError();
-                setUsernameInput(event.target.value);
-              }}
-              className="ui-input"
-              disabled={isLoading || isSubmitting}
-              placeholder={dataProvider === "supabase" ? "Email" : "Usuario"}
-            />
-            <input
-              id="passwordInput"
-              type="password"
-              value={passwordInput}
-              onChange={(event) => {
-                clearError();
-                setPasswordInput(event.target.value);
-              }}
-              className="ui-input"
-              disabled={isLoading || isSubmitting}
-              placeholder="Contrasena"
-            />
+            </label>
+            <label className="grid gap-1 text-xs font-medium text-slate-600" htmlFor="usernameInput">
+              {dataProvider === "supabase" ? "Usuario (email)" : "Usuario"}
+              <input
+                id="usernameInput"
+                value={usernameInput}
+                onChange={(event) => {
+                  clearError();
+                  setUsernameInput(event.target.value);
+                }}
+                className="ui-input"
+                disabled={isLoading || isSubmitting}
+                placeholder={dataProvider === "supabase" ? "Email" : "Usuario"}
+              />
+            </label>
+            <label className="grid gap-1 text-xs font-medium text-slate-600" htmlFor="passwordInput">
+              Contrasena
+              <input
+                id="passwordInput"
+                type="password"
+                value={passwordInput}
+                onChange={(event) => {
+                  clearError();
+                  setPasswordInput(event.target.value);
+                }}
+                className="ui-input"
+                disabled={isLoading || isSubmitting}
+                placeholder="Contrasena"
+              />
+            </label>
             <button
               type="submit"
               className="ui-btn-primary w-full"
@@ -147,7 +154,7 @@ export const LoginPage = () => {
           {dataProvider === "mock" ? (
           <details className="rounded-lg border border-slate-200 p-3">
             <summary className="cursor-pointer text-sm font-medium text-slate-700">
-              Opciones avanzadas (tenant/usuario)
+              Opciones avanzadas (comercio/usuario)
             </summary>
             <div className="mt-3 space-y-3">
               <select
@@ -160,7 +167,7 @@ export const LoginPage = () => {
                 className="ui-input"
                 disabled={isLoading || isSubmitting || !hasTenants}
               >
-                <option value="">Seleccionar tenant</option>
+                <option value="">Seleccionar comercio</option>
                 {tenantOptions.map((tenant) => (
                   <option key={tenant.value} value={tenant.value}>
                     {tenant.label}
@@ -196,7 +203,7 @@ export const LoginPage = () => {
                 ))}
               </select>
               <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                <p>Tenant: {selectedTenant ? selectedTenant.trade_name : "-"}</p>
+                <p>Comercio: {selectedTenant ? selectedTenant.trade_name : "-"}</p>
                 <p>Usuario: {selectedUser ? selectedUser.full_name : "-"}</p>
               </div>
             </div>
@@ -220,13 +227,13 @@ export const LoginPage = () => {
 
         {dataProvider === "mock" && !hasTenants ? (
           <p className="mt-4 text-xs text-slate-500">
-            No hay tenants cargados. En mock se bootstrappea automaticamente el tenant demo.
+            No hay comercios cargados. En mock se bootstrappea automaticamente el comercio demo.
           </p>
         ) : null}
 
         {dataProvider === "mock" && !hasUsers && tenantId ? (
           <p className="mt-2 text-xs text-slate-500">
-            No hay usuarios para el tenant seleccionado.
+            No hay usuarios para el comercio seleccionado.
           </p>
         ) : null}
 
