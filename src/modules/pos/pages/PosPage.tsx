@@ -12,8 +12,10 @@ import { PosCustomerModal, type PosCustomerModalValues } from "@/modules/pos/com
 import { CashOpenForm } from "@/modules/caja/components/CashOpenForm";
 import { ReceiptTicketPanel } from "@/modules/comprobantes/components/ReceiptTicketPanel";
 import { PosCart } from "@/modules/pos/components/PosCart";
+import { PosCartItemEditModal } from "@/modules/pos/components/PosCartItemEditModal";
 import { PosCheckoutPanel } from "@/modules/pos/components/PosCheckoutPanel";
 import { PosProductList } from "@/modules/pos/components/PosProductList";
+import { PosQuickProductModal } from "@/modules/pos/components/PosQuickProductModal";
 import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
 import { usePosSale } from "@/modules/pos/hooks/usePosSale";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
@@ -128,9 +130,12 @@ export const PosPage = () => {
     clearFeedback,
     reload,
     addProductToCart,
+    addManualProductToCart,
+    createProductFromPosAndAddToCart,
     addProductByBarcode,
     setSelectedCustomer,
     setCartItemQuantity,
+    updateCartItem,
     increaseQuantity,
     decreaseQuantity,
     removeFromCart,
@@ -159,6 +164,8 @@ export const PosPage = () => {
   const [printMenuReceiptId, setPrintMenuReceiptId] = useState<string | null>(null);
   const [customerModalState, setCustomerModalState] = useState<PosCustomerModalState | null>(null);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+  const [isQuickProductModalOpen, setIsQuickProductModalOpen] = useState(false);
+  const [editingCartItemId, setEditingCartItemId] = useState<string | null>(null);
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   const [isCustomerModalSubmitting, setIsCustomerModalSubmitting] = useState(false);
   const [clientLogoUrl, setClientLogoUrl] = useState<string | null>(null);
@@ -219,6 +226,17 @@ export const PosPage = () => {
   const checkoutSummary = useMemo(
     () => getCheckoutSummary(selectedPaymentMethodId || null),
     [getCheckoutSummary, selectedPaymentMethodId]
+  );
+  const productCategories = useMemo(
+    () =>
+      Array.from(new Set(products.map((product) => product.category).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b)
+      ),
+    [products]
+  );
+  const editingCartItem = useMemo(
+    () => cart.find((item) => item.product_id === editingCartItemId) ?? null,
+    [cart, editingCartItemId]
   );
 
   const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
@@ -1275,6 +1293,14 @@ export const PosPage = () => {
             <button
               type="button"
               className="ui-btn-ghost"
+              onClick={() => setIsQuickProductModalOpen(true)}
+              disabled={isSubmitting || !canWritePos || isCashGateBlocking}
+            >
+              Producto rapido
+            </button>
+            <button
+              type="button"
+              className="ui-btn-ghost"
               onClick={() => setIsCameraScannerOpen(true)}
               disabled={isSubmitting || !canWritePos || isCashGateBlocking}
             >
@@ -1424,6 +1450,7 @@ export const PosPage = () => {
                     onIncrease={increaseQuantity}
                     onDecrease={decreaseQuantity}
                     onSetQuantity={setCartItemQuantity}
+                    onEdit={(item) => setEditingCartItemId(item.product_id)}
                     onRemove={removeFromCart}
                     onCheckout={() => setIsCheckoutModalOpen(true)}
                   />
@@ -1664,6 +1691,52 @@ export const PosPage = () => {
           </div>
         </section>
       ) : null}
+
+      <PosQuickProductModal
+        open={isQuickProductModalOpen}
+        categories={productCategories}
+        disabled={isSubmitting || isCashGateBlocking || !canWritePos}
+        onClose={() => {
+          setIsQuickProductModalOpen(false);
+          window.setTimeout(() => {
+            focusScannerCapture();
+          }, 0);
+        }}
+        onAddManual={(values) => {
+          const ok = addManualProductToCart(values);
+          if (ok) {
+            setRightPanelTab("cart");
+            window.setTimeout(() => {
+              focusScannerCapture();
+            }, 0);
+          }
+          return ok;
+        }}
+        onCreateAndAdd={async (values) => {
+          const ok = await createProductFromPosAndAddToCart(values);
+          if (ok) {
+            setRightPanelTab("cart");
+            window.setTimeout(() => {
+              focusScannerCapture();
+            }, 0);
+          }
+          return ok;
+        }}
+      />
+
+      <PosCartItemEditModal
+        item={editingCartItem}
+        disabled={isSubmitting || isCashGateBlocking || !canWritePos}
+        onClose={() => {
+          setEditingCartItemId(null);
+          window.setTimeout(() => {
+            focusScannerCapture();
+          }, 0);
+        }}
+        onSubmit={(values) => {
+          updateCartItem(values);
+        }}
+      />
 
       <BarcodeScannerModal
         open={isCameraScannerOpen}

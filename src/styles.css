@@ -733,7 +733,7 @@ html.dark {
 
   .pos-cart-item--compact {
     display: grid;
-    grid-template-columns: minmax(0, 1.7fr) auto auto auto auto;
+    grid-template-columns: minmax(0, 1.5fr) auto auto auto auto auto;
     align-items: center;
     gap: 0.45rem;
     padding: 0.55rem 0.65rem;

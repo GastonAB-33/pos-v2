@@ -48,6 +48,7 @@ interface PosCartItem {
   scale_weight: number | null;
   scale_total_price: number | null;
   scale_barcode: string | null;
+  is_manual_item: boolean;
 }
 
 interface PosCartItemComputed extends PosCartItem {
@@ -82,6 +83,27 @@ interface BarcodeScanResult {
   promotion?: PromotionWithDetails;
   parsedScale?: ParsedScaleBarcode | null;
   error?: string;
+}
+
+export interface PosQuickProductInput {
+  name: string;
+  category: string;
+  saleMode: "unit" | "weight";
+  quantity: number;
+  unitPrice: number;
+  costPrice: number;
+  stock: number;
+  code: string;
+  barcode: string;
+  favorite: boolean;
+}
+
+export interface PosCartItemEditInput {
+  productId: string;
+  name: string;
+  category: string;
+  quantity: number;
+  unitPrice: number;
 }
 
 const roundQty = (value: number): number => Number(value.toFixed(3));
@@ -198,6 +220,17 @@ const paymentMethodPriority = (method: PaymentMethod): number => {
 };
 
 const normalizeBarcodeValue = (value: string): string => value.trim().replace(/\s+/g, "");
+const buildQuickProductCode = (name: string): string => {
+  const base = name
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 28);
+
+  return `${base || "POS"}-${Date.now().toString().slice(-6)}`;
+};
 
 export const usePosSale = (tenantId: string | null) => {
   const { isOnline, refreshPending } = useOffline();
@@ -659,6 +692,7 @@ export const usePosSale = (tenantId: string | null) => {
                     ? roundAmount((item.scale_total_price ?? 0) + options.parsedScale.totalPrice)
                     : item.scale_total_price,
                 scale_barcode: options?.parsedScale?.raw ?? item.scale_barcode,
+                is_manual_item: item.is_manual_item,
               }
             : item
         );
@@ -682,12 +716,156 @@ export const usePosSale = (tenantId: string | null) => {
           scale_weight: options?.parsedScale?.weight ?? null,
           scale_total_price: options?.parsedScale?.totalPrice ?? null,
           scale_barcode: options?.parsedScale?.raw ?? null,
+          is_manual_item: false,
         },
       ];
     });
 
     return true;
   };
+
+  const addManualProductToCart = useCallback((input: PosQuickProductInput): boolean => {
+    const quantity = roundQty(input.quantity);
+    const unitPrice = roundAmount(input.unitPrice);
+    const name = input.name.trim();
+    const category = input.category.trim() || "Venta manual";
+
+    if (!name) {
+      setFeedback({ type: "error", message: "Ingresa el nombre del producto" });
+      return false;
+    }
+
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setFeedback({ type: "error", message: "La cantidad debe ser mayor a 0" });
+      return false;
+    }
+
+    if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+      setFeedback({ type: "error", message: "El precio debe ser mayor a 0" });
+      return false;
+    }
+
+    const manualId = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setCartState((prev) => [
+      ...prev,
+      {
+        product_id: manualId,
+        name,
+        category,
+        sale_mode: input.saleMode,
+        quantity,
+        unit_price: unitPrice,
+        base_unit_price: unitPrice,
+        stock_available: Number.MAX_SAFE_INTEGER,
+        price_list_id: null,
+        price_list_name: null,
+        price_list_is_active: null,
+        is_scale_item: false,
+        scale_weight: null,
+        scale_total_price: null,
+        scale_barcode: null,
+        is_manual_item: true,
+      },
+    ]);
+
+    return true;
+  }, []);
+
+  const createProductFromPosAndAddToCart = useCallback(
+    async (input: PosQuickProductInput): Promise<boolean> => {
+      if (!tenantId) return false;
+
+      const quantity = roundQty(input.quantity);
+      const unitPrice = roundAmount(input.unitPrice);
+      const name = input.name.trim();
+      const category = input.category.trim() || "General";
+      const stock = roundQty(Math.max(input.stock, quantity));
+
+      if (!name || quantity <= 0 || unitPrice <= 0) {
+        setFeedback({ type: "error", message: "Completa nombre, cantidad y precio" });
+        return false;
+      }
+
+      setIsSubmitting(true);
+      try {
+        const priceWithoutVat = roundAmount(unitPrice / 1.21);
+        const created = await productsService.create(tenantId, {
+          code: input.code.trim() || buildQuickProductCode(name),
+          name,
+          image_url: null,
+          brand: null,
+          supplier: null,
+          is_favorite: input.favorite,
+          description: null,
+          price: unitPrice,
+          cost_price: roundAmount(input.costPrice),
+          stock_current: stock,
+          stock_min: null,
+          stock_max: null,
+          category,
+          subcategory: null,
+          sale_mode: input.saleMode,
+          currency_code: "ARS",
+          price_without_vat: priceWithoutVat,
+          vat_percent: 21,
+          profit_percent:
+            input.costPrice > 0
+              ? roundAmount(((priceWithoutVat - input.costPrice) / input.costPrice) * 100)
+              : 0,
+          is_active: true,
+        });
+
+        if (input.barcode.trim()) {
+          await productsService.setPrimaryBarcode(tenantId, created.id, input.barcode.trim());
+        }
+
+        setProducts((current) =>
+          [...current.filter((product) => product.id !== created.id), created].sort((a, b) =>
+            a.name.localeCompare(b.name)
+          )
+        );
+        if (input.barcode.trim()) {
+          setPrimaryBarcodes((current) => ({ ...current, [created.id]: input.barcode.trim() }));
+          setProductBarcodes((current) => [
+            ...current.filter((barcode) => barcode.product_id !== created.id || !barcode.is_primary),
+            {
+              id: `local-barcode-${created.id}`,
+              tenant_id: tenantId,
+              product_id: created.id,
+              barcode: input.barcode.trim(),
+              is_primary: true,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          ]);
+        }
+
+        await auditService.createSafe(tenantId, {
+          user_id: null,
+          module: "pos",
+          action: "quick_product_create",
+          entity_type: "product",
+          entity_id: created.id,
+          description: `Producto creado desde POS: ${created.name}`,
+          metadata: {
+            code: created.code,
+            category: created.category,
+            price: created.price,
+            stock_current: created.stock_current,
+          },
+        });
+
+        return addProductToCart(created, quantity);
+      } catch (error) {
+        const message = error instanceof Error && error.message ? error.message : "No se pudo crear el producto";
+        setFeedback({ type: "error", message });
+        return false;
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [addProductToCart, tenantId]
+  );
 
   const findPromotionByBarcode = useCallback(
     (rawBarcode: string): PromotionWithDetails | null => {
@@ -933,6 +1111,58 @@ export const usePosSale = (tenantId: string | null) => {
           ? {
               ...item,
               quantity: normalizedQty,
+            }
+          : item
+      );
+    });
+  };
+
+  const updateCartItem = (input: PosCartItemEditInput) => {
+    const normalizedQty = roundQty(input.quantity);
+    const normalizedPrice = roundAmount(input.unitPrice);
+    const name = input.name.trim();
+    const category = input.category.trim() || "General";
+
+    if (!name) {
+      setFeedback({ type: "error", message: "El producto necesita nombre" });
+      return;
+    }
+
+    if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) {
+      setFeedback({ type: "error", message: "La cantidad debe ser mayor a 0" });
+      return;
+    }
+
+    if (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0) {
+      setFeedback({ type: "error", message: "El precio debe ser mayor a 0" });
+      return;
+    }
+
+    setCartState((prev) => {
+      const target = prev.find((item) => item.product_id === input.productId);
+      if (!target) return prev;
+
+      if (
+        !target.is_manual_item &&
+        !posSettings.allow_negative_stock &&
+        normalizedQty > target.stock_available
+      ) {
+        setFeedback({
+          type: "error",
+          message: `Stock insuficiente para ${target.name}`,
+        });
+        return prev;
+      }
+
+      return prev.map((item) =>
+        item.product_id === input.productId
+          ? {
+              ...item,
+              name,
+              category,
+              quantity: normalizedQty,
+              unit_price: normalizedPrice,
+              base_unit_price: item.is_manual_item ? normalizedPrice : item.base_unit_price,
             }
           : item
       );
@@ -1298,7 +1528,7 @@ export const usePosSale = (tenantId: string | null) => {
 
     const stockConflict = posSettings.allow_negative_stock
       ? null
-      : cart.find((item) => item.quantity > item.stock_available);
+      : cart.find((item) => !item.is_manual_item && item.quantity > item.stock_available);
     if (stockConflict) {
       setFeedback({
         type: "error",
@@ -1445,6 +1675,7 @@ export const usePosSale = (tenantId: string | null) => {
                 ? ({ ...promotionsResolution.applied_cart_promotion } as Record<string, unknown>)
                 : null,
               cart_promotion_discount_allocated: item.cart_promotion_discount_total,
+              is_manual_sale_item: item.is_manual_item,
             },
           })),
         });
@@ -1547,8 +1778,13 @@ export const usePosSale = (tenantId: string | null) => {
               ? ({ ...promotionsResolution.applied_cart_promotion } as Record<string, unknown>)
               : null,
             cart_promotion_discount_allocated: item.cart_promotion_discount_total,
+            is_manual_sale_item: item.is_manual_item,
           },
         });
+
+        if (item.is_manual_item) {
+          continue;
+        }
 
         await stockService.create(tenantId, {
           product_id: item.product_id,
@@ -2003,9 +2239,12 @@ export const usePosSale = (tenantId: string | null) => {
     clearFeedback,
     reload: loadPosData,
     addProductToCart,
+    addManualProductToCart,
+    createProductFromPosAndAddToCart,
     addProductByBarcode,
     setSelectedCustomer,
     setCartItemQuantity,
+    updateCartItem,
     increaseQuantity,
     decreaseQuantity,
     removeFromCart,

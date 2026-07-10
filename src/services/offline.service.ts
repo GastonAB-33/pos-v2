@@ -294,6 +294,30 @@ const syncPendingSaleRecord = async (record: PendingSaleRecord): Promise<Sale> =
   });
 
   for (const item of record.items) {
+    const isManualSaleItem =
+      item.metadata?.is_manual_sale_item === true || item.product_id.startsWith("manual-");
+
+    if (isManualSaleItem) {
+      await salesService.createItem(record.tenant_id, {
+        sale_id: sale.id,
+        product_id: item.product_id,
+        product_name_snapshot: item.name,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        discount_total: roundAmount(item.discount_total),
+        tax_total: 0,
+        line_total: roundAmount(item.line_total),
+        metadata: {
+          ...(item.metadata ?? {}),
+          offline_sync: {
+            local_sale_id: record.local_id,
+            synced_at: nowIso(),
+          },
+        },
+      });
+      continue;
+    }
+
     const product = await productsService.getById(record.tenant_id, item.product_id);
     if (!product) {
       throw new Error(`Producto inexistente durante sync: ${item.name}`);
