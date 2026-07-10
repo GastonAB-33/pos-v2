@@ -23,6 +23,7 @@
   configuracionCatalogo: "/catalogo/configuracion",
   configuracionAnalisis: "/analisis/configuracion",
   configuracionSistema: "/sistema/configuracion",
+  altaComercio: "/sistema/alta-comercio",
   centroSoporte: "/sistema/centro-soporte",
   misConsultas: "/sistema/mis-consultas",
   configuracionContable: "/contable/configuracion",

@@ -45,6 +45,7 @@ const createDevBypassTenant = (): Tenant => ({
   id: "tenant-demo-ar",
   legalName: "Tenant Demo Argentina SA",
   tradeName: "Tenant Demo AR",
+  slug: "demo",
   cuit: "30-00000000-0",
   isActive: true,
   createdAt: new Date(0).toISOString(),

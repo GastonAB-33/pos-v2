@@ -86,6 +86,7 @@ const sidebarGroups: SidebarGroup[] = [
     defaultExpanded: true,
     items: [
       { label: "Usuarios", to: routePaths.usuarios, module: "usuarios" },
+      { label: "Alta de comercio", to: routePaths.altaComercio, module: "configuracion_sistema" },
       { label: "Centro soporte", to: routePaths.centroSoporte, module: "configuracion_sistema" },
       { label: "Mis consultas", to: routePaths.misConsultas, module: "configuracion_sistema" },
       { label: "Configuracion", to: routePaths.configuracionSistema, module: "configuracion_sistema" },
@@ -151,6 +152,8 @@ export const Sidebar = () => {
           items: group.items.filter((item) => {
             const isSupportCenterItem = item.to === routePaths.centroSoporte;
             if (isSupportCenterItem && !supportOperator) return false;
+            const isTenantOnboardingItem = item.to === routePaths.altaComercio;
+            if (isTenantOnboardingItem && !supportOperator) return false;
             return canRead(item.module);
           }),
         }))

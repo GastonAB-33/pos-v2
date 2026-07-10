@@ -8,6 +8,8 @@ const supportConsoleEmails =
   (import.meta.env.VITE_SUPPORT_CONSOLE_EMAILS as string | undefined)?.trim() || "";
 const supportConsoleUserIds =
   (import.meta.env.VITE_SUPPORT_CONSOLE_USER_IDS as string | undefined)?.trim() || "";
+const supportWhatsappPhone =
+  (import.meta.env.VITE_SUPPORT_WHATSAPP_PHONE as string | undefined)?.replace(/\D/g, "") || "";
 const hasPlaceholderSupabaseUrl =
   supabaseUrl?.includes("your-project-ref.supabase.co") ||
   supabaseUrl === "TU_URL_DE_SUPABASE";
@@ -45,6 +47,7 @@ export const env = {
   apiUrl,
   supportConsoleEmails,
   supportConsoleUserIds,
+  supportWhatsappPhone,
   // Valores seguros para evitar crash en modo mock.
   supabaseUrl: supabaseUrl || "http://localhost:54321",
   supabaseAnonKey: supabaseAnonKey || "public-anon-key",

@@ -69,7 +69,7 @@ export const tenantScopedTables = [
 export type TenantScopedTableName = (typeof tenantScopedTables)[number];
 
 export const tableDefinitions: Record<DbTableName, readonly string[]> = {
-  tenants: ["id", "legal_name", "trade_name", "cuit", "is_active", "created_at", "updated_at"],
+  tenants: ["id", "legal_name", "trade_name", "slug", "cuit", "is_active", "created_at", "updated_at"],
   permission_profiles: ["id", "tenant_id", "name", "description", "is_active", "permissions", "created_at", "updated_at"],
   users: ["id", "tenant_id", "email", "username", "full_name", "role_code", "permission_profile_id", "is_active", "created_at", "updated_at"],
   products: ["id", "tenant_id", "code", "name", "image_url", "brand", "supplier", "description", "price", "cost_price", "stock_current", "stock_min", "stock_max", "category", "subcategory", "sale_mode", "currency_code", "price_without_vat", "vat_percent", "profit_percent", "is_favorite", "is_active", "created_at", "updated_at"],

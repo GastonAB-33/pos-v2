@@ -12,6 +12,7 @@ import {
   normalizePermissionProfile,
   type PermissionProfile,
 } from "@/types/permissions";
+import { normalizeTenantSlug } from "@/utils/tenant-slug";
 
 interface OptionItem {
   value: string;
@@ -31,6 +32,13 @@ const DEV_ADMIN_USERNAME = "admin";
 const DEV_ADMIN_PASSWORD = "admin123";
 const DEV_ADMIN_EMAIL = "admin@demo.local";
 const DEV_ADMIN_FULL_NAME = "Administrador Demo";
+
+const normalizeLoginText = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 
 const createFullPermissionProfile = (): PermissionProfile => {
   const profile = createDefaultPermissionProfile();
@@ -133,13 +141,15 @@ const resolveProfileOrError = (
   return { ok: true, profile };
 };
 
-export const useMockLogin = () => {
+export const useMockLogin = (expectedTenantSlug?: string) => {
   const setSession = useAuthStore((state) => state.setSession);
 
   const [tenantId, setTenantId] = useState("");
   const [userId, setUserId] = useState("");
   const [userSearch, setUserSearch] = useState("");
-  const [tenantInput, setTenantInput] = useState(DEV_TENANT_LOGIN);
+  const [tenantInput, setTenantInput] = useState(
+    dataProvider === "mock" ? DEV_TENANT_LOGIN : normalizeTenantSlug(expectedTenantSlug)
+  );
   const [usernameInput, setUsernameInput] = useState(DEV_ADMIN_USERNAME);
   const [passwordInput, setPasswordInput] = useState(DEV_ADMIN_PASSWORD);
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
@@ -356,11 +366,17 @@ export const useMockLogin = () => {
   };
 
   const loginWithCredentials = async (): Promise<boolean> => {
-    const normalizedTenant = tenantInput.trim().toLowerCase();
+    const normalizedTenant = normalizeLoginText(tenantInput);
     const normalizedUsername = usernameInput.trim().toLowerCase();
     const password = passwordInput;
+    const normalizedExpectedSlug = normalizeTenantSlug(expectedTenantSlug);
 
     if (dataProvider !== "mock") {
+      if (!normalizedTenant && !normalizedExpectedSlug) {
+        setError("Completa el comercio para iniciar sesion");
+        return false;
+      }
+
       if (!normalizedUsername || !password.trim()) {
         setError("Completa email y contrasena para iniciar sesion");
         return false;
@@ -371,9 +387,18 @@ export const useMockLogin = () => {
         return false;
       }
 
-      const session = await authService.signInWithPassword(normalizedUsername, password);
+      const session = await authService.signInWithPassword(
+        normalizedUsername,
+        password,
+        normalizedExpectedSlug || normalizedTenant
+      );
       setSession(session);
       return true;
+    }
+
+    if (normalizedExpectedSlug && normalizedExpectedSlug !== DEV_TENANT_LOGIN) {
+      setError("El comercio indicado en el enlace no existe en el entorno de desarrollo");
+      return false;
     }
 
     if (
@@ -461,8 +486,14 @@ export const useMockLogin = () => {
       }
 
       return await loginFromSelectors();
-    } catch {
-      setError("No se pudo iniciar sesion mock");
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : dataProvider === "mock"
+            ? "No se pudo iniciar sesion mock"
+            : "No se pudo iniciar sesion"
+      );
       return false;
     } finally {
       setIsSubmitting(false);
@@ -507,7 +538,10 @@ export const useMockLogin = () => {
     login,
     loginAsDemoAdmin,
     demoCredentials,
-    canSubmit: Boolean(tenantId && userId) || Boolean(usernameInput.trim() && passwordInput.trim()),
+    canSubmit:
+      dataProvider === "mock"
+        ? Boolean(tenantId && userId) || Boolean(usernameInput.trim() && passwordInput.trim())
+        : Boolean(tenantInput.trim() && usernameInput.trim() && passwordInput.trim()),
     hasTenants: tenants.length > 0,
     hasUsers: users.length > 0,
   };

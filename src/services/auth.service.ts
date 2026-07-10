@@ -6,6 +6,7 @@ import { usersService } from "@/services/users.service";
 import type { TenantRecord, UserRecord } from "@/types/entities";
 import type { AppUser } from "@/types/user";
 import { normalizePermissionProfile } from "@/types/permissions";
+import { getTenantSlugFromRecord, normalizeTenantSlug } from "@/utils/tenant-slug";
 
 interface PosSession {
   tenant: ReturnType<typeof tenantsService.toTenant>;
@@ -69,7 +70,7 @@ const resolvePosSessionFromAuthUser = async (authUserId: string): Promise<PosSes
 };
 
 export const authService = {
-  signInWithPassword: async (email: string, password: string): Promise<PosSession> => {
+  signInWithPassword: async (email: string, password: string, expectedTenantSlug?: string): Promise<PosSession> => {
     if (dataProvider !== "supabase") {
       throw new Error("Supabase Auth solo esta disponible con VITE_DATA_PROVIDER=supabase");
     }
@@ -88,7 +89,15 @@ export const authService = {
       throw new Error("Supabase Auth no devolvio usuario autenticado");
     }
 
-    return resolvePosSessionFromAuthUser(authUserId);
+    const session = await resolvePosSessionFromAuthUser(authUserId);
+    const expectedSlug = normalizeTenantSlug(expectedTenantSlug);
+
+    if (expectedSlug && getTenantSlugFromRecord(session.tenant) !== expectedSlug) {
+      await supabase.auth.signOut();
+      throw new Error("El usuario no pertenece al comercio indicado en el enlace");
+    }
+
+    return session;
   },
 
   signOut: async () => {
@@ -96,4 +105,3 @@ export const authService = {
     await supabase.auth.signOut();
   },
 };
-
