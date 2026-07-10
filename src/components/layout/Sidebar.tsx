@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { routePaths } from "@/config/routes";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
+import { usePwa } from "@/features/pwa/hooks/usePwa";
 import { isSupportOperator } from "@/features/support/support-operator";
 import { useDeviceProfile } from "@/hooks/useDeviceProfile";
 import { useUiStore } from "@/store/ui.store";
@@ -103,6 +104,7 @@ export const Sidebar = () => {
   const { canRead } = usePermissions();
   const supportOperator = isSupportOperator(user);
   const { isDesktop } = useDeviceProfile();
+  const { isInstalled } = usePwa();
   const setSidebarOpen = useUiStore((state) => state.setSidebarOpen);
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
@@ -114,12 +116,19 @@ export const Sidebar = () => {
 
     const posUrl = new URL(quickAccessItem.to, window.location.origin);
     posUrl.searchParams.set("from", "panel-web");
+    posUrl.searchParams.set("returnTo", `${location.pathname}${location.search}`);
+
+    if (isInstalled) {
+      navigate(`${posUrl.pathname}${posUrl.search}`);
+      closeDrawerAfterNavigation();
+      return;
+    }
+
     posUrl.searchParams.set("view", "browser");
     const opened = window.open(posUrl.toString(), "_blank", "noopener,noreferrer");
     if (!opened) {
-      window.alert(
-        "No se pudo abrir una nueva pestana web para POS. Habilita popups para este sitio e intenta de nuevo."
-      );
+      navigate(`${posUrl.pathname}${posUrl.search}`);
+      closeDrawerAfterNavigation();
     }
   };
 

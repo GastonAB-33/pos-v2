@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { useToast } from "@/components/ui/useToast";
@@ -94,6 +95,8 @@ export const PosPage = () => {
   const canWritePos = canWrite("pos");
   const canWriteCustomers = canWrite("clientes");
   const { success: toastSuccess, error: toastError } = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
   const {
     isOnline,
     isSyncing,
@@ -102,7 +105,7 @@ export const PosPage = () => {
     syncNow,
     clearSyncError,
   } = useOffline();
-  const { canInstall, isInstalling, installApp, isInstallSupported } = usePwa();
+  const { canInstall, isInstalled, isInstalling, installApp, isInstallSupported } = usePwa();
 
   const {
     products,
@@ -238,6 +241,25 @@ export const PosPage = () => {
     () => cart.find((item) => item.product_id === editingCartItemId) ?? null,
     [cart, editingCartItemId]
   );
+  const returnToPanelPath = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const returnTo = params.get("returnTo");
+
+    if (returnTo?.startsWith("/") && !returnTo.startsWith("//")) {
+      return returnTo;
+    }
+
+    return routePaths.home;
+  }, [location.search]);
+
+  const shouldShowReturnToPanel = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return isInstalled || params.get("from") === "panel-web" || params.has("returnTo");
+  }, [isInstalled, location.search]);
+
+  const handleReturnToPanel = useCallback(() => {
+    navigate(returnToPanelPath);
+  }, [navigate, returnToPanelPath]);
 
   const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
     if (!tenantId || !selectedCustomer) return null;
@@ -1249,6 +1271,15 @@ export const PosPage = () => {
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2 xl:col-start-3">
+            {shouldShowReturnToPanel ? (
+              <button
+                type="button"
+                onClick={handleReturnToPanel}
+                className="ui-btn-ghost"
+              >
+                Volver al panel
+              </button>
+            ) : null}
             <input
               ref={scannerCaptureRef}
               type="text"
