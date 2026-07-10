@@ -36,6 +36,7 @@ interface PosCartProps {
   onIncrease: (productId: string) => void;
   onDecrease: (productId: string) => void;
   onSetQuantity: (productId: string, quantity: number) => void;
+  onEdit: (item: PosCartItemView) => void;
   onRemove: (productId: string) => void;
   onCheckout: () => void;
 }
@@ -76,6 +77,7 @@ export const PosCart = ({
   onIncrease,
   onDecrease,
   onSetQuantity,
+  onEdit,
   onRemove,
   onCheckout,
 }: PosCartProps) => {
@@ -241,6 +243,17 @@ export const PosCart = ({
                     <p className="text-[11px] text-slate-500">Subtotal</p>
                   )}
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => onEdit(item)}
+                  disabled={disabled || !canWrite}
+                  aria-label={`Editar ${item.name}`}
+                  className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-600 disabled:opacity-50"
+                  title="Editar item"
+                >
+                  Editar
+                </button>
 
                 <button
                   type="button"
