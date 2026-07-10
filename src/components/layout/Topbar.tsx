@@ -89,6 +89,7 @@ const routeLabels: Array<{ path: string; label: string }> = [
   { path: routePaths.configuracionCatalogo, label: "Config. Catalogo" },
   { path: routePaths.configuracionAnalisis, label: "Config. Analisis" },
   { path: routePaths.configuracionSistema, label: "Config. Sistema" },
+  { path: routePaths.altaComercio, label: "Alta de comercio" },
   { path: routePaths.centroSoporte, label: "Centro soporte" },
   { path: routePaths.misConsultas, label: "Mis consultas" },
   { path: routePaths.configuracionContable, label: "Config. Contable" },
@@ -235,6 +236,18 @@ export const Topbar = () => {
     email: user?.email,
     fallback: "Invitado",
   });
+  const supportWhatsappUrl = useMemo(() => {
+    if (!env.supportWhatsappPhone) return "";
+
+    const message = [
+      "Hola, necesito soporte para el sistema POS.",
+      `Comercio: ${tenantName}`,
+      `Usuario: ${currentUserLabel}`,
+      `Modulo actual: ${currentTitle}`,
+    ].join("\n");
+
+    return `https://wa.me/${env.supportWhatsappPhone}?text=${encodeURIComponent(message)}`;
+  }, [currentTitle, currentUserLabel, tenantName]);
 
   const usersForAssignments = useMemo(() => {
     const deduped = new Map<string, UserRecord>();
@@ -727,6 +740,17 @@ export const Topbar = () => {
       </div>
 
       <div className="flex items-center gap-2 md:gap-3">
+        {supportWhatsappUrl ? (
+          <a
+            className="ui-btn-primary text-xs"
+            href={supportWhatsappUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            WhatsApp soporte
+          </a>
+        ) : null}
+
         <button type="button" className="ui-btn-ghost text-xs" onClick={() => togglePanel("support")}>
           Soporte
         </button>
@@ -757,6 +781,17 @@ export const Topbar = () => {
               Envia sugerencias o reportes de fallas con contexto automatico de tenant, usuario y horario.
             </p>
           </div>
+
+          {supportWhatsappUrl ? (
+            <a
+              className="ui-btn-primary justify-center text-xs"
+              href={supportWhatsappUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Contactar por WhatsApp
+            </a>
+          ) : null}
 
           <label className="block text-xs text-slate-500" htmlFor="support-type">
             Tipo

@@ -5,6 +5,7 @@ import { generateEntityId, nowIso } from "@/services/base/entity-factory";
 import { getMockTable, persistMockDatabase } from "@/services/mock/mock-db";
 import type { TenantRecord } from "@/types/entities";
 import type { Tenant } from "@/types/tenant";
+import { normalizeTenantSlug } from "@/utils/tenant-slug";
 
 const getMockTenants = (): TenantRecord[] => getMockTable(dbTables.tenants) as TenantRecord[];
 
@@ -12,6 +13,7 @@ const toTenant = (record: TenantRecord): Tenant => ({
   id: record.id,
   legalName: record.legal_name,
   tradeName: record.trade_name,
+  slug: record.slug ?? normalizeTenantSlug(record.trade_name),
   cuit: record.cuit,
   isActive: record.is_active,
   createdAt: record.created_at,
@@ -22,6 +24,7 @@ const toTenant = (record: TenantRecord): Tenant => ({
 const fromTenantInput = (input: {
   legal_name: string;
   trade_name: string;
+  slug?: string | null;
   cuit: string;
   is_active: boolean;
 }): TenantRecord => {
@@ -30,6 +33,7 @@ const fromTenantInput = (input: {
     id: generateEntityId(),
     legal_name: input.legal_name,
     trade_name: input.trade_name,
+    slug: normalizeTenantSlug(input.slug ?? input.trade_name),
     cuit: input.cuit,
     is_active: input.is_active,
     created_at: createdAt,
@@ -62,15 +66,45 @@ export const tenantsService = {
     return (data as TenantRecord | null) ?? null;
   },
 
+  async getPublicBySlug(slug: string): Promise<Pick<TenantRecord, "id" | "trade_name" | "slug" | "is_active"> | null> {
+    const normalizedSlug = normalizeTenantSlug(slug);
+    if (!normalizedSlug) return null;
+
+    if (dataProvider === "mock") {
+      const tenant =
+        getMockTenants().find((item) => normalizeTenantSlug(item.slug ?? item.trade_name) === normalizedSlug) ??
+        null;
+      if (!tenant) return null;
+      return {
+        id: tenant.id,
+        trade_name: tenant.trade_name,
+        slug: tenant.slug ?? normalizeTenantSlug(tenant.trade_name),
+        is_active: tenant.is_active,
+      };
+    }
+
+    const { data, error } = await supabase.rpc("pos_public_tenant_by_slug", {
+      tenant_slug: normalizedSlug,
+    });
+
+    if (error) throw error;
+
+    const rows = Array.isArray(data) ? data : [];
+    const row = rows[0] as Pick<TenantRecord, "id" | "trade_name" | "slug" | "is_active"> | undefined;
+    return row ?? null;
+  },
+
   async create(input: {
     legal_name: string;
     trade_name: string;
+    slug?: string | null;
     cuit: string;
     is_active?: boolean;
   }): Promise<TenantRecord> {
     const row = fromTenantInput({
       legal_name: input.legal_name,
       trade_name: input.trade_name,
+      slug: input.slug,
       cuit: input.cuit,
       is_active: input.is_active ?? true,
     });

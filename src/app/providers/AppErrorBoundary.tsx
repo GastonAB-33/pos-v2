@@ -27,7 +27,6 @@ export class AppErrorBoundary extends Component<
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     // Mantener log visible en consola para debug durante desarrollo.
-    // eslint-disable-next-line no-console
     console.error("App render error:", error, errorInfo);
   }
 

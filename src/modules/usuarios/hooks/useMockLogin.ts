@@ -12,6 +12,7 @@ import {
   normalizePermissionProfile,
   type PermissionProfile,
 } from "@/types/permissions";
+import { normalizeTenantSlug } from "@/utils/tenant-slug";
 
 interface OptionItem {
   value: string;
@@ -140,14 +141,14 @@ const resolveProfileOrError = (
   return { ok: true, profile };
 };
 
-export const useMockLogin = () => {
+export const useMockLogin = (expectedTenantSlug?: string) => {
   const setSession = useAuthStore((state) => state.setSession);
 
   const [tenantId, setTenantId] = useState("");
   const [userId, setUserId] = useState("");
   const [userSearch, setUserSearch] = useState("");
   const [tenantInput, setTenantInput] = useState(
-    dataProvider === "mock" ? DEV_TENANT_LOGIN : ""
+    dataProvider === "mock" ? DEV_TENANT_LOGIN : normalizeTenantSlug(expectedTenantSlug)
   );
   const [usernameInput, setUsernameInput] = useState(DEV_ADMIN_USERNAME);
   const [passwordInput, setPasswordInput] = useState(DEV_ADMIN_PASSWORD);
@@ -368,9 +369,10 @@ export const useMockLogin = () => {
     const normalizedTenant = normalizeLoginText(tenantInput);
     const normalizedUsername = usernameInput.trim().toLowerCase();
     const password = passwordInput;
+    const normalizedExpectedSlug = normalizeTenantSlug(expectedTenantSlug);
 
     if (dataProvider !== "mock") {
-      if (!normalizedTenant) {
+      if (!normalizedTenant && !normalizedExpectedSlug) {
         setError("Completa el comercio para iniciar sesion");
         return false;
       }
@@ -385,22 +387,18 @@ export const useMockLogin = () => {
         return false;
       }
 
-      const session = await authService.signInWithPassword(normalizedUsername, password);
-      const tenantCandidates = [
-        session.tenant.tradeName,
-        session.tenant.legalName,
-        session.tenant.cuit,
-        session.tenant.id,
-      ].map(normalizeLoginText);
-
-      if (!tenantCandidates.includes(normalizedTenant)) {
-        await authService.signOut();
-        setError("El usuario no pertenece al comercio indicado");
-        return false;
-      }
-
+      const session = await authService.signInWithPassword(
+        normalizedUsername,
+        password,
+        normalizedExpectedSlug || normalizedTenant
+      );
       setSession(session);
       return true;
+    }
+
+    if (normalizedExpectedSlug && normalizedExpectedSlug !== DEV_TENANT_LOGIN) {
+      setError("El comercio indicado en el enlace no existe en el entorno de desarrollo");
+      return false;
     }
 
     if (

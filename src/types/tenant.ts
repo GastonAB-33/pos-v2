@@ -10,6 +10,7 @@ export interface Tenant {
   id: string;
   legalName: string;
   tradeName: string;
+  slug?: string | null;
   cuit: string;
   isActive: boolean;
   createdAt: string;

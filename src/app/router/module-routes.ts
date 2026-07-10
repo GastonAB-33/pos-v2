@@ -28,6 +28,7 @@ import {
 import { UsuariosPage } from "@/modules/usuarios/pages/UsuariosPage";
 import { MisConsultasPage } from "@/modules/sistema/pages/MisConsultasPage";
 import { CentroSoportePage } from "@/modules/sistema/pages/CentroSoportePage";
+import { AltaComercioPage } from "@/modules/sistema/pages/AltaComercioPage";
 
 export const moduleRoutes: ModuleRouteItem[] = [
   { path: routePaths.menuPrincipal, Component: MainMenuPage },
@@ -52,6 +53,7 @@ export const moduleRoutes: ModuleRouteItem[] = [
   { path: routePaths.configuracionCatalogo, Component: ConfiguracionCatalogoPage, requiredPermission: { module: "configuracion_catalogo", level: "read" } },
   { path: routePaths.configuracionAnalisis, Component: ConfiguracionAnalisisPage, requiredPermission: { module: "configuracion_analisis", level: "read" } },
   { path: routePaths.configuracionSistema, Component: ConfiguracionSistemaPage, requiredPermission: { module: "configuracion_sistema", level: "read" } },
+  { path: routePaths.altaComercio, Component: AltaComercioPage, requiredPermission: { module: "configuracion_sistema", level: "write" } },
   { path: routePaths.centroSoporte, Component: CentroSoportePage, requiredPermission: { module: "configuracion_sistema", level: "read" } },
   { path: routePaths.misConsultas, Component: MisConsultasPage, requiredPermission: { module: "configuracion_sistema", level: "read" } },
   { path: routePaths.configuracionContable, Component: ConfiguracionContablePage, requiredPermission: { module: "configuracion_contable", level: "read" } },

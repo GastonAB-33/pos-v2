@@ -11,6 +11,7 @@ export interface TenantRecord {
   id: string;
   legal_name: string;
   trade_name: string;
+  slug?: string | null;
   cuit: string;
   is_active: boolean;
   created_at: string;
