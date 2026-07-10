@@ -260,11 +260,20 @@ export const PosProductList = ({
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {paginatedFavorites.pageItems.map((product) => (
                 <article key={`fav-${product.id}`} className="pos-favorite-card pos-favorite-card--uniform">
-                  <div className="pos-favorite-media">
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-brand-700">
-                    {product.category}
-                  </span>
-                </div>
+                  <div className="pos-favorite-media overflow-hidden">
+                    {product.image_url ? (
+                      <img
+                        src={product.image_url}
+                        alt={product.name}
+                        className="h-full w-full rounded-xl object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className="text-xs font-semibold uppercase tracking-[0.12em] text-brand-700">
+                        {product.category}
+                      </span>
+                    )}
+                  </div>
                   <div className="min-h-0 flex-1 overflow-hidden">
                     <p className="truncate text-sm font-semibold text-slate-900" title={product.name}>
                       {product.name}
