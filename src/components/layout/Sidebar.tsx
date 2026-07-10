@@ -115,34 +115,12 @@ export const Sidebar = () => {
     const posUrl = new URL(quickAccessItem.to, window.location.origin);
     posUrl.searchParams.set("from", "panel-web");
     posUrl.searchParams.set("view", "browser");
-    const opened = window.open("", "_blank");
+    const opened = window.open(posUrl.toString(), "_blank", "noopener,noreferrer");
     if (!opened) {
       window.alert(
         "No se pudo abrir una nueva pestana web para POS. Habilita popups para este sitio e intenta de nuevo."
       );
-      return;
     }
-
-    opened.opener = null;
-    const safeTitle = `${quickAccessItem.label} Web`;
-    const safeUrl = posUrl.toString();
-    opened.document.open();
-    opened.document.write(`<!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>${safeTitle}</title>
-    <style>
-      html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #f1f5f9; }
-      iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
-    </style>
-  </head>
-  <body>
-    <iframe src="${safeUrl}" title="${safeTitle}" referrerpolicy="no-referrer"></iframe>
-  </body>
-</html>`);
-    opened.document.close();
   };
 
   const isItemActive = (to: string) =>
