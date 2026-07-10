@@ -1,3 +1,5 @@
+import { PaginationControls } from "@/components/ui/PaginationControls";
+import { usePagination } from "@/hooks/usePagination";
 import type { Product } from "@/types/entities";
 
 interface PurchaseProductListProps {
@@ -26,6 +28,8 @@ export const PurchaseProductList = ({
   onSearchChange,
   onAddProduct,
 }: PurchaseProductListProps) => {
+  const paginatedProducts = usePagination(products, 10, `${search}|${products.length}`);
+
   return (
     <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
       <div className="space-y-1">
@@ -46,7 +50,7 @@ export const PurchaseProductList = ({
           </div>
         ) : null}
 
-        {products.map((product) => (
+        {paginatedProducts.pageItems.map((product) => (
           <article
             key={product.id}
             className="grid gap-2 rounded-lg border border-slate-200 p-3 md:grid-cols-[1fr_auto]"
@@ -75,6 +79,14 @@ export const PurchaseProductList = ({
           </article>
         ))}
       </div>
+      <PaginationControls
+        currentPage={paginatedProducts.currentPage}
+        pageCount={paginatedProducts.pageCount}
+        startItem={paginatedProducts.startItem}
+        endItem={paginatedProducts.endItem}
+        totalItems={paginatedProducts.totalItems}
+        onPageChange={paginatedProducts.setCurrentPage}
+      />
     </section>
   );
 };
