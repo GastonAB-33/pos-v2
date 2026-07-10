@@ -312,7 +312,7 @@ export const PosPage = () => {
     try {
       const [tenantSettings, openSession] = await Promise.all([
         hasLoadedCashDefaults ? Promise.resolve(null) : settingsService.getByTenant(tenantId),
-        cashService.getOpenSessionByUser(tenantId, resolvedOperatorUserId),
+        cashService.getOpenSession(tenantId),
       ]);
 
       if (tenantSettings) {
@@ -324,7 +324,7 @@ export const PosPage = () => {
       setHasResolvedCashGate(true);
     } catch {
       setOpenCashSessionId(null);
-      setCashGateFeedback("No se pudo validar la caja abierta del usuario.");
+      setCashGateFeedback("No se pudo validar la caja abierta del comercio.");
       setHasResolvedCashGate(true);
     } finally {
       setIsCheckingCashSession(false);
@@ -505,7 +505,7 @@ export const PosPage = () => {
 
       setIsOpeningCashSession(true);
       try {
-        const existingOpen = await cashService.getOpenSessionByUser(tenantId, resolvedOperatorUserId);
+        const existingOpen = await cashService.getOpenSession(tenantId);
         if (existingOpen) {
           setOpenCashSessionId(existingOpen.id);
           setCashGateFeedback(null);
