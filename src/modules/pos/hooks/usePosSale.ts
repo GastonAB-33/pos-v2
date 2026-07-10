@@ -1374,11 +1374,11 @@ export const usePosSale = (tenantId: string | null) => {
     if (requireOpenSessionForSale || requiresOpenCashSessionForSale) {
       if (!openSession) {
         try {
-          openSession = await cashService.getOpenSessionByUser(tenantId, resolvedCreatedBy);
+          openSession = await cashService.getOpenSession(tenantId);
         } catch {
           setFeedback({
             type: "error",
-            message: "No se pudo validar la caja abierta para este usuario",
+            message: "No se pudo validar la caja abierta del comercio",
           });
           return null;
         }
