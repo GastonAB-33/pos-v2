@@ -203,4 +203,3 @@ select
   products_in_other_test_tenants
 from visible_data
 order by expected_slug;
-
