@@ -4,6 +4,8 @@ import { routePaths } from "@/config/routes";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { isSupportOperator } from "@/features/support/support-operator";
+import { useDeviceProfile } from "@/hooks/useDeviceProfile";
+import { useUiStore } from "@/store/ui.store";
 import type { AppModule } from "@/types/modules";
 import { cn } from "@/utils/cn";
 
@@ -100,6 +102,8 @@ export const Sidebar = () => {
   const user = useAuthStore((state) => state.user);
   const { canRead } = usePermissions();
   const supportOperator = isSupportOperator(user);
+  const { isDesktop } = useDeviceProfile();
+  const setSidebarOpen = useUiStore((state) => state.setSidebarOpen);
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(sidebarGroups.map((group) => [group.id, false]))
@@ -144,6 +148,12 @@ export const Sidebar = () => {
   const isItemActive = (to: string) =>
     location.pathname === to || location.pathname.startsWith(`${to}/`);
 
+  const closeDrawerAfterNavigation = () => {
+    if (!isDesktop) {
+      setSidebarOpen(false);
+    }
+  };
+
   const visibleGroups = useMemo(
     () =>
       sidebarGroups
@@ -169,6 +179,7 @@ export const Sidebar = () => {
         type="button"
         className="w-full border-b border-slate-200 px-5 py-4 text-left transition hover:bg-slate-50"
         onClick={() => {
+          closeDrawerAfterNavigation();
           navigate(routePaths.menuPrincipal);
         }}
       >
@@ -240,6 +251,7 @@ export const Sidebar = () => {
                     <NavLink
                       key={item.to}
                       to={item.to}
+                      onClick={closeDrawerAfterNavigation}
                       className={() =>
                         cn(
                           "block rounded-r-lg border-l-2 px-3 py-2 text-sm transition",

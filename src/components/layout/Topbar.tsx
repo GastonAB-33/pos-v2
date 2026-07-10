@@ -176,6 +176,7 @@ export const Topbar = () => {
   const { canInstall, isInstalling, isInstalled, installApp, isInstallSupported } = usePwa();
   const theme = useUiStore((state) => state.theme);
   const toggleTheme = useUiStore((state) => state.toggleTheme);
+  const toggleSidebar = useUiStore((state) => state.toggleSidebar);
 
   const [now, setNow] = useState(() => new Date());
   const [activePanel, setActivePanel] = useState<TopbarPanel>(null);
@@ -731,15 +732,26 @@ export const Topbar = () => {
 
   return (
     <header className="app-topbar relative">
-      <div>
-        <p className="text-[15px] font-semibold text-slate-900 capitalize">{formattedDate}</p>
-        <p className="text-xs text-slate-500">{currentTitle} · Tenant: {tenantName}</p>
-        {lastSyncMessage ? (
-          <p className={`text-[11px] ${lastSyncError ? "text-red-600" : "text-slate-500"}`}>{lastSyncMessage}</p>
-        ) : null}
+      <div className="flex min-w-0 items-center gap-3">
+        <button
+          type="button"
+          className="app-menu-button ui-btn-ghost"
+          aria-label="Abrir menu"
+          onClick={toggleSidebar}
+        >
+          <span aria-hidden="true">☰</span>
+        </button>
+
+        <div className="min-w-0">
+          <p className="truncate text-[15px] font-semibold text-slate-900 capitalize">{formattedDate}</p>
+          <p className="truncate text-xs text-slate-500">{currentTitle} · Tenant: {tenantName}</p>
+          {lastSyncMessage ? (
+            <p className={`truncate text-[11px] ${lastSyncError ? "text-red-600" : "text-slate-500"}`}>{lastSyncMessage}</p>
+          ) : null}
+        </div>
       </div>
 
-      <div className="flex items-center gap-2 md:gap-3">
+      <div className="app-topbar-actions flex items-center gap-2 md:gap-3">
         {supportWhatsappUrl ? (
           <a
             className="ui-btn-primary text-xs"

@@ -104,10 +104,28 @@ html.dark {
     border-color: var(--ui-border);
   }
 
+  .app-sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    border: 0;
+    background: var(--ui-overlay);
+  }
+
   .app-topbar {
     @apply flex min-h-16 flex-wrap items-center justify-between gap-3 border-b px-6 py-2;
     background-color: var(--ui-sidebar);
     border-color: var(--ui-border);
+  }
+
+  .app-menu-button {
+    display: none;
+    min-height: 2.5rem;
+    min-width: 2.5rem;
+    align-items: center;
+    justify-content: center;
+    padding-inline: 0.75rem;
+    font-size: 1rem;
   }
 
   .bg-slate-100 {
@@ -841,6 +859,61 @@ html.dark {
 }
 
 @media (max-width: 1024px) {
+  .app-shell {
+    display: block;
+  }
+
+  .app-content {
+    min-height: 100vh;
+  }
+
+  .app-main--pos {
+    @apply p-3;
+  }
+
+  .app-sidebar {
+    position: fixed;
+    inset-block: 0;
+    left: 0;
+    z-index: 50;
+    width: min(18rem, calc(100vw - 2.5rem));
+    transform: translateX(-105%);
+    box-shadow: var(--shadow-panel);
+    transition: transform 180ms ease;
+  }
+
+  .app-shell.is-sidebar-open .app-sidebar {
+    transform: translateX(0);
+  }
+
+  .app-menu-button {
+    display: inline-flex;
+  }
+
+  .app-topbar {
+    @apply min-h-14 gap-2 px-3 py-2;
+  }
+
+  .app-topbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 0.1rem;
+  }
+
+  .app-topbar-actions > * {
+    flex: 0 0 auto;
+  }
+
+  .app-topbar > .ui-card {
+    left: 0.75rem;
+    right: 0.75rem;
+    top: calc(100% + 0.5rem);
+    max-width: none;
+    max-height: calc(100vh - 5rem);
+    overflow-y: auto;
+  }
+
   .app-main {
     @apply p-4;
   }
@@ -866,7 +939,25 @@ html.dark {
   }
 }
 
+@media (max-width: 767px) {
+  .app-main {
+    @apply p-3;
+  }
+
+  .app-topbar {
+    align-items: flex-start;
+  }
+
+  .ui-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (min-width: 1025px) {
+  .app-shell--desktop .app-sidebar {
+    transform: none;
+  }
+
   .pos-mobile-dock {
     display: none;
   }
