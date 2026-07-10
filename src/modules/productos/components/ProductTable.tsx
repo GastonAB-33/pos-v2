@@ -33,7 +33,8 @@ export const ProductTable = ({
   onDelete,
 }: ProductTableProps) => {
   const selectedSet = new Set(selectedIds);
-  const allSelected = products.length > 0 && selectedIds.length === products.length;
+  const allSelected =
+    products.length > 0 && products.every((product) => selectedSet.has(product.entity.id));
 
   if (!products.length) {
     return <div className="ui-empty-state">No hay productos para los filtros seleccionados.</div>;

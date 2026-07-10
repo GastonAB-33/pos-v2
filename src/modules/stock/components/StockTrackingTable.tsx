@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PaginationControls } from "@/components/ui/PaginationControls";
+import { usePagination } from "@/hooks/usePagination";
 import type { Product } from "@/types/entities";
 import { downloadXlsx } from "@/utils/xlsx";
 import {
@@ -135,7 +137,17 @@ export const StockTrackingTable = ({
     [rows, selectedIds]
   );
 
-  const allVisibleSelected = rows.length > 0 && selectedVisibleIds.length === rows.length;
+  const paginatedRows = usePagination(
+    rows,
+    10,
+    `${search}|${categoryFilter}|${statusFilter}|${rows.length}`
+  );
+  const selectedPageIds = useMemo(
+    () => selectedIds.filter((id) => paginatedRows.pageItems.some((row) => row.id === id)),
+    [paginatedRows.pageItems, selectedIds]
+  );
+  const allVisibleSelected =
+    paginatedRows.pageItems.length > 0 && selectedPageIds.length === paginatedRows.pageItems.length;
 
   const updateDraft = (product: Product, patch: Partial<StockDraft>) => {
     setDrafts((current) => {
@@ -190,13 +202,15 @@ export const StockTrackingTable = ({
 
   const toggleSelectAllVisible = (checked: boolean) => {
     if (!checked) {
-      setSelectedIds((current) => current.filter((id) => !rows.some((row) => row.id === id)));
+      setSelectedIds((current) =>
+        current.filter((id) => !paginatedRows.pageItems.some((row) => row.id === id))
+      );
       return;
     }
 
     setSelectedIds((current) => {
       const next = new Set(current);
-      rows.forEach((row) => next.add(row.id));
+      paginatedRows.pageItems.forEach((row) => next.add(row.id));
       return [...next];
     });
   };
@@ -422,7 +436,7 @@ export const StockTrackingTable = ({
               </tr>
             </thead>
             <tbody>
-              {rows.map((product) => {
+              {paginatedRows.pageItems.map((product) => {
                 const draft = getDraft(product);
                 const { stockMin, stockMax } = resolveThresholds(product, draft);
                 const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
@@ -483,6 +497,15 @@ export const StockTrackingTable = ({
           </table>
         </div>
       )}
+
+      <PaginationControls
+        currentPage={paginatedRows.currentPage}
+        pageCount={paginatedRows.pageCount}
+        startItem={paginatedRows.startItem}
+        endItem={paginatedRows.endItem}
+        totalItems={paginatedRows.totalItems}
+        onPageChange={paginatedRows.setCurrentPage}
+      />
     </section>
   );
 };

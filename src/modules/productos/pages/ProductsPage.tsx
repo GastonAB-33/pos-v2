@@ -2,6 +2,8 @@
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
+import { PaginationControls } from "@/components/ui/PaginationControls";
+import { usePagination } from "@/hooks/usePagination";
 import { BarcodeGeneratorModal } from "@/modules/productos/components/BarcodeGeneratorModal";
 import { ProductAuditLog } from "@/modules/productos/components/ProductAuditLog";
 import { ProductFilters } from "@/modules/productos/components/ProductFilters";
@@ -30,6 +32,9 @@ export const ProductsPage = () => {
   const [importOpen, setImportOpen] = useState(false);
 
   const selectedCount = products.selectedIds.length;
+  const filteredProductsKey = JSON.stringify(products.filters);
+  const paginatedProducts = usePagination(products.filteredProducts, 10, filteredProductsKey);
+  const pageProductIds = paginatedProducts.pageItems.map((product) => product.entity.id);
 
   const sortedAudit = useMemo(
     () => [...products.auditLog].sort((a, b) => b.date.localeCompare(a.date)),
@@ -92,12 +97,14 @@ export const ProductsPage = () => {
         <div className="ui-loading">Cargando productos...</div>
       ) : (
         <ProductTable
-          products={products.filteredProducts}
+          products={paginatedProducts.pageItems}
           selectedIds={products.selectedIds}
           canWrite={canWriteProductos}
           canDelete={canWriteProductos}
           onToggleSelect={products.toggleSelected}
-          onToggleSelectAll={products.toggleSelectAllVisible}
+          onToggleSelectAll={(selected) => {
+            pageProductIds.forEach((productId) => products.toggleSelected(productId, selected));
+          }}
           onToggleFavorite={(product) => {
             void products.toggleFavorite(product);
           }}
@@ -111,6 +118,17 @@ export const ProductsPage = () => {
           }}
         />
       )}
+
+      {!products.isLoading ? (
+        <PaginationControls
+          currentPage={paginatedProducts.currentPage}
+          pageCount={paginatedProducts.pageCount}
+          startItem={paginatedProducts.startItem}
+          endItem={paginatedProducts.endItem}
+          totalItems={paginatedProducts.totalItems}
+          onPageChange={paginatedProducts.setCurrentPage}
+        />
+      ) : null}
 
       <ProductAuditLog
         loading={products.isLoadingAudit}

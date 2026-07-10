@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { PaginationControls } from "@/components/ui/PaginationControls";
+import { usePagination } from "@/hooks/usePagination";
 import type { Product } from "@/types/entities";
 import { cn } from "@/utils/cn";
 
@@ -94,6 +96,17 @@ export const PosProductList = ({
       return matchesTerm && matchesCategory;
     });
   }, [primaryBarcodes, products, productsSearch, selectedCategory]);
+
+  const paginatedFavorites = usePagination(
+    filteredFavorites,
+    10,
+    `${favoritesSearch}|${favoriteProducts.length}`
+  );
+  const paginatedProducts = usePagination(
+    filteredProducts,
+    10,
+    `${productsSearch}|${selectedCategory}|${products.length}`
+  );
 
   const resolveWeightQuantity = (productId: string) => {
     const raw = weightInputs[productId] ?? "500";
@@ -245,7 +258,7 @@ export const PosProductList = ({
           <div className="ui-empty-state py-5">No hay productos favoritos configurados.</div>
         ) : (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {filteredFavorites.map((product) => (
+              {paginatedFavorites.pageItems.map((product) => (
                 <article key={`fav-${product.id}`} className="pos-favorite-card pos-favorite-card--uniform">
                   <div className="pos-favorite-media">
                   <span className="text-xs font-semibold uppercase tracking-[0.12em] text-brand-700">
@@ -274,6 +287,14 @@ export const PosProductList = ({
               ))}
           </div>
         )}
+          <PaginationControls
+            currentPage={paginatedFavorites.currentPage}
+            pageCount={paginatedFavorites.pageCount}
+            startItem={paginatedFavorites.startItem}
+            endItem={paginatedFavorites.endItem}
+            totalItems={paginatedFavorites.totalItems}
+            onPageChange={paginatedFavorites.setCurrentPage}
+          />
       </div>
       ) : (
         <div className="space-y-3">
@@ -340,7 +361,7 @@ export const PosProductList = ({
               </div>
             ) : null}
 
-            {filteredProducts.map((product) => {
+            {paginatedProducts.pageItems.map((product) => {
               const barcode = primaryBarcodes[product.id] ?? null;
 
               return (
@@ -374,6 +395,14 @@ export const PosProductList = ({
               );
             })}
           </div>
+          <PaginationControls
+            currentPage={paginatedProducts.currentPage}
+            pageCount={paginatedProducts.pageCount}
+            startItem={paginatedProducts.startItem}
+            endItem={paginatedProducts.endItem}
+            totalItems={paginatedProducts.totalItems}
+            onPageChange={paginatedProducts.setCurrentPage}
+          />
         </div>
       )}
     </section>

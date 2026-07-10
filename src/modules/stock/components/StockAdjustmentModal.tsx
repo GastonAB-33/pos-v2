@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { PaginationControls } from "@/components/ui/PaginationControls";
+import { usePagination } from "@/hooks/usePagination";
 import type { Product } from "@/types/entities";
 import type { StockBatchAdjustmentValues } from "@/modules/stock/types/stock-adjustment.types";
 
@@ -63,6 +65,12 @@ export const StockAdjustmentModal = ({
       })
       .filter((row) => row.quantityIn > 0 || row.quantityOut > 0);
   }, [drafts, products]);
+
+  const paginatedProducts = usePagination(
+    visibleProducts,
+    10,
+    `${search}|${visibleProducts.length}`
+  );
 
   const updateDraft = (productId: string, patch: Partial<DraftValues>) => {
     setDrafts((current) => {
@@ -156,7 +164,7 @@ export const StockAdjustmentModal = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleProducts.map((product) => {
+                  {paginatedProducts.pageItems.map((product) => {
                     const draft = drafts[product.id] ?? { quantityIn: "", quantityOut: "" };
                     const quantityIn = toPositiveNumber(draft.quantityIn);
                     const quantityOut = toPositiveNumber(draft.quantityOut);
@@ -207,6 +215,17 @@ export const StockAdjustmentModal = ({
               </table>
             </div>
           )}
+        </div>
+
+        <div className="mt-3">
+          <PaginationControls
+            currentPage={paginatedProducts.currentPage}
+            pageCount={paginatedProducts.pageCount}
+            startItem={paginatedProducts.startItem}
+            endItem={paginatedProducts.endItem}
+            totalItems={paginatedProducts.totalItems}
+            onPageChange={paginatedProducts.setCurrentPage}
+          />
         </div>
 
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3">

@@ -19,6 +19,53 @@ const normalizeBarcode = (value: string) => value.trim().replace(/\s+/g, "");
 const productImagesBucket =
   (import.meta.env.VITE_SUPABASE_PRODUCT_IMAGES_BUCKET as string | undefined)?.trim() ||
   "product-images";
+const PRODUCT_IMAGE_MAX_SIZE = 720;
+const PRODUCT_IMAGE_QUALITY = 0.78;
+
+const loadImageFromFile = (file: File): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("No se pudo procesar la imagen seleccionada"));
+    };
+    image.src = url;
+  });
+
+const optimizeProductImage = async (file: File): Promise<File> => {
+  if (!file.type.startsWith("image/") || file.type === "image/svg+xml") return file;
+
+  const image = await loadImageFromFile(file);
+  const maxDimension = Math.max(image.width, image.height);
+  const scale = maxDimension > PRODUCT_IMAGE_MAX_SIZE ? PRODUCT_IMAGE_MAX_SIZE / maxDimension : 1;
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d");
+  if (!context) return file;
+  context.drawImage(image, 0, 0, width, height);
+
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, "image/webp", PRODUCT_IMAGE_QUALITY);
+  });
+
+  if (!blob) return file;
+
+  const baseName = file.name.replace(/\.[^.]+$/, "") || "producto";
+  return new File([blob], `${baseName}.webp`, {
+    type: "image/webp",
+    lastModified: Date.now(),
+  });
+};
 
 const fileToDataUrl = async (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -131,20 +178,22 @@ export const productsService = {
   },
 
   uploadProductImage: async (tenantId: string, productId: string, file: File): Promise<string> => {
+    const optimizedFile = await optimizeProductImage(file);
+
     if (isMockDataProvider) {
-      return fileToDataUrl(file);
+      return fileToDataUrl(optimizedFile);
     }
 
-    const normalizedExt = (file.name.split(".").pop() ?? "jpg").toLowerCase();
+    const normalizedExt = (optimizedFile.name.split(".").pop() ?? "jpg").toLowerCase();
     const extension = ["jpg", "jpeg", "png", "webp"].includes(normalizedExt) ? normalizedExt : "jpg";
     const path = `${tenantId}/${productId}/${Date.now()}-${Math.random()
       .toString(36)
       .slice(2, 8)}.${extension}`;
 
-    const { error } = await supabase.storage.from(productImagesBucket).upload(path, file, {
+    const { error } = await supabase.storage.from(productImagesBucket).upload(path, optimizedFile, {
       cacheControl: "3600",
       upsert: false,
-      contentType: file.type || "image/jpeg",
+      contentType: optimizedFile.type || "image/webp",
     });
 
     if (error) {
