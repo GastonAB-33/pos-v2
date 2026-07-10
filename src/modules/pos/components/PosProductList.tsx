@@ -260,25 +260,27 @@ export const PosProductList = ({
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {paginatedFavorites.pageItems.map((product) => (
                 <article key={`fav-${product.id}`} className="pos-favorite-card pos-favorite-card--uniform">
-                  <div className="pos-favorite-media overflow-hidden">
-                    {product.image_url ? (
-                      <img
-                        src={product.image_url}
-                        alt={product.name}
-                        className="h-full w-full rounded-xl object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <span className="text-xs font-semibold uppercase tracking-[0.12em] text-brand-700">
-                        {product.category}
-                      </span>
-                    )}
-                  </div>
-                  <div className="min-h-0 flex-1 overflow-hidden">
-                    <p className="truncate text-sm font-semibold text-slate-900" title={product.name}>
-                      {product.name}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-600">{product.brand ?? product.category}</p>
+                  <div className="flex min-h-0 gap-3">
+                    <div className="pos-favorite-media">
+                      {product.image_url ? (
+                        <img
+                          src={product.image_url}
+                          alt={product.name}
+                          className="h-full w-full rounded-lg object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <span className="text-center text-[10px] font-semibold uppercase tracking-[0.1em] text-brand-700">
+                          {product.category}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1 overflow-hidden pt-1">
+                      <p className="line-clamp-2 text-sm font-semibold leading-5 text-slate-900" title={product.name}>
+                        {product.name}
+                      </p>
+                      <p className="mt-1 truncate text-xs text-slate-600">{product.brand ?? product.category}</p>
+                    </div>
                   </div>
                   <div className="mt-auto flex min-w-0 flex-wrap items-end justify-between gap-2">
                     <div className="min-w-0">
