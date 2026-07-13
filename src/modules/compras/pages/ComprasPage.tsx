@@ -173,15 +173,16 @@ export const ComprasPage = () => {
   return (
     <PagePlaceholder title="Compras a proveedores" description="Registro de compras con impacto en stock y caja">
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-slate-600">
-            Compras a proveedores registradas: {purchases.length} | Items en carrito: {cart.length}
-          </p>
-          <div className="flex items-center gap-2">
+        <section className="workspace-toolbar workspace-toolbar--inline">
+          <div className="workspace-meta">
+            <span>{purchases.length} compras registradas</span>
+            <span>{cart.length} items en la compra actual</span>
+          </div>
+          <div className="workspace-toolbar__actions">
             <button
               type="button"
               onClick={() => setIsProductModalOpen(true)}
-              className="ui-btn-primary px-3 py-2 text-sm"
+              className="ui-btn-primary"
               disabled={isSubmitting || !canWritePurchases}
             >
               Agregar producto nuevo
@@ -192,7 +193,7 @@ export const ComprasPage = () => {
                 clearFeedback();
                 void reload();
               }}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="ui-btn-ghost"
               disabled={isLoading || isSubmitting}
             >
               Recargar
@@ -200,13 +201,13 @@ export const ComprasPage = () => {
             <button
               type="button"
               onClick={clearCart}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="ui-btn-ghost"
               disabled={isSubmitting || !canWritePurchases}
             >
               Limpiar carrito
             </button>
           </div>
-        </div>
+        </section>
 
         {feedback ? <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>{feedback.message}</div> : null}
 
@@ -215,7 +216,7 @@ export const ComprasPage = () => {
             Cargando compras...
           </div>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+          <div className="workspace-layout">
             <PurchaseProductList
               products={products}
               search={search}
@@ -228,7 +229,7 @@ export const ComprasPage = () => {
               }}
             />
 
-            <div className="space-y-4">
+            <div className="workspace-aside">
               <PurchaseCart
                 items={cart}
                 total={summary.total}
@@ -249,8 +250,11 @@ export const ComprasPage = () => {
           </div>
         )}
 
-        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
-          <h2 className="text-base font-semibold text-slate-900">Historial de compras a proveedores</h2>
+        <section className="workspace-history space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold text-slate-900">Historial de compras</h2>
+            <span className="ui-badge ui-badge--info">{purchases.length}</span>
+          </div>
           {isLoading ? (
             <div className="rounded-lg border border-slate-200 p-8 text-center text-sm text-slate-600">
               Cargando historial...
