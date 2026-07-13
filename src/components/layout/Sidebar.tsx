@@ -108,7 +108,7 @@ export const Sidebar = () => {
   const setSidebarOpen = useUiStore((state) => state.setSidebarOpen);
 
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(sidebarGroups.map((group) => [group.id, false]))
+    Object.fromEntries(sidebarGroups.map((group) => [group.id, group.defaultExpanded]))
   );
 
   const openPosInNewTab = () => {
@@ -170,8 +170,8 @@ export const Sidebar = () => {
           navigate(routePaths.menuPrincipal);
         }}
       >
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">POS V2</p>
-        <p className="mt-1 text-lg font-semibold text-slate-900">Panel Operativo</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Gestion comercial</p>
+        <p className="mt-1 text-lg font-semibold text-slate-900">POS V2</p>
       </button>
 
       <nav className="space-y-5 p-3">
@@ -190,8 +190,8 @@ export const Sidebar = () => {
                   : "border-brand-500/30 bg-brand-500/10 text-slate-700 hover:bg-brand-500/20 hover:text-slate-900"
               )}
             >
-              <span>{quickAccessItem.label}</span>
-              <span className="ui-badge ui-badge--info text-[10px]">LIVE</span>
+              <span>Abrir punto de venta</span>
+              <span aria-hidden="true">↗</span>
             </button>
           </section>
         ) : null}

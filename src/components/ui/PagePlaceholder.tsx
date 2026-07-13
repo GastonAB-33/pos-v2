@@ -8,10 +8,12 @@ interface PagePlaceholderProps {
 
 export const PagePlaceholder = ({ title, description, children }: PagePlaceholderProps) => {
   return (
-    <section className="ui-panel">
-      <header>
-        <h1 className="text-2xl font-semibold text-slate-900">{title}</h1>
+    <section className="ui-page">
+      <header className="ui-page-header">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">{title}</h1>
         {description ? <p className="mt-1 text-sm text-slate-600">{description}</p> : null}
+        </div>
       </header>
       {children}
     </section>

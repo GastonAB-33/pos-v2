@@ -16,7 +16,7 @@ import { useUiStore } from "@/store/ui.store";
 import type { Product, UserRecord } from "@/types/entities";
 import { storageKeys } from "@/utils/local-storage";
 
-type TopbarPanel = "support" | "tasks" | "chat" | "notifications" | "user" | null;
+type TopbarPanel = "support" | "tasks" | "chat" | "notifications" | "user" | "more" | null;
 type SupportType = "sugerencia" | "falla";
 type TaskStatus = "pendiente" | "completada";
 
@@ -754,7 +754,7 @@ export const Topbar = () => {
       <div className="app-topbar-actions flex items-center gap-2 md:gap-3">
         {supportWhatsappUrl ? (
           <a
-            className="ui-btn-primary text-xs"
+            className="ui-btn-primary app-topbar-support text-xs"
             href={supportWhatsappUrl}
             target="_blank"
             rel="noreferrer"
@@ -767,16 +767,12 @@ export const Topbar = () => {
           Soporte
         </button>
 
-        <button type="button" className="ui-btn-ghost text-xs" onClick={() => togglePanel("tasks")}>
-          Tareas {pendingTasksCount > 0 ? `(${pendingTasksCount})` : ""}
-        </button>
-
-        <button type="button" className="ui-btn-ghost text-xs" onClick={() => togglePanel("chat")}>
-          Chat {unreadChatCount > 0 ? `(${unreadChatCount})` : ""}
-        </button>
-
         <button type="button" className="ui-btn-ghost text-xs" onClick={() => togglePanel("notifications")}>
-          Notificaciones {notificationCount > 0 ? `(${notificationCount})` : ""}
+          Alertas {notificationCount > 0 ? `(${notificationCount})` : ""}
+        </button>
+
+        <button type="button" className="ui-btn-ghost text-xs" onClick={() => togglePanel("more")}>
+          Mas {pendingTasksCount + unreadChatCount > 0 ? `(${pendingTasksCount + unreadChatCount})` : ""}
         </button>
 
         <button type="button" className="ui-btn-ghost text-right" onClick={() => togglePanel("user")}>
@@ -784,6 +780,20 @@ export const Topbar = () => {
           <p className="text-xs text-slate-500">{user?.email ?? "sin-sesion@local"}</p>
         </button>
       </div>
+
+      {activePanel === "more" ? (
+        <div className="ui-card app-topbar-popover absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[280px] space-y-2">
+          <p className="ui-section-label">Herramientas</p>
+          <button type="button" className="ui-popover-action" onClick={() => togglePanel("tasks")}>
+            <span>Tareas del equipo</span>
+            {pendingTasksCount > 0 ? <span className="ui-badge ui-badge--warn">{pendingTasksCount}</span> : null}
+          </button>
+          <button type="button" className="ui-popover-action" onClick={() => togglePanel("chat")}>
+            <span>Chat interno</span>
+            {unreadChatCount > 0 ? <span className="ui-badge ui-badge--info">{unreadChatCount}</span> : null}
+          </button>
+        </div>
+      ) : null}
 
       {activePanel === "support" ? (
         <div className="ui-card absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[460px] space-y-3">
