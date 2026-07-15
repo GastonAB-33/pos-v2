@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { routePaths } from "@/config/routes";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
+import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { useDeviceProfile } from "@/hooks/useDeviceProfile";
 import { useUiStore } from "@/store/ui.store";
 import { cn } from "@/utils/cn";
@@ -58,6 +59,7 @@ export const AppLayout = () => {
         <main className="app-main">
           <Outlet />
         </main>
+        <MobileBottomNav />
       </div>
     </div>
   );

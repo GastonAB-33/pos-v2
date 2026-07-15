@@ -1,4 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { Bell, CircleEllipsis, Headphones, Menu, UserRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/useToast";
 import { env } from "@/config/env";
@@ -739,7 +740,7 @@ export const Topbar = () => {
           aria-label="Abrir menu"
           onClick={toggleSidebar}
         >
-          <span aria-hidden="true">☰</span>
+          <Menu aria-hidden="true" size={19} />
         </button>
 
         <div className="min-w-0">
@@ -763,21 +764,27 @@ export const Topbar = () => {
           </a>
         ) : null}
 
-        <button type="button" className="ui-btn-ghost text-xs" onClick={() => togglePanel("support")}>
-          Soporte
+        <button type="button" className="ui-btn-ghost gap-1.5 text-xs" onClick={() => togglePanel("support")}>
+          <Headphones aria-hidden="true" size={15} />
+          <span>Soporte</span>
         </button>
 
-        <button type="button" className="ui-btn-ghost text-xs" onClick={() => togglePanel("notifications")}>
-          Alertas {notificationCount > 0 ? `(${notificationCount})` : ""}
+        <button type="button" className="ui-btn-ghost gap-1.5 text-xs" onClick={() => togglePanel("notifications")}>
+          <Bell aria-hidden="true" size={15} />
+          <span>Alertas {notificationCount > 0 ? `(${notificationCount})` : ""}</span>
         </button>
 
-        <button type="button" className="ui-btn-ghost text-xs" onClick={() => togglePanel("more")}>
-          Mas {pendingTasksCount + unreadChatCount > 0 ? `(${pendingTasksCount + unreadChatCount})` : ""}
+        <button type="button" className="ui-btn-ghost gap-1.5 text-xs" onClick={() => togglePanel("more")}>
+          <CircleEllipsis aria-hidden="true" size={16} />
+          <span>Mas {pendingTasksCount + unreadChatCount > 0 ? `(${pendingTasksCount + unreadChatCount})` : ""}</span>
         </button>
 
-        <button type="button" className="ui-btn-ghost text-right" onClick={() => togglePanel("user")}>
-          <p className="text-sm font-medium text-slate-900">Testing user</p>
-          <p className="text-xs text-slate-500">{user?.email ?? "sin-sesion@local"}</p>
+        <button type="button" className="ui-btn-ghost app-topbar-user gap-2 text-right" onClick={() => togglePanel("user")}>
+          <UserRound aria-hidden="true" size={16} />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-medium text-slate-900">{currentUserLabel}</span>
+            <span className="block truncate text-xs text-slate-500">{user?.email ?? "sin-sesion@local"}</span>
+          </span>
         </button>
       </div>
 

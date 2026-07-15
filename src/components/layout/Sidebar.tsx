@@ -1,4 +1,15 @@
 import { useMemo, useState } from "react";
+import {
+  BarChart3,
+  Building2,
+  ChevronDown,
+  ClipboardList,
+  Package,
+  ShoppingCart,
+  Tags,
+  WalletCards,
+  type LucideIcon,
+} from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { routePaths } from "@/config/routes";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -19,6 +30,7 @@ interface SidebarItem {
 interface SidebarGroup {
   id: string;
   label: string;
+  icon: LucideIcon;
   collapsible: boolean;
   defaultExpanded: boolean;
   items: SidebarItem[];
@@ -34,6 +46,7 @@ const sidebarGroups: SidebarGroup[] = [
   {
     id: "agenda",
     label: "Agenda",
+    icon: ClipboardList,
     collapsible: true,
     defaultExpanded: true,
     items: [
@@ -45,6 +58,7 @@ const sidebarGroups: SidebarGroup[] = [
   {
     id: "catalogo",
     label: "Catalogo",
+    icon: Package,
     collapsible: true,
     defaultExpanded: true,
     items: [
@@ -59,6 +73,7 @@ const sidebarGroups: SidebarGroup[] = [
   {
     id: "contable",
     label: "Contable",
+    icon: WalletCards,
     collapsible: true,
     defaultExpanded: true,
     items: [
@@ -73,6 +88,7 @@ const sidebarGroups: SidebarGroup[] = [
   {
     id: "analisis",
     label: "Analisis",
+    icon: BarChart3,
     collapsible: true,
     defaultExpanded: true,
     items: [
@@ -85,6 +101,7 @@ const sidebarGroups: SidebarGroup[] = [
   {
     id: "sistema",
     label: "Sistema",
+    icon: Tags,
     collapsible: true,
     defaultExpanded: true,
     items: [
@@ -164,14 +181,21 @@ export const Sidebar = () => {
     <aside className="app-sidebar">
       <button
         type="button"
-        className="w-full border-b border-slate-200 px-5 py-4 text-left transition hover:bg-slate-50"
+        className="w-full border-b border-slate-200 px-4 py-4 text-left transition hover:bg-slate-50"
         onClick={() => {
           closeDrawerAfterNavigation();
           navigate(routePaths.menuPrincipal);
         }}
       >
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Gestion comercial</p>
-        <p className="mt-1 text-lg font-semibold text-slate-900">POS V2</p>
+        <span className="flex items-center gap-2.5">
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--ui-accent-soft)] text-[var(--ui-accent)]">
+            <Building2 aria-hidden="true" size={18} />
+          </span>
+          <span>
+            <span className="block text-sm font-semibold text-slate-900">Gestion POS</span>
+            <span className="mt-0.5 block text-[11px] font-medium text-slate-500">Panel operativo</span>
+          </span>
+        </span>
       </button>
 
       <nav className="space-y-5 p-3">
@@ -190,7 +214,7 @@ export const Sidebar = () => {
                   : "border-brand-500/30 bg-brand-500/10 text-slate-700 hover:bg-brand-500/20 hover:text-slate-900"
               )}
             >
-              <span>Abrir punto de venta</span>
+              <span className="flex items-center gap-2"><ShoppingCart aria-hidden="true" size={16} /> Abrir punto de venta</span>
               <span aria-hidden="true">↗</span>
             </button>
           </section>
@@ -198,6 +222,7 @@ export const Sidebar = () => {
 
         {visibleGroups.map((group) => {
           const isExpanded = expandedGroups[group.id] ?? true;
+          const GroupIcon = group.icon;
 
           return (
             <section key={group.id} className="space-y-1">
@@ -212,17 +237,16 @@ export const Sidebar = () => {
                   }));
                 }}
               >
-                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  {group.label}
-                </span>
-                <span
+                <GroupIcon aria-hidden="true" size={14} className="text-slate-500" />
+                <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">{group.label}</span>
+                <ChevronDown
+                  aria-hidden="true"
+                  size={15}
                   className={cn(
                     "ml-auto text-xs text-slate-500 transition-transform",
                     isExpanded ? "rotate-180" : "rotate-0"
                   )}
-                >
-                  v
-                </span>
+                />
               </button>
 
               <div

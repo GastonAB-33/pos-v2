@@ -10,6 +10,9 @@ html.light {
 
   --ui-bg: #f4f4f6;
   --ui-sidebar: #ffffff;
+  --ui-topbar: #ffffff;
+  --ui-nav-text: #1f2937;
+  --ui-nav-muted: #667085;
   --ui-surface: #ffffff;
   --ui-surface-2: #f0f0f4;
   --ui-border: #dcdce8;
@@ -42,7 +45,11 @@ html.dark {
   color-scheme: dark;
 
   --ui-bg: #0f0f11;
-  --ui-sidebar: #131316;
+  /* La navegacion mantiene una referencia visual clara en ambos temas. */
+  --ui-sidebar: #ffffff;
+  --ui-topbar: #18181c;
+  --ui-nav-text: #1f2937;
+  --ui-nav-muted: #667085;
   --ui-surface: #18181c;
   --ui-surface-2: #222228;
   --ui-border: #2a2a33;
@@ -83,7 +90,7 @@ html.dark {
 
   .app-shell {
     @apply flex min-h-screen;
-    background: radial-gradient(circle at top right, var(--ui-accent-soft), transparent 46%), var(--ui-bg);
+    background: var(--ui-bg);
   }
 
   .app-content {
@@ -104,6 +111,16 @@ html.dark {
     border-color: var(--ui-border);
   }
 
+  .app-sidebar .text-slate-900 {
+    color: var(--ui-nav-text) !important;
+  }
+
+  .app-sidebar .text-slate-700,
+  .app-sidebar .text-slate-600,
+  .app-sidebar .text-slate-500 {
+    color: var(--ui-nav-muted) !important;
+  }
+
   .app-sidebar-backdrop {
     position: fixed;
     inset: 0;
@@ -114,7 +131,7 @@ html.dark {
 
   .app-topbar {
     @apply flex min-h-16 flex-wrap items-center justify-between gap-3 border-b px-6 py-2;
-    background-color: var(--ui-sidebar);
+    background-color: var(--ui-topbar);
     border-color: var(--ui-border);
   }
 
@@ -426,7 +443,7 @@ html.dark {
     @apply rounded-lg border px-3 py-2 text-sm font-semibold;
     border-color: transparent;
     color: #ffffff;
-    background: linear-gradient(180deg, color-mix(in srgb, var(--ui-accent) 88%, #ffffff 12%) 0%, var(--ui-accent) 100%);
+    background: var(--ui-accent);
   }
 
   .ui-btn-primary:hover {
@@ -466,9 +483,7 @@ html.dark {
     @apply space-y-5 border p-5 md:p-6;
     border-color: color-mix(in srgb, var(--ui-border) 88%, transparent);
     border-radius: calc(var(--radius-xl) + 2px);
-    background:
-      radial-gradient(circle at top right, color-mix(in srgb, var(--ui-accent-soft) 32%, transparent), transparent 48%),
-      color-mix(in srgb, var(--ui-surface) 97%, transparent);
+    background: color-mix(in srgb, var(--ui-surface) 97%, transparent);
     box-shadow: var(--shadow-panel);
   }
 
@@ -878,7 +893,7 @@ html.dark {
 .app-topbar {
   min-height: 3.75rem;
   padding-inline: 1.75rem;
-  background: color-mix(in srgb, var(--ui-sidebar) 96%, transparent);
+  background: var(--ui-topbar);
   backdrop-filter: blur(14px);
 }
 
@@ -1023,6 +1038,110 @@ tbody td {
   background: var(--ui-success);
 }
 
+.app-topbar-user {
+  max-width: 15rem;
+}
+
+.app-mobile-nav {
+  display: none;
+}
+
+.current-accounts-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.current-accounts-search {
+  min-width: min(100%, 22rem);
+  flex: 1 1 22rem;
+}
+
+.current-accounts-layout {
+  display: grid;
+  align-items: start;
+  gap: 1rem;
+  grid-template-columns: minmax(17rem, 21rem) minmax(0, 1fr);
+}
+
+.current-accounts-list {
+  position: sticky;
+  top: 1rem;
+}
+
+.current-accounts-list__items {
+  display: grid;
+  max-height: calc(100vh - 17rem);
+  gap: 0.5rem;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.current-account-customer {
+  width: 100%;
+  border: 1px solid var(--ui-border);
+  border-radius: 0.5rem;
+  background: var(--ui-surface);
+  padding: 0.75rem;
+  text-align: left;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.current-account-customer:hover,
+.current-account-customer--active {
+  border-color: color-mix(in srgb, var(--ui-accent) 55%, var(--ui-border));
+  background: var(--ui-accent-soft);
+}
+
+.current-account-detail {
+  min-width: 0;
+}
+
+.current-account-balance-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.current-account-balance-grid article {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--radius-sm);
+  background: var(--ui-surface-2);
+  padding: 0.875rem;
+}
+
+.current-account-balance-grid p,
+.current-account-balance-grid span {
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.current-account-balance-grid strong {
+  display: block;
+  margin-top: 0.3rem;
+  color: var(--ui-text);
+  font-family: "DM Mono", ui-monospace, SFMono-Regular, monospace;
+  font-size: 1.15rem;
+}
+
+.current-account-balance-grid__updated {
+  border-color: color-mix(in srgb, var(--ui-accent) 42%, var(--ui-border)) !important;
+  background: var(--ui-accent-soft) !important;
+}
+
+.current-account-balance-grid__updated strong {
+  color: var(--ui-accent);
+}
+
+.current-account-movements thead th {
+  white-space: nowrap;
+}
+
 .app-topbar-popover {
   padding: 0.5rem !important;
 }
@@ -1142,12 +1261,35 @@ tbody td {
   background: var(--ui-surface) !important;
 }
 
+.cash-metric-card--success {
+  border-color: color-mix(in srgb, var(--ui-success) 34%, var(--ui-border)) !important;
+}
+
+.cash-metric-card--danger {
+  border-color: color-mix(in srgb, var(--ui-danger) 34%, var(--ui-border)) !important;
+}
+
+.cash-metric-card--accent {
+  border-color: var(--ui-accent) !important;
+  background: var(--ui-accent) !important;
+}
+
+.cash-metric-card--accent p,
+.cash-metric-card--accent button {
+  color: #ffffff !important;
+}
+
+.cash-metric-card--accent button {
+  border-color: color-mix(in srgb, #ffffff 50%, transparent) !important;
+  background: transparent !important;
+}
+
 .cash-close-action {
   min-height: 2.25rem;
   border-radius: 0.5rem;
   padding-inline: 0.75rem;
   color: #ffffff;
-  background: var(--ui-text);
+  background: var(--ui-accent);
   font-size: 0.875rem;
   font-weight: 600;
 }
@@ -1177,6 +1319,49 @@ tbody td {
 .pos-surface--header,
 .pos-favorite-card--hero {
   background: var(--ui-surface);
+}
+
+.pos-page {
+  max-width: 1680px;
+  margin-inline: auto;
+}
+
+.pos-title {
+  font-size: 1.35rem;
+  letter-spacing: 0;
+}
+
+.pos-surface--header {
+  padding: 1rem;
+}
+
+.pos-content-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 23rem);
+}
+
+.pos-favorite-card,
+.pos-product-row,
+.pos-cart-item {
+  background: var(--ui-surface) !important;
+}
+
+.pos-favorite-card--uniform {
+  height: 12.25rem;
+  min-height: 12.25rem;
+}
+
+.pos-favorite-media {
+  border-radius: 0.5rem;
+  background: var(--ui-surface-2);
+}
+
+.pos-summary-panel {
+  background: var(--ui-surface-2);
+}
+
+.pos-side-column > .pos-surface {
+  position: sticky;
+  top: 1rem;
 }
 
 .pos-side-tabs {
@@ -1373,6 +1558,18 @@ html.dark section.fixed.inset-0 > .relative.z-10 {
     @apply p-4;
   }
 
+  .current-accounts-layout {
+    grid-template-columns: minmax(15.5rem, 18rem) minmax(0, 1fr);
+  }
+
+  .pos-content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pos-side-column > .pos-surface {
+    position: static;
+  }
+
   .pos-cart-item--compact {
     grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 0.4rem;
@@ -1401,6 +1598,67 @@ html.dark section.fixed.inset-0 > .relative.z-10 {
 
   .app-topbar {
     align-items: flex-start;
+  }
+
+  .app-content {
+    padding-bottom: 4.75rem;
+  }
+
+  .current-accounts-layout,
+  .current-account-balance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .current-accounts-list {
+    position: static;
+  }
+
+  .current-accounts-list__items {
+    max-height: 17rem;
+  }
+
+  .app-topbar-user {
+    min-width: 2.25rem;
+    padding-inline: 0.5rem !important;
+  }
+
+  .app-topbar-user span > span {
+    display: none;
+  }
+
+  .app-mobile-nav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 35;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    min-height: 4.35rem;
+    border-top: 1px solid var(--ui-border);
+    background: var(--ui-sidebar);
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .app-mobile-nav__item {
+    display: grid;
+    min-width: 0;
+    place-items: center;
+    gap: 0.18rem;
+    padding: 0.55rem 0.2rem;
+    color: var(--ui-nav-muted);
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .app-mobile-nav__item--active {
+    color: var(--ui-accent);
+  }
+
+  .app-mobile-nav__item--active svg {
+    stroke-width: 2.5;
   }
 
   .ui-summary-grid {
