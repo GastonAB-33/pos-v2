@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { PaginationControls } from "@/components/ui/PaginationControls";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { usePagination } from "@/hooks/usePagination";
 import type { Product } from "@/types/entities";
 import type { StockBatchAdjustmentValues } from "@/modules/stock/types/stock-adjustment.types";
@@ -123,9 +124,7 @@ export const StockAdjustmentModal = ({
             <button type="button" className="ui-btn-ghost" onClick={resetDrafts} disabled={busy}>
               Limpiar
             </button>
-            <button type="button" className="ui-btn-ghost" onClick={onClose} disabled={busy}>
-              Cerrar
-            </button>
+            <ModalCloseButton label="Cerrar ajuste" onClick={onClose} disabled={busy} />
           </div>
         </div>
 

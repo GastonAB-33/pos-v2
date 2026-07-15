@@ -1,3 +1,6 @@
+import { Plus, RefreshCw } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
+
 interface CustomersToolbarProps {
   canWrite: boolean;
   loading: boolean;
@@ -30,20 +33,14 @@ export const CustomersToolbar = ({
           placeholder="Buscar por nombre, doc, telefono o email"
           className="ui-input w-72"
         />
-        <button
-          type="button"
-          onClick={onReload}
-          className="ui-btn-ghost"
-          disabled={loading}
-        >
-          Recargar
-        </button>
+        <IconButton icon={RefreshCw} label="Recargar clientes" onClick={onReload} loading={loading} />
         <button
           type="button"
           onClick={onCreate}
           className="ui-btn-primary"
           disabled={!canWrite || loading}
         >
+          <Plus aria-hidden="true" className="h-4 w-4" />
           Nuevo cliente
         </button>
       </div>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { PaymentMethodSelector } from "@/components/payments/PaymentMethodSelector";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import {
   getPaymentMethodPosConfig,
   normalizePaymentMethodCode,
@@ -465,14 +466,7 @@ export const CurrentAccountPaymentModal = ({
               Selecciona medio de pago y completa los datos contables requeridos.
             </p>
           </div>
-          <button
-            type="button"
-            className="ui-btn-ghost px-2 py-1 text-xs"
-            onClick={onClose}
-            disabled={busy}
-          >
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar pago" onClick={onClose} disabled={busy} />
         </div>
 
         <div className="mt-4 space-y-4">

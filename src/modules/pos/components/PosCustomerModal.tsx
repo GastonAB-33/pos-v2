@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { FieldErrors } from "react-hook-form";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 
 const posCustomerModalSchema = z.object({
   firstName: z.string().min(2, "Nombre obligatorio"),
@@ -167,9 +168,7 @@ export const PosCustomerModal = ({
       >
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-          <button type="button" className="ui-btn-ghost px-2.5 py-1.5 text-xs" onClick={onCancel} disabled={disabled}>
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar cliente" onClick={onCancel} disabled={disabled} />
         </div>
 
         <div className="inline-flex rounded-xl bg-slate-50 p-1">

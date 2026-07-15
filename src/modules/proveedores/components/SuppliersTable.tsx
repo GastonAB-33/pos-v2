@@ -4,6 +4,8 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { Pencil, Power, Trash2 } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 import type { Supplier } from "@/types/entities";
 
 interface SuppliersTableProps {
@@ -65,27 +67,9 @@ export const SuppliersTable = ({
 
         return (
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onEdit(supplier)}
-              className="rounded-md border border-slate-300 px-2 py-1 text-xs"
-            >
-              Editar
-            </button>
-            <button
-              type="button"
-              onClick={() => onToggleActive(supplier)}
-              className="rounded-md border border-slate-300 px-2 py-1 text-xs"
-            >
-              {supplier.is_active ? "Desactivar" : "Activar"}
-            </button>
-            <button
-              type="button"
-              onClick={() => onDelete(supplier)}
-              className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-700"
-            >
-              Eliminar
-            </button>
+            <IconButton size="sm" icon={Pencil} label="Editar proveedor" onClick={() => onEdit(supplier)} />
+            <IconButton size="sm" icon={Power} label={supplier.is_active ? "Desactivar proveedor" : "Activar proveedor"} onClick={() => onToggleActive(supplier)} />
+            <IconButton size="sm" icon={Trash2} label="Eliminar proveedor" tone="danger" onClick={() => onDelete(supplier)} />
           </div>
         );
       },
@@ -107,7 +91,7 @@ export const SuppliersTable = ({
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200">
+    <div className="ui-table-wrap">
       <table className="min-w-full divide-y divide-slate-200 text-sm">
         <thead className="bg-slate-50">
           {table.getHeaderGroups().map((headerGroup) => (

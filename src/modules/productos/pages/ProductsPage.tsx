@@ -42,7 +42,7 @@ export const ProductsPage = () => {
   );
 
   if (!tenantId) {
-    return <section className="ui-panel">No hay tenant activo para operar el módulo.</section>;
+    return <section className="ui-panel">No hay un comercio activo.</section>;
   }
 
   if (!canReadProductos) {

@@ -1,4 +1,5 @@
 ﻿import { useMemo, useState } from "react";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import type {
   ProductImportErrorRow,
   ProductImportMode,
@@ -74,9 +75,7 @@ export const ProductImportModal = ({
             <h3 className="text-base font-semibold text-slate-900">Importación masiva de productos (XLSX)</h3>
             <p className="text-xs text-slate-500">Nombre y categoría son obligatorios. Respeta el formato predefinido por columna.</p>
           </div>
-          <button type="button" className="ui-btn-ghost" onClick={onClose} disabled={busy}>
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar importación" onClick={onClose} disabled={busy} />
         </div>
 
         <div className="mt-4 space-y-4">

@@ -8,6 +8,8 @@ import { CustomerCurrentAccountPanel } from "@/modules/clientes/components/Custo
 import { useCurrentAccountsPage } from "@/modules/cuentas-corrientes/hooks/useCurrentAccountsPage";
 import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
+import { RefreshCw } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 
 const currency = new Intl.NumberFormat("es-AR", {
   style: "currency",
@@ -49,7 +51,7 @@ export const CuentasCorrientesPage = () => {
     return (
       <PagePlaceholder
         title="Cuentas Corrientes"
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -77,17 +79,15 @@ export const CuentasCorrientesPage = () => {
             placeholder="Buscar cliente por nombre, documento, email o telefono"
             className="ui-input current-accounts-search"
           />
-          <button
-            type="button"
+          <IconButton
+            icon={RefreshCw}
+            label="Recargar cuentas corrientes"
             onClick={() => {
               clearFeedback();
               void reload();
             }}
-            className="ui-btn-ghost"
-            disabled={isLoading}
-          >
-            Recargar
-          </button>
+            loading={isLoading}
+          />
         </div>
 
         <div className="current-accounts-layout">

@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { IconButton } from "@/components/ui/IconButton";
+import { Plus, RefreshCw, ShoppingCart, X } from "lucide-react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -40,9 +42,7 @@ const DuplicateProductReviewModal = ({
             Antes de crear "{review.values.nombre}", revisa si ya existe para evitar duplicados.
           </p>
         </div>
-        <button type="button" className="ui-btn-ghost" onClick={onClose} disabled={disabled}>
-          Cerrar
-        </button>
+        <IconButton icon={X} label="Cerrar" onClick={onClose} disabled={disabled} />
       </div>
 
       <div className="mt-4 space-y-2">
@@ -156,7 +156,7 @@ export const ComprasPage = () => {
     return (
       <PagePlaceholder
         title="Compras a proveedores"
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -185,27 +185,25 @@ export const ComprasPage = () => {
               className="ui-btn-primary"
               disabled={isSubmitting || !canWritePurchases}
             >
+              <Plus aria-hidden="true" className="h-4 w-4" />
               Agregar producto nuevo
             </button>
-            <button
-              type="button"
+            <IconButton
+              icon={RefreshCw}
+              label="Recargar compras"
               onClick={() => {
                 clearFeedback();
                 void reload();
               }}
-              className="ui-btn-ghost"
-              disabled={isLoading || isSubmitting}
-            >
-              Recargar
-            </button>
-            <button
-              type="button"
+              loading={isLoading}
+              disabled={isSubmitting}
+            />
+            <IconButton
+              icon={ShoppingCart}
+              label="Limpiar compra actual"
               onClick={clearCart}
-              className="ui-btn-ghost"
               disabled={isSubmitting || !canWritePurchases}
-            >
-              Limpiar carrito
-            </button>
+            />
           </div>
         </section>
 

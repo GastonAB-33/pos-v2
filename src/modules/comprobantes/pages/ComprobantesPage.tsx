@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { RefreshCw } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -33,7 +35,7 @@ export const ComprobantesPage = () => {
     return (
       <PagePlaceholder
         title="Comprobantes"
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -61,17 +63,15 @@ export const ComprobantesPage = () => {
             placeholder="Buscar por numero, venta o cliente"
             className="ui-input max-w-sm"
           />
-          <button
-            type="button"
-            className="ui-btn-ghost"
+          <IconButton
+            icon={RefreshCw}
+            label="Recargar comprobantes"
             onClick={() => {
               clearFeedback();
               void reload();
             }}
-            disabled={isLoading}
-          >
-            Recargar
-          </button>
+            loading={isLoading}
+          />
         </div>
 
         {feedback ? <div className="ui-error-state">{feedback.message}</div> : null}

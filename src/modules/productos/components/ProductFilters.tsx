@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Download, Ellipsis, FilterX, Plus, RefreshCw, Upload } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 import type { ProductFiltersState } from "@/modules/productos/types/product.types";
 
 interface ProductFiltersProps {
@@ -47,18 +49,23 @@ export const ProductFilters = ({
 
         <div className="workspace-toolbar__actions">
           <div className="relative">
-            <button type="button" className="ui-btn-ghost" onClick={() => setActionsOpen((open) => !open)}>
-              Acciones
-            </button>
+            <IconButton
+              icon={Ellipsis}
+              label="Más acciones"
+              onClick={() => setActionsOpen((open) => !open)}
+            />
             {actionsOpen ? (
               <div className="workspace-action-menu">
                 <button type="button" className="ui-popover-action" onClick={() => { onReload(); setActionsOpen(false); }} disabled={loading}>
+                  <RefreshCw aria-hidden="true" className="h-4 w-4" />
                   Recargar catalogo
                 </button>
                 <button type="button" className="ui-popover-action" onClick={() => { onOpenImport(); setActionsOpen(false); }} disabled={!canWrite || loading}>
+                  <Upload aria-hidden="true" className="h-4 w-4" />
                   Importar XLSX
                 </button>
                 <button type="button" className="ui-popover-action" onClick={() => { onExportXlsx(); setActionsOpen(false); }} disabled={loading}>
+                  <Download aria-hidden="true" className="h-4 w-4" />
                   Exportar XLSX
                 </button>
               </div>
@@ -70,7 +77,8 @@ export const ProductFilters = ({
             onClick={onOpenCreate}
             disabled={!canWrite || loading}
           >
-            Nuevo Producto
+            <Plus aria-hidden="true" className="h-4 w-4" />
+            Nuevo producto
           </button>
         </div>
       </header>
@@ -138,9 +146,7 @@ export const ProductFilters = ({
 
         <div className="workspace-filter-strip__footer">
           <div className="flex items-center gap-2">
-            <button type="button" className="ui-btn-ghost" onClick={onClearFilters}>
-              Limpiar filtros
-            </button>
+            <IconButton icon={FilterX} label="Limpiar filtros" onClick={onClearFilters} />
             {selectedCount > 0 ? (
               <button
                 type="button"
@@ -152,8 +158,6 @@ export const ProductFilters = ({
               </button>
             ) : null}
           </div>
-
-          <p className="text-xs text-slate-500">Los filtros se aplican al instante.</p>
         </div>
       </div>
     </div>

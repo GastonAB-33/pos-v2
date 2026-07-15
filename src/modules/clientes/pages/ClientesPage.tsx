@@ -169,7 +169,7 @@ export const ClientesPage = () => {
     return (
       <PagePlaceholder
         title="Clientes"
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -184,7 +184,7 @@ export const ClientesPage = () => {
   }
 
   return (
-    <PagePlaceholder title="Clientes" description="CRUD funcional con base de cuenta corriente">
+    <PagePlaceholder title="Clientes" description="Clientes, datos de contacto y cuenta corriente">
       <div className="space-y-4">
         <CustomersToolbar
           canWrite={canWriteClientes}

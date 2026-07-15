@@ -1,4 +1,5 @@
 import type { Invoice } from "@/types/entities";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 
 interface InvoiceDetailPanelProps {
   invoice: Invoice;
@@ -60,9 +61,7 @@ export const InvoiceDetailPanel = ({
               {isSendingToArca || invoice.arca_status === "pending" ? "Enviando..." : sendButtonLabel}
             </button>
           )}
-          <button type="button" className="ui-btn-ghost" onClick={onClose}>
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar detalle" onClick={onClose} />
         </div>
       </header>
 

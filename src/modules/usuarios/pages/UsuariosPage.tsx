@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { IconButton } from "@/components/ui/IconButton";
+import { Plus, RefreshCw } from "lucide-react";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -149,7 +151,7 @@ export const UsuariosPage = () => {
     return (
       <PagePlaceholder
         title="Usuarios"
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -164,30 +166,25 @@ export const UsuariosPage = () => {
   }
 
   return (
-    <PagePlaceholder
-      title="Usuarios"
-      description="Gestion de usuarios y perfiles de permisos por tenant"
-    >
+    <PagePlaceholder title="Usuarios" description="Usuarios, perfiles y permisos del comercio">
       <div className="space-y-4">
-        <section className="ui-card space-y-3 bg-gradient-to-br from-slate-50 to-white">
+        <section className="ui-card space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">Gestion de accesos</p>
               <h2 className="text-lg font-semibold text-slate-900">Administracion de usuarios</h2>
-              <p className="text-sm text-slate-500">Controla perfiles, niveles y permisos por modulo.</p>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="ui-btn-ghost"
+              <IconButton
+                icon={RefreshCw}
+                label="Recargar usuarios"
                 onClick={() => {
                   clearFeedback();
                   void reload();
                 }}
-                disabled={isLoading || isSubmitting}
-              >
-                Recargar
-              </button>
+                loading={isLoading}
+                disabled={isSubmitting}
+              />
               {tab === "users" ? (
                 <button
                   type="button"
@@ -195,6 +192,7 @@ export const UsuariosPage = () => {
                   onClick={openCreateUserForm}
                   disabled={!canWriteUsersModule || isSubmitting || !allProfiles.length}
                 >
+                  <Plus aria-hidden="true" className="h-4 w-4" />
                   Nuevo usuario
                 </button>
               ) : (
@@ -204,6 +202,7 @@ export const UsuariosPage = () => {
                   onClick={openCreateProfileForm}
                   disabled={!canWriteUsersModule || isSubmitting}
                 >
+                  <Plus aria-hidden="true" className="h-4 w-4" />
                   Nuevo perfil
                 </button>
               )}
@@ -242,7 +241,7 @@ export const UsuariosPage = () => {
         {tab === "users" ? (
           <section className="space-y-3 ui-card">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base font-semibold text-slate-900">Usuarios del tenant</h2>
+              <h2 className="text-base font-semibold text-slate-900">Usuarios del comercio</h2>
               <input
                 type="search"
                 value={userSearch}

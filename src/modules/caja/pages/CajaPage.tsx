@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { IconButton } from "@/components/ui/IconButton";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { RefreshCw } from "lucide-react";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -217,7 +220,7 @@ export const CajaPage = () => {
   };
 
   if (!tenantId) {
-    return <PagePlaceholder title="Caja" description="No hay tenant activo para operar el modulo" />;
+    return <PagePlaceholder title="Caja" description="No hay un comercio activo" />;
   }
 
   if (!canReadCaja) {
@@ -273,16 +276,15 @@ export const CajaPage = () => {
               >
                 Cerrar caja
               </button>
-              <button
-                type="button"
+              <IconButton
+                icon={RefreshCw}
+                label="Actualizar caja"
                 onClick={() => {
                   void handleRefresh();
                 }}
-                className="ui-btn-ghost"
+                loading={isRefreshing}
                 disabled={isLoading || isSubmitting || isRefreshing}
-              >
-                {isRefreshing ? "Actualizando..." : "Actualizar"}
-              </button>
+              />
             </div>
           </div>
         </section>
@@ -319,9 +321,6 @@ export const CajaPage = () => {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-1">
               <h2 className="text-base font-semibold text-slate-900">Caja diaria</h2>
-              <p className="text-sm text-slate-600">
-                Resumen operativo de la caja seleccionada, ordenado para controlar apertura, cobros, egresos y cierre.
-              </p>
             </div>
             {dailySession ? (
               <span className={dailySession.status === "open" ? "ui-badge ui-badge--success" : "ui-badge"}>
@@ -379,7 +378,7 @@ export const CajaPage = () => {
 
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs text-slate-500">
-                  Sesion {dailySession.status === "open" ? "abierta" : "cerrada"} | ID {dailySession.id}
+                  Sesión {dailySession.status === "open" ? "abierta" : "cerrada"}
                 </p>
                 <button
                   type="button"
@@ -434,13 +433,7 @@ export const CajaPage = () => {
           <div className="relative z-10 max-h-[92vh] w-full max-w-5xl space-y-3 overflow-auto rounded-2xl bg-white p-4 shadow-panel">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-base font-semibold text-slate-900">Movimiento manual</h3>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
-                onClick={() => setIsManualMovementModalOpen(false)}
-              >
-                Cerrar
-              </button>
+              <ModalCloseButton label="Cerrar movimiento" onClick={() => setIsManualMovementModalOpen(false)} />
             </div>
 
             <div className="grid gap-3 lg:grid-cols-2">
@@ -483,13 +476,7 @@ export const CajaPage = () => {
           <div className="relative z-10 w-full max-w-2xl space-y-3 rounded-2xl bg-white p-4 shadow-panel">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-base font-semibold text-slate-900">Cierre de caja</h3>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
-                onClick={() => setIsCloseCashModalOpen(false)}
-              >
-                Cerrar
-              </button>
+              <ModalCloseButton label="Cerrar resumen" onClick={() => setIsCloseCashModalOpen(false)} />
             </div>
 
             {currentSession ? (
@@ -558,13 +545,7 @@ export const CajaPage = () => {
                     ? "Detalle de egresos"
                     : "Detalle del total de caja"}
               </h3>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
-                onClick={() => setOpenSummaryModal(null)}
-              >
-                Cerrar
-              </button>
+              <ModalCloseButton label="Cerrar detalle" onClick={() => setOpenSummaryModal(null)} />
             </div>
 
             {dailySessionBreakdown ? (
@@ -677,13 +658,7 @@ export const CajaPage = () => {
           <div className="relative z-10 w-full max-w-4xl space-y-3 rounded-2xl bg-white p-4 shadow-panel">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-base font-semibold text-slate-900">Resumen de cuenta corriente</h3>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
-                onClick={() => setIsCurrentAccountModalOpen(false)}
-              >
-                Cerrar
-              </button>
+              <ModalCloseButton label="Cerrar cuentas corrientes" onClick={() => setIsCurrentAccountModalOpen(false)} />
             </div>
 
             <p className="text-xs text-slate-500">
@@ -787,13 +762,7 @@ export const CajaPage = () => {
               <h3 className="text-base font-semibold text-slate-900">
                 Detalle de movimientos de caja diaria
               </h3>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
-                onClick={() => setIsDailyDetailModalOpen(false)}
-              >
-                Cerrar
-              </button>
+              <ModalCloseButton label="Cerrar detalle diario" onClick={() => setIsDailyDetailModalOpen(false)} />
             </div>
 
             <div className="grid gap-3 md:grid-cols-2">
@@ -852,9 +821,8 @@ export const CajaPage = () => {
           <div className="relative z-10 w-full max-w-3xl space-y-3 rounded-2xl bg-white p-4 shadow-panel">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-base font-semibold text-slate-900">Ticket / Factura</h3>
-              <button
-                type="button"
-                className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs"
+              <ModalCloseButton
+                label="Cerrar comprobante"
                 onClick={() => {
                   setIsSaleDocumentModalOpen(false);
                   setIsSaleDocumentLoading(false);
@@ -862,9 +830,7 @@ export const CajaPage = () => {
                   setSelectedReceipt(null);
                   setSelectedInvoice(null);
                 }}
-              >
-                Cerrar
-              </button>
+              />
             </div>
 
             {isSaleDocumentLoading ? (

@@ -1,5 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+
 interface BarcodeScannerModalProps {
   open: boolean;
   title?: string;
@@ -149,9 +151,7 @@ export const BarcodeScannerModal = ({
             <h3 className="text-base font-semibold text-slate-900">{title}</h3>
             <p className="text-xs text-slate-500">{description}</p>
           </div>
-          <button type="button" className="ui-btn-ghost" onClick={onClose}>
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar escáner" onClick={onClose} />
         </div>
 
         <div className="space-y-3">

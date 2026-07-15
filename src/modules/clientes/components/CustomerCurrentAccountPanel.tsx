@@ -3,6 +3,8 @@ import { CurrentAccountAdjustmentModal } from "@/modules/clientes/components/Cur
 import { CurrentAccountMovementsTable } from "@/modules/clientes/components/CurrentAccountMovementsTable";
 import { CurrentAccountPaymentModal } from "@/modules/clientes/components/CurrentAccountPaymentModal";
 import { useState } from "react";
+import { RefreshCw, X } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 import type { Customer } from "@/types/entities";
 
 interface CustomerCurrentAccountPanelProps {
@@ -44,7 +46,6 @@ export const CustomerCurrentAccountPanel = ({
     isLoading,
     isSubmitting,
     hasOpenCashSession,
-    openCashSessionId,
     feedback,
     clearFeedback,
     reload,
@@ -94,24 +95,17 @@ export const CustomerCurrentAccountPanel = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
+          <IconButton
+            icon={RefreshCw}
+            label="Recargar cuenta corriente"
             onClick={() => {
               clearFeedback();
               void reload();
             }}
-            className="ui-btn-ghost"
-            disabled={isLoading || isSubmitting}
-          >
-            Recargar
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="ui-btn-ghost"
-          >
-            Cerrar
-          </button>
+            loading={isLoading}
+            disabled={isSubmitting}
+          />
+          <IconButton icon={X} label="Cerrar cuenta corriente" onClick={onClose} />
         </div>
       </div>
 
@@ -139,8 +133,8 @@ export const CustomerCurrentAccountPanel = ({
           No hay caja abierta para el usuario actual. Puedes consultar movimientos y actualizar la regla de saldo,
           pero para registrar pagos debes abrir caja.
         </div>
-      ) : openCashSessionId ? (
-        <p className="text-xs text-slate-500">Caja activa para movimientos contables: {openCashSessionId}</p>
+      ) : hasOpenCashSession ? (
+        <p className="text-xs text-emerald-700">Caja abierta para registrar movimientos</p>
       ) : null}
 
       {canWrite ? (

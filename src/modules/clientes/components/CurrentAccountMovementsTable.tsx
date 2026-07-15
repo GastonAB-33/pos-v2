@@ -5,6 +5,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import type { CurrentAccountMovement } from "@/types/entities";
 import type {
   CurrentAccountSaleDetail,
@@ -205,13 +206,7 @@ export const CurrentAccountMovementsTable = ({
                   {ticketSaleDetail.receipt_number ? ` | ${ticketSaleDetail.receipt_number}` : ""}
                 </p>
               </div>
-              <button
-                type="button"
-                className="ui-btn-ghost px-2 py-1 text-xs"
-                onClick={() => setTicketSaleDetail(null)}
-              >
-                Cerrar
-              </button>
+              <ModalCloseButton label="Cerrar ticket" onClick={() => setTicketSaleDetail(null)} />
             </div>
 
             <div className="mt-3 max-h-[60vh] overflow-auto rounded-lg border border-slate-200">

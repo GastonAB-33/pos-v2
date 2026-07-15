@@ -4,6 +4,8 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { Pencil, Power, Trash2 } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 import type { PermissionProfileRecord } from "@/types/entities";
 import type { AppModule } from "@/types/modules";
 
@@ -89,23 +91,9 @@ export const PermissionProfilesTable = ({
 
         return (
           <div className="flex items-center gap-2">
-            <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => onEdit(info.row.original)}>
-              Editar
-            </button>
-            <button
-              type="button"
-              className="ui-btn-ghost px-2 py-1 text-xs"
-              onClick={() => onToggleActive(info.row.original)}
-            >
-              {info.row.original.profile.is_active ? "Desactivar" : "Activar"}
-            </button>
-            <button
-              type="button"
-              className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-700"
-              onClick={() => onDelete(info.row.original)}
-            >
-              Eliminar
-            </button>
+            <IconButton size="sm" icon={Pencil} label="Editar perfil" onClick={() => onEdit(info.row.original)} />
+            <IconButton size="sm" icon={Power} label={info.row.original.profile.is_active ? "Desactivar perfil" : "Activar perfil"} onClick={() => onToggleActive(info.row.original)} />
+            <IconButton size="sm" icon={Trash2} label="Eliminar perfil" tone="danger" onClick={() => onDelete(info.row.original)} />
           </div>
         );
       },

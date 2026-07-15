@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { PosCartItemEditInput } from "@/modules/pos/hooks/usePosSale";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 
 interface PosCartItemView {
   product_id: string;
@@ -66,9 +67,7 @@ export const PosCartItemEditModal = ({
             <h2 className="text-base font-semibold text-slate-900">Editar producto del carrito</h2>
             <p className="text-xs text-slate-500">Estos cambios afectan solo esta venta.</p>
           </div>
-          <button type="button" className="ui-btn-ghost px-3 py-1.5 text-xs" onClick={onClose}>
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar edición" onClick={onClose} />
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">

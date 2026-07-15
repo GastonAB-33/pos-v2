@@ -1,5 +1,7 @@
 ﻿import { useRef, useState } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { IconButton } from "@/components/ui/IconButton";
+import { RefreshCw } from "lucide-react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -121,7 +123,7 @@ export const StockPage = () => {
     return (
       <PagePlaceholder
         title="Stock"
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -161,17 +163,16 @@ export const StockPage = () => {
                 Ajustar stock
               </button>
             ) : null}
-            <button
-              type="button"
+            <IconButton
+              icon={RefreshCw}
+              label="Recargar stock"
               onClick={() => {
                 clearFeedback();
                 void reload();
               }}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              disabled={isLoading || isSubmitting}
-            >
-              Recargar
-            </button>
+              loading={isLoading}
+              disabled={isSubmitting}
+            />
           </div>
         </div>
 

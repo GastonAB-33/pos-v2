@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, CircleEllipsis, Headphones, Menu, UserRound } from "lucide-react";
+import { Bell, CircleEllipsis, Headphones, Menu, RefreshCw, UserRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/useToast";
 import { env } from "@/config/env";
@@ -229,7 +229,7 @@ export const Topbar = () => {
         ? "ui-badge ui-badge--success"
         : "ui-badge ui-badge--danger";
 
-  const tenantName = tenant?.tradeName ?? tenantId ?? "Sin tenant";
+  const tenantName = tenant?.tradeName ?? "Sin comercio";
   const currentUserId = user?.id ?? "";
   const isSupportProfile = isSupportOperator(user);
   const currentUserLabel = getDisplayName({
@@ -745,7 +745,7 @@ export const Topbar = () => {
 
         <div className="min-w-0">
           <p className="truncate text-[15px] font-semibold text-slate-900 capitalize">{formattedDate}</p>
-          <p className="truncate text-xs text-slate-500">{currentTitle} · Tenant: {tenantName}</p>
+          <p className="truncate text-xs text-slate-500">{currentTitle} · {tenantName}</p>
           {lastSyncMessage ? (
             <p className={`truncate text-[11px] ${lastSyncError ? "text-red-600" : "text-slate-500"}`}>{lastSyncMessage}</p>
           ) : null}
@@ -807,7 +807,7 @@ export const Topbar = () => {
           <div>
             <p className="text-sm font-semibold text-slate-900">Soporte</p>
             <p className="text-xs text-slate-500">
-              Envia sugerencias o reportes de fallas con contexto automatico de tenant, usuario y horario.
+              Envía sugerencias o reportes de fallas con los datos necesarios para ayudarte.
             </p>
           </div>
 
@@ -872,7 +872,7 @@ export const Topbar = () => {
         <div className="ui-card absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[560px] space-y-3">
           <div>
             <p className="text-sm font-semibold text-slate-900">Tareas del equipo</p>
-            <p className="text-xs text-slate-500">Crea tareas y delegalas entre usuarios del tenant.</p>
+            <p className="text-xs text-slate-500">Crea tareas y delégalas entre usuarios del comercio.</p>
           </div>
 
           <div className="grid gap-2 md:grid-cols-2">
@@ -1145,6 +1145,7 @@ export const Topbar = () => {
               className="ui-btn-ghost text-xs"
               disabled={!isOnline || isSyncing || totalPendingCount === 0}
             >
+              <RefreshCw aria-hidden="true" className={isSyncing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
               {lastSyncError ? "Reintentar sync" : "Sincronizar"}
             </button>
 

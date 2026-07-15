@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { LoadingState } from "@/components/ui/UiStates";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { IconButton } from "@/components/ui/IconButton";
+import { RefreshCw } from "lucide-react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -328,7 +330,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     return (
       <PagePlaceholder
         title={scopePreset.title}
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -370,22 +372,19 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     >
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-slate-600">
-            Tenant settings activos para {draft.negocio.trade_name || "negocio sin nombre"}
-          </p>
+          <p className="text-sm text-slate-600">{draft.negocio.trade_name || "Configuración del comercio"}</p>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="ui-btn-ghost"
+            <IconButton
+              icon={RefreshCw}
+              label="Recargar configuración"
               onClick={() => {
                 clearFeedback();
                 void reload();
               }}
-              disabled={isLoading || isSavingAll}
-            >
-              Recargar
-            </button>
+              loading={isLoading}
+              disabled={isSavingAll}
+            />
 
             {scopePreset.allowSaveAll ? (
               <button

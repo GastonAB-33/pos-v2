@@ -4,6 +4,8 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { Pencil, Power, Trash2, WalletCards } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 import type { Customer } from "@/types/entities";
 
 interface CustomersTableProps {
@@ -84,37 +86,13 @@ export const CustomersTable = ({
 
         return (
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onViewCurrentAccount(row)}
-              className="rounded-md border border-slate-300 px-2 py-1 text-xs"
-            >
-              Estado cta cte
-            </button>
+            <IconButton size="sm" icon={WalletCards} label="Ver cuenta corriente" onClick={() => onViewCurrentAccount(row)} />
 
             {canWrite ? (
               <>
-                <button
-                  type="button"
-                  onClick={() => onEdit(row)}
-                  className="rounded-md border border-slate-300 px-2 py-1 text-xs"
-                >
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onToggleActive(row)}
-                  className="rounded-md border border-slate-300 px-2 py-1 text-xs"
-                >
-                  {row.is_active ? "Desactivar" : "Activar"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDelete(row)}
-                  className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-700"
-                >
-                  Eliminar
-                </button>
+                <IconButton size="sm" icon={Pencil} label="Editar cliente" onClick={() => onEdit(row)} />
+                <IconButton size="sm" icon={Power} label={row.is_active ? "Desactivar cliente" : "Activar cliente"} onClick={() => onToggleActive(row)} />
+                <IconButton size="sm" icon={Trash2} label="Eliminar cliente" tone="danger" onClick={() => onDelete(row)} />
               </>
             ) : null}
           </div>
@@ -132,13 +110,13 @@ export const CustomersTable = ({
   if (!customers.length) {
     return (
       <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-        No hay clientes cargados para este tenant.
+        No hay clientes cargados.
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200">
+    <div className="ui-table-wrap">
       <table className="min-w-full divide-y divide-slate-200 text-sm">
         <thead className="bg-slate-50">
           {table.getHeaderGroups().map((headerGroup) => (

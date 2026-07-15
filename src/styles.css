@@ -450,7 +450,7 @@ html.dark {
     filter: brightness(1.05);
   }
 
-  .ui-btn-ghost {
+.ui-btn-ghost {
     @apply rounded-lg border px-3 py-2 text-sm;
     border-color: var(--ui-border);
     color: var(--ui-muted);
@@ -897,6 +897,71 @@ html.dark {
   backdrop-filter: blur(14px);
 }
 
+.ui-icon-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
+  background: var(--ui-surface);
+  color: var(--ui-text-muted);
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.ui-icon-button--sm {
+  width: 30px;
+  height: 30px;
+}
+
+.ui-icon-button--md {
+  width: 36px;
+  height: 36px;
+}
+
+.ui-icon-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--ui-accent) 42%, var(--ui-border));
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent);
+}
+
+.ui-icon-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ui-accent) 38%, transparent);
+  outline-offset: 2px;
+}
+
+.ui-icon-button--primary {
+  border-color: var(--ui-accent);
+  background: var(--ui-accent);
+  color: #fff;
+}
+
+.ui-icon-button--primary:hover:not(:disabled) {
+  border-color: var(--ui-accent-strong);
+  background: var(--ui-accent-strong);
+  color: #fff;
+}
+
+.ui-icon-button--danger {
+  border-color: color-mix(in srgb, #dc2626 34%, var(--ui-border));
+  color: #b91c1c;
+}
+
+.ui-icon-button--danger:hover:not(:disabled) {
+  border-color: #dc2626;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.ui-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .ui-page {
   display: grid;
   gap: 1.25rem;
@@ -977,6 +1042,7 @@ html.dark {
   border-radius: 0.5rem;
   background: var(--ui-accent);
   box-shadow: none;
+  gap: 0.45rem;
 }
 
 .ui-btn-ghost,
@@ -987,6 +1053,7 @@ html.dark {
   justify-content: center;
   border-radius: 0.5rem;
   background: transparent;
+  gap: 0.45rem;
 }
 
 .ui-btn-primary:focus-visible,
@@ -1005,8 +1072,37 @@ html.dark {
 
 .ui-table-wrap,
 .app-main:not(.app-main--pos) .ui-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--ui-border);
   border-radius: var(--radius-sm);
+  background: var(--ui-surface);
   box-shadow: none;
+}
+
+.ui-table-wrap table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.ui-table-wrap thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--ui-surface-2);
+}
+
+.ui-table-wrap tbody tr {
+  transition: background-color 140ms ease;
+}
+
+.ui-table-wrap tbody tr:hover {
+  background: color-mix(in srgb, var(--ui-accent-soft) 52%, var(--ui-surface));
+}
+
+.ui-table-wrap tbody td:last-child,
+.ui-table-wrap thead th:last-child {
+  white-space: nowrap;
 }
 
 thead th {
@@ -1155,7 +1251,7 @@ tbody td {
   display: flex;
   width: 100%;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 0.5rem;
   border-radius: 0.375rem;
   padding: 0.6rem 0.5rem;
@@ -1259,6 +1355,11 @@ tbody td {
 .cash-metric-card {
   border-color: var(--ui-border) !important;
   background: var(--ui-surface) !important;
+}
+
+.ui-popover-action svg {
+  flex: 0 0 auto;
+  color: var(--ui-muted);
 }
 
 .cash-metric-card--success {
@@ -1663,6 +1764,36 @@ html.dark section.fixed.inset-0 > .relative.z-10 {
 
   .ui-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  section.fixed.inset-0 {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  section.fixed.inset-0 > div:not(.absolute) {
+    width: 100%;
+    max-width: none;
+    max-height: 90vh;
+    overflow-y: auto;
+    border-bottom-right-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+  }
+
+  .ui-table-wrap {
+    margin-inline: -0.25rem;
+  }
+
+  .ui-table-wrap table {
+    min-width: 42rem;
+  }
+
+  .workspace-toolbar {
+    padding: 0.875rem;
+  }
+
+  .workspace-toolbar__actions {
+    justify-content: flex-end;
   }
 }
 
