@@ -172,7 +172,7 @@ export const ComprasPage = () => {
 
   return (
     <PagePlaceholder title="Compras a proveedores" description="Registro de compras con impacto en stock y caja">
-      <div className="space-y-4">
+      <div className="purchases-operational-page space-y-4">
         <section className="workspace-toolbar workspace-toolbar--inline">
           <div className="workspace-meta">
             <span>{purchases.length} compras registradas</span>

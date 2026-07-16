@@ -779,7 +779,12 @@ export const Topbar = () => {
           <span>Mas {pendingTasksCount + unreadChatCount > 0 ? `(${pendingTasksCount + unreadChatCount})` : ""}</span>
         </button>
 
-        <button type="button" className="ui-btn-ghost app-topbar-user gap-2 text-right" onClick={() => togglePanel("user")}>
+        <button
+          type="button"
+          className="ui-btn-ghost app-topbar-user gap-2 text-right"
+          aria-label={`Opciones de ${currentUserLabel}`}
+          onClick={() => togglePanel("user")}
+        >
           <UserRound aria-hidden="true" size={16} />
           <span className="min-w-0">
             <span className="block truncate text-sm font-medium text-slate-900">{currentUserLabel}</span>

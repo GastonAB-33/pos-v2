@@ -1,58 +1,65 @@
+import { Boxes, CircleDollarSign, PackageSearch, ShoppingCart, Users, Wallet } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { routePaths } from "@/config/routes";
+
+const quickActions = [
+  { label: "Nueva venta", detail: "Abrir terminal POS", to: routePaths.pos, icon: ShoppingCart },
+  { label: "Productos", detail: "Catalogo e inventario", to: routePaths.productos, icon: PackageSearch },
+  { label: "Caja diaria", detail: "Movimientos y cierre", to: routePaths.caja, icon: Wallet },
+  { label: "Clientes", detail: "Datos y cuenta corriente", to: routePaths.clientes, icon: Users },
+  { label: "Stock", detail: "Existencias y ajustes", to: routePaths.stock, icon: Boxes },
+  { label: "Cuentas corrientes", detail: "Deudas y cobranzas", to: routePaths.cuentasCorrientes, icon: CircleDollarSign },
+] as const;
 
 export const MainMenuPage = () => {
+  const navigate = useNavigate();
+
   return (
-    <PagePlaceholder
-      title="Menu principal"
-      description="Panel informativo general para todo el sistema."
-    >
-      <div className="mt-5 grid gap-4 xl:grid-cols-2">
-        <article className="ui-card space-y-3 xl:col-span-2">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-base font-semibold text-slate-900">Novedades del sistema</h3>
-            <span className="ui-badge ui-badge--info">Comunicado oficial</span>
+    <PagePlaceholder title="Inicio operativo" description="Accesos principales y novedades del comercio">
+      <div className="operational-home-grid">
+        <section className="operational-home-main">
+          <div className="operational-section-heading">
+            <div>
+              <p className="ui-section-label">Accesos rapidos</p>
+              <h2 className="text-base font-semibold text-slate-900">Operaciones frecuentes</h2>
+            </div>
           </div>
-          <p className="text-sm text-slate-700">
-            Esta seccion esta reservada para comunicados globales del sistema publicados por administracion central.
-          </p>
-          <div className="rounded-lg border border-slate-200 p-3">
-            <p className="text-sm font-medium text-slate-900">Sin novedades publicadas</p>
-            <p className="mt-1 text-xs text-slate-500">
-              Cuando exista un anuncio oficial, aparecera aqui para todos los clientes.
-            </p>
+
+          <div className="operational-quick-grid">
+            {quickActions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <button
+                  key={action.to}
+                  type="button"
+                  className="operational-quick-action"
+                  onClick={() => navigate(action.to)}
+                >
+                  <span className="operational-quick-action__icon"><Icon aria-hidden="true" size={19} /></span>
+                  <span className="min-w-0 text-left">
+                    <span className="block text-sm font-semibold text-slate-900">{action.label}</span>
+                    <span className="block truncate text-xs text-slate-500">{action.detail}</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        </article>
+        </section>
 
-        <article className="ui-card space-y-2">
-          <h3 className="text-base font-semibold text-slate-900">Area de soporte</h3>
-          <p className="text-sm text-slate-700">
-            Canal destinado a incidencias tecnicas, consultas funcionales y seguimiento de casos.
-          </p>
-        </article>
-
-        <article className="ui-card space-y-2">
-          <h3 className="text-base font-semibold text-slate-900">Area de tareas</h3>
-          <p className="text-sm text-slate-700">
-            Espacio para organizar solicitudes, pendientes y prioridades operativas del sistema.
-          </p>
-        </article>
-
-        <article className="ui-card space-y-2">
-          <h3 className="text-base font-semibold text-slate-900">Area de chat</h3>
-          <p className="text-sm text-slate-700">
-            Seccion para comunicacion rapida entre usuarios y coordinacion de acciones del dia.
-          </p>
-        </article>
-
-        <article className="ui-card space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-base font-semibold text-slate-900">Manuales</h3>
-            <span className="ui-badge ui-badge--warn">Proximamente</span>
+        <aside className="operational-home-aside">
+          <div className="operational-section-heading">
+            <div>
+              <p className="ui-section-label">Comunicaciones</p>
+              <h2 className="text-base font-semibold text-slate-900">Novedades</h2>
+            </div>
+            <span className="ui-badge ui-badge--info">Sistema</span>
           </div>
-          <p className="text-sm text-slate-700">
-            Los manuales estaran disponibles en una plataforma externa integrada en una proxima version.
-          </p>
-        </article>
+          <div className="ui-empty-state">
+            <p className="font-semibold text-slate-900">Todo al dia</p>
+            <p className="mt-1 text-xs text-slate-500">No hay comunicados nuevos para tu comercio.</p>
+          </div>
+        </aside>
       </div>
     </PagePlaceholder>
   );

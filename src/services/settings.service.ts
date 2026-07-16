@@ -111,7 +111,7 @@ const createDefaultBarcodeScaleSettings = (): BarcodeScaleSettings => ({
 
 const createDefaultAppearanceSettings = (): AppearanceSettings => ({
   default_theme: "light",
-  accent_color: "#6054e8",
+  accent_color: "#0056b3",
   display_name: "POS V2",
   density: "standard",
 });

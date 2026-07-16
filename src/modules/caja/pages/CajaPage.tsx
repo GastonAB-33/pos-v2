@@ -228,8 +228,8 @@ export const CajaPage = () => {
   }
 
   return (
-    <PagePlaceholder title="Caja" description="Control diario y cierre de caja">
-      <div className="space-y-4">
+    <PagePlaceholder title="Caja diaria" description="Control de efectivo, movimientos y cierre de turno">
+      <div className="cash-page-layout space-y-4">
         <section className="workspace-toolbar workspace-toolbar--inline">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="workspace-meta">

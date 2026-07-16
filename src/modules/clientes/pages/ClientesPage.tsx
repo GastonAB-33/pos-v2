@@ -222,21 +222,35 @@ export const ClientesPage = () => {
         ) : null}
 
         {formOpen ? (
-          <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <h3 className="mb-4 text-base font-semibold text-slate-900">
-              {formMode === "create" ? "Crear cliente" : "Editar cliente"}
-            </h3>
-            <CustomerForm
-              mode={formMode}
-              customer={selectedCustomer}
-              priceLists={priceLists}
-              disabled={isSubmitting}
-              onCancel={() => {
+          <section className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
+            <button
+              type="button"
+              className="absolute inset-0"
+              aria-label="Cerrar formulario de cliente"
+              onClick={() => {
                 setFormOpen(false);
                 setSelectedCustomer(undefined);
               }}
-              onSubmit={handleSubmitForm}
             />
+            <div className="relative z-10 max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-4">
+              <div className="mb-4 border-b border-slate-200 pb-3">
+                <p className="ui-section-label">Clientes</p>
+                <h3 className="text-base font-semibold text-slate-900">
+                  {formMode === "create" ? "Crear cliente" : "Editar cliente"}
+                </h3>
+              </div>
+              <CustomerForm
+                mode={formMode}
+                customer={selectedCustomer}
+                priceLists={priceLists}
+                disabled={isSubmitting}
+                onCancel={() => {
+                  setFormOpen(false);
+                  setSelectedCustomer(undefined);
+                }}
+                onSubmit={handleSubmitForm}
+              />
+            </div>
           </section>
         ) : null}
 

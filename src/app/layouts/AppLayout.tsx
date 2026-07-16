@@ -28,10 +28,29 @@ export const AppLayout = () => {
 
   if (isPosRoute) {
     return (
-      <div className="app-shell" data-device-kind={deviceKind}>
-        <main className="app-main app-main--pos w-full">
-          <Outlet />
-        </main>
+      <div
+        className={cn(
+          "app-shell app-shell--pos",
+          isDesktop ? "app-shell--desktop" : "app-shell--drawer",
+          sidebarOpen ? "is-sidebar-open" : "is-sidebar-closed"
+        )}
+        data-device-kind={deviceKind}
+      >
+        {!isDesktop && sidebarOpen ? (
+          <button
+            type="button"
+            className="app-sidebar-backdrop"
+            aria-label="Cerrar menu"
+            onClick={() => setSidebarOpen(false)}
+          />
+        ) : null}
+        <Sidebar />
+        <div className="app-content">
+          <main className="app-main app-main--pos">
+            <Outlet />
+          </main>
+          <MobileBottomNav />
+        </div>
       </div>
     );
   }

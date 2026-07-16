@@ -55,7 +55,7 @@ export const ProductsPage = () => {
   };
 
   return (
-    <section className="ui-panel space-y-4">
+    <section className="ui-panel operational-page product-catalog-page space-y-4">
       <ProductFilters
           canWrite={canWriteProductos}
           loading={products.isLoading || products.isSubmitting}
