@@ -277,6 +277,30 @@ export const usePosSale = (tenantId: string | null) => {
     setGeneratedInvoice(null);
   }, []);
 
+  const applyOfflineSnapshot = useCallback((snapshot: NonNullable<ReturnType<typeof offlineService.getPosSnapshot>>) => {
+    setProducts(snapshot.products);
+    setProductBarcodes(snapshot.product_barcodes);
+    setPrimaryBarcodes(
+      snapshot.product_barcodes.reduce<Record<string, string>>((acc, row) => {
+        if (row.is_primary) acc[row.product_id] = row.barcode;
+        return acc;
+      }, {})
+    );
+    setCustomers(snapshot.customers);
+    setPaymentMethods(snapshot.payment_methods);
+    setBankAccounts(snapshot.bank_accounts);
+    setOriginBanks(snapshot.origin_banks);
+    setInstallmentPlans(snapshot.installment_plans);
+    setPriceLists(snapshot.price_lists);
+    setPromotions(snapshot.promotions);
+    setPosSettings(snapshot.pos_settings);
+    setScaleSettings(snapshot.scale_settings);
+    setMercadoPagoSettings(snapshot.mercado_pago_settings);
+    setArcaSettings(snapshot.arca_settings);
+    setRequireOpenSessionForSale(snapshot.require_open_session_for_sale);
+    setDefaultInvoiceDocumentType(snapshot.default_invoice_document_type);
+  }, []);
+
   const loadPosData = useCallback(async () => {
     if (!tenantId) {
       setProducts([]);
@@ -303,6 +327,18 @@ export const usePosSale = (tenantId: string | null) => {
 
     setIsLoading(true);
     try {
+      await offlineService.hydrate();
+      if (!isOnline) {
+        const snapshot = offlineService.getPosSnapshot(tenantId);
+        if (!snapshot) {
+          setFeedback({ type: "error", message: "No hay una copia local del POS para este comercio. Conectate una vez para prepararlo." });
+          return;
+        }
+        applyOfflineSnapshot(snapshot);
+        setFeedback({ type: "success", message: "POS listo sin conexion con datos guardados localmente." });
+        return;
+      }
+
       await Promise.allSettled([
         originBanksService.ensureDefaults(tenantId),
         installmentPlansService.ensureDefaults(tenantId),
@@ -428,6 +464,28 @@ export const usePosSale = (tenantId: string | null) => {
           : ""
       );
 
+      offlineService.savePosSnapshot({
+        tenant_id: tenantId,
+        saved_at: new Date().toISOString(),
+        products: activeProducts,
+        product_barcodes: allProductBarcodes,
+        customers: activeCustomers,
+        payment_methods: [...allActivePaymentMethods].sort((a, b) => paymentMethodPriority(a) - paymentMethodPriority(b)),
+        bank_accounts: [...allActiveBankAccounts].sort((a, b) => a.bank_name.localeCompare(b.bank_name)),
+        origin_banks: [...allActiveOriginBanks].sort((a, b) => a.name.localeCompare(b.name)),
+        installment_plans: [...allActiveInstallmentPlans].sort((a, b) => a.installments - b.installments || a.name.localeCompare(b.name)),
+        price_lists: [...allPriceLists].sort((a, b) => a.name.localeCompare(b.name)),
+        promotions: allActivePromotions,
+        pos_settings: resolvedPosSettings,
+        scale_settings: tenantSettings?.codigos_balanza ?? defaultBarcodeScaleSettings,
+        // Los cobros online se bloquean sin conexion; no persistimos credenciales en el dispositivo.
+        mercado_pago_settings: { ...resolvedMercadoPagoSettings, access_token: "" },
+        arca_settings: resolvedArcaSettings,
+        require_open_session_for_sale: tenantSettings?.caja?.require_open_session_for_sale ?? false,
+        default_invoice_document_type: tenantSettings?.facturacion?.default_document_type ?? "B",
+        open_cash_session: offlineService.getPosSnapshot(tenantId)?.open_cash_session ?? null,
+      });
+
       if (hasPartialErrors) {
         setFeedback({
           type: "error",
@@ -439,7 +497,7 @@ export const usePosSale = (tenantId: string | null) => {
     } finally {
       setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [applyOfflineSnapshot, isOnline, tenantId]);
 
   useEffect(() => {
     void loadPosData();
