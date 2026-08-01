@@ -7,6 +7,7 @@ interface ProductFiltersProps {
   canWrite: boolean;
   loading: boolean;
   selectedCount: number;
+  filteredCount: number;
   filters: ProductFiltersState;
   categories: string[];
   subcategories: string[];
@@ -18,12 +19,15 @@ interface ProductFiltersProps {
   onOpenImport: () => void;
   onExportXlsx: () => void;
   onDeleteSelected: () => void;
+  onSelectAllFiltered: () => void;
+  onClearSelection: () => void;
 }
 
 export const ProductFilters = ({
   canWrite,
   loading,
   selectedCount,
+  filteredCount,
   filters,
   categories,
   subcategories,
@@ -35,6 +39,8 @@ export const ProductFilters = ({
   onOpenImport,
   onExportXlsx,
   onDeleteSelected,
+  onSelectAllFiltered,
+  onClearSelection,
 }: ProductFiltersProps) => {
   const [actionsOpen, setActionsOpen] = useState(false);
 
@@ -148,14 +154,36 @@ export const ProductFilters = ({
           <div className="flex items-center gap-2">
             <IconButton icon={FilterX} label="Limpiar filtros" onClick={onClearFilters} />
             {selectedCount > 0 ? (
-              <button
-                type="button"
-                className="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700"
-                onClick={onDeleteSelected}
-                disabled={!canWrite || loading}
-              >
-                Eliminar seleccionados ({selectedCount})
-              </button>
+              <>
+                {selectedCount < filteredCount ? (
+                  <button
+                    type="button"
+                    className="ui-btn-ghost px-3 py-2 text-sm"
+                    onClick={onSelectAllFiltered}
+                    disabled={loading}
+                  >
+                    Seleccionar los {filteredCount} resultados
+                  </button>
+                ) : (
+                  <span className="ui-badge ui-badge--info">Todos los {filteredCount} seleccionados</span>
+                )}
+                <button
+                  type="button"
+                  className="ui-btn-ghost px-3 py-2 text-sm"
+                  onClick={onClearSelection}
+                  disabled={loading}
+                >
+                  Quitar seleccion
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700"
+                  onClick={onDeleteSelected}
+                  disabled={!canWrite || loading}
+                >
+                  Eliminar seleccionados ({selectedCount})
+                </button>
+              </>
             ) : null}
           </div>
         </div>

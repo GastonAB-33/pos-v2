@@ -60,6 +60,7 @@ export const ProductsPage = () => {
           canWrite={canWriteProductos}
           loading={products.isLoading || products.isSubmitting}
           selectedCount={selectedCount}
+          filteredCount={products.filteredProducts.length}
           filters={products.filters}
           categories={products.categoryOptions}
           subcategories={products.subcategoryOptions}
@@ -85,6 +86,8 @@ export const ProductsPage = () => {
             if (!ok) return;
             void products.deleteSelected();
           }}
+          onSelectAllFiltered={() => products.toggleSelectAllVisible(true)}
+          onClearSelection={() => products.setSelectedIds([])}
       />
 
       {products.feedback ? (

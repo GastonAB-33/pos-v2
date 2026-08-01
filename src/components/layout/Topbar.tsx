@@ -1,10 +1,11 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, CircleEllipsis, Headphones, Menu, RefreshCw, UserRound } from "lucide-react";
+import { Bell, CircleEllipsis, Headphones, Menu, Newspaper, RefreshCw, UserRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/useToast";
 import { env } from "@/config/env";
 import { routePaths } from "@/config/routes";
 import { useAuthStore } from "@/features/auth/store/auth.store";
+import { publicChangelogEntries } from "@/features/changelog/public-changelog";
 import { useOffline } from "@/features/offline/hooks/useOffline";
 import { usePwa } from "@/features/pwa/hooks/usePwa";
 import { supportCenterStorage, type SupportTicket } from "@/features/support/support-center.storage";
@@ -17,7 +18,7 @@ import { useUiStore } from "@/store/ui.store";
 import type { Product, UserRecord } from "@/types/entities";
 import { storageKeys } from "@/utils/local-storage";
 
-type TopbarPanel = "support" | "tasks" | "chat" | "notifications" | "user" | "more" | null;
+type TopbarPanel = "support" | "tasks" | "chat" | "notifications" | "user" | "more" | "changelog" | null;
 type SupportType = "sugerencia" | "falla";
 type TaskStatus = "pendiente" | "completada";
 
@@ -804,6 +805,45 @@ export const Topbar = () => {
             <span>Chat interno</span>
             {unreadChatCount > 0 ? <span className="ui-badge ui-badge--info">{unreadChatCount}</span> : null}
           </button>
+          <button type="button" className="ui-popover-action" onClick={() => togglePanel("changelog")}>
+            <span className="inline-flex items-center gap-2">
+              <Newspaper aria-hidden="true" size={15} />
+              Novedades del sistema
+            </span>
+          </button>
+        </div>
+      ) : null}
+
+      {activePanel === "changelog" ? (
+        <div className="ui-card app-topbar-popover absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[460px] space-y-3">
+          <div>
+            <p className="ui-section-label">Actualizaciones</p>
+            <h2 className="mt-1 text-base font-semibold text-slate-900">Novedades del sistema</h2>
+          </div>
+
+          {publicChangelogEntries.length ? (
+            <div className="max-h-[420px] space-y-3 overflow-auto pr-1">
+              {publicChangelogEntries.map((entry) => (
+                <article key={entry.version} className="rounded-lg border border-slate-200 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-semibold text-slate-900">{entry.title}</h3>
+                    <span className="ui-badge ui-badge--info">v{entry.version}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {new Date(entry.publishedAt).toLocaleDateString("es-AR")}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-700">{entry.summary}</p>
+                  <ul className="mt-2 space-y-1 text-sm text-slate-600">
+                    {entry.changes.map((change) => (
+                      <li key={change}>• {change}</li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="ui-empty-state">Todavia no hay actualizaciones publicadas.</div>
+          )}
         </div>
       ) : null}
 

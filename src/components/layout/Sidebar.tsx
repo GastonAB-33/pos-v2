@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   Building2,
@@ -124,9 +124,26 @@ export const Sidebar = () => {
   const { isInstalled } = usePwa();
   const setSidebarOpen = useUiStore((state) => state.setSidebarOpen);
 
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(sidebarGroups.map((group) => [group.id, group.defaultExpanded]))
-  );
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(() => {
+    const activeGroup = sidebarGroups.find((group) =>
+      group.items.some(
+        (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
+      )
+    );
+    const defaultGroup = activeGroup ?? sidebarGroups.find((group) => group.defaultExpanded);
+    return defaultGroup?.id ?? null;
+  });
+
+  useEffect(() => {
+    const activeGroup = sidebarGroups.find((group) =>
+      group.items.some(
+        (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
+      )
+    );
+    if (!activeGroup) return;
+
+    setExpandedGroupId(activeGroup.id);
+  }, [location.pathname]);
 
   const openPosInNewTab = () => {
     if (typeof window === "undefined") return;
@@ -224,7 +241,7 @@ export const Sidebar = () => {
         ) : null}
 
         {visibleGroups.map((group) => {
-          const isExpanded = expandedGroups[group.id] ?? true;
+          const isExpanded = expandedGroupId === group.id;
           const GroupIcon = group.icon;
 
           return (
@@ -234,10 +251,7 @@ export const Sidebar = () => {
                 className="flex w-full items-center gap-2 px-2 py-1 text-left"
                 onClick={() => {
                   if (!group.collapsible) return;
-                  setExpandedGroups((previous) => ({
-                    ...Object.fromEntries(sidebarGroups.map((entry) => [entry.id, false])),
-                    [group.id]: !previous[group.id],
-                  }));
+                  setExpandedGroupId((current) => current === group.id ? null : group.id);
                 }}
               >
                 <GroupIcon aria-hidden="true" size={14} className="text-slate-500" />
