@@ -367,6 +367,39 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       .map((item) => item.product);
   };
 
+  const addProductByBarcode = async (
+    rawBarcode: string
+  ): Promise<{ ok: boolean; product?: Product; error?: string }> => {
+    if (!tenantId) return { ok: false, error: "No hay un comercio activo" };
+
+    const barcode = normalizeBarcode(rawBarcode);
+    if (!barcode) return { ok: false, error: "Ingresa un codigo de barras" };
+
+    const barcodeRow =
+      productBarcodes.find(
+        (row) => normalizeBarcode(row.barcode) === barcode && row.is_primary
+      ) ?? productBarcodes.find((row) => normalizeBarcode(row.barcode) === barcode);
+
+    let product = barcodeRow
+      ? products.find((candidate) => candidate.id === barcodeRow.product_id) ?? null
+      : products.find((candidate) => normalizeBarcode(candidate.code) === barcode) ?? null;
+
+    if (!product) {
+      try {
+        product = await productsService.getByBarcode(tenantId, barcode);
+      } catch {
+        return { ok: false, error: "No se pudo consultar el codigo de barras" };
+      }
+    }
+
+    if (!product || !product.is_active) {
+      return { ok: false, error: `No se encontro un producto activo para ${barcode}` };
+    }
+
+    addProductToCart(product);
+    return { ok: true, product };
+  };
+
   const createProductAndAddToCart = async (values: ProductFormModalValues): Promise<Product | null> => {
     if (!tenantId) return null;
 
@@ -456,6 +489,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     clearFeedback,
     reload: loadData,
     addProductToCart,
+    addProductByBarcode,
     setItemQuantity,
     setItemUnitCost,
     removeItem,

@@ -113,6 +113,7 @@ export const ComprasPage = () => {
     clearFeedback,
     reload,
     addProductToCart,
+    addProductByBarcode,
     setItemQuantity,
     setItemUnitCost,
     removeItem,
@@ -279,6 +280,7 @@ export const ComprasPage = () => {
                     if (!canWritePurchases) return;
                     addProductToCart(product);
                   }}
+                  onBarcodeScan={addProductByBarcode}
                 />
 
                 <div className="workspace-aside">
