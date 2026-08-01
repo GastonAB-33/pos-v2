@@ -8,6 +8,8 @@ import { suppliersService } from "@/services/suppliers.service";
 import type { Product, ProductBarcode, Purchase, PurchaseItem, Supplier } from "@/types/entities";
 import type { ProductFormModalValues } from "@/modules/productos/types/product.types";
 import type { PurchaseCheckoutValues } from "@/modules/compras/schemas/purchase-checkout.schema";
+import type { SupplierFormValues } from "@/modules/proveedores/schemas/supplier-form.schema";
+import { toSupplierServiceInput } from "@/modules/proveedores/utils/supplier-input";
 
 interface PurchaseCartItem {
   product_id: string;
@@ -415,6 +417,27 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     }
   };
 
+  const createSupplier = async (values: SupplierFormValues): Promise<Supplier | null> => {
+    if (!tenantId) return null;
+
+    setIsSubmitting(true);
+    try {
+      const created = await suppliersService.create(tenantId, toSupplierServiceInput(values));
+      setSuppliers((current) =>
+        [created, ...current.filter((supplier) => supplier.id !== created.id)].sort((a, b) =>
+          a.name.localeCompare(b.name)
+        )
+      );
+      setFeedback({ type: "success", message: `Proveedor ${created.name} creado` });
+      return created;
+    } catch {
+      setFeedback({ type: "error", message: "No se pudo crear el proveedor" });
+      return null;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return {
     products: filteredProducts,
     allProducts: products,
@@ -440,5 +463,6 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     confirmPurchase,
     findPotentialDuplicateProducts,
     createProductAndAddToCart,
+    createSupplier,
   };
 };

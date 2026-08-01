@@ -830,7 +830,10 @@ export const Topbar = () => {
                     <span className="ui-badge ui-badge--info">v{entry.version}</span>
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
-                    {new Date(entry.publishedAt).toLocaleDateString("es-AR")}
+                    Realizada el {new Date(entry.developedAt).toLocaleDateString("es-AR")}
+                    {entry.publishedAt
+                      ? ` | Publicada el ${new Date(entry.publishedAt).toLocaleDateString("es-AR")}`
+                      : ""}
                   </p>
                   <p className="mt-2 text-sm text-slate-700">{entry.summary}</p>
                   <ul className="mt-2 space-y-1 text-sm text-slate-600">

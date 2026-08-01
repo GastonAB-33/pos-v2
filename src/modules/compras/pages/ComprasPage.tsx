@@ -11,8 +11,10 @@ import { PurchaseProductList } from "@/modules/compras/components/PurchaseProduc
 import { PurchasesHistoryTable } from "@/modules/compras/components/PurchasesHistoryTable";
 import { usePurchasesModule } from "@/modules/compras/hooks/usePurchasesModule";
 import { ProductFormModal } from "@/modules/productos/components/ProductFormModal";
+import { SupplierForm } from "@/modules/proveedores/components/SupplierForm";
 import type { ProductFormModalValues } from "@/modules/productos/types/product.types";
 import type { PurchaseCheckoutValues } from "@/modules/compras/schemas/purchase-checkout.schema";
+import type { SupplierFormValues } from "@/modules/proveedores/schemas/supplier-form.schema";
 import type { Product } from "@/types/entities";
 
 interface DuplicateReviewState {
@@ -89,6 +91,9 @@ export const ComprasPage = () => {
   const canReadPurchases = canRead("compras");
   const canWritePurchases = canWrite("compras");
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+  const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [preferredSupplierId, setPreferredSupplierId] = useState<string>();
   const [duplicateReview, setDuplicateReview] = useState<DuplicateReviewState | null>(null);
 
   const {
@@ -115,6 +120,7 @@ export const ComprasPage = () => {
     confirmPurchase,
     findPotentialDuplicateProducts,
     createProductAndAddToCart,
+    createSupplier,
   } = usePurchasesModule(tenantId, user?.id ?? null);
 
   const historyRows = purchases.map((purchase) => ({
@@ -125,7 +131,20 @@ export const ComprasPage = () => {
   const handleConfirmPurchase = async (values: PurchaseCheckoutValues): Promise<boolean> => {
     if (!canWritePurchases) return false;
     const purchase = await confirmPurchase(values);
+    if (purchase) {
+      setIsPurchaseModalOpen(false);
+      setPreferredSupplierId(undefined);
+    }
     return Boolean(purchase);
+  };
+
+  const handleCreateSupplier = async (values: SupplierFormValues) => {
+    if (!canWritePurchases) return;
+    const created = await createSupplier(values);
+    if (created) {
+      setPreferredSupplierId(created.id);
+      setIsSupplierModalOpen(false);
+    }
   };
 
   const handleNewProductSubmit = async (values: ProductFormModalValues) => {
@@ -176,17 +195,20 @@ export const ComprasPage = () => {
         <section className="workspace-toolbar workspace-toolbar--inline">
           <div className="workspace-meta">
             <span>{purchases.length} compras registradas</span>
-            <span>{cart.length} items en la compra actual</span>
+            <span>El historial se ordena desde la compra mas reciente</span>
           </div>
           <div className="workspace-toolbar__actions">
             <button
               type="button"
-              onClick={() => setIsProductModalOpen(true)}
+              onClick={() => {
+                clearFeedback();
+                setIsPurchaseModalOpen(true);
+              }}
               className="ui-btn-primary"
               disabled={isSubmitting || !canWritePurchases}
             >
               <Plus aria-hidden="true" className="h-4 w-4" />
-              Agregar producto nuevo
+              Nueva compra
             </button>
             <IconButton
               icon={RefreshCw}
@@ -198,55 +220,10 @@ export const ComprasPage = () => {
               loading={isLoading}
               disabled={isSubmitting}
             />
-            <IconButton
-              icon={ShoppingCart}
-              label="Limpiar compra actual"
-              onClick={clearCart}
-              disabled={isSubmitting || !canWritePurchases}
-            />
           </div>
         </section>
 
         {feedback ? <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>{feedback.message}</div> : null}
-
-        {isLoading ? (
-          <div className="rounded-lg border border-slate-200 p-10 text-center text-sm text-slate-600">
-            Cargando compras...
-          </div>
-        ) : (
-          <div className="workspace-layout">
-            <PurchaseProductList
-              products={products}
-              search={search}
-              onSearchChange={setSearch}
-              disabled={isSubmitting}
-              canWrite={canWritePurchases}
-              onAddProduct={(product) => {
-                if (!canWritePurchases) return;
-                addProductToCart(product);
-              }}
-            />
-
-            <div className="workspace-aside">
-              <PurchaseCart
-                items={cart}
-                total={summary.total}
-                disabled={isSubmitting}
-                canWrite={canWritePurchases}
-                onSetQuantity={setItemQuantity}
-                onSetUnitCost={setItemUnitCost}
-                onRemove={removeItem}
-              />
-
-              <PurchaseCheckoutPanel
-                suppliers={suppliers}
-                canWrite={canWritePurchases}
-                disabled={isSubmitting}
-                onSubmit={handleConfirmPurchase}
-              />
-            </div>
-          </div>
-        )}
 
         <section className="workspace-history space-y-3">
           <div className="flex items-center justify-between gap-3">
@@ -262,6 +239,111 @@ export const ComprasPage = () => {
           )}
         </section>
       </div>
+
+      {isPurchaseModalOpen ? (
+        <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-2 sm:p-4">
+          <div className="flex max-h-[calc(100vh-1rem)] w-full max-w-7xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-panel sm:max-h-[calc(100vh-2rem)]">
+            <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-3 sm:px-5">
+              <div>
+                <p className="ui-section-label">Compras a proveedores</p>
+                <h2 className="mt-1 text-lg font-semibold text-slate-900">Nueva compra</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Agrega productos, confirma el proveedor y registra el pago en la caja abierta.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <IconButton
+                  icon={ShoppingCart}
+                  label="Limpiar compra actual"
+                  onClick={clearCart}
+                  disabled={isSubmitting || !canWritePurchases || cart.length === 0}
+                />
+                <IconButton
+                  icon={X}
+                  label="Cerrar nueva compra"
+                  onClick={() => setIsPurchaseModalOpen(false)}
+                  disabled={isSubmitting}
+                />
+              </div>
+            </header>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+              <div className="workspace-layout">
+                <PurchaseProductList
+                  products={products}
+                  search={search}
+                  onSearchChange={setSearch}
+                  disabled={isSubmitting}
+                  canWrite={canWritePurchases}
+                  onAddProduct={(product) => {
+                    if (!canWritePurchases) return;
+                    addProductToCart(product);
+                  }}
+                />
+
+                <div className="workspace-aside">
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setIsProductModalOpen(true)}
+                      className="ui-btn-ghost"
+                      disabled={isSubmitting || !canWritePurchases}
+                    >
+                      <Plus aria-hidden="true" className="h-4 w-4" />
+                      Producto nuevo
+                    </button>
+                  </div>
+                  <PurchaseCart
+                    items={cart}
+                    total={summary.total}
+                    disabled={isSubmitting}
+                    canWrite={canWritePurchases}
+                    onSetQuantity={setItemQuantity}
+                    onSetUnitCost={setItemUnitCost}
+                    onRemove={removeItem}
+                  />
+
+                  <PurchaseCheckoutPanel
+                    suppliers={suppliers}
+                    canWrite={canWritePurchases}
+                    disabled={isSubmitting}
+                    preferredSupplierId={preferredSupplierId}
+                    onCreateSupplier={() => setIsSupplierModalOpen(true)}
+                    onSubmit={handleConfirmPurchase}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {isSupplierModalOpen ? (
+        <section className="fixed inset-0 z-[70] flex items-center justify-center bg-[var(--ui-overlay)] p-4">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-panel">
+            <div className="mb-4 flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">Nuevo proveedor</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Se guardara en Proveedores y quedara seleccionado en esta compra.
+                </p>
+              </div>
+              <IconButton
+                icon={X}
+                label="Cerrar alta de proveedor"
+                onClick={() => setIsSupplierModalOpen(false)}
+                disabled={isSubmitting}
+              />
+            </div>
+            <SupplierForm
+              mode="create"
+              disabled={isSubmitting}
+              onCancel={() => setIsSupplierModalOpen(false)}
+              onSubmit={handleCreateSupplier}
+            />
+          </div>
+        </section>
+      ) : null}
 
       <ProductFormModal
         open={isProductModalOpen}

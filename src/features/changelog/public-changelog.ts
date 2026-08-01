@@ -1,6 +1,7 @@
 export interface PublicChangelogEntry {
   version: string;
-  publishedAt: string;
+  developedAt: string;
+  publishedAt?: string;
   title: string;
   summary: string;
   changes: string[];
