@@ -175,6 +175,14 @@ const normalizeBarcode = (value: string | null): string | null => {
   return cleaned || null;
 };
 
+const normalizeProductIdentity = (value: string): string =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
 const parseNumericCell = (value: unknown): { value: number | null; invalid: boolean; raw: string } => {
   if (typeof value === "number" && Number.isFinite(value)) {
     return { value, invalid: false, raw: String(value) };
@@ -183,10 +191,17 @@ const parseNumericCell = (value: unknown): { value: number | null; invalid: bool
   const raw = toTrimmedString(value);
   if (!raw) return { value: null, invalid: false, raw: "" };
 
-  const compact = raw.replace(/\s+/g, "");
-  const normalized = compact.includes(",")
-    ? compact.replace(/\./g, "").replace(",", ".")
-    : compact;
+  const compact = raw.replace(/\s+/g, "").replace(/[^0-9,.-]/g, "");
+  const lastComma = compact.lastIndexOf(",");
+  const lastDot = compact.lastIndexOf(".");
+  const normalized =
+    lastComma >= 0 && lastDot >= 0
+      ? lastComma > lastDot
+        ? compact.replace(/\./g, "").replace(",", ".")
+        : compact.replace(/,/g, "")
+      : lastComma >= 0
+        ? compact.replace(",", ".")
+        : compact;
   const parsed = Number(normalized);
   if (!Number.isFinite(parsed)) return { value: null, invalid: true, raw };
   return { value: parsed, invalid: false, raw };
@@ -929,10 +944,12 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       errorRows.push(...duplicateErrors);
     }
 
+    const invalidRowNumbers = new Set(errorRows.map((error) => error.rowNumber));
+
     return {
       fileName: file.name,
       totalRows: rawRows.length,
-      validRows,
+      validRows: validRows.filter((row) => !invalidRowNumbers.has(row.rowNumber)),
       errorRows,
     };
   };
@@ -974,8 +991,18 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       barcodeToProductId.set(normalizedBarcode, barcodeRow.product_id);
     }
 
+    const productIdsByName = new Map<string, string[]>();
+    for (const product of products) {
+      const normalizedName = normalizeProductIdentity(product.name);
+      if (!normalizedName) continue;
+      productIdsByName.set(normalizedName, [
+        ...(productIdsByName.get(normalizedName) ?? []),
+        product.id,
+      ]);
+    }
+
     try {
-      if (preview.errorRows.length > 0) {
+      if (preview.errorRows.length > 0 && preview.validRows.length === 0) {
         const result = {
           created: 0,
           updated: 0,
@@ -1008,7 +1035,10 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           continue;
         }
 
-        const matchedProductId = codeMatch ?? barcodeMatch;
+        const normalizedName = normalizeProductIdentity(row.name);
+        const nameMatches = productIdsByName.get(normalizedName) ?? [];
+        const nameMatch = nameMatches.length === 1 ? nameMatches[0] : null;
+        const matchedProductId = codeMatch ?? barcodeMatch ?? (mode === "upsert" ? nameMatch : null);
         if (mode === "upsert" && matchedProductId) {
           const existing = products.find((product) => product.id === matchedProductId);
           if (!existing) {
@@ -1054,7 +1084,10 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           continue;
         }
 
-        const matchedProductId = codeMatch ?? barcodeMatch;
+        const normalizedName = normalizeProductIdentity(row.name);
+        const nameMatches = productIdsByName.get(normalizedName) ?? [];
+        const nameMatch = nameMatches.length === 1 ? nameMatches[0] : null;
+        const matchedProductId = codeMatch ?? barcodeMatch ?? (mode === "upsert" ? nameMatch : null);
 
         if (mode === "create_only" && matchedProductId) {
           skipped += 1;
@@ -1102,6 +1135,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
             if (nextCode) {
               codeToProductId.set(nextCode, matchedProductId);
             }
+            productIdsByName.set(normalizedName, [matchedProductId]);
 
             updated += 1;
             continue;
@@ -1137,6 +1171,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           if (createdProduct.code) {
             codeToProductId.set(createdProduct.code.trim().toUpperCase(), createdProduct.id);
           }
+          productIdsByName.set(normalizedName, [createdProduct.id]);
 
           created += 1;
         } catch (error) {
@@ -1146,6 +1181,8 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           });
         }
       }
+
+      const allImportErrors = [...preview.errorRows, ...importErrors];
 
       await auditService.createSafe(tenantId, {
         user_id: userId,
@@ -1161,16 +1198,16 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           created,
           updated,
           skipped,
-          errors: importErrors.length,
+          errors: allImportErrors.length,
         },
       });
 
       await loadProducts();
 
-      if (importErrors.length > 0) {
+      if (allImportErrors.length > 0) {
         setFeedback({
           type: "error",
-          message: `Importacion parcial. Creados: ${created} | Actualizados: ${updated} | Saltados: ${skipped} | Errores: ${importErrors.length}`,
+          message: `Importacion parcial. Creados: ${created} | Actualizados: ${updated} | Saltados: ${skipped} | Errores: ${allImportErrors.length}`,
         });
       } else {
         setFeedback({
@@ -1183,8 +1220,8 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
         created,
         updated,
         skipped,
-        errors: importErrors.length,
-        errorRows: importErrors,
+        errors: allImportErrors.length,
+        errorRows: allImportErrors,
       };
     } finally {
       setIsSubmitting(false);

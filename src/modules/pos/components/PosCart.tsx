@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Plus } from "lucide-react";
 
 interface PosCartItemView {
   product_id: string;
@@ -38,6 +39,7 @@ interface PosCartProps {
   onSetQuantity: (productId: string, quantity: number) => void;
   onEdit: (item: PosCartItemView) => void;
   onRemove: (productId: string) => void;
+  onOpenQuickProduct: () => void;
   onCheckout: () => void;
 }
 
@@ -79,6 +81,7 @@ export const PosCart = ({
   onSetQuantity,
   onEdit,
   onRemove,
+  onOpenQuickProduct,
   onCheckout,
 }: PosCartProps) => {
   const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
@@ -123,9 +126,16 @@ export const PosCart = ({
     <section id={id} className="pos-surface space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold text-slate-900">Cart ({items.length} items)</h2>
-        <span className="text-xs uppercase tracking-[0.12em] text-slate-500">
-          Venta activa
-        </span>
+        <button
+          type="button"
+          className="ui-btn-ghost inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs"
+          onClick={onOpenQuickProduct}
+          disabled={disabled || !canWrite}
+          title="Agregar un producto que no esta registrado"
+        >
+          <Plus aria-hidden="true" className="h-3.5 w-3.5" />
+          Producto no registrado
+        </button>
       </div>
 
       <form

@@ -2372,10 +2372,18 @@ section.fixed.inset-0 > div:not(.absolute) {
     border: 0;
   }
 
-  .product-catalog-page .ui-table-wrap tbody td:first-child,
   .product-catalog-page .ui-table-wrap tbody td:nth-child(4),
   .product-catalog-page .ui-table-wrap tbody td:nth-child(7) {
     display: none;
+  }
+
+  .product-catalog-page .ui-table-wrap tbody td:first-child {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.55rem;
+    z-index: 1;
+    display: block;
+    width: auto;
   }
 
   .product-catalog-page .ui-table-wrap tbody td:nth-child(2) {

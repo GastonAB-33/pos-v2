@@ -54,8 +54,8 @@ export const ProductImportModal = ({
   const [activeTab, setActiveTab] = useState<PreviewTab>("valid");
 
   const busy = loading || isParsing;
-  const hasBlockingErrors = (preview?.errorRows.length ?? 0) > 0;
-  const hasImportableRows = (preview?.validRows.length ?? 0) > 0 && !hasBlockingErrors;
+  const hasImportErrors = (preview?.errorRows.length ?? 0) > 0;
+  const hasImportableRows = (preview?.validRows.length ?? 0) > 0;
 
   const topErrors = useMemo(() => {
     if (!preview) return [];
@@ -143,7 +143,7 @@ export const ProductImportModal = ({
               disabled={busy || !canWrite}
             >
               <option value="create_only">Modo: crear solo nuevos</option>
-              <option value="upsert">Modo: crear y actualizar por código / código de barras</option>
+              <option value="upsert">Modo: crear y actualizar por código, barras o nombre único</option>
             </select>
 
             <button
@@ -184,9 +184,9 @@ export const ProductImportModal = ({
             ) : null}
           </div>
 
-          {hasBlockingErrors ? (
+          {hasImportErrors ? (
             <div className="ui-error-state">
-              Corregí las filas con error antes de confirmar la importación. No se crearán productos hasta que el archivo esté limpio.
+              Las filas con error se omitirán. Podés importar las filas válidas y descargar el detalle para corregir el resto.
             </div>
           ) : null}
 

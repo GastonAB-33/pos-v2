@@ -1480,6 +1480,7 @@ export const PosPage = () => {
                     onSetQuantity={setCartItemQuantity}
                     onEdit={(item) => setEditingCartItemId(item.product_id)}
                     onRemove={removeFromCart}
+                    onOpenQuickProduct={() => setIsQuickProductModalOpen(true)}
                     onCheckout={() => setIsCheckoutModalOpen(true)}
                   />
                 </>

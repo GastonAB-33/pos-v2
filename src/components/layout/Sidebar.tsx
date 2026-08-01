@@ -142,11 +142,14 @@ export const Sidebar = () => {
     }
 
     posUrl.searchParams.set("view", "browser");
-    const opened = window.open(posUrl.toString(), "_blank", "noopener,noreferrer");
+    const opened = window.open(posUrl.toString(), "_blank");
     if (!opened) {
       navigate(`${posUrl.pathname}${posUrl.search}`);
       closeDrawerAfterNavigation();
+      return;
     }
+
+    opened.opener = null;
   };
 
   const isItemActive = (to: string) =>
