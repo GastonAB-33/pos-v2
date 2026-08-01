@@ -262,7 +262,7 @@ const rowSchema = z
     cost_price: z.number().min(0, "Costo >= 0"),
     profit_percent: z.number().min(0, "Ganancia >= 0"),
     vat_percent: z.number().min(0, "IVA >= 0"),
-    stock_current: z.number().min(0, "Stock >= 0"),
+    stock_current: z.number(),
     is_favorite: z.boolean().nullable(),
     is_active: z.boolean(),
   });
