@@ -8,6 +8,8 @@ import { suppliersService } from "@/services/suppliers.service";
 import type { Product, ProductBarcode, Purchase, PurchaseItem, Supplier } from "@/types/entities";
 import type { ProductFormModalValues } from "@/modules/productos/types/product.types";
 import type { PurchaseCheckoutValues } from "@/modules/compras/schemas/purchase-checkout.schema";
+import type { SupplierFormValues } from "@/modules/proveedores/schemas/supplier-form.schema";
+import { toSupplierServiceInput } from "@/modules/proveedores/utils/supplier-input";
 
 interface PurchaseCartItem {
   product_id: string;
@@ -365,6 +367,39 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       .map((item) => item.product);
   };
 
+  const addProductByBarcode = async (
+    rawBarcode: string
+  ): Promise<{ ok: boolean; product?: Product; error?: string }> => {
+    if (!tenantId) return { ok: false, error: "No hay un comercio activo" };
+
+    const barcode = normalizeBarcode(rawBarcode);
+    if (!barcode) return { ok: false, error: "Ingresa un codigo de barras" };
+
+    const barcodeRow =
+      productBarcodes.find(
+        (row) => normalizeBarcode(row.barcode) === barcode && row.is_primary
+      ) ?? productBarcodes.find((row) => normalizeBarcode(row.barcode) === barcode);
+
+    let product = barcodeRow
+      ? products.find((candidate) => candidate.id === barcodeRow.product_id) ?? null
+      : products.find((candidate) => normalizeBarcode(candidate.code) === barcode) ?? null;
+
+    if (!product) {
+      try {
+        product = await productsService.getByBarcode(tenantId, barcode);
+      } catch {
+        return { ok: false, error: "No se pudo consultar el codigo de barras" };
+      }
+    }
+
+    if (!product || !product.is_active) {
+      return { ok: false, error: `No se encontro un producto activo para ${barcode}` };
+    }
+
+    addProductToCart(product);
+    return { ok: true, product };
+  };
+
   const createProductAndAddToCart = async (values: ProductFormModalValues): Promise<Product | null> => {
     if (!tenantId) return null;
 
@@ -415,6 +450,27 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     }
   };
 
+  const createSupplier = async (values: SupplierFormValues): Promise<Supplier | null> => {
+    if (!tenantId) return null;
+
+    setIsSubmitting(true);
+    try {
+      const created = await suppliersService.create(tenantId, toSupplierServiceInput(values));
+      setSuppliers((current) =>
+        [created, ...current.filter((supplier) => supplier.id !== created.id)].sort((a, b) =>
+          a.name.localeCompare(b.name)
+        )
+      );
+      setFeedback({ type: "success", message: `Proveedor ${created.name} creado` });
+      return created;
+    } catch {
+      setFeedback({ type: "error", message: "No se pudo crear el proveedor" });
+      return null;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return {
     products: filteredProducts,
     allProducts: products,
@@ -433,6 +489,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     clearFeedback,
     reload: loadData,
     addProductToCart,
+    addProductByBarcode,
     setItemQuantity,
     setItemUnitCost,
     removeItem,
@@ -440,5 +497,6 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     confirmPurchase,
     findPotentialDuplicateProducts,
     createProductAndAddToCart,
+    createSupplier,
   };
 };

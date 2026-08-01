@@ -235,7 +235,7 @@ begin
       'amount_decimals', 2,
       'ean13_enabled', true
     ),
-    '{"default_theme": "light", "accent_color": "#6054e8", "display_name": "POS V2", "density": "standard"}'::jsonb,
+    '{"default_theme": "light", "accent_color": "#0056b3", "display_name": "POS V2", "density": "standard"}'::jsonb,
     '{"show_dev_flags": false, "data_provider": "supabase", "version": "1.0.0", "enable_mock_auth_bypass": false, "allow_placeholder_export_import": false, "mercado_pago": {"enabled": true, "mode": "mock", "access_token": "", "public_key": "", "force_unavailable": false}}'::jsonb
   )
   on conflict (tenant_id) do update

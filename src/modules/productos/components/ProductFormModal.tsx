@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEv
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { VoiceDictationButton } from "@/components/form/VoiceDictationButton";
 import { ProductImageEditorModal } from "@/modules/productos/components/ProductImageEditorModal";
 import {
@@ -459,9 +460,7 @@ export const ProductFormModal = ({
               Cálculo automático en vivo. Guardado solo con el botón "Guardar".
             </p>
           </div>
-          <button type="button" className="ui-btn-ghost" onClick={onClose} disabled={disabled}>
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar producto" onClick={onClose} disabled={disabled} />
         </div>
 
         <form className="space-y-6" onSubmit={handleSubmit(handleFormSubmit)} onKeyDown={handlePreventEnterSubmit}>

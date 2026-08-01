@@ -76,7 +76,7 @@ export const MediosPagoPage = () => {
     return (
       <PagePlaceholder
         title="Medios de pago"
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }

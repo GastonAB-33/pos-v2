@@ -5,16 +5,16 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"DM Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
-        mono: ['"DM Mono"', "ui-monospace", "SFMono-Regular", "monospace"],
+        sans: ['"Hanken Grotesk"', "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ['"JetBrains Mono"', "ui-monospace", "SFMono-Regular", "monospace"],
       },
       colors: {
         brand: {
-          50: "#f2efff",
-          100: "#e6dfff",
-          500: "#7c6af7",
-          600: "#6958e8",
-          700: "#5848d2",
+          50: "#eef6ff",
+          100: "#d9ebff",
+          500: "#0874d1",
+          600: "#0056b3",
+          700: "#00458f",
         },
       },
       borderRadius: {

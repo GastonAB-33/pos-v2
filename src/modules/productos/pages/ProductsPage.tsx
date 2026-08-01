@@ -42,7 +42,7 @@ export const ProductsPage = () => {
   );
 
   if (!tenantId) {
-    return <section className="ui-panel">No hay tenant activo para operar el módulo.</section>;
+    return <section className="ui-panel">No hay un comercio activo.</section>;
   }
 
   if (!canReadProductos) {
@@ -55,11 +55,12 @@ export const ProductsPage = () => {
   };
 
   return (
-    <section className="ui-panel space-y-4">
+    <section className="ui-panel operational-page product-catalog-page space-y-4">
       <ProductFilters
           canWrite={canWriteProductos}
           loading={products.isLoading || products.isSubmitting}
           selectedCount={selectedCount}
+          filteredCount={products.filteredProducts.length}
           filters={products.filters}
           categories={products.categoryOptions}
           subcategories={products.subcategoryOptions}
@@ -85,6 +86,8 @@ export const ProductsPage = () => {
             if (!ok) return;
             void products.deleteSelected();
           }}
+          onSelectAllFiltered={() => products.toggleSelectAllVisible(true)}
+          onClearSelection={() => products.setSelectedIds([])}
       />
 
       {products.feedback ? (

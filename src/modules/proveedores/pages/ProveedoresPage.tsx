@@ -79,7 +79,7 @@ export const ProveedoresPage = () => {
     return (
       <PagePlaceholder
         title="Proveedores"
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -94,7 +94,7 @@ export const ProveedoresPage = () => {
   }
 
   return (
-    <PagePlaceholder title="Proveedores" description="CRUD funcional de proveedores">
+    <PagePlaceholder title="Proveedores" description="Datos de contacto y compras por proveedor">
       <div className="space-y-4">
         <SuppliersToolbar
           canWrite={canWriteSuppliers}

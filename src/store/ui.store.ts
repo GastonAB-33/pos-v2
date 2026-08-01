@@ -60,7 +60,7 @@ export const useUiStore = create<UiStore>()(
       sidebarOpen: true,
       theme: getInitialTheme(),
       density: "standard",
-      accentColor: "#6054e8",
+      accentColor: "#0056b3",
       toasts: [],
 
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -72,7 +72,7 @@ export const useUiStore = create<UiStore>()(
         set({
           accentColor: /^#[0-9a-f]{6}$/i.test(color.trim())
             ? color.trim()
-            : "#6054e8",
+            : "#0056b3",
         }),
       toggleTheme: () =>
         set((state) => ({

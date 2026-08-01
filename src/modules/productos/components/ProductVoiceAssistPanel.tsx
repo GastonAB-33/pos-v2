@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { productVoiceService, type ProductVoiceAnalyzeResult } from "@/services/ia/product-voice.service";
 import { useVoiceDictation } from "@/modules/productos/hooks/useVoiceDictation";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import type { ProductFormValues } from "@/modules/productos/schemas/product-form.schema";
 import {
   computePricingForward,
@@ -111,9 +112,7 @@ export const ProductVoiceAssistPanel = ({
             La IA sugiere datos. Podes editarlos antes de guardar.
           </p>
         </div>
-        <button type="button" onClick={onClose} className="ui-btn-ghost" disabled={disabled || isRecording || isAnalyzing}>
-          Cerrar
-        </button>
+        <ModalCloseButton label="Cerrar asistente de voz" onClick={onClose} disabled={disabled || isRecording || isAnalyzing} />
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[360px_1fr]">

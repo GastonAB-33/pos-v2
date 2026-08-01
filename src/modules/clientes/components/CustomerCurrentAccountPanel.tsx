@@ -3,6 +3,8 @@ import { CurrentAccountAdjustmentModal } from "@/modules/clientes/components/Cur
 import { CurrentAccountMovementsTable } from "@/modules/clientes/components/CurrentAccountMovementsTable";
 import { CurrentAccountPaymentModal } from "@/modules/clientes/components/CurrentAccountPaymentModal";
 import { useState } from "react";
+import { RefreshCw, X } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 import type { Customer } from "@/types/entities";
 
 interface CustomerCurrentAccountPanelProps {
@@ -44,7 +46,6 @@ export const CustomerCurrentAccountPanel = ({
     isLoading,
     isSubmitting,
     hasOpenCashSession,
-    openCashSessionId,
     feedback,
     clearFeedback,
     reload,
@@ -86,37 +87,40 @@ export const CustomerCurrentAccountPanel = ({
   const canUpdatePricingRule = canWrite && Boolean(userId);
 
   return (
-    <section className="space-y-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <section className="current-account-detail ui-card space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-base font-semibold text-slate-900">Cuenta corriente</h3>
           <p className="text-sm text-slate-600">{customer.full_name}</p>
-          <p className="text-sm font-medium text-slate-900">Saldo actual: {currency.format(balance)}</p>
-          <p className="text-sm font-medium text-brand-700">
-            Saldo actualizado: {currency.format(accountSummary.updatedBalance)}
-          </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
+          <IconButton
+            icon={RefreshCw}
+            label="Recargar cuenta corriente"
             onClick={() => {
               clearFeedback();
               void reload();
             }}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            disabled={isLoading || isSubmitting}
-          >
-            Recargar
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            Cerrar
-          </button>
+            loading={isLoading}
+            disabled={isSubmitting}
+          />
+          <IconButton icon={X} label="Cerrar cuenta corriente" onClick={onClose} />
         </div>
+      </div>
+
+      <div className="current-account-balance-grid">
+        <article>
+          <p>Deuda original</p>
+          <strong>{currency.format(balance)}</strong>
+        </article>
+        <article className="current-account-balance-grid__updated">
+          <p>Saldo actualizado</p>
+          <strong>{currency.format(accountSummary.updatedBalance)}</strong>
+          <span title="El recargo o actualizacion vigente reemplaza al anterior; no se suma varias veces.">
+            Regla vigente
+          </span>
+        </article>
       </div>
 
       {feedback ? <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>{feedback.message}</div> : null}
@@ -129,8 +133,8 @@ export const CustomerCurrentAccountPanel = ({
           No hay caja abierta para el usuario actual. Puedes consultar movimientos y actualizar la regla de saldo,
           pero para registrar pagos debes abrir caja.
         </div>
-      ) : openCashSessionId ? (
-        <p className="text-xs text-slate-500">Caja activa para movimientos contables: {openCashSessionId}</p>
+      ) : hasOpenCashSession ? (
+        <p className="text-xs text-emerald-700">Caja abierta para registrar movimientos</p>
       ) : null}
 
       {canWrite ? (
@@ -157,7 +161,7 @@ export const CustomerCurrentAccountPanel = ({
       )}
 
       {isLoading ? (
-        <div className="rounded-lg border border-slate-200 p-6 text-center text-sm text-slate-600">
+        <div className="ui-loading">
           Cargando movimientos...
         </div>
       ) : (

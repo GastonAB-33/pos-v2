@@ -1,5 +1,6 @@
 ﻿import { ProductActions } from "@/modules/productos/components/ProductActions";
 import type { ProductViewModel } from "@/modules/productos/types/product.types";
+import { CheckCircle2, CircleX, Star } from "lucide-react";
 
 interface ProductTableProps {
   products: ProductViewModel[];
@@ -103,15 +104,7 @@ export const ProductTable = ({
                       className="inline-flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                       style={{ color: isFavorite ? "var(--ui-accent)" : "var(--ui-muted)" }}
                     >
-                      <svg
-                        viewBox="0 0 24 24"
-                        className="h-5 w-5"
-                        fill={isFavorite ? "currentColor" : "none"}
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                      >
-                        <path d="m12 3.8 2.57 5.21 5.75.84-4.16 4.06.98 5.73L12 16.98 6.86 19.64l.98-5.73L3.68 9.85l5.75-.84L12 3.8z" />
-                      </svg>
+                      <Star aria-hidden="true" className="h-4 w-4" fill={isFavorite ? "currentColor" : "none"} />
                     </button>
                     <span
                       aria-label={product.activo ? "Producto activo" : "Producto inactivo"}
@@ -120,13 +113,9 @@ export const ProductTable = ({
                       style={{ color: product.activo ? "var(--ui-success)" : "var(--ui-danger)" }}
                     >
                       {product.activo ? (
-                        <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M3 8.3 6.3 11.2 13 4.7" />
-                        </svg>
+                        <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5" />
                       ) : (
-                        <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="m4.2 4.2 7.6 7.6M11.8 4.2l-7.6 7.6" />
-                        </svg>
+                        <CircleX aria-hidden="true" className="h-3.5 w-3.5" />
                       )}
                     </span>
                   </div>

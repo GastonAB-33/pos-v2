@@ -4,6 +4,8 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { Barcode, Pencil, Power, Trash2 } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 import type { Promotion } from "@/types/entities";
 import type { PromotionWithDetails } from "@/services/promotions.service";
 
@@ -119,26 +121,10 @@ export const PromotionsTable = ({
 
         return (
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => onEdit(promotion)} className="ui-btn-ghost px-2 py-1 text-xs">
-              Editar
-            </button>
-            <button type="button" onClick={() => onBarcode(promotion)} className="ui-btn-ghost px-2 py-1 text-xs">
-              Barcode
-            </button>
-            <button
-              type="button"
-              onClick={() => onToggleActive(promotion)}
-              className="ui-btn-ghost px-2 py-1 text-xs"
-            >
-              {promotion.is_active ? "Desactivar" : "Activar"}
-            </button>
-            <button
-              type="button"
-              onClick={() => onDelete(promotion)}
-              className="ui-btn-ghost border-red-300 px-2 py-1 text-xs text-red-700"
-            >
-              Eliminar
-            </button>
+            <IconButton size="sm" icon={Pencil} label="Editar promoción" onClick={() => onEdit(promotion)} />
+            <IconButton size="sm" icon={Barcode} label="Generar código de barras" onClick={() => onBarcode(promotion)} />
+            <IconButton size="sm" icon={Power} label={promotion.is_active ? "Desactivar promoción" : "Activar promoción"} onClick={() => onToggleActive(promotion)} />
+            <IconButton size="sm" icon={Trash2} label="Eliminar promoción" tone="danger" onClick={() => onDelete(promotion)} />
           </div>
         );
       },

@@ -2,6 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import type {
   CurrentAccountSummary,
   CurrentAccountDebtSaleOption,
@@ -167,9 +168,7 @@ export const CurrentAccountAdjustmentModal = ({
               Define una regla global para mostrar el saldo actualizado sin crear movimientos contables.
             </p>
           </div>
-          <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={onClose} disabled={busy}>
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar ajuste" onClick={onClose} disabled={busy} />
         </div>
 
         {!debtSales.length ? (

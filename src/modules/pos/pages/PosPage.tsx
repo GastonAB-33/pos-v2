@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { IconButton } from "@/components/ui/IconButton";
+import { Camera, RefreshCw, ShoppingCart } from "lucide-react";
 import { useToast } from "@/components/ui/useToast";
 import { routePaths } from "@/config/routes";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -341,7 +343,7 @@ export const PosPage = () => {
       setCashDefaultOpeningAmount(0);
       setCashGateFeedback(
         user
-          ? "Tu sesion no esta vinculada a un usuario del tenant. Inicia sesion nuevamente o verifica el usuario."
+          ? "Tu sesión no está vinculada a un usuario del comercio. Inicia sesión nuevamente."
           : null
       );
       setHasResolvedCashGate(true);
@@ -1234,7 +1236,7 @@ export const PosPage = () => {
     return (
       <PagePlaceholder
         title="POS"
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -1311,16 +1313,15 @@ export const PosPage = () => {
                 }, 0);
               }}
             />
-            <button
-              type="button"
+            <IconButton
+              icon={RefreshCw}
+              label="Sincronizar punto de venta"
               onClick={() => {
                 void handleSynchronize();
               }}
-              className="ui-btn-ghost"
+              loading={isManualSyncing || isSyncing}
               disabled={isManualSyncing || isSubmitting}
-            >
-              {isManualSyncing || isSyncing ? "Sincronizando..." : "Sincronizar"}
-            </button>
+            />
             <button
               type="button"
               className="ui-btn-ghost"
@@ -1329,14 +1330,12 @@ export const PosPage = () => {
             >
               Producto rapido
             </button>
-            <button
-              type="button"
-              className="ui-btn-ghost"
+            <IconButton
+              icon={Camera}
+              label="Escanear con cámara"
               onClick={() => setIsCameraScannerOpen(true)}
               disabled={isSubmitting || !canWritePos || isCashGateBlocking}
-            >
-              Escanear camara
-            </button>
+            />
             {isInstallSupported && canInstall ? (
               <button
                 type="button"
@@ -1349,14 +1348,12 @@ export const PosPage = () => {
                 {isInstalling ? "Instalando..." : "Instalar app"}
               </button>
             ) : null}
-            <button
-              type="button"
+            <IconButton
+              icon={ShoppingCart}
+              label="Limpiar carrito"
               onClick={clearCart}
-              className="ui-btn-ghost"
               disabled={isSubmitting || !canWritePos || isCashGateBlocking}
-            >
-              Limpiar carrito
-            </button>
+            />
             <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2">
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-sm font-semibold text-white">
                 {operatorInitials}
@@ -1365,7 +1362,7 @@ export const PosPage = () => {
                 <p className="truncate text-sm font-semibold text-slate-900">
                   {user?.fullName ?? "Operador"}
                 </p>
-                <p className="truncate text-xs text-slate-500">{user?.email ?? "sin-sesion@local"}</p>
+                <p className="truncate text-xs text-slate-500">Operador de caja</p>
               </div>
             </div>
           </div>
@@ -1388,8 +1385,8 @@ export const PosPage = () => {
           {isCashGateResolving && !openCashSessionId
             ? "Validando usuario y caja..."
             : openCashSessionId
-              ? `Caja abierta para este usuario: ${openCashSessionId}`
-              : "Caja pendiente de apertura. El POS queda bloqueado para registrar movimientos contables."}
+              ? "Caja abierta"
+              : "Abre la caja para comenzar a vender."}
         </p>
         {isCashGateResolving && !openCashSessionId ? (
           <div className="inline-flex items-center gap-2 text-xs text-slate-500">
@@ -1483,6 +1480,7 @@ export const PosPage = () => {
                     onSetQuantity={setCartItemQuantity}
                     onEdit={(item) => setEditingCartItemId(item.product_id)}
                     onRemove={removeFromCart}
+                    onOpenQuickProduct={() => setIsQuickProductModalOpen(true)}
                     onCheckout={() => setIsCheckoutModalOpen(true)}
                   />
                 </>
@@ -1490,16 +1488,15 @@ export const PosPage = () => {
                 <section className="pos-surface space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <h2 className="text-lg font-semibold text-slate-900">Comprobantes recientes</h2>
-                    <button
-                      type="button"
-                      className="ui-btn-ghost px-3 py-1.5 text-xs"
+                    <IconButton
+                      size="sm"
+                      icon={RefreshCw}
+                      label="Actualizar comprobantes"
                       onClick={() => {
                         void loadRecentReceipts();
                       }}
-                      disabled={isLoadingReceipts}
-                    >
-                      {isLoadingReceipts ? "Actualizando..." : "Actualizar"}
-                    </button>
+                      loading={isLoadingReceipts}
+                    />
                   </div>
 
                   {isLoadingReceipts ? (

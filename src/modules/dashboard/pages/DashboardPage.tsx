@@ -1,3 +1,5 @@
+import { RefreshCw } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/UiStates";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -33,18 +35,15 @@ export const DashboardPage = () => {
       description="KPIs y visualizaciones operativas en tiempo real"
     >
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-slate-600">Panel consolidado de ventas, stock, caja, compras y clientes</p>
-          <button
-            type="button"
+        <div className="flex justify-end">
+          <IconButton
+            icon={RefreshCw}
+            label="Recargar estadísticas"
             onClick={() => {
               void reload();
             }}
-            className="ui-btn-ghost"
-            disabled={isLoading}
-          >
-            Recargar
-          </button>
+            loading={isLoading}
+          />
         </div>
 
         {error ? <ErrorState message={error} /> : null}

@@ -1,5 +1,6 @@
 ﻿import { useEffect, useRef } from "react";
 import JsBarcode from "jsbarcode";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import type { ProductViewModel } from "@/modules/productos/types/product.types";
 
 interface BarcodeGeneratorModalProps {
@@ -56,9 +57,7 @@ export const BarcodeGeneratorModal = ({ open, product, onClose }: BarcodeGenerat
               {product.nombre} - {product.codigoProducto}
             </p>
           </div>
-          <button type="button" className="ui-btn-ghost" onClick={onClose}>
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar código de barras" onClick={onClose} />
         </div>
 
         {barcodeValue ? (

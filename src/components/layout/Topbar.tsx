@@ -1,9 +1,11 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { Bell, CircleEllipsis, Headphones, Menu, Newspaper, RefreshCw, UserRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/useToast";
 import { env } from "@/config/env";
 import { routePaths } from "@/config/routes";
 import { useAuthStore } from "@/features/auth/store/auth.store";
+import { publicChangelogEntries } from "@/features/changelog/public-changelog";
 import { useOffline } from "@/features/offline/hooks/useOffline";
 import { usePwa } from "@/features/pwa/hooks/usePwa";
 import { supportCenterStorage, type SupportTicket } from "@/features/support/support-center.storage";
@@ -16,7 +18,7 @@ import { useUiStore } from "@/store/ui.store";
 import type { Product, UserRecord } from "@/types/entities";
 import { storageKeys } from "@/utils/local-storage";
 
-type TopbarPanel = "support" | "tasks" | "chat" | "notifications" | "user" | null;
+type TopbarPanel = "support" | "tasks" | "chat" | "notifications" | "user" | "more" | "changelog" | null;
 type SupportType = "sugerencia" | "falla";
 type TaskStatus = "pendiente" | "completada";
 
@@ -228,7 +230,7 @@ export const Topbar = () => {
         ? "ui-badge ui-badge--success"
         : "ui-badge ui-badge--danger";
 
-  const tenantName = tenant?.tradeName ?? tenantId ?? "Sin tenant";
+  const tenantName = tenant?.tradeName ?? "Sin comercio";
   const currentUserId = user?.id ?? "";
   const isSupportProfile = isSupportOperator(user);
   const currentUserLabel = getDisplayName({
@@ -739,12 +741,12 @@ export const Topbar = () => {
           aria-label="Abrir menu"
           onClick={toggleSidebar}
         >
-          <span aria-hidden="true">☰</span>
+          <Menu aria-hidden="true" size={19} />
         </button>
 
         <div className="min-w-0">
           <p className="truncate text-[15px] font-semibold text-slate-900 capitalize">{formattedDate}</p>
-          <p className="truncate text-xs text-slate-500">{currentTitle} · Tenant: {tenantName}</p>
+          <p className="truncate text-xs text-slate-500">{currentTitle} · {tenantName}</p>
           {lastSyncMessage ? (
             <p className={`truncate text-[11px] ${lastSyncError ? "text-red-600" : "text-slate-500"}`}>{lastSyncMessage}</p>
           ) : null}
@@ -754,7 +756,7 @@ export const Topbar = () => {
       <div className="app-topbar-actions flex items-center gap-2 md:gap-3">
         {supportWhatsappUrl ? (
           <a
-            className="ui-btn-primary text-xs"
+            className="ui-btn-primary app-topbar-support text-xs"
             href={supportWhatsappUrl}
             target="_blank"
             rel="noreferrer"
@@ -763,34 +765,97 @@ export const Topbar = () => {
           </a>
         ) : null}
 
-        <button type="button" className="ui-btn-ghost text-xs" onClick={() => togglePanel("support")}>
-          Soporte
+        <button type="button" className="ui-btn-ghost gap-1.5 text-xs" onClick={() => togglePanel("support")}>
+          <Headphones aria-hidden="true" size={15} />
+          <span>Soporte</span>
         </button>
 
-        <button type="button" className="ui-btn-ghost text-xs" onClick={() => togglePanel("tasks")}>
-          Tareas {pendingTasksCount > 0 ? `(${pendingTasksCount})` : ""}
+        <button type="button" className="ui-btn-ghost gap-1.5 text-xs" onClick={() => togglePanel("notifications")}>
+          <Bell aria-hidden="true" size={15} />
+          <span>Alertas {notificationCount > 0 ? `(${notificationCount})` : ""}</span>
         </button>
 
-        <button type="button" className="ui-btn-ghost text-xs" onClick={() => togglePanel("chat")}>
-          Chat {unreadChatCount > 0 ? `(${unreadChatCount})` : ""}
+        <button type="button" className="ui-btn-ghost gap-1.5 text-xs" onClick={() => togglePanel("more")}>
+          <CircleEllipsis aria-hidden="true" size={16} />
+          <span>Mas {pendingTasksCount + unreadChatCount > 0 ? `(${pendingTasksCount + unreadChatCount})` : ""}</span>
         </button>
 
-        <button type="button" className="ui-btn-ghost text-xs" onClick={() => togglePanel("notifications")}>
-          Notificaciones {notificationCount > 0 ? `(${notificationCount})` : ""}
-        </button>
-
-        <button type="button" className="ui-btn-ghost text-right" onClick={() => togglePanel("user")}>
-          <p className="text-sm font-medium text-slate-900">Testing user</p>
-          <p className="text-xs text-slate-500">{user?.email ?? "sin-sesion@local"}</p>
+        <button
+          type="button"
+          className="ui-btn-ghost app-topbar-user gap-2 text-right"
+          aria-label={`Opciones de ${currentUserLabel}`}
+          onClick={() => togglePanel("user")}
+        >
+          <UserRound aria-hidden="true" size={16} />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-medium text-slate-900">{currentUserLabel}</span>
+            <span className="block truncate text-xs text-slate-500">{user?.email ?? "sin-sesion@local"}</span>
+          </span>
         </button>
       </div>
+
+      {activePanel === "more" ? (
+        <div className="ui-card app-topbar-popover absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[280px] space-y-2">
+          <p className="ui-section-label">Herramientas</p>
+          <button type="button" className="ui-popover-action" onClick={() => togglePanel("tasks")}>
+            <span>Tareas del equipo</span>
+            {pendingTasksCount > 0 ? <span className="ui-badge ui-badge--warn">{pendingTasksCount}</span> : null}
+          </button>
+          <button type="button" className="ui-popover-action" onClick={() => togglePanel("chat")}>
+            <span>Chat interno</span>
+            {unreadChatCount > 0 ? <span className="ui-badge ui-badge--info">{unreadChatCount}</span> : null}
+          </button>
+          <button type="button" className="ui-popover-action" onClick={() => togglePanel("changelog")}>
+            <span className="inline-flex items-center gap-2">
+              <Newspaper aria-hidden="true" size={15} />
+              Novedades del sistema
+            </span>
+          </button>
+        </div>
+      ) : null}
+
+      {activePanel === "changelog" ? (
+        <div className="ui-card app-topbar-popover absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[460px] space-y-3">
+          <div>
+            <p className="ui-section-label">Actualizaciones</p>
+            <h2 className="mt-1 text-base font-semibold text-slate-900">Novedades del sistema</h2>
+          </div>
+
+          {publicChangelogEntries.length ? (
+            <div className="max-h-[420px] space-y-3 overflow-auto pr-1">
+              {publicChangelogEntries.map((entry) => (
+                <article key={entry.version} className="rounded-lg border border-slate-200 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-semibold text-slate-900">{entry.title}</h3>
+                    <span className="ui-badge ui-badge--info">v{entry.version}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Realizada el {new Date(entry.developedAt).toLocaleDateString("es-AR")}
+                    {entry.publishedAt
+                      ? ` | Publicada el ${new Date(entry.publishedAt).toLocaleDateString("es-AR")}`
+                      : ""}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-700">{entry.summary}</p>
+                  <ul className="mt-2 space-y-1 text-sm text-slate-600">
+                    {entry.changes.map((change) => (
+                      <li key={change}>• {change}</li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="ui-empty-state">Todavia no hay actualizaciones publicadas.</div>
+          )}
+        </div>
+      ) : null}
 
       {activePanel === "support" ? (
         <div className="ui-card absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[460px] space-y-3">
           <div>
             <p className="text-sm font-semibold text-slate-900">Soporte</p>
             <p className="text-xs text-slate-500">
-              Envia sugerencias o reportes de fallas con contexto automatico de tenant, usuario y horario.
+              Envía sugerencias o reportes de fallas con los datos necesarios para ayudarte.
             </p>
           </div>
 
@@ -855,7 +920,7 @@ export const Topbar = () => {
         <div className="ui-card absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[560px] space-y-3">
           <div>
             <p className="text-sm font-semibold text-slate-900">Tareas del equipo</p>
-            <p className="text-xs text-slate-500">Crea tareas y delegalas entre usuarios del tenant.</p>
+            <p className="text-xs text-slate-500">Crea tareas y delégalas entre usuarios del comercio.</p>
           </div>
 
           <div className="grid gap-2 md:grid-cols-2">
@@ -1128,6 +1193,7 @@ export const Topbar = () => {
               className="ui-btn-ghost text-xs"
               disabled={!isOnline || isSyncing || totalPendingCount === 0}
             >
+              <RefreshCw aria-hidden="true" className={isSyncing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
               {lastSyncError ? "Reintentar sync" : "Sincronizar"}
             </button>
 

@@ -1,4 +1,5 @@
 ﻿import { useMemo, useState } from "react";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import type {
   ProductImportErrorRow,
   ProductImportMode,
@@ -53,8 +54,8 @@ export const ProductImportModal = ({
   const [activeTab, setActiveTab] = useState<PreviewTab>("valid");
 
   const busy = loading || isParsing;
-  const hasBlockingErrors = (preview?.errorRows.length ?? 0) > 0;
-  const hasImportableRows = (preview?.validRows.length ?? 0) > 0 && !hasBlockingErrors;
+  const hasImportErrors = (preview?.errorRows.length ?? 0) > 0;
+  const hasImportableRows = (preview?.validRows.length ?? 0) > 0;
 
   const topErrors = useMemo(() => {
     if (!preview) return [];
@@ -74,9 +75,7 @@ export const ProductImportModal = ({
             <h3 className="text-base font-semibold text-slate-900">Importación masiva de productos (XLSX)</h3>
             <p className="text-xs text-slate-500">Nombre y categoría son obligatorios. Respeta el formato predefinido por columna.</p>
           </div>
-          <button type="button" className="ui-btn-ghost" onClick={onClose} disabled={busy}>
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar importación" onClick={onClose} disabled={busy} />
         </div>
 
         <div className="mt-4 space-y-4">
@@ -144,7 +143,7 @@ export const ProductImportModal = ({
               disabled={busy || !canWrite}
             >
               <option value="create_only">Modo: crear solo nuevos</option>
-              <option value="upsert">Modo: crear y actualizar por código / código de barras</option>
+              <option value="upsert">Modo: crear y actualizar por código, barras o nombre único</option>
             </select>
 
             <button
@@ -185,9 +184,9 @@ export const ProductImportModal = ({
             ) : null}
           </div>
 
-          {hasBlockingErrors ? (
+          {hasImportErrors ? (
             <div className="ui-error-state">
-              Corregí las filas con error antes de confirmar la importación. No se crearán productos hasta que el archivo esté limpio.
+              Las filas con error se omitirán. Podés importar las filas válidas y descargar el detalle para corregir el resto.
             </div>
           ) : null}
 

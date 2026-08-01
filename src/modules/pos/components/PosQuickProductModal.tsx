@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { PosQuickProductInput } from "@/modules/pos/hooks/usePosSale";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 
 interface PosQuickProductModalProps {
   open: boolean;
@@ -110,9 +111,7 @@ export const PosQuickProductModal = ({
             <h2 className="text-base font-semibold text-slate-900">Agregar producto rapido</h2>
             <p className="text-xs text-slate-500">Carga lo minimo para resolver la venta sin salir del POS.</p>
           </div>
-          <button type="button" className="ui-btn-ghost px-3 py-1.5 text-xs" onClick={onClose} disabled={isSubmitting}>
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar producto rápido" onClick={onClose} disabled={isSubmitting} />
         </div>
 
         <div className="space-y-4">

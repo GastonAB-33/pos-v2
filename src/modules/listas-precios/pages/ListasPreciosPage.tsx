@@ -84,7 +84,7 @@ export const ListasPreciosPage = () => {
     return (
       <PagePlaceholder
         title="Listas de precios"
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -101,7 +101,7 @@ export const ListasPreciosPage = () => {
   return (
     <PagePlaceholder
       title="Listas de precios"
-      description="Multiples listas por tenant, con modo porcentaje o precio fijo"
+      description="Listas con ajuste porcentual o precio fijo"
     >
       <div className="space-y-4">
         <PriceListsToolbar

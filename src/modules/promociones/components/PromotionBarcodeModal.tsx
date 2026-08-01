@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import JsBarcode from "jsbarcode";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { buildPromotionBarcode, type PromotionWithDetails } from "@/services/promotions.service";
 
 interface PromotionBarcodeModalProps {
@@ -50,9 +51,7 @@ export const PromotionBarcodeModal = ({ promotion, onClose }: PromotionBarcodeMo
             <h3 className="text-base font-semibold text-slate-900">Codigo de barras</h3>
             <p className="font-mono text-xs text-slate-500">{promotion.name} - {promotion.code}</p>
           </div>
-          <button type="button" className="ui-btn-ghost" onClick={onClose}>
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar código de barras" onClick={onClose} />
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-4">

@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { IconButton } from "@/components/ui/IconButton";
+import { Download, RefreshCw } from "lucide-react";
 import { ErrorState, LoadingState } from "@/components/ui/UiStates";
 import { useToast } from "@/components/ui/useToast";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -379,7 +381,7 @@ export const ReportesPage = () => {
     return (
       <PagePlaceholder
         title="Reportes"
-        description="No hay tenant activo para consultar reportes"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -405,22 +407,21 @@ export const ReportesPage = () => {
             {meta.currentAccountMovementsCount}
           </p>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="ui-btn-ghost"
+            <IconButton
+              icon={RefreshCw}
+              label="Recargar reportes"
               onClick={() => {
                 void reload();
               }}
-              disabled={isLoading}
-            >
-              Recargar
-            </button>
+              loading={isLoading}
+            />
             <button
               type="button"
               className="ui-btn-primary"
               onClick={handleExport}
               disabled={!activeReportStats.canExport || isLoading}
             >
+              <Download aria-hidden="true" className="h-4 w-4" />
               Exportar CSV
             </button>
           </div>

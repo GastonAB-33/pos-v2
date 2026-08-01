@@ -89,7 +89,7 @@ export const PromocionesPage = () => {
     return (
       <PagePlaceholder
         title="Promociones"
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }

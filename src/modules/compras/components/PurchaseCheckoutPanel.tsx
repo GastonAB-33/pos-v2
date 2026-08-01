@@ -1,5 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import { Plus } from "lucide-react";
+import { useEffect } from "react";
 import type { Supplier } from "@/types/entities";
 import {
   purchaseCheckoutSchema,
@@ -10,6 +12,8 @@ interface PurchaseCheckoutPanelProps {
   suppliers: Supplier[];
   canWrite: boolean;
   disabled?: boolean;
+  preferredSupplierId?: string;
+  onCreateSupplier: () => void;
   onSubmit: (values: PurchaseCheckoutValues) => Promise<boolean>;
 }
 
@@ -17,12 +21,15 @@ export const PurchaseCheckoutPanel = ({
   suppliers,
   canWrite,
   disabled,
+  preferredSupplierId,
+  onCreateSupplier,
   onSubmit,
 }: PurchaseCheckoutPanelProps) => {
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<PurchaseCheckoutValues>({
     resolver: zodResolver(purchaseCheckoutSchema),
@@ -31,6 +38,12 @@ export const PurchaseCheckoutPanel = ({
       notes: "",
     },
   });
+
+  useEffect(() => {
+    if (preferredSupplierId) {
+      setValue("supplierId", preferredSupplierId, { shouldValidate: true });
+    }
+  }, [preferredSupplierId, setValue]);
 
   const submit = async (values: PurchaseCheckoutValues) => {
     const saved = await onSubmit(values);
@@ -48,7 +61,18 @@ export const PurchaseCheckoutPanel = ({
 
       <form className="grid gap-3" onSubmit={handleSubmit(submit)}>
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Proveedor</label>
+          <div className="mb-1 flex items-center justify-between gap-3">
+            <label className="block text-sm font-medium text-slate-700">Proveedor</label>
+            <button
+              type="button"
+              className="ui-btn-ghost px-2 py-1 text-xs"
+              onClick={onCreateSupplier}
+              disabled={disabled || !canWrite}
+            >
+              <Plus aria-hidden="true" className="h-3.5 w-3.5" />
+              Nuevo proveedor
+            </button>
+          </div>
           <select
             {...register("supplierId")}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"

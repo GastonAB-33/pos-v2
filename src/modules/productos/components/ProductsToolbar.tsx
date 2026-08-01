@@ -1,3 +1,6 @@
+import { Download, FileSpreadsheet, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
+
 export interface ProductFilters {
   search: string;
   category: string;
@@ -55,14 +58,12 @@ export const ProductsToolbar = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
+          <IconButton
+            icon={RefreshCw}
+            label="Recargar productos"
             onClick={onReload}
-            className="ui-btn-ghost"
-            disabled={loading}
-          >
-            Recargar
-          </button>
+            loading={loading}
+          />
 
           <button
             type="button"
@@ -70,6 +71,7 @@ export const ProductsToolbar = ({
             className="ui-btn-ghost"
             disabled={loading || !canWrite}
           >
+            <FileSpreadsheet aria-hidden="true" className="h-4 w-4" />
             Plantilla XLSX
           </button>
 
@@ -79,6 +81,7 @@ export const ProductsToolbar = ({
             className="ui-btn-ghost"
             disabled={loading || !canWrite}
           >
+            <Upload aria-hidden="true" className="h-4 w-4" />
             Importar XLSX
           </button>
 
@@ -101,6 +104,7 @@ export const ProductsToolbar = ({
             className="ui-btn-ghost"
             disabled={loading || !hasRows}
           >
+            <Download aria-hidden="true" className="h-4 w-4" />
             Exportar XLSX
           </button>
 
@@ -110,6 +114,7 @@ export const ProductsToolbar = ({
             className="ui-btn-ghost"
             disabled={loading || !hasRows}
           >
+            <Download aria-hidden="true" className="h-4 w-4" />
             Exportar CSV
           </button>
 
@@ -120,6 +125,7 @@ export const ProductsToolbar = ({
               className="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700"
               disabled={loading || !canWrite}
             >
+              <Trash2 aria-hidden="true" className="h-4 w-4" />
               Eliminar seleccionados ({selectedCount})
             </button>
           ) : null}
@@ -130,6 +136,7 @@ export const ProductsToolbar = ({
             className="ui-btn-primary"
             disabled={!canWrite || loading}
           >
+            <Plus aria-hidden="true" className="h-4 w-4" />
             Nuevo producto
           </button>
         </div>

@@ -1,3 +1,6 @@
+import { Plus, RefreshCw } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
+
 interface SuppliersToolbarProps {
   canWrite: boolean;
   loading: boolean;
@@ -16,34 +19,28 @@ export const SuppliersToolbar = ({
   onReload,
 }: SuppliersToolbarProps) => {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="workspace-toolbar workspace-toolbar--inline">
       <div className="grid gap-1">
-        <h2 className="text-lg font-semibold text-slate-900">Proveedores</h2>
-        <p className="text-sm text-slate-500">CRUD base de proveedores</p>
+        <p className="ui-section-label">Abastecimiento</p>
+        <h2 className="mt-1 text-lg font-semibold text-slate-900">Proveedores</h2>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="workspace-toolbar__actions">
         <input
           type="search"
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="Buscar por nombre, telefono o email"
-          className="w-72 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="ui-input w-72"
         />
-        <button
-          type="button"
-          onClick={onReload}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          disabled={loading}
-        >
-          Recargar
-        </button>
+        <IconButton icon={RefreshCw} label="Recargar proveedores" onClick={onReload} loading={loading} />
         <button
           type="button"
           onClick={onCreate}
-          className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="ui-btn-primary"
           disabled={!canWrite || loading}
         >
+          <Plus aria-hidden="true" className="h-4 w-4" />
           Nuevo proveedor
         </button>
       </div>

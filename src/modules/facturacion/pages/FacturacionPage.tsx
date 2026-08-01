@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { RefreshCw } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -55,7 +57,7 @@ export const FacturacionPage = () => {
     return (
       <PagePlaceholder
         title="Facturacion"
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -81,17 +83,16 @@ export const FacturacionPage = () => {
           </p>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="ui-btn-ghost"
+            <IconButton
+              icon={RefreshCw}
+              label="Recargar facturación"
               onClick={() => {
                 clearFeedback();
                 void reload();
               }}
-              disabled={isLoading || isSubmitting}
-            >
-              Recargar
-            </button>
+              loading={isLoading}
+              disabled={isSubmitting}
+            />
 
             <button
               type="button"
