@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import type { PropsWithChildren } from "react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { settingsService } from "@/services/settings.service";
-import { useUiStore } from "@/store/ui.store";
+import { useUiStore, type UiFontSize } from "@/store/ui.store";
 
 const hexToSoftRgba = (hex: string): string => {
   const normalized = hex.trim();
@@ -21,13 +21,22 @@ const normalizeLegacyAccent = (color: string): string => {
   return normalized === "#6054e8" || normalized === "#7c6af7" ? "#0056b3" : color;
 };
 
+const fontSizePixels: Record<UiFontSize, string> = {
+  compact: "14px",
+  normal: "16px",
+  large: "18px",
+  "extra-large": "20px",
+};
+
 export const ThemeProvider = ({ children }: PropsWithChildren) => {
   const tenantId = useAuthStore((state) => state.tenantId);
   const theme = useUiStore((state) => state.theme);
   const density = useUiStore((state) => state.density);
+  const fontSize = useUiStore((state) => state.fontSize);
   const accentColor = useUiStore((state) => state.accentColor);
   const setTheme = useUiStore((state) => state.setTheme);
   const setDensity = useUiStore((state) => state.setDensity);
+  const setFontSize = useUiStore((state) => state.setFontSize);
   const setAccentColor = useUiStore((state) => state.setAccentColor);
 
   useEffect(() => {
@@ -42,6 +51,9 @@ export const ThemeProvider = ({ children }: PropsWithChildren) => {
 
         setTheme(tenantSettings.apariencia.default_theme);
         setDensity(tenantSettings.apariencia.density);
+        if (tenantSettings.apariencia.font_size) {
+          setFontSize(tenantSettings.apariencia.font_size);
+        }
         setAccentColor(normalizeLegacyAccent(tenantSettings.apariencia.accent_color));
       } catch {
         // Mantener theme actual si falla carga de settings.
@@ -53,13 +65,15 @@ export const ThemeProvider = ({ children }: PropsWithChildren) => {
     return () => {
       active = false;
     };
-  }, [setAccentColor, setDensity, setTheme, tenantId]);
+  }, [setAccentColor, setDensity, setFontSize, setTheme, tenantId]);
 
   useEffect(() => {
     const root = document.documentElement;
     root.classList.remove("light", "dark");
     root.classList.add(theme);
     root.classList.toggle("ui-density-compact", density === "compact");
+    root.setAttribute("data-ui-fontsize", fontSize);
+    root.style.fontSize = fontSizePixels[fontSize] ?? "16px";
     root.style.colorScheme = theme;
     root.style.setProperty("--ui-accent", accentColor);
     root.style.setProperty("--ui-accent-soft", hexToSoftRgba(accentColor));
@@ -67,7 +81,7 @@ export const ThemeProvider = ({ children }: PropsWithChildren) => {
       "--ui-accent-strong",
       `color-mix(in srgb, ${accentColor} 82%, #000000)`,
     );
-  }, [theme, density, accentColor]);
+  }, [theme, density, fontSize, accentColor]);
 
   return <>{children}</>;
 };

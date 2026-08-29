@@ -101,25 +101,33 @@ export const useConfiguracionModule = (
 
     try {
       const [resolvedSettings, customerRows, paymentMethodRows] = await Promise.all([
-        settingsService.getByTenant(tenantId),
-        customersService.getAllByTenant(tenantId),
-        paymentMethodsService.getActiveByTenant(tenantId),
+        settingsService.getByTenant(tenantId).catch(() => null),
+        customersService.getAllByTenant(tenantId).catch(() => []),
+        paymentMethodsService.getActiveByTenant(tenantId).catch(() => []),
       ]);
 
-      setSettings(resolvedSettings);
-      setDraft(resolvedSettings);
+      if (resolvedSettings) {
+        setSettings(resolvedSettings);
+        setDraft(resolvedSettings);
+      } else {
+        // Cargar fallback de configuración básica por si falla backend o RLS
+        const fallbackSettings = await settingsService.getByTenant(tenantId);
+        setSettings(fallbackSettings);
+        setDraft(fallbackSettings);
+      }
+
       setCustomers(
-        customerRows
+        (customerRows ?? [])
           .filter((customer) => customer.is_active)
           .sort((a, b) => a.full_name.localeCompare(b.full_name))
       );
       setPaymentMethods(
-        paymentMethodRows
+        (paymentMethodRows ?? [])
           .filter((method) => method.is_active)
           .sort((a, b) => a.name.localeCompare(b.name))
       );
     } catch {
-      setFeedback({ type: "error", message: "No se pudo cargar la configuracion" });
+      setFeedback({ type: "error", message: "No se pudo cargar la configuración" });
     } finally {
       setIsLoading(false);
     }
@@ -160,12 +168,12 @@ export const useConfiguracionModule = (
         setDraft(updated);
         setFeedback({
           type: "success",
-          message: `Configuracion de ${sectionLabel[section]} guardada`,
+          message: `Configuración de ${sectionLabel[section]} guardada`,
         });
 
         await persistWithAudit(
           `update_${section}`,
-          `Configuracion actualizada: ${sectionLabel[section]}`,
+          `Configuración actualizada: ${sectionLabel[section]}`,
           {
             section,
             values: sanitizeSectionAuditValues(section, updated[section]),
@@ -195,12 +203,12 @@ export const useConfiguracionModule = (
         setDraft(updated);
         setFeedback({
           type: "success",
-          message: `Configuracion de ${sectionLabel[section]} restablecida`,
+          message: `Configuración de ${sectionLabel[section]} restablecida`,
         });
 
         await persistWithAudit(
           `reset_${section}`,
-          `Configuracion restablecida: ${sectionLabel[section]}`,
+          `Configuración restablecida: ${sectionLabel[section]}`,
           {
             section,
           }
@@ -235,9 +243,9 @@ export const useConfiguracionModule = (
 
       setSettings(updated);
       setDraft(updated);
-      setFeedback({ type: "success", message: "Configuracion general guardada" });
+      setFeedback({ type: "success", message: "Configuración general guardada" });
 
-      await persistWithAudit("update_all", "Configuracion general actualizada", {
+      await persistWithAudit("update_all", "Configuración general actualizada", {
         sections: [
           "negocio",
           "pos",
@@ -252,7 +260,7 @@ export const useConfiguracionModule = (
     } catch {
       setFeedback({
         type: "error",
-        message: "No se pudo guardar la configuracion general",
+        message: "No se pudo guardar la configuración general",
       });
     } finally {
       setIsSavingAll(false);

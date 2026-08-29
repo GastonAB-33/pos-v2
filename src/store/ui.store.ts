@@ -4,6 +4,7 @@ import { storageKeys } from "@/utils/local-storage";
 
 export type UiTheme = "light" | "dark";
 export type UiDensity = "standard" | "compact";
+export type UiFontSize = "compact" | "normal" | "large" | "extra-large";
 export type UiToastType = "success" | "error" | "info";
 
 export interface UiToast {
@@ -17,12 +18,15 @@ interface UiStore {
   sidebarOpen: boolean;
   theme: UiTheme;
   density: UiDensity;
+  fontSize: UiFontSize;
   accentColor: string;
   toasts: UiToast[];
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
   setTheme: (theme: UiTheme) => void;
   setDensity: (density: UiDensity) => void;
+  setFontSize: (fontSize: UiFontSize) => void;
+  cycleFontSize: () => void;
   setAccentColor: (color: string) => void;
   toggleTheme: () => void;
   pushToast: (toast: Omit<UiToast, "id">) => string;
@@ -54,12 +58,15 @@ const getInitialTheme = (): UiTheme => {
   return "light";
 };
 
+const fontSizeCycleOrder: UiFontSize[] = ["compact", "normal", "large", "extra-large"];
+
 export const useUiStore = create<UiStore>()(
   persist(
     (set) => ({
       sidebarOpen: true,
       theme: getInitialTheme(),
       density: "standard",
+      fontSize: "normal",
       accentColor: "#0056b3",
       toasts: [],
 
@@ -68,6 +75,13 @@ export const useUiStore = create<UiStore>()(
 
       setTheme: (theme) => set({ theme }),
       setDensity: (density) => set({ density }),
+      setFontSize: (fontSize) => set({ fontSize }),
+      cycleFontSize: () =>
+        set((state) => {
+          const currentIndex = fontSizeCycleOrder.indexOf(state.fontSize);
+          const nextIndex = (currentIndex + 1) % fontSizeCycleOrder.length;
+          return { fontSize: fontSizeCycleOrder[nextIndex] };
+        }),
       setAccentColor: (color) =>
         set({
           accentColor: /^#[0-9a-f]{6}$/i.test(color.trim())
@@ -100,6 +114,7 @@ export const useUiStore = create<UiStore>()(
         sidebarOpen: state.sidebarOpen,
         theme: state.theme,
         density: state.density,
+        fontSize: state.fontSize,
         accentColor: state.accentColor,
       }),
     }

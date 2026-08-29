@@ -1,5 +1,5 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, CircleEllipsis, Headphones, Menu, Newspaper, RefreshCw, UserRound } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Bell, CircleEllipsis, Headphones, Menu, Newspaper, RefreshCw, Type, UserRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/useToast";
 import { env } from "@/config/env";
@@ -177,6 +177,8 @@ export const Topbar = () => {
   } = useOffline();
   const { canInstall, isInstalling, isInstalled, installApp, isInstallSupported } = usePwa();
   const theme = useUiStore((state) => state.theme);
+  const fontSize = useUiStore((state) => state.fontSize);
+  const cycleFontSize = useUiStore((state) => state.cycleFontSize);
   const toggleTheme = useUiStore((state) => state.toggleTheme);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
 
@@ -764,6 +766,16 @@ export const Topbar = () => {
             WhatsApp soporte
           </a>
         ) : null}
+
+        <button
+          type="button"
+          className="ui-btn-ghost gap-1.5 text-xs font-semibold"
+          title={`Tamaño de interfaz: ${fontSize === "compact" ? "Compacto" : fontSize === "large" ? "Grande" : fontSize === "extra-large" ? "Muy grande" : "Normal"}. Clic para cambiar.`}
+          onClick={cycleFontSize}
+        >
+          <Type aria-hidden="true" size={15} />
+          <span>{fontSize === "compact" ? "A-" : fontSize === "large" ? "A+" : fontSize === "extra-large" ? "A++" : "A"}</span>
+        </button>
 
         <button type="button" className="ui-btn-ghost gap-1.5 text-xs" onClick={() => togglePanel("support")}>
           <Headphones aria-hidden="true" size={15} />

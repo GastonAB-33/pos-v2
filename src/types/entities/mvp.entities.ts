@@ -410,11 +410,14 @@ export interface BarcodeScaleSettings {
   ean13_enabled: boolean;
 }
 
+export type UiFontSize = "compact" | "normal" | "large" | "extra-large";
+
 export interface AppearanceSettings {
   default_theme: "light" | "dark";
   accent_color: string;
   display_name: string;
   density: UiDensity;
+  font_size?: UiFontSize;
 }
 
 export interface SystemSettings {
