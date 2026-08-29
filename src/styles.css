@@ -2067,7 +2067,6 @@ body {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
-
 .ui-kpi {
   font-family: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
   font-size: 1.18rem;

@@ -766,8 +766,7 @@ export const Topbar = () => {
             WhatsApp soporte
           </a>
         ) : null}
-
-        <button
+        <button
           type="button"
           className="ui-btn-ghost gap-1.5 text-xs font-semibold"
           title={`Tamaño de interfaz: ${fontSize === "compact" ? "Compacto" : fontSize === "large" ? "Grande" : fontSize === "extra-large" ? "Muy grande" : "Normal"}. Clic para cambiar.`}
@@ -791,7 +790,6 @@ export const Topbar = () => {
           <CircleEllipsis aria-hidden="true" size={16} />
           <span>Mas {pendingTasksCount + unreadChatCount > 0 ? `(${pendingTasksCount + unreadChatCount})` : ""}</span>
         </button>
-
         <button
           type="button"
           className="ui-btn-ghost app-topbar-user gap-2 text-right"
