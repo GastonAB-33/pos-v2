@@ -2,14 +2,27 @@ import { useMemo, useState } from "react";
 import { LoadingState } from "@/components/ui/UiStates";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
-import { RefreshCw } from "lucide-react";
+import {
+  Building2,
+  CheckCircle2,
+  FileText,
+  Package,
+  Palette,
+  RefreshCw,
+  Scale,
+  Settings,
+  ShoppingCart,
+  Sparkles,
+  Store,
+  Type,
+  Wallet,
+} from "lucide-react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { useAccountingCatalogs } from "@/modules/configuracion/hooks/useAccountingCatalogs";
 import { useConfiguracionModule } from "@/modules/configuracion/hooks/useConfiguracionModule";
-import { dataProvider } from "@/services/config/data-provider";
-import { useUiStore } from "@/store/ui.store";
+import { useUiStore, type UiFontSize } from "@/store/ui.store";
 import type { AppModule } from "@/types/modules";
 import type {
   AppearanceSettings,
@@ -58,8 +71,8 @@ interface ConfiguracionScopePreset {
 
 const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionScopePreset> = {
   all: {
-    title: "Configuracion",
-    description: "Parametros centrales del negocio listos para escalar",
+    title: "Configuración del Sistema",
+    description: "Parámetros centrales del negocio, apariencia, accesibilidad e integraciones",
     permissionModule: "configuracion",
     allowSaveAll: true,
     visibleSections: {
@@ -75,7 +88,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
     },
   },
   agenda: {
-    title: "Configuracion de Agenda",
+    title: "Configuración de Agenda",
     description: "Configuraciones relacionadas con agenda y datos base del negocio",
     permissionModule: "configuracion_agenda",
     allowSaveAll: false,
@@ -92,8 +105,8 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
     },
   },
   catalogo: {
-    title: "Configuracion de Catalogo",
-    description: "Configuraciones operativas para catalogo, stock y codigos",
+    title: "Configuración de Catálogo",
+    description: "Configuraciones operativas para catálogo, stock y códigos",
     permissionModule: "configuracion_catalogo",
     allowSaveAll: false,
     visibleSections: {
@@ -109,8 +122,8 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
     },
   },
   analisis: {
-    title: "Configuracion de Analisis",
-    description: "Configuraciones del modulo de analisis",
+    title: "Configuración de Análisis",
+    description: "Configuraciones del módulo de análisis",
     permissionModule: "configuracion_analisis",
     allowSaveAll: false,
     visibleSections: {
@@ -126,7 +139,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
     },
   },
   sistema: {
-    title: "Configuracion de Sistema",
+    title: "Configuración de Sistema",
     description: "Preferencias de sistema, integraciones y apariencia",
     permissionModule: "configuracion_sistema",
     allowSaveAll: false,
@@ -143,8 +156,8 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
     },
   },
   contable: {
-    title: "Configuracion Contable",
-    description: "Configuraciones de caja, facturacion y catalogos contables",
+    title: "Configuración Contable",
+    description: "Configuraciones de caja, facturación y catálogos contables",
     permissionModule: "configuracion_contable",
     allowSaveAll: false,
     visibleSections: {
@@ -161,6 +174,79 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
   },
 };
 
+type ConfigTabKey =
+  | "negocio"
+  | "pos"
+  | "apariencia"
+  | "caja"
+  | "stock"
+  | "facturacion"
+  | "contableCatalogos"
+  | "codigos_balanza"
+  | "sistema";
+
+interface ConfigTabDefinition {
+  id: ConfigTabKey;
+  label: string;
+  icon: typeof Store;
+  badge?: string;
+  description: string;
+}
+
+const configTabs: ConfigTabDefinition[] = [
+  { id: "negocio", label: "Negocio", icon: Store, description: "Datos comerciales y de contacto" },
+  { id: "pos", label: "Punto de Venta", icon: ShoppingCart, description: "Comportamiento de caja y scanner" },
+  { id: "apariencia", label: "Apariencia y Letra", icon: Palette, badge: "Accesibilidad", description: "Tema y tamaño de letra/interfaz" },
+  { id: "caja", label: "Caja y Tesorería", icon: Wallet, description: "Sesiones y movimientos iniciales" },
+  { id: "stock", label: "Stock e Inventario", icon: Package, description: "Alertas y umbrales de stock" },
+  { id: "facturacion", label: "Facturación & ARCA", icon: FileText, description: "Emisión fiscal y comprobantes" },
+  { id: "contableCatalogos", label: "Bancos y Cobros", icon: Building2, description: "Cuentas bancarias y planes de cuotas" },
+  { id: "codigos_balanza", label: "Balanza & Códigos", icon: Scale, description: "Formatos PLU y códigos de peso/monto" },
+  { id: "sistema", label: "Integraciones & Sistema", icon: Settings, description: "MercadoPago y parámetros avanzados" },
+];
+
+const fontSizeOptions: Array<{
+  id: UiFontSize;
+  label: string;
+  shortLabel: string;
+  badge: string;
+  description: string;
+  pixelSize: string;
+}> = [
+  {
+    id: "compact",
+    label: "Compacto",
+    shortLabel: "A-",
+    badge: "14px (87.5%)",
+    description: "Para pantallas pequeñas o ver mayor densidad de datos.",
+    pixelSize: "14px",
+  },
+  {
+    id: "normal",
+    label: "Normal",
+    shortLabel: "A",
+    badge: "16px (100%)",
+    description: "Tamaño estándar predeterminado del sistema.",
+    pixelSize: "16px",
+  },
+  {
+    id: "large",
+    label: "Grande (Recomendado)",
+    shortLabel: "A+",
+    badge: "18px (112.5%)",
+    description: "Excelente para pantallas de caja POS y fácil lectura.",
+    pixelSize: "18px",
+  },
+  {
+    id: "extra-large",
+    label: "Muy Grande",
+    shortLabel: "A++",
+    badge: "20px (125%)",
+    description: "Máxima visibilidad a distancia y prevención de fatiga visual.",
+    pixelSize: "20px",
+  },
+];
+
 interface ConfiguracionPageProps {
   scope?: ConfiguracionModuleScope;
 }
@@ -176,6 +262,15 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
   const setTheme = useUiStore((state) => state.setTheme);
   const setAccentColor = useUiStore((state) => state.setAccentColor);
   const setDensity = useUiStore((state) => state.setDensity);
+  const fontSize = useUiStore((state) => state.fontSize);
+  const setFontSize = useUiStore((state) => state.setFontSize);
+
+  const [activeTab, setActiveTab] = useState<ConfigTabKey>(() => {
+    if (scopePreset.visibleSections.apariencia && scope === "sistema") return "apariencia";
+    if (scopePreset.visibleSections.negocio) return "negocio";
+    const firstVisible = configTabs.find((tab) => scopePreset.visibleSections[tab.id]);
+    return firstVisible ? firstVisible.id : "negocio";
+  });
 
   const {
     draft,
@@ -240,6 +335,11 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     [customers]
   );
 
+  const visibleTabs = useMemo(
+    () => configTabs.filter((tab) => scopePreset.visibleSections[tab.id]),
+    [scopePreset]
+  );
+
   const updateSection = <TSection extends TenantSettingsSectionKey>(
     section: TSection,
     patch: Partial<TenantSettings[TSection]>
@@ -299,6 +399,9 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     setTheme(appearance.default_theme);
     setAccentColor(appearance.accent_color);
     setDensity(appearance.density);
+    if (appearance.font_size) {
+      setFontSize(appearance.font_size);
+    }
   };
 
   const handleSaveSection = async (section: TenantSettingsSectionKey) => {
@@ -339,18 +442,41 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     return (
       <PagePlaceholder
         title={scopePreset.title}
-        description="No tenes permisos de lectura para este modulo"
+        description="No tenés permisos de lectura para este módulo"
       />
     );
   }
 
-  if (isLoading || !draft) {
+  if (isLoading) {
     return (
       <PagePlaceholder
         title={scopePreset.title}
         description={scopePreset.description}
       >
-        <LoadingState message="Cargando configuracion..." />
+        <LoadingState message="Cargando configuración del sistema..." />
+      </PagePlaceholder>
+    );
+  }
+
+  if (!draft) {
+    return (
+      <PagePlaceholder
+        title={scopePreset.title}
+        description={scopePreset.description}
+      >
+        <div className="ui-card space-y-4 text-center py-10">
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            No se pudo obtener la configuración del comercio actual.
+          </p>
+          <button
+            type="button"
+            className="ui-btn-primary mx-auto gap-2"
+            onClick={() => void reload()}
+          >
+            <RefreshCw size={16} />
+            <span>Reintentar carga</span>
+          </button>
+        </div>
       </PagePlaceholder>
     );
   }
@@ -365,19 +491,34 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     !mercadoPagoConfig.force_unavailable;
   const hasVisibleSettings = Object.values(scopePreset.visibleSections).some(Boolean);
 
+  const selectedFontSizeObj =
+    fontSizeOptions.find((opt) => opt.id === (draft.apariencia.font_size ?? fontSize)) ??
+    fontSizeOptions[1];
+
   return (
-    <PagePlaceholder
-      title={scopePreset.title}
-      description={scopePreset.description}
-    >
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-slate-600">{draft.negocio.trade_name || "Configuración del comercio"}</p>
+    <PagePlaceholder title={scopePreset.title} description={scopePreset.description}>
+      <div className="space-y-6">
+        {/* Encabezado Principal y Acciones */}
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
+              <Store size={22} />
+            </div>
+            <div>
+              <h1 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                {draft.negocio.trade_name || "Configuración del comercio"}
+              </h1>
+              <p className="text-xs text-slate-500">
+                {draft.negocio.cuit ? `CUIT: ${draft.negocio.cuit} · ` : ""}
+                {draft.negocio.email || "Configuración general"}
+              </p>
+            </div>
+          </div>
 
           <div className="flex items-center gap-2">
             <IconButton
               icon={RefreshCw}
-              label="Recargar configuración"
+              label="Recargar"
               onClick={() => {
                 clearFeedback();
                 void reload();
@@ -389,18 +530,20 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
             {scopePreset.allowSaveAll ? (
               <button
                 type="button"
-                className="ui-btn-primary"
+                className="ui-btn-primary gap-2"
                 onClick={() => {
                   void handleSaveAll();
                 }}
                 disabled={!canWriteConfiguracion || isSavingAll}
               >
-                {isSavingAll ? "Guardando..." : "Guardar todo"}
+                <CheckCircle2 size={16} />
+                <span>{isSavingAll ? "Guardando todo..." : "Guardar todo"}</span>
               </button>
             ) : null}
           </div>
         </div>
 
+        {/* Notificaciones y Feedbacks */}
         {feedback ? (
           <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>
             {feedback.message}
@@ -429,21 +572,66 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
         {!hasVisibleSettings ? (
           <section className="ui-card">
             <p className="text-sm text-slate-600">
-              Este modulo todavia no tiene configuraciones disponibles.
+              Este módulo todavía no tiene configuraciones disponibles.
             </p>
           </section>
         ) : null}
 
-        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.negocio}>
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-slate-900">Negocio</h2>
+        {/* Navegación por Pestañas / Menú Horizontal de Categorías */}
+        {visibleTabs.length > 1 ? (
+          <nav aria-label="Categorías de configuración" className="flex flex-wrap gap-2 border-b border-slate-200 pb-2 dark:border-slate-800">
+            {visibleTabs.map((tab) => {
+              const IconComp = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={[
+                    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all",
+                    isActive
+                      ? "bg-blue-600 text-white shadow-sm dark:bg-blue-600"
+                      : "bg-white text-slate-700 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800",
+                  ].join(" ")}
+                >
+                  <IconComp size={16} />
+                  <span>{tab.label}</span>
+                  {tab.badge ? (
+                    <span
+                      className={[
+                        "rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                        isActive ? "bg-white/20 text-white" : "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+                      ].join(" ")}
+                    >
+                      {tab.badge}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </nav>
+        ) : null}
+
+        {/* SECCIÓN: NEGOCIO */}
+        <section
+          className="ui-card space-y-4"
+          hidden={!scopePreset.visibleSections.negocio || (visibleTabs.length > 1 && activeTab !== "negocio")}
+        >
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <Store className="text-blue-600 dark:text-blue-400" size={20} />
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Datos del Negocio</h2>
+                <p className="text-xs text-slate-500">Información comercial, razón social y datos de contacto de tu comercio</p>
+              </div>
+            </div>
+
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 className="ui-btn-ghost"
-                onClick={() => {
-                  void resetSection("negocio");
-                }}
+                onClick={() => { void resetSection("negocio"); }}
                 disabled={!canWriteConfiguracion || savingSection.negocio}
               >
                 Restablecer
@@ -451,73 +639,113 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               <button
                 type="button"
                 className="ui-btn-primary"
-                onClick={() => {
-                  void handleSaveSection("negocio");
-                }}
+                onClick={() => { void handleSaveSection("negocio"); }}
                 disabled={!canWriteConfiguracion || savingSection.negocio}
               >
-                {savingSection.negocio ? "Guardando..." : "Guardar"}
+                {savingSection.negocio ? "Guardando..." : "Guardar Negocio"}
               </button>
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <input className="ui-input" value={draft.negocio.trade_name} onChange={(event) => updateSection("negocio", { trade_name: event.target.value })} placeholder="Nombre comercial" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" value={draft.negocio.legal_name} onChange={(event) => updateSection("negocio", { legal_name: event.target.value })} placeholder="Razon social" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" value={draft.negocio.cuit} onChange={(event) => updateSection("negocio", { cuit: event.target.value })} placeholder="CUIT" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" value={draft.negocio.address} onChange={(event) => updateSection("negocio", { address: event.target.value })} placeholder="Domicilio" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" value={draft.negocio.phone} onChange={(event) => updateSection("negocio", { phone: event.target.value })} placeholder="Telefono" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" type="email" value={draft.negocio.email} onChange={(event) => updateSection("negocio", { email: event.target.value })} placeholder="Email" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" value={draft.negocio.logo_url ?? ""} onChange={(event) => updateSection("negocio", { logo_url: event.target.value || null })} placeholder="Logo URL (placeholder)" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" value={draft.negocio.currency_code} onChange={(event) => updateSection("negocio", { currency_code: event.target.value.toUpperCase() })} placeholder="Moneda" disabled={!canWriteConfiguracion} />
-            <input className="ui-input md:col-span-2" value={draft.negocio.timezone} onChange={(event) => updateSection("negocio", { timezone: event.target.value })} placeholder="Zona horaria" disabled={!canWriteConfiguracion} />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Nombre Comercial</label>
+              <input className="ui-input" value={draft.negocio.trade_name} onChange={(event) => updateSection("negocio", { trade_name: event.target.value })} placeholder="Ej: Mi Almacén POS" disabled={!canWriteConfiguracion} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Razón Social</label>
+              <input className="ui-input" value={draft.negocio.legal_name} onChange={(event) => updateSection("negocio", { legal_name: event.target.value })} placeholder="Ej: Comercio S.R.L." disabled={!canWriteConfiguracion} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">CUIT</label>
+              <input className="ui-input" value={draft.negocio.cuit} onChange={(event) => updateSection("negocio", { cuit: event.target.value })} placeholder="20-12345678-9" disabled={!canWriteConfiguracion} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Domicilio Comercial</label>
+              <input className="ui-input" value={draft.negocio.address} onChange={(event) => updateSection("negocio", { address: event.target.value })} placeholder="Av. Principal 1234" disabled={!canWriteConfiguracion} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Teléfono / WhatsApp</label>
+              <input className="ui-input" value={draft.negocio.phone} onChange={(event) => updateSection("negocio", { phone: event.target.value })} placeholder="Ej: +54 9 11 1234-5678" disabled={!canWriteConfiguracion} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Email de Contacto</label>
+              <input className="ui-input" type="email" value={draft.negocio.email} onChange={(event) => updateSection("negocio", { email: event.target.value })} placeholder="contacto@comercio.com" disabled={!canWriteConfiguracion} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Moneda del Sistema</label>
+              <input className="ui-input" value={draft.negocio.currency_code} onChange={(event) => updateSection("negocio", { currency_code: event.target.value.toUpperCase() })} placeholder="ARS" disabled={!canWriteConfiguracion} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Zona Horaria</label>
+              <input className="ui-input" value={draft.negocio.timezone} onChange={(event) => updateSection("negocio", { timezone: event.target.value })} placeholder="America/Argentina/Buenos_Aires" disabled={!canWriteConfiguracion} />
+            </div>
           </div>
         </section>
 
-        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.pos}>
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-slate-900">POS</h2>
+        {/* SECCIÓN: PUNTO DE VENTA (POS) */}
+        <section
+          className="ui-card space-y-4"
+          hidden={!scopePreset.visibleSections.pos || (visibleTabs.length > 1 && activeTab !== "pos")}
+        >
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="text-blue-600 dark:text-blue-400" size={20} />
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Punto de Venta (POS)</h2>
+                <p className="text-xs text-slate-500">Parámetros operativos de cobro, impresión y comportamiento de la caja</p>
+              </div>
+            </div>
+
             <div className="flex items-center gap-2">
               <button type="button" className="ui-btn-ghost" onClick={() => { void resetSection("pos"); }} disabled={!canWriteConfiguracion || savingSection.pos}>Restablecer</button>
-              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("pos"); }} disabled={!canWriteConfiguracion || savingSection.pos}>{savingSection.pos ? "Guardando..." : "Guardar"}</button>
+              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("pos"); }} disabled={!canWriteConfiguracion || savingSection.pos}>{savingSection.pos ? "Guardando..." : "Guardar POS"}</button>
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <select className="ui-input" value={draft.pos.default_customer_id ?? ""} onChange={(event) => updateSection("pos", { default_customer_id: event.target.value || null })} disabled={!canWriteConfiguracion}>
-              <option value="">Sin cliente por defecto</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>{customer.full_name}</option>
-              ))}
-            </select>
-
-            <select className="ui-input" value={draft.pos.default_payment_method_id ?? ""} onChange={(event) => updateSection("pos", { default_payment_method_id: event.target.value || null })} disabled={!canWriteConfiguracion}>
-              <option value="">Medio de pago por defecto: automatico</option>
-              {paymentMethods.map((method) => (
-                <option key={method.id} value={method.id}>{method.name}</option>
-              ))}
-            </select>
-
-            <select className="ui-input" value={draft.pos.cart_behavior} onChange={(event) => updateSection("pos", { cart_behavior: event.target.value as TenantSettings["pos"]["cart_behavior"] })} disabled={!canWriteConfiguracion}>
-              <option value="merge_same_product">Carrito: fusionar items iguales</option>
-              <option value="separate_lines">Carrito: lineas separadas</option>
-            </select>
-
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={draft.pos.auto_print_receipt} onChange={(event) => updateSection("pos", { auto_print_receipt: event.target.checked })} disabled={!canWriteConfiguracion} />
-              Impresion automatica
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={draft.pos.allow_sale_without_customer} onChange={(event) => updateSection("pos", { allow_sale_without_customer: event.target.checked })} disabled={!canWriteConfiguracion} />
-              Permitir venta sin cliente
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={draft.pos.allow_negative_stock} onChange={(event) => updateSection("pos", { allow_negative_stock: event.target.checked })} disabled={!canWriteConfiguracion} />
-              Permitir stock negativo en venta
-            </label>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Cliente por defecto al iniciar cobro</label>
+              <select className="ui-input" value={draft.pos.default_customer_id ?? ""} onChange={(event) => updateSection("pos", { default_customer_id: event.target.value || null })} disabled={!canWriteConfiguracion}>
+                <option value="">Consumidor Final (Sin cliente grabado)</option>
+                {customers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>{customer.full_name}</option>
+                ))}
+              </select>
+              {draft.pos.default_customer_id ? (
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Seleccionado: {customerNameById.get(draft.pos.default_customer_id) ?? "Cliente no encontrado"}
+                </p>
+              ) : null}
+            </div>
 
             <div>
-              <label className="mb-1 block text-sm text-slate-700">Cantidad inicial al escanear</label>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Medio de pago por defecto</label>
+              <select className="ui-input" value={draft.pos.default_payment_method_id ?? ""} onChange={(event) => updateSection("pos", { default_payment_method_id: event.target.value || null })} disabled={!canWriteConfiguracion}>
+                <option value="">Efectivo / Selección automática</option>
+                {paymentMethods.map((method) => (
+                  <option key={method.id} value={method.id}>{method.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Agrupación de ítems en el carrito</label>
+              <select className="ui-input" value={draft.pos.cart_behavior} onChange={(event) => updateSection("pos", { cart_behavior: event.target.value as TenantSettings["pos"]["cart_behavior"] })} disabled={!canWriteConfiguracion}>
+                <option value="merge_same_product">Sumar cantidad al escanear mismo producto</option>
+                <option value="separate_lines">Agregar cada escaneo en una nueva línea</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Cantidad inicial al escanear código</label>
               <input
                 className="ui-input"
                 type="number"
@@ -536,43 +764,288 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               />
             </div>
 
-            <p className="text-xs text-slate-500 md:col-span-2">
-              Cliente por defecto: {draft.pos.default_customer_id ? customerNameById.get(draft.pos.default_customer_id) ?? "Cliente no encontrado" : "No configurado"}
-            </p>
-            <p className="text-xs text-slate-500 md:col-span-2">
-              Medio de pago por defecto: {draft.pos.default_payment_method_id ? paymentMethods.find((method) => method.id === draft.pos.default_payment_method_id)?.name ?? "Medio no encontrado" : "Automatico"}
-            </p>
+            <div className="md:col-span-2 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Reglas de Operación</span>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.pos.auto_print_receipt} onChange={(event) => updateSection("pos", { auto_print_receipt: event.target.checked })} disabled={!canWriteConfiguracion} />
+                  <span>Impresión automática de ticket</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.pos.allow_sale_without_customer} onChange={(event) => updateSection("pos", { allow_sale_without_customer: event.target.checked })} disabled={!canWriteConfiguracion} />
+                  <span>Permitir venta sin seleccionar cliente</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.pos.allow_negative_stock} onChange={(event) => updateSection("pos", { allow_negative_stock: event.target.checked })} disabled={!canWriteConfiguracion} />
+                  <span>Permitir venta sin stock disponible</span>
+                </label>
+              </div>
+            </div>
           </div>
         </section>
 
-        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.stock}>
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-slate-900">Stock</h2>
+        {/* SECCIÓN: APARIENCIA Y ACCESIBILIDAD (NUEVO DISEÑO CON TAMAÑO DE LETRA) */}
+        <section
+          className="ui-card space-y-6"
+          hidden={!scopePreset.visibleSections.apariencia || (visibleTabs.length > 1 && activeTab !== "apariencia")}
+        >
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
             <div className="flex items-center gap-2">
-              <button type="button" className="ui-btn-ghost" onClick={() => { void resetSection("stock"); }} disabled={!canWriteConfiguracion || savingSection.stock}>Restablecer</button>
-              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("stock"); }} disabled={!canWriteConfiguracion || savingSection.stock}>{savingSection.stock ? "Guardando..." : "Guardar"}</button>
+              <Palette className="text-blue-600 dark:text-blue-400" size={20} />
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  Apariencia, Tema y Accesibilidad Visual
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Personalizá el tamaño de las letras, zoom de pantalla y colores para que tus cajeros operen con total comodidad
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="ui-btn-ghost"
+                onClick={() => { void resetSection("apariencia"); }}
+                disabled={!canWriteConfiguracion || savingSection.apariencia}
+              >
+                Restablecer
+              </button>
+              <button
+                type="button"
+                className="ui-btn-primary"
+                onClick={() => { void handleSaveSection("apariencia"); }}
+                disabled={!canWriteConfiguracion || savingSection.apariencia}
+              >
+                {savingSection.apariencia ? "Guardando..." : "Guardar Apariencia"}
+              </button>
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={draft.stock.use_min_max} onChange={(event) => updateSection("stock", { use_min_max: event.target.checked })} disabled={!canWriteConfiguracion} />
-              Usar stock minimo/maximo
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={draft.stock.alerts_active} onChange={(event) => updateSection("stock", { alerts_active: event.target.checked })} disabled={!canWriteConfiguracion} />
-              Alertas de stock activas
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={draft.stock.allow_manual_adjustments} onChange={(event) => updateSection("stock", { allow_manual_adjustments: event.target.checked })} disabled={!canWriteConfiguracion} />
-              Permitir ajustes manuales
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={draft.stock.allow_negative_stock} onChange={(event) => updateSection("stock", { allow_negative_stock: event.target.checked })} disabled={!canWriteConfiguracion} />
-              Permitir stock negativo
-            </label>
+          {/* TARJETA DESTACADA: TAMAÑO DE FUENTE E INTERFAZ (ACCESIBILIDAD) */}
+          <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-5 dark:border-blue-900/50 dark:bg-blue-950/20">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2">
+                <Type className="text-blue-600 dark:text-blue-400" size={20} />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  Tamaño de Letras e Interfaz (Escala de Pantalla)
+                </h3>
+              </div>
+              <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                Escala actual: {selectedFontSizeObj.label}
+              </span>
+            </div>
+
+            <p className="mb-4 text-xs text-slate-600 dark:text-slate-400">
+              Seleccioná el tamaño en el que querés ver las pantallas del sistema. Al cambiarlo, todos los números, botones, totales de caja y listas de productos se reescalan automáticamente.
+            </p>
+
+            {/* Selector de Opciones de Tamaño */}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mb-5">
+              {fontSizeOptions.map((option) => {
+                const isSelected = (draft.apariencia.font_size ?? fontSize) === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => {
+                      updateSection("apariencia", { font_size: option.id });
+                      setFontSize(option.id);
+                    }}
+                    disabled={!canWriteConfiguracion}
+                    className={[
+                      "flex flex-col justify-between rounded-xl border p-4 text-left transition-all",
+                      isSelected
+                        ? "border-blue-600 bg-white ring-2 ring-blue-500/30 dark:bg-slate-900 dark:border-blue-500"
+                        : "border-slate-200 bg-white/70 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900/50 dark:hover:border-slate-700",
+                    ].join(" ")}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                          {option.shortLabel}
+                        </span>
+                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                          {option.badge}
+                        </span>
+                      </div>
+                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">
+                        {option.label}
+                      </p>
+                      <p className="text-xs text-slate-500 line-clamp-2">
+                        {option.description}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 dark:border-slate-800">
+                      <span className="text-[11px] text-slate-400">Base {option.pixelSize}</span>
+                      {isSelected ? (
+                        <CheckCircle2 size={16} className="text-blue-600 dark:text-blue-400" />
+                      ) : null}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* VISTA PREVIA EN TIEMPO REAL */}
+            <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 shadow-sm">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3 dark:border-slate-800">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles size={14} className="text-amber-500" />
+                  Vista Previa Interactiva de Cobro POS
+                </span>
+                <span className="text-xs text-slate-400">Escala activa: {selectedFontSizeObj.pixelSize}</span>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs text-slate-500">Producto de prueba</p>
+                  <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    Coca-Cola 2.25L Retornable
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="ui-badge ui-badge--success">Stock: 48 u.</span>
+                    <span className="text-xs text-slate-500">Código: 7791234567890</span>
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <p className="text-xs text-slate-500">Total a cobrar</p>
+                  <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                    $2.450,00
+                  </p>
+                  <button type="button" className="ui-btn-primary mt-1 text-xs py-1 px-3">
+                    Cobrar ($2.450)
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* TEMA Y OTROS PARÁMETROS DE APARIENCIA */}
+          <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm text-slate-700">Umbral global por defecto</label>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Tema Predeterminado</label>
+              <select className="ui-input" value={draft.apariencia.default_theme} onChange={(event) => updateSection("apariencia", { default_theme: event.target.value as AppearanceSettings["default_theme"] })} disabled={!canWriteConfiguracion}>
+                <option value="light">Modo Claro (Recomendado para día)</option>
+                <option value="dark">Modo Oscuro (Recomendado para noche)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Densidad de Filas y Tablas</label>
+              <select className="ui-input" value={draft.apariencia.density} onChange={(event) => updateSection("apariencia", { density: event.target.value as AppearanceSettings["density"] })} disabled={!canWriteConfiguracion}>
+                <option value="standard">Vista Estándar (Cómoda)</option>
+                <option value="compact">Vista Compacta (Mayor cantidad de filas)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Color de Acento de la Marca</label>
+              <div className="flex items-center gap-3">
+                <input className="h-10 w-16 cursor-pointer rounded border border-slate-200 p-1" type="color" value={draft.apariencia.accent_color} onChange={(event) => updateSection("apariencia", { accent_color: event.target.value })} disabled={!canWriteConfiguracion} />
+                <span className="text-xs font-mono text-slate-600 dark:text-slate-400">{draft.apariencia.accent_color}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Nombre Visible del Comercio en Topbar</label>
+              <input className="ui-input" value={draft.apariencia.display_name} onChange={(event) => updateSection("apariencia", { display_name: event.target.value })} placeholder="Ej: Sucursal Centro" disabled={!canWriteConfiguracion} />
+            </div>
+          </div>
+        </section>
+
+        {/* SECCIÓN: CAJA Y TESORERÍA */}
+        <section
+          className="ui-card space-y-4"
+          hidden={!scopePreset.visibleSections.caja || (visibleTabs.length > 1 && activeTab !== "caja")}
+        >
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <Wallet className="text-blue-600 dark:text-blue-400" size={20} />
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Caja y Tesorería</h2>
+                <p className="text-xs text-slate-500">Apertura, cierre y reglas de movimiento de fondos en el punto de venta</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button type="button" className="ui-btn-ghost" onClick={() => { void resetSection("caja"); }} disabled={!canWriteConfiguracion || savingSection.caja}>Restablecer</button>
+              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("caja"); }} disabled={!canWriteConfiguracion || savingSection.caja}>{savingSection.caja ? "Guardando..." : "Guardar Caja"}</button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Monto Inicial Sugerido al Abrir Caja</label>
+              <input
+                className="ui-input"
+                type="number"
+                step="0.01"
+                min="0"
+                value={draft.caja.default_opening_amount}
+                onChange={(event) =>
+                  updateSection("caja", {
+                    default_opening_amount: Math.max(
+                      0,
+                      toNumber(event.target.value, draft.caja.default_opening_amount)
+                    ),
+                  })
+                }
+                disabled={!canWriteConfiguracion}
+              />
+            </div>
+
+            <div className="md:col-span-2 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Reglas de Control de Caja</span>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.caja.require_open_session_for_sale} onChange={(event) => updateSection("caja", { require_open_session_for_sale: event.target.checked })} disabled={!canWriteConfiguracion} />
+                  <span>Exigir caja abierta para realizar ventas</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.caja.allow_manual_movements} onChange={(event) => updateSection("caja", { allow_manual_movements: event.target.checked })} disabled={!canWriteConfiguracion} />
+                  <span>Permitir ingresos/egresos manuales</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.caja.require_notes_on_manual_movements} onChange={(event) => updateSection("caja", { require_notes_on_manual_movements: event.target.checked })} disabled={!canWriteConfiguracion} />
+                  <span>Exigir motivo en movimientos manuales</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* SECCIÓN: STOCK E INVENTARIO */}
+        <section
+          className="ui-card space-y-4"
+          hidden={!scopePreset.visibleSections.stock || (visibleTabs.length > 1 && activeTab !== "stock")}
+        >
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <Package className="text-blue-600 dark:text-blue-400" size={20} />
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Stock e Inventario</h2>
+                <p className="text-xs text-slate-500">Alertas de stock mínimo y reglas de ajuste de mercadería</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button type="button" className="ui-btn-ghost" onClick={() => { void resetSection("stock"); }} disabled={!canWriteConfiguracion || savingSection.stock}>Restablecer</button>
+              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("stock"); }} disabled={!canWriteConfiguracion || savingSection.stock}>{savingSection.stock ? "Guardando..." : "Guardar Stock"}</button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Umbral Global de Stock Bajo</label>
               <input
                 className="ui-input"
                 type="number"
@@ -594,80 +1067,85 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                 disabled={!canWriteConfiguracion}
               />
             </div>
+
+            <div className="md:col-span-2 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Parámetros de Control</span>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.stock.use_min_max} onChange={(event) => updateSection("stock", { use_min_max: event.target.checked })} disabled={!canWriteConfiguracion} />
+                  <span>Usar stock mín/máx por producto</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.stock.alerts_active} onChange={(event) => updateSection("stock", { alerts_active: event.target.checked })} disabled={!canWriteConfiguracion} />
+                  <span>Activar alertas de stock en Topbar</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.stock.allow_manual_adjustments} onChange={(event) => updateSection("stock", { allow_manual_adjustments: event.target.checked })} disabled={!canWriteConfiguracion} />
+                  <span>Permitir ajustes manuales</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.stock.allow_negative_stock} onChange={(event) => updateSection("stock", { allow_negative_stock: event.target.checked })} disabled={!canWriteConfiguracion} />
+                  <span>Permitir stock bajo cero</span>
+                </label>
+              </div>
+            </div>
           </div>
         </section>
 
-        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.caja}>
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-slate-900">Caja</h2>
+        {/* SECCIÓN: FACTURACIÓN & ARCA */}
+        <section
+          className="ui-card space-y-4"
+          hidden={!scopePreset.visibleSections.facturacion || (visibleTabs.length > 1 && activeTab !== "facturacion")}
+        >
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
             <div className="flex items-center gap-2">
-              <button type="button" className="ui-btn-ghost" onClick={() => { void resetSection("caja"); }} disabled={!canWriteConfiguracion || savingSection.caja}>Restablecer</button>
-              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("caja"); }} disabled={!canWriteConfiguracion || savingSection.caja}>{savingSection.caja ? "Guardando..." : "Guardar"}</button>
+              <FileText className="text-blue-600 dark:text-blue-400" size={20} />
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Facturación y ARCA (AFIP)</h2>
+                <p className="text-xs text-slate-500">Configuración de facturación electrónica, datos fiscales del emisor y correlatividad</p>
+              </div>
             </div>
-          </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={draft.caja.require_open_session_for_sale} onChange={(event) => updateSection("caja", { require_open_session_for_sale: event.target.checked })} disabled={!canWriteConfiguracion} />
-              Exigir caja abierta para vender
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={draft.caja.allow_manual_movements} onChange={(event) => updateSection("caja", { allow_manual_movements: event.target.checked })} disabled={!canWriteConfiguracion} />
-              Permitir ingresos/egresos manuales
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={draft.caja.require_notes_on_manual_movements} onChange={(event) => updateSection("caja", { require_notes_on_manual_movements: event.target.checked })} disabled={!canWriteConfiguracion} />
-              Requerir observacion en movimientos manuales
-            </label>
-            <div>
-              <label className="mb-1 block text-sm text-slate-700">Monto inicial por defecto</label>
-              <input
-                className="ui-input"
-                type="number"
-                step="0.01"
-                min="0"
-                value={draft.caja.default_opening_amount}
-                onChange={(event) =>
-                  updateSection("caja", {
-                    default_opening_amount: Math.max(
-                      0,
-                      toNumber(event.target.value, draft.caja.default_opening_amount)
-                    ),
-                  })
-                }
-                disabled={!canWriteConfiguracion}
-              />
-            </div>
-          </div>
-        </section>
-
-        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.facturacion}>
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-slate-900">Facturacion</h2>
             <div className="flex items-center gap-2">
               <button type="button" className="ui-btn-ghost" onClick={() => { void resetSection("facturacion"); }} disabled={!canWriteConfiguracion || savingSection.facturacion}>Restablecer</button>
-              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("facturacion"); }} disabled={!canWriteConfiguracion || savingSection.facturacion}>{savingSection.facturacion ? "Guardando..." : "Guardar"}</button>
+              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("facturacion"); }} disabled={!canWriteConfiguracion || savingSection.facturacion}>{savingSection.facturacion ? "Guardando..." : "Guardar Facturación"}</button>
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <select className="ui-input" value={draft.facturacion.default_document_type} onChange={(event) => updateSection("facturacion", { default_document_type: event.target.value as FacturacionSettings["default_document_type"] })} disabled={!canWriteConfiguracion}>
-              <option value="A">Factura A</option>
-              <option value="B">Factura B</option>
-              <option value="C">Factura C</option>
-              <option value="PRESUPUESTO">Presupuesto</option>
-            </select>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={draft.facturacion.allow_budget_without_customer} onChange={(event) => updateSection("facturacion", { allow_budget_without_customer: event.target.checked })} disabled={!canWriteConfiguracion} />
-              Permitir presupuesto sin cliente
-            </label>
-            <input className="ui-input" value={draft.facturacion.issuer_tax_name} onChange={(event) => updateSection("facturacion", { issuer_tax_name: event.target.value })} placeholder="Razon social emisor" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" value={draft.facturacion.issuer_cuit} onChange={(event) => updateSection("facturacion", { issuer_cuit: event.target.value })} placeholder="CUIT emisor" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" value={draft.facturacion.issuer_address} onChange={(event) => updateSection("facturacion", { issuer_address: event.target.value })} placeholder="Domicilio fiscal emisor" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" value={draft.facturacion.issuer_fiscal_condition} onChange={(event) => updateSection("facturacion", { issuer_fiscal_condition: event.target.value })} placeholder="Condicion fiscal emisor" disabled={!canWriteConfiguracion} />
-            <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-slate-900">ARCA</h3>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Tipo de Comprobante por Defecto</label>
+              <select className="ui-input" value={draft.facturacion.default_document_type} onChange={(event) => updateSection("facturacion", { default_document_type: event.target.value as FacturacionSettings["default_document_type"] })} disabled={!canWriteConfiguracion}>
+                <option value="A">Factura A</option>
+                <option value="B">Factura B</option>
+                <option value="C">Factura C</option>
+                <option value="PRESUPUESTO">Presupuesto Interno</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Razón Social Emisor ARCA</label>
+              <input className="ui-input" value={draft.facturacion.issuer_tax_name} onChange={(event) => updateSection("facturacion", { issuer_tax_name: event.target.value })} placeholder="Razón social fiscal" disabled={!canWriteConfiguracion} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">CUIT Emisor Fiscal</label>
+              <input className="ui-input" value={draft.facturacion.issuer_cuit} onChange={(event) => updateSection("facturacion", { issuer_cuit: event.target.value })} placeholder="CUIT de emisión" disabled={!canWriteConfiguracion} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Condición Fiscal Emisor</label>
+              <input className="ui-input" value={draft.facturacion.issuer_fiscal_condition} onChange={(event) => updateSection("facturacion", { issuer_fiscal_condition: event.target.value })} placeholder="Responsable Inscripto / Monotributo" disabled={!canWriteConfiguracion} />
+            </div>
+
+            {/* PANEL ARCA */}
+            <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3 mb-3 dark:border-slate-700">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Parámetros de Integración ARCA</h3>
                 <div className="flex items-center gap-2">
                   <span
                     className={[
@@ -679,22 +1157,16 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                           : "ui-badge--success",
                     ].join(" ")}
                   >
-                    {draft.facturacion.arca.mode === "mock"
-                      ? "Mock"
-                      : draft.facturacion.arca.mode === "sandbox"
-                        ? "Sandbox"
-                        : "Real"}
-                  </span>
-                  <span className={draft.facturacion.arca.force_unavailable ? "ui-badge ui-badge--danger" : "ui-badge ui-badge--success"}>
-                    {draft.facturacion.arca.force_unavailable ? "No disponible" : "Disponible"}
+                    Modo {draft.facturacion.arca.mode.toUpperCase()}
                   </span>
                 </div>
               </div>
 
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <label className="flex items-center gap-2 text-sm text-slate-700">
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="flex items-center gap-2.5 text-sm font-medium text-slate-800 dark:text-slate-200">
                   <input
                     type="checkbox"
+                    className="h-4 w-4 rounded text-blue-600"
                     checked={draft.facturacion.arca.enabled}
                     onChange={(event) =>
                       updateSection("facturacion", {
@@ -706,24 +1178,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                     }
                     disabled={!canWriteConfiguracion}
                   />
-                  Habilitar ARCA
-                </label>
-
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={draft.facturacion.arca.force_unavailable}
-                    onChange={(event) =>
-                      updateSection("facturacion", {
-                        arca: {
-                          ...draft.facturacion.arca,
-                          force_unavailable: event.target.checked,
-                        },
-                      })
-                    }
-                    disabled={!canWriteConfiguracion}
-                  />
-                  Forzar no disponible
+                  Habilitar Facturación Electrónica ARCA
                 </label>
 
                 <select
@@ -739,217 +1194,110 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   }
                   disabled={!canWriteConfiguracion}
                 >
-                  <option value="mock">Modo mock</option>
-                  <option value="sandbox">Modo sandbox / homologacion</option>
-                  <option value="real">Modo real</option>
+                  <option value="mock">Modo Mock (Pruebas Locales)</option>
+                  <option value="sandbox">Modo Sandbox (Homologación AFIP)</option>
+                  <option value="real">Modo Real (Producción AFIP)</option>
                 </select>
 
-                <select
-                  className="ui-input"
-                  value={draft.facturacion.arca.fiscal_environment}
-                  onChange={(event) =>
-                    updateSection("facturacion", {
-                      arca: {
-                        ...draft.facturacion.arca,
-                        fiscal_environment:
-                          event.target.value as FacturacionSettings["arca"]["fiscal_environment"],
-                      },
-                    })
-                  }
-                  disabled={!canWriteConfiguracion}
-                >
-                  <option value="homologacion">Entorno homologacion</option>
-                  <option value="produccion">Entorno produccion</option>
-                </select>
-
-                <input
-                  className="ui-input"
-                  value={draft.facturacion.arca.cuit_emisor}
-                  onChange={(event) =>
-                    updateSection("facturacion", {
-                      arca: {
-                        ...draft.facturacion.arca,
-                        cuit_emisor: event.target.value.trim(),
-                      },
-                    })
-                  }
-                  placeholder="CUIT emisor ARCA"
-                  disabled={!canWriteConfiguracion}
-                />
-
-                <input
-                  className="ui-input"
-                  type="number"
-                  min="1"
-                  value={draft.facturacion.arca.punto_venta}
-                  onChange={(event) =>
-                    updateSection("facturacion", {
-                      arca: {
-                        ...draft.facturacion.arca,
-                        punto_venta: Math.max(
-                          1,
-                          Math.floor(toNumber(event.target.value, draft.facturacion.arca.punto_venta))
-                        ),
-                      },
-                    })
-                  }
-                  placeholder="Punto de venta"
-                  disabled={!canWriteConfiguracion}
-                />
-
-                <input
-                  className="ui-input md:col-span-2"
-                  value={draft.facturacion.arca.certificado_alias}
-                  onChange={(event) =>
-                    updateSection("facturacion", {
-                      arca: {
-                        ...draft.facturacion.arca,
-                        certificado_alias: event.target.value.trim(),
-                      },
-                    })
-                  }
-                  placeholder="Alias/referencia de certificado"
-                  disabled={!canWriteConfiguracion}
-                />
-
-                <label className="flex items-center gap-2 text-sm text-slate-700 md:col-span-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Punto de Venta Fiscal</label>
                   <input
-                    type="checkbox"
-                    checked={draft.facturacion.arca.allow_internal_fallback}
+                    className="ui-input"
+                    type="number"
+                    min="1"
+                    value={draft.facturacion.arca.punto_venta}
                     onChange={(event) =>
                       updateSection("facturacion", {
                         arca: {
                           ...draft.facturacion.arca,
-                          allow_internal_fallback: event.target.checked,
+                          punto_venta: Math.max(
+                            1,
+                            Math.floor(toNumber(event.target.value, draft.facturacion.arca.punto_venta))
+                          ),
                         },
                       })
                     }
+                    placeholder="1"
                     disabled={!canWriteConfiguracion}
                   />
-                  Permitir fallback a factura interna cuando ARCA no este disponible
-                </label>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Alias Certificado Digital</label>
+                  <input
+                    className="ui-input"
+                    value={draft.facturacion.arca.certificado_alias}
+                    onChange={(event) =>
+                      updateSection("facturacion", {
+                        arca: {
+                          ...draft.facturacion.arca,
+                          certificado_alias: event.target.value.trim(),
+                        },
+                      })
+                    }
+                    placeholder="Alias certificado AFIP"
+                    disabled={!canWriteConfiguracion}
+                  />
+                </div>
               </div>
+            </div>
 
-              <p className="mt-2 text-xs text-slate-500">
-                El frontend no ejecuta firma ni certificados reales. Esta configuracion prepara el envio a backend/edge.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-4">
-            <div>
-              <label className="mb-1 block text-xs text-slate-500">Secuencia A</label>
-              <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.A} onChange={(event) => updateDocumentSequence("A", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.A))))} disabled={!canWriteConfiguracion} />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-slate-500">Secuencia B</label>
-              <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.B} onChange={(event) => updateDocumentSequence("B", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.B))))} disabled={!canWriteConfiguracion} />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-slate-500">Secuencia C</label>
-              <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.C} onChange={(event) => updateDocumentSequence("C", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.C))))} disabled={!canWriteConfiguracion} />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs text-slate-500">Secuencia Presupuesto</label>
-              <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.PRESUPUESTO} onChange={(event) => updateDocumentSequence("PRESUPUESTO", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.PRESUPUESTO))))} disabled={!canWriteConfiguracion} />
+            {/* CORRELATIVIDAD DE SECUENCIAS */}
+            <div className="md:col-span-2 space-y-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Próximos Números de Secuencia</span>
+              <div className="grid gap-3 md:grid-cols-4">
+                <div>
+                  <label className="mb-1 block text-xs text-slate-600 dark:text-slate-400">Factura A</label>
+                  <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.A} onChange={(event) => updateDocumentSequence("A", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.A))))} disabled={!canWriteConfiguracion} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-600 dark:text-slate-400">Factura B</label>
+                  <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.B} onChange={(event) => updateDocumentSequence("B", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.B))))} disabled={!canWriteConfiguracion} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-600 dark:text-slate-400">Factura C</label>
+                  <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.C} onChange={(event) => updateDocumentSequence("C", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.C))))} disabled={!canWriteConfiguracion} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-slate-600 dark:text-slate-400">Presupuesto</label>
+                  <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.PRESUPUESTO} onChange={(event) => updateDocumentSequence("PRESUPUESTO", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.PRESUPUESTO))))} disabled={!canWriteConfiguracion} />
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.contableCatalogos}>
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <h2 className="text-base font-semibold text-slate-900">Contable y cobranzas</h2>
-              <p className="text-xs text-slate-500">
-                Catalogos usados en POS para cuentas destino, transferencias y planes de cuotas.
-              </p>
+        {/* SECCIÓN: BANCOS Y COBROS */}
+        <section
+          className="ui-card space-y-4"
+          hidden={!scopePreset.visibleSections.contableCatalogos || (visibleTabs.length > 1 && activeTab !== "contableCatalogos")}
+        >
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <Building2 className="text-blue-600 dark:text-blue-400" size={20} />
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Bancos, Cuentas y Planes de Cuotas</h2>
+                <p className="text-xs text-slate-500">Catálogos de cuentas de depósito y financiación con tarjeta en POS</p>
+              </div>
             </div>
-            {isAccountingLoading ? <span className="text-xs text-slate-500">Cargando...</span> : null}
+            {isAccountingLoading ? <span className="text-xs text-slate-500">Cargando datos contables...</span> : null}
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            <article className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <h3 className="text-sm font-semibold text-slate-900">Cuentas bancarias del comercio</h3>
+          <div className="grid gap-6 lg:grid-cols-3">
+            {/* CUENTAS BANCARIAS */}
+            <article className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Cuentas Bancarias</h3>
 
               <div className="space-y-2">
-                <input
-                  className="ui-input"
-                  value={bankAccountForm.bank_name}
-                  onChange={(event) =>
-                    setBankAccountForm((current) => ({ ...current, bank_name: event.target.value }))
-                  }
-                  placeholder="Banco"
-                  disabled={!canWriteConfiguracion}
-                />
-                <select
-                  className="ui-input"
-                  value={bankAccountForm.account_type}
-                  onChange={(event) =>
-                    setBankAccountForm((current) => ({
-                      ...current,
-                      account_type: event.target.value as BankAccount["account_type"],
-                    }))
-                  }
-                  disabled={!canWriteConfiguracion}
-                >
+                <input className="ui-input" value={bankAccountForm.bank_name} onChange={(event) => setBankAccountForm((current) => ({ ...current, bank_name: event.target.value }))} placeholder="Nombre del Banco" disabled={!canWriteConfiguracion} />
+                <select className="ui-input" value={bankAccountForm.account_type} onChange={(event) => setBankAccountForm((current) => ({ ...current, account_type: event.target.value as BankAccount["account_type"] }))} disabled={!canWriteConfiguracion}>
                   {bankAccountTypeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
+                    <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
-                <input
-                  className="ui-input"
-                  value={bankAccountForm.holder_name}
-                  onChange={(event) =>
-                    setBankAccountForm((current) => ({ ...current, holder_name: event.target.value }))
-                  }
-                  placeholder="Titular"
-                  disabled={!canWriteConfiguracion}
-                />
-                <input
-                  className="ui-input"
-                  value={bankAccountForm.cbu}
-                  onChange={(event) =>
-                    setBankAccountForm((current) => ({ ...current, cbu: event.target.value }))
-                  }
-                  placeholder="CBU (opcional)"
-                  disabled={!canWriteConfiguracion}
-                />
-                <input
-                  className="ui-input"
-                  value={bankAccountForm.alias}
-                  onChange={(event) =>
-                    setBankAccountForm((current) => ({ ...current, alias: event.target.value }))
-                  }
-                  placeholder="Alias (opcional)"
-                  disabled={!canWriteConfiguracion}
-                />
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <input
-                    className="ui-input"
-                    value={bankAccountForm.currency_code}
-                    onChange={(event) =>
-                      setBankAccountForm((current) => ({
-                        ...current,
-                        currency_code: event.target.value.toUpperCase(),
-                      }))
-                    }
-                    placeholder="Moneda"
-                    disabled={!canWriteConfiguracion}
-                  />
-                  <label className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={bankAccountForm.is_active}
-                      onChange={(event) =>
-                        setBankAccountForm((current) => ({ ...current, is_active: event.target.checked }))
-                      }
-                      disabled={!canWriteConfiguracion}
-                    />
-                    Activa
-                  </label>
-                </div>
+                <input className="ui-input" value={bankAccountForm.holder_name} onChange={(event) => setBankAccountForm((current) => ({ ...current, holder_name: event.target.value }))} placeholder="Titular de la Cuenta" disabled={!canWriteConfiguracion} />
+                <input className="ui-input" value={bankAccountForm.cbu} onChange={(event) => setBankAccountForm((current) => ({ ...current, cbu: event.target.value }))} placeholder="CBU / CVU (22 dígitos)" disabled={!canWriteConfiguracion} />
+                <input className="ui-input" value={bankAccountForm.alias} onChange={(event) => setBankAccountForm((current) => ({ ...current, alias: event.target.value }))} placeholder="Alias CBU" disabled={!canWriteConfiguracion} />
                 <button
                   type="button"
                   className="ui-btn-primary w-full"
@@ -975,36 +1323,21 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                     });
                   }}
                 >
-                  Agregar cuenta
+                  Agregar Cuenta
                 </button>
               </div>
 
-              <div className="max-h-56 space-y-2 overflow-auto pr-1">
+              <div className="max-h-48 space-y-2 overflow-auto pr-1">
                 {bankAccounts.map((account) => (
-                  <div key={account.id} className="rounded-lg bg-white p-2">
-                    <p className="text-sm font-medium text-slate-900">{account.bank_name}</p>
-                    <p className="text-xs text-slate-500">
-                      {account.holder_name} | {account.currency_code}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {account.alias || "Sin alias"} | {account.cbu || "Sin CBU"}
-                    </p>
-                    <div className="mt-1 flex items-center justify-between gap-2">
-                      <span
-                        className={
-                          account.is_active ? "ui-badge ui-badge--success" : "ui-badge ui-badge--warn"
-                        }
-                      >
+                  <div key={account.id} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{account.bank_name}</p>
+                    <p className="text-xs text-slate-500">{account.holder_name} · {account.currency_code}</p>
+                    <p className="text-xs font-mono text-slate-500">{account.alias || "Sin alias"} · {account.cbu || "Sin CBU"}</p>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className={account.is_active ? "ui-badge ui-badge--success" : "ui-badge ui-badge--warn"}>
                         {account.is_active ? "Activa" : "Inactiva"}
                       </span>
-                      <button
-                        type="button"
-                        className="ui-btn-ghost px-2 py-1 text-xs"
-                        onClick={() => {
-                          void toggleBankAccount(account.id);
-                        }}
-                        disabled={!canWriteConfiguracion}
-                      >
+                      <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => { void toggleBankAccount(account.id); }} disabled={!canWriteConfiguracion}>
                         {account.is_active ? "Desactivar" : "Activar"}
                       </button>
                     </div>
@@ -1013,39 +1346,13 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               </div>
             </article>
 
-            <article className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <h3 className="text-sm font-semibold text-slate-900">Bancos de origen</h3>
+            {/* BANCOS DE ORIGEN */}
+            <article className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Bancos Emisores</h3>
 
               <div className="space-y-2">
-                <input
-                  className="ui-input"
-                  value={originBankForm.name}
-                  onChange={(event) =>
-                    setOriginBankForm((current) => ({ ...current, name: event.target.value }))
-                  }
-                  placeholder="Nombre de banco"
-                  disabled={!canWriteConfiguracion}
-                />
-                <input
-                  className="ui-input"
-                  value={originBankForm.code}
-                  onChange={(event) =>
-                    setOriginBankForm((current) => ({ ...current, code: event.target.value }))
-                  }
-                  placeholder="Codigo (opcional)"
-                  disabled={!canWriteConfiguracion}
-                />
-                <label className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={originBankForm.is_active}
-                    onChange={(event) =>
-                      setOriginBankForm((current) => ({ ...current, is_active: event.target.checked }))
-                    }
-                    disabled={!canWriteConfiguracion}
-                  />
-                  Activo
-                </label>
+                <input className="ui-input" value={originBankForm.name} onChange={(event) => setOriginBankForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nombre de Banco" disabled={!canWriteConfiguracion} />
+                <input className="ui-input" value={originBankForm.code} onChange={(event) => setOriginBankForm((current) => ({ ...current, code: event.target.value }))} placeholder="Código BCRA (Opcional)" disabled={!canWriteConfiguracion} />
                 <button
                   type="button"
                   className="ui-btn-primary w-full"
@@ -1053,37 +1360,24 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   onClick={() => {
                     void upsertOriginBank(originBankForm).then((saved) => {
                       if (!saved) return;
-                      setOriginBankForm({
-                        code: "",
-                        name: "",
-                        is_active: true,
-                      });
+                      setOriginBankForm({ code: "", name: "", is_active: true });
                     });
                   }}
                 >
-                  Agregar banco
+                  Agregar Banco
                 </button>
               </div>
 
-              <div className="max-h-56 space-y-2 overflow-auto pr-1">
+              <div className="max-h-48 space-y-2 overflow-auto pr-1">
                 {originBanks.map((bank) => (
-                  <div key={bank.id} className="rounded-lg bg-white p-2">
-                    <p className="text-sm font-medium text-slate-900">{bank.name}</p>
-                    <p className="text-xs text-slate-500">{bank.code}</p>
-                    <div className="mt-1 flex items-center justify-between gap-2">
-                      <span
-                        className={bank.is_active ? "ui-badge ui-badge--success" : "ui-badge ui-badge--warn"}
-                      >
+                  <div key={bank.id} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{bank.name}</p>
+                    <p className="text-xs text-slate-500">{bank.code || "Sin código"}</p>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className={bank.is_active ? "ui-badge ui-badge--success" : "ui-badge ui-badge--warn"}>
                         {bank.is_active ? "Activo" : "Inactivo"}
                       </span>
-                      <button
-                        type="button"
-                        className="ui-btn-ghost px-2 py-1 text-xs"
-                        onClick={() => {
-                          void toggleOriginBank(bank.id);
-                        }}
-                        disabled={!canWriteConfiguracion}
-                      >
+                      <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => { void toggleOriginBank(bank.id); }} disabled={!canWriteConfiguracion}>
                         {bank.is_active ? "Desactivar" : "Activar"}
                       </button>
                     </div>
@@ -1092,79 +1386,16 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               </div>
             </article>
 
-            <article className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <h3 className="text-sm font-semibold text-slate-900">Planes de cuotas</h3>
+            {/* PLANES DE CUOTAS */}
+            <article className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Planes de Cuotas</h3>
 
               <div className="space-y-2">
-                <input
-                  className="ui-input"
-                  value={installmentPlanForm.name}
-                  onChange={(event) =>
-                    setInstallmentPlanForm((current) => ({ ...current, name: event.target.value }))
-                  }
-                  placeholder="Nombre del plan"
-                  disabled={!canWriteConfiguracion}
-                />
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <input
-                    className="ui-input"
-                    type="number"
-                    min="1"
-                    value={installmentPlanForm.installments}
-                    onChange={(event) =>
-                      setInstallmentPlanForm((current) => ({
-                        ...current,
-                        installments: Math.max(1, Math.floor(toNumber(event.target.value, 1))),
-                      }))
-                    }
-                    placeholder="Cuotas"
-                    disabled={!canWriteConfiguracion}
-                  />
-                  <input
-                    className="ui-input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={installmentPlanForm.interest_percent}
-                    onChange={(event) =>
-                      setInstallmentPlanForm((current) => ({
-                        ...current,
-                        interest_percent: Math.max(0, toNumber(event.target.value, 0)),
-                      }))
-                    }
-                    placeholder="Interes %"
-                    disabled={!canWriteConfiguracion}
-                  />
+                <input className="ui-input" value={installmentPlanForm.name} onChange={(event) => setInstallmentPlanForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ej: 3 Cuotas sin interés" disabled={!canWriteConfiguracion} />
+                <div className="grid gap-2 grid-cols-2">
+                  <input className="ui-input" type="number" min="1" value={installmentPlanForm.installments} onChange={(event) => setInstallmentPlanForm((current) => ({ ...current, installments: Math.max(1, Math.floor(toNumber(event.target.value, 1))) }))} placeholder="Cant. Cuotas" disabled={!canWriteConfiguracion} />
+                  <input className="ui-input" type="number" min="0" step="0.01" value={installmentPlanForm.interest_percent} onChange={(event) => setInstallmentPlanForm((current) => ({ ...current, interest_percent: Math.max(0, toNumber(event.target.value, 0)) }))} placeholder="Recargo %" disabled={!canWriteConfiguracion} />
                 </div>
-                <input
-                  className="ui-input"
-                  value={installmentPlanForm.card_brand}
-                  onChange={(event) =>
-                    setInstallmentPlanForm((current) => ({ ...current, card_brand: event.target.value }))
-                  }
-                  placeholder="Marca de tarjeta (opcional)"
-                  disabled={!canWriteConfiguracion}
-                />
-                <input
-                  className="ui-input"
-                  value={installmentPlanForm.code}
-                  onChange={(event) =>
-                    setInstallmentPlanForm((current) => ({ ...current, code: event.target.value }))
-                  }
-                  placeholder="Codigo (opcional)"
-                  disabled={!canWriteConfiguracion}
-                />
-                <label className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={installmentPlanForm.is_active}
-                    onChange={(event) =>
-                      setInstallmentPlanForm((current) => ({ ...current, is_active: event.target.checked }))
-                    }
-                    disabled={!canWriteConfiguracion}
-                  />
-                  Activo
-                </label>
                 <button
                   type="button"
                   className="ui-btn-primary w-full"
@@ -1172,53 +1403,29 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   onClick={() => {
                     void upsertInstallmentPlan({
                       ...installmentPlanForm,
-                      code:
-                        installmentPlanForm.code ||
-                        `plan_${installmentPlanForm.installments}_${Math.round(installmentPlanForm.interest_percent)}`,
+                      code: installmentPlanForm.code || `plan_${installmentPlanForm.installments}_${Math.round(installmentPlanForm.interest_percent)}`,
                       card_brand: installmentPlanForm.card_brand || null,
                       notes: installmentPlanForm.notes || null,
                     }).then((saved) => {
                       if (!saved) return;
-                      setInstallmentPlanForm({
-                        code: "",
-                        name: "",
-                        installments: 1,
-                        interest_percent: 0,
-                        card_brand: "",
-                        notes: "",
-                        is_active: true,
-                      });
+                      setInstallmentPlanForm({ code: "", name: "", installments: 1, interest_percent: 0, card_brand: "", notes: "", is_active: true });
                     });
                   }}
                 >
-                  Agregar plan
+                  Agregar Plan
                 </button>
               </div>
 
-              <div className="max-h-56 space-y-2 overflow-auto pr-1">
+              <div className="max-h-48 space-y-2 overflow-auto pr-1">
                 {installmentPlans.map((plan) => (
-                  <div key={plan.id} className="rounded-lg bg-white p-2">
-                    <p className="text-sm font-medium text-slate-900">{plan.name}</p>
-                    <p className="text-xs text-slate-500">
-                      {plan.installments} cuotas | {plan.interest_percent.toFixed(2)}%
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {plan.card_brand ? `Tarjeta: ${plan.card_brand}` : "Todas las tarjetas"}
-                    </p>
-                    <div className="mt-1 flex items-center justify-between gap-2">
-                      <span
-                        className={plan.is_active ? "ui-badge ui-badge--success" : "ui-badge ui-badge--warn"}
-                      >
+                  <div key={plan.id} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{plan.name}</p>
+                    <p className="text-xs text-slate-500">{plan.installments} cuotas · Recargo: {plan.interest_percent.toFixed(2)}%</p>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <span className={plan.is_active ? "ui-badge ui-badge--success" : "ui-badge ui-badge--warn"}>
                         {plan.is_active ? "Activo" : "Inactivo"}
                       </span>
-                      <button
-                        type="button"
-                        className="ui-btn-ghost px-2 py-1 text-xs"
-                        onClick={() => {
-                          void toggleInstallmentPlan(plan.id);
-                        }}
-                        disabled={!canWriteConfiguracion}
-                      >
+                      <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => { void toggleInstallmentPlan(plan.id); }} disabled={!canWriteConfiguracion}>
                         {plan.is_active ? "Desactivar" : "Activar"}
                       </button>
                     </div>
@@ -1229,197 +1436,121 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
           </div>
         </section>
 
-        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.codigos_balanza}>
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-slate-900">Codigos de barras y balanza</h2>
+        {/* SECCIÓN: BALANZA Y CÓDIGOS */}
+        <section
+          className="ui-card space-y-4"
+          hidden={!scopePreset.visibleSections.codigos_balanza || (visibleTabs.length > 1 && activeTab !== "codigos_balanza")}
+        >
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <Scale className="text-blue-600 dark:text-blue-400" size={20} />
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Lectura de Balanza y Códigos EAN13</h2>
+                <p className="text-xs text-slate-500">Definición de posiciones de PLU, peso o importe en etiquetas de balanzas pesables</p>
+              </div>
+            </div>
+
             <div className="flex items-center gap-2">
               <button type="button" className="ui-btn-ghost" onClick={() => { void resetSection("codigos_balanza"); }} disabled={!canWriteConfiguracion || savingSection.codigos_balanza}>Restablecer</button>
-              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("codigos_balanza"); }} disabled={!canWriteConfiguracion || savingSection.codigos_balanza}>{savingSection.codigos_balanza ? "Guardando..." : "Guardar"}</button>
+              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("codigos_balanza"); }} disabled={!canWriteConfiguracion || savingSection.codigos_balanza}>{savingSection.codigos_balanza ? "Guardando..." : "Guardar Balanza"}</button>
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={draft.codigos_balanza.scale_parser_enabled} onChange={(event) => updateSection("codigos_balanza", { scale_parser_enabled: event.target.checked })} disabled={!canWriteConfiguracion} />
-              Activar parser de balanza
-            </label>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={draft.codigos_balanza.ean13_enabled} onChange={(event) => updateSection("codigos_balanza", { ean13_enabled: event.target.checked })} disabled={!canWriteConfiguracion} />
-              Compatibilidad EAN13
-            </label>
-            <select className="ui-input" value={draft.codigos_balanza.scale_mode} onChange={(event) => updateSection("codigos_balanza", { scale_mode: event.target.value as BarcodeScaleMode })} disabled={!canWriteConfiguracion}>
-              <option value="total_price">Codigo con importe total</option>
-              <option value="weight">Codigo con peso</option>
-            </select>
-            <input className="ui-input" value={draft.codigos_balanza.scale_prefix} onChange={(event) => updateSection("codigos_balanza", { scale_prefix: event.target.value })} placeholder="Prefijo de balanza" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" type="number" min="8" max="18" value={draft.codigos_balanza.code_length} onChange={(event) => updateSection("codigos_balanza", { code_length: Math.max(8, Math.floor(toNumber(event.target.value, draft.codigos_balanza.code_length))) })} placeholder="Longitud total" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.plu_start} onChange={(event) => updateSection("codigos_balanza", { plu_start: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.plu_start))) })} placeholder="Inicio PLU" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.plu_length} onChange={(event) => updateSection("codigos_balanza", { plu_length: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.plu_length))) })} placeholder="Largo PLU" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.weight_start} onChange={(event) => updateSection("codigos_balanza", { weight_start: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.weight_start))) })} placeholder="Inicio peso" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.weight_length} onChange={(event) => updateSection("codigos_balanza", { weight_length: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.weight_length))) })} placeholder="Largo peso" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" type="number" min="0" max="4" value={draft.codigos_balanza.weight_decimals} onChange={(event) => updateSection("codigos_balanza", { weight_decimals: Math.max(0, Math.floor(toNumber(event.target.value, draft.codigos_balanza.weight_decimals))) })} placeholder="Decimales peso" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.amount_start} onChange={(event) => updateSection("codigos_balanza", { amount_start: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.amount_start))) })} placeholder="Inicio importe" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.amount_length} onChange={(event) => updateSection("codigos_balanza", { amount_length: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.amount_length))) })} placeholder="Largo importe" disabled={!canWriteConfiguracion} />
-            <input className="ui-input" type="number" min="0" max="4" value={draft.codigos_balanza.amount_decimals} onChange={(event) => updateSection("codigos_balanza", { amount_decimals: Math.max(0, Math.floor(toNumber(event.target.value, draft.codigos_balanza.amount_decimals))) })} placeholder="Decimales importe" disabled={!canWriteConfiguracion} />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="md:col-span-2 flex flex-wrap gap-4 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/40">
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-200">
+                <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.codigos_balanza.scale_parser_enabled} onChange={(event) => updateSection("codigos_balanza", { scale_parser_enabled: event.target.checked })} disabled={!canWriteConfiguracion} />
+                Activar Parser de Balanzas Comercial
+              </label>
+
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-200">
+                <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.codigos_balanza.ean13_enabled} onChange={(event) => updateSection("codigos_balanza", { ean13_enabled: event.target.checked })} disabled={!canWriteConfiguracion} />
+                Compatibilidad EAN-13 Estándar
+              </label>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Modo de Lectura de Balanza</label>
+              <select className="ui-input" value={draft.codigos_balanza.scale_mode} onChange={(event) => updateSection("codigos_balanza", { scale_mode: event.target.value as BarcodeScaleMode })} disabled={!canWriteConfiguracion}>
+                <option value="total_price">El código incluye IMPORTE TOTAL en pesos</option>
+                <option value="weight">El código incluye PESO en Kilogramos</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Prefijo de Balanza (Ej: 20)</label>
+              <input className="ui-input" value={draft.codigos_balanza.scale_prefix} onChange={(event) => updateSection("codigos_balanza", { scale_prefix: event.target.value })} placeholder="20" disabled={!canWriteConfiguracion} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Inicio de Posición PLU</label>
+              <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.plu_start} onChange={(event) => updateSection("codigos_balanza", { plu_start: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.plu_start))) })} placeholder="3" disabled={!canWriteConfiguracion} />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Largo del Código PLU</label>
+              <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.plu_length} onChange={(event) => updateSection("codigos_balanza", { plu_length: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.plu_length))) })} placeholder="4" disabled={!canWriteConfiguracion} />
+            </div>
           </div>
         </section>
 
-        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.apariencia}>
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-slate-900">Apariencia</h2>
+        {/* SECCIÓN: INTEGRACIONES Y SISTEMA */}
+        <section
+          className="ui-card space-y-4"
+          hidden={!scopePreset.visibleSections.sistema || (visibleTabs.length > 1 && activeTab !== "sistema")}
+        >
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
             <div className="flex items-center gap-2">
-              <button type="button" className="ui-btn-ghost" onClick={() => { void resetSection("apariencia"); }} disabled={!canWriteConfiguracion || savingSection.apariencia}>Restablecer</button>
-              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("apariencia"); }} disabled={!canWriteConfiguracion || savingSection.apariencia}>{savingSection.apariencia ? "Guardando..." : "Guardar"}</button>
+              <Settings className="text-blue-600 dark:text-blue-400" size={20} />
+              <div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Integraciones y Sistema</h2>
+                <p className="text-xs text-slate-500">MercadoPago, proveedor de datos de base y estado de plataforma</p>
+              </div>
             </div>
-          </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <select className="ui-input" value={draft.apariencia.default_theme} onChange={(event) => updateSection("apariencia", { default_theme: event.target.value as AppearanceSettings["default_theme"] })} disabled={!canWriteConfiguracion}>
-              <option value="light">Modo claro</option>
-              <option value="dark">Modo oscuro</option>
-            </select>
-            <select className="ui-input" value={draft.apariencia.density} onChange={(event) => updateSection("apariencia", { density: event.target.value as AppearanceSettings["density"] })} disabled={!canWriteConfiguracion}>
-              <option value="standard">Vista estandar</option>
-              <option value="compact">Vista compacta</option>
-            </select>
-            <input className="ui-input" type="color" value={draft.apariencia.accent_color} onChange={(event) => updateSection("apariencia", { accent_color: event.target.value })} disabled={!canWriteConfiguracion} />
-            <input className="ui-input" value={draft.apariencia.display_name} onChange={(event) => updateSection("apariencia", { display_name: event.target.value })} placeholder="Nombre visible" disabled={!canWriteConfiguracion} />
-          </div>
-
-          <button
-            type="button"
-            className="ui-btn-ghost"
-            disabled={!canWriteConfiguracion}
-            onClick={() => applyAppearance(draft.apariencia)}
-          >
-            Aplicar vista previa
-          </button>
-        </section>
-
-        <section className="ui-card space-y-3" hidden={!scopePreset.visibleSections.sistema}>
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-slate-900">Sistema</h2>
             <div className="flex items-center gap-2">
               <button type="button" className="ui-btn-ghost" onClick={() => { void resetSection("sistema"); }} disabled={!canWriteConfiguracion || savingSection.sistema}>Restablecer</button>
-              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("sistema"); }} disabled={!canWriteConfiguracion || savingSection.sistema}>{savingSection.sistema ? "Guardando..." : "Guardar"}</button>
+              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("sistema"); }} disabled={!canWriteConfiguracion || savingSection.sistema}>{savingSection.sistema ? "Guardando..." : "Guardar Sistema"}</button>
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="ui-input">
-              Proveedor de datos actual: <strong>{draft.sistema.data_provider}</strong>
-            </div>
-            <div className="ui-input">
-              Version visible: <strong>{draft.sistema.version}</strong>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="ui-input font-medium">
+              Proveedor de Datos Activo: <span className="font-bold text-blue-600">{draft.sistema.data_provider.toUpperCase()}</span>
             </div>
 
-            {dataProvider === "mock" ? (
-              <>
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input type="checkbox" checked={draft.sistema.show_dev_flags} onChange={(event) => updateSection("sistema", { show_dev_flags: event.target.checked })} disabled={!canWriteConfiguracion} />
-                  Mostrar flags mock/dev
-                </label>
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input type="checkbox" checked={draft.sistema.enable_mock_auth_bypass} onChange={(event) => updateSection("sistema", { enable_mock_auth_bypass: event.target.checked })} disabled={!canWriteConfiguracion} />
-                  Habilitar bypass mock visible
-                </label>
-              </>
-            ) : (
-              <p className="text-sm text-slate-500 md:col-span-2">
-                Flags de desarrollo ocultos porque el proveedor activo no es mock.
-              </p>
-            )}
+            <div className="ui-input font-medium">
+              Versión del Sistema: <span className="font-bold text-slate-900 dark:text-slate-100">{draft.sistema.version}</span>
+            </div>
 
-            <label className="flex items-center gap-2 text-sm text-slate-700 md:col-span-2">
-              <input type="checkbox" checked={draft.sistema.allow_placeholder_export_import} onChange={(event) => updateSection("sistema", { allow_placeholder_export_import: event.target.checked })} disabled={!canWriteConfiguracion} />
-              Habilitar placeholder de export/import
-            </label>
-
-            <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-slate-900">Mercado Pago</h3>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={[
-                      "ui-badge",
-                      mercadoPagoConfig.mode === "mock"
-                        ? "ui-badge--info"
-                        : mercadoPagoConfig.mode === "sandbox"
-                          ? "ui-badge--warn"
-                          : "ui-badge--success",
-                    ].join(" ")}
-                  >
-                    {mercadoPagoModeLabel[mercadoPagoConfig.mode]}
+            {/* MERCADOPAGO */}
+            <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3 mb-3 dark:border-slate-700">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Integración con Mercado Pago (QR / Cobro)</h3>
+                <div className="flex items-center gap-2">
+                  <span className="ui-badge ui-badge--info">
+                    Modo {mercadoPagoModeLabel[mercadoPagoConfig.mode]}
                   </span>
                   <span className={mercadoPagoConfigured ? "ui-badge ui-badge--success" : "ui-badge ui-badge--danger"}>
-                    {mercadoPagoConfigured ? "Disponible" : "No configurado"}
+                    {mercadoPagoConfigured ? "Configurado" : "Sin Configurar"}
                   </span>
                 </div>
               </div>
 
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={mercadoPagoConfig.enabled}
-                    onChange={(event) => updateMercadoPagoSettings({ enabled: event.target.checked })}
-                    disabled={!canWriteConfiguracion}
-                  />
-                  Habilitar Mercado Pago
-                </label>
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={mercadoPagoConfig.force_unavailable}
-                    onChange={(event) =>
-                      updateMercadoPagoSettings({ force_unavailable: event.target.checked })
-                    }
-                    disabled={!canWriteConfiguracion}
-                  />
-                  Marcar como no disponible
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="flex items-center gap-2.5 text-sm font-medium text-slate-800 dark:text-slate-200">
+                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={mercadoPagoConfig.enabled} onChange={(event) => updateMercadoPagoSettings({ enabled: event.target.checked })} disabled={!canWriteConfiguracion} />
+                  Habilitar Cobro por Mercado Pago
                 </label>
 
-                <select
-                  className="ui-input"
-                  value={mercadoPagoConfig.mode}
-                  onChange={(event) =>
-                    updateMercadoPagoSettings({
-                      mode: event.target.value as MercadoPagoMode,
-                    })
-                  }
-                  disabled={!canWriteConfiguracion}
-                >
-                  <option value="mock">Modo mock</option>
-                  <option value="sandbox">Modo sandbox</option>
-                  <option value="real">Modo real</option>
+                <select className="ui-input" value={mercadoPagoConfig.mode} onChange={(event) => updateMercadoPagoSettings({ mode: event.target.value as MercadoPagoMode })} disabled={!canWriteConfiguracion}>
+                  <option value="mock">Modo Mock (Simulación)</option>
+                  <option value="sandbox">Modo Sandbox (Pruebas)</option>
+                  <option value="real">Modo Real (Producción)</option>
                 </select>
 
-                <input
-                  className="ui-input"
-                  type="password"
-                  value={mercadoPagoConfig.access_token}
-                  onChange={(event) =>
-                    updateMercadoPagoSettings({ access_token: event.target.value.trim() })
-                  }
-                  placeholder="Access token (usar backend en produccion)"
-                  disabled={!canWriteConfiguracion}
-                />
-
-                <input
-                  className="ui-input md:col-span-2"
-                  value={mercadoPagoConfig.public_key}
-                  onChange={(event) =>
-                    updateMercadoPagoSettings({ public_key: event.target.value.trim() })
-                  }
-                  placeholder="Public key"
-                  disabled={!canWriteConfiguracion}
-                />
+                <input className="ui-input md:col-span-2" value={mercadoPagoConfig.public_key} onChange={(event) => updateMercadoPagoSettings({ public_key: event.target.value.trim() })} placeholder="Public Key de Mercado Pago (APP_USR-...)" disabled={!canWriteConfiguracion} />
               </div>
-
-              <p className="mt-2 text-xs text-slate-500">
-                En modo sandbox/real, el frontend no debe enviar credenciales directo a Mercado Pago.
-                Esta configuracion deja el sistema preparado para backend/edge functions.
-              </p>
             </div>
           </div>
         </section>

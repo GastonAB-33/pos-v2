@@ -30,8 +30,8 @@ export const SuppliersToolbar = ({
           type="search"
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Buscar por nombre, telefono o email"
-          className="ui-input w-72"
+          placeholder="Buscar por nombre, teléfono o email"
+          className="ui-input w-full md:w-72"
         />
         <IconButton icon={RefreshCw} label="Recargar proveedores" onClick={onReload} loading={loading} />
         <button
@@ -47,4 +47,3 @@ export const SuppliersToolbar = ({
     </div>
   );
 };
-

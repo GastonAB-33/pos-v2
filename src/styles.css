@@ -2050,6 +2050,23 @@ body {
   letter-spacing: 0;
 }
 
+.ui-summary-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+@media (min-width: 640px) {
+  .ui-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .ui-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
 .ui-kpi {
   font-family: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
   font-size: 1.18rem;
@@ -2306,11 +2323,13 @@ section.fixed.inset-0 > div:not(.absolute) {
 
   .app-main,
   .app-main--pos {
-    padding: 0.6rem 0.55rem 5.2rem;
+    padding: 0.6rem 0.55rem 6rem !important;
   }
 
   .ui-page-header {
     min-height: 2.65rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
   }
 
   .ui-page-eyebrow,
@@ -2322,14 +2341,48 @@ section.fixed.inset-0 > div:not(.absolute) {
   .workspace-toolbar__header {
     align-items: center;
     padding-bottom: 0.55rem;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.5rem;
   }
 
   .workspace-toolbar__actions {
-    width: auto;
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .workspace-toolbar__actions > button,
+  .workspace-toolbar__actions > a {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-height: 2.5rem;
   }
 
   .workspace-filter-strip {
     padding: 0.55rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .workspace-filter-strip input,
+  .workspace-filter-strip select {
+    width: 100% !important;
+    min-height: 2.5rem;
+  }
+
+  /* Scroll horizontal suave y seguro para todas las tablas generales en móvil */
+  .ui-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+    border-radius: 8px;
+  }
+
+  .ui-table-wrap table {
+    min-width: 32rem;
   }
 
   .product-catalog-page .ui-table-wrap {
@@ -2411,7 +2464,7 @@ section.fixed.inset-0 > div:not(.absolute) {
   }
 
   .cash-daily-workspace > div.grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(1, minmax(0, 1fr));
   }
 
   .pos-surface--header {
@@ -2449,7 +2502,17 @@ section.fixed.inset-0 > div:not(.absolute) {
     padding-block: 0.4rem;
   }
 
+  /* Modales en móvil: Bottom sheets táctiles al 100% de ancho */
+  section.fixed.inset-0 {
+    align-items: flex-end !important;
+  }
+
   section.fixed.inset-0 > div:not(.absolute) {
-    border-radius: 8px 8px 0 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 90dvh !important;
+    overflow-y: auto !important;
+    border-radius: 16px 16px 0 0 !important;
+    margin: 0 !important;
   }
 }

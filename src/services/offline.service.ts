@@ -5,6 +5,23 @@ import { productsService } from "@/services/products.service";
 import { receiptsService } from "@/services/receipts.service";
 import { salesService } from "@/services/sales.service";
 import { stockService } from "@/services/stock.service";
+import { offlineDatabase, type OfflineDatabaseState } from "@/services/offline-database.service";
+import type {
+  ArcaSettings,
+  BankAccount,
+  BarcodeScaleSettings,
+  CashSession,
+  Customer,
+  InstallmentPlan,
+  MercadoPagoSettings,
+  OriginBank,
+  PaymentMethod,
+  PosSettings,
+  PriceList,
+  Product,
+  ProductBarcode,
+} from "@/types/entities";
+import type { PromotionWithDetails } from "@/services/promotions.service";
 import type { CashMovementType, PaymentMethodType, Sale } from "@/types/entities";
 import { storageKeys } from "@/utils/local-storage";
 
@@ -107,6 +124,27 @@ export interface OfflineSyncMeta {
   updated_at: string;
 }
 
+export interface PosOfflineSnapshot {
+  tenant_id: string;
+  saved_at: string;
+  products: Product[];
+  product_barcodes: ProductBarcode[];
+  customers: Customer[];
+  payment_methods: PaymentMethod[];
+  bank_accounts: BankAccount[];
+  origin_banks: OriginBank[];
+  installment_plans: InstallmentPlan[];
+  price_lists: PriceList[];
+  promotions: PromotionWithDetails[];
+  pos_settings: PosSettings;
+  scale_settings: BarcodeScaleSettings;
+  mercado_pago_settings: MercadoPagoSettings;
+  arca_settings: ArcaSettings;
+  require_open_session_for_sale: boolean;
+  default_invoice_document_type: "A" | "B" | "C" | "PRESUPUESTO";
+  open_cash_session: CashSession | null;
+}
+
 const roundQty = (value: number): number => Number(value.toFixed(3));
 const roundAmount = (value: number): number => Number(value.toFixed(2));
 
@@ -123,7 +161,27 @@ const getSafeLocalStorage = (): Storage | null => {
   }
 };
 
-const readQueue = <T>(key: string): T[] => {
+let memoryState: OfflineDatabaseState = offlineDatabase.emptyState();
+let hydrated = false;
+let persistTimer: number | null = null;
+
+const legacyState = (): OfflineDatabaseState => ({
+  pendingSales: readLegacyQueue<PendingSaleRecord>(storageKeys.pendingSales),
+  pendingCashMovements: readLegacyQueue<PendingCashMovementRecord>(storageKeys.pendingCashMovements),
+  syncMeta: readLegacyQueue<OfflineSyncMeta>(storageKeys.offlineSyncMeta),
+  posSnapshots: [],
+});
+
+const schedulePersist = (): void => {
+  if (typeof window === "undefined") return;
+  if (persistTimer !== null) window.clearTimeout(persistTimer);
+  persistTimer = window.setTimeout(() => {
+    persistTimer = null;
+    void offlineDatabase.write(memoryState).catch(() => undefined);
+  }, 0);
+};
+
+const readLegacyQueue = <T>(key: string): T[] => {
   const storage = getSafeLocalStorage();
   if (!storage) return [];
 
@@ -135,12 +193,6 @@ const readQueue = <T>(key: string): T[] => {
   } catch {
     return [];
   }
-};
-
-const writeQueue = <T>(key: string, rows: T[]): void => {
-  const storage = getSafeLocalStorage();
-  if (!storage) return;
-  storage.setItem(key, JSON.stringify(rows));
 };
 
 const saleOfflineMarker = (localId: string): string => `[offline:${localId}]`;
@@ -163,17 +215,18 @@ const appendMarkerToNotes = (notes: string | null | undefined, marker: string): 
   return `${clean} | ${marker}`;
 };
 
-const getAllPendingSales = (): PendingSaleRecord[] => readQueue<PendingSaleRecord>(storageKeys.pendingSales);
+const getAllPendingSales = (): PendingSaleRecord[] => memoryState.pendingSales as PendingSaleRecord[];
 const getAllPendingCashMovements = (): PendingCashMovementRecord[] =>
-  readQueue<PendingCashMovementRecord>(storageKeys.pendingCashMovements);
-const getAllSyncMeta = (): OfflineSyncMeta[] => readQueue<OfflineSyncMeta>(storageKeys.offlineSyncMeta);
+  memoryState.pendingCashMovements as PendingCashMovementRecord[];
+const getAllSyncMeta = (): OfflineSyncMeta[] => memoryState.syncMeta as OfflineSyncMeta[];
 
 const replacePendingSalesForTenant = (
   tenantId: string,
   nextTenantRows: PendingSaleRecord[]
 ): void => {
   const otherTenants = getAllPendingSales().filter((row) => row.tenant_id !== tenantId);
-  writeQueue(storageKeys.pendingSales, [...otherTenants, ...nextTenantRows]);
+  memoryState = { ...memoryState, pendingSales: [...otherTenants, ...nextTenantRows] };
+  schedulePersist();
 };
 
 const replacePendingCashMovementsForTenant = (
@@ -181,7 +234,8 @@ const replacePendingCashMovementsForTenant = (
   nextTenantRows: PendingCashMovementRecord[]
 ): void => {
   const otherTenants = getAllPendingCashMovements().filter((row) => row.tenant_id !== tenantId);
-  writeQueue(storageKeys.pendingCashMovements, [...otherTenants, ...nextTenantRows]);
+  memoryState = { ...memoryState, pendingCashMovements: [...otherTenants, ...nextTenantRows] };
+  schedulePersist();
 };
 
 const upsertSyncMeta = (
@@ -202,20 +256,20 @@ const upsertSyncMeta = (
 
   const nextRows = allRows.filter((row) => row.tenant_id !== tenantId);
   nextRows.push(nextRow);
-  writeQueue(storageKeys.offlineSyncMeta, nextRows);
+  memoryState = { ...memoryState, syncMeta: nextRows };
+  schedulePersist();
   return nextRow;
 };
 
 const clearSyncMeta = (tenantId?: string | null): void => {
   if (!tenantId) {
-    writeQueue(storageKeys.offlineSyncMeta, []);
+    memoryState = { ...memoryState, syncMeta: [] };
+    schedulePersist();
     return;
   }
 
-  writeQueue(
-    storageKeys.offlineSyncMeta,
-    getAllSyncMeta().filter((row) => row.tenant_id !== tenantId)
-  );
+  memoryState = { ...memoryState, syncMeta: getAllSyncMeta().filter((row) => row.tenant_id !== tenantId) };
+  schedulePersist();
 };
 
 const linkPendingCashMovementsToSale = (
@@ -240,7 +294,8 @@ const linkPendingCashMovementsToSale = (
     } satisfies PendingCashMovementRecord;
   });
 
-  writeQueue(storageKeys.pendingCashMovements, nextRows);
+  memoryState = { ...memoryState, pendingCashMovements: nextRows };
+  schedulePersist();
   return linked;
 };
 
@@ -258,7 +313,8 @@ const savePendingCashMovementInternal = (
     updated_at: now,
   };
 
-  writeQueue(storageKeys.pendingCashMovements, [...getAllPendingCashMovements(), row]);
+  memoryState = { ...memoryState, pendingCashMovements: [...getAllPendingCashMovements(), row] };
+  schedulePersist();
   return row;
 };
 
@@ -480,6 +536,19 @@ const syncPendingSaleRecord = async (record: PendingSaleRecord): Promise<Sale> =
 };
 
 export const offlineService = {
+  hydrate: async (): Promise<void> => {
+    if (hydrated) return;
+    try {
+      const saved = await offlineDatabase.read();
+      memoryState = saved ?? legacyState();
+      if (!saved) schedulePersist();
+    } catch {
+      memoryState = legacyState();
+    } finally {
+      hydrated = true;
+    }
+  },
+
   isOnline: (): boolean => {
     if (typeof navigator === "undefined") return true;
     return navigator.onLine;
@@ -497,7 +566,8 @@ export const offlineService = {
       updated_at: now,
     };
 
-    writeQueue(storageKeys.pendingSales, [...getAllPendingSales(), row]);
+    memoryState = { ...memoryState, pendingSales: [...getAllPendingSales(), row] };
+    schedulePersist();
     return row;
   },
 
@@ -531,35 +601,29 @@ export const offlineService = {
 
   clearPendingById: (queue: "sales" | "cash_movements", localId: string): void => {
     if (queue === "sales") {
-      writeQueue(
-        storageKeys.pendingSales,
-        getAllPendingSales().filter((row) => row.local_id !== localId)
-      );
+      memoryState = { ...memoryState, pendingSales: getAllPendingSales().filter((row) => row.local_id !== localId) };
+      schedulePersist();
       return;
     }
 
-    writeQueue(
-      storageKeys.pendingCashMovements,
-      getAllPendingCashMovements().filter((row) => row.local_id !== localId)
-    );
+    memoryState = { ...memoryState, pendingCashMovements: getAllPendingCashMovements().filter((row) => row.local_id !== localId) };
+    schedulePersist();
   },
 
   clearAllPending: (tenantId?: string | null): void => {
     if (!tenantId) {
-      writeQueue(storageKeys.pendingSales, []);
-      writeQueue(storageKeys.pendingCashMovements, []);
+      memoryState = { ...memoryState, pendingSales: [], pendingCashMovements: [] };
+      schedulePersist();
       clearSyncMeta();
       return;
     }
 
-    writeQueue(
-      storageKeys.pendingSales,
-      getAllPendingSales().filter((row) => row.tenant_id !== tenantId)
-    );
-    writeQueue(
-      storageKeys.pendingCashMovements,
-      getAllPendingCashMovements().filter((row) => row.tenant_id !== tenantId)
-    );
+    memoryState = {
+      ...memoryState,
+      pendingSales: getAllPendingSales().filter((row) => row.tenant_id !== tenantId),
+      pendingCashMovements: getAllPendingCashMovements().filter((row) => row.tenant_id !== tenantId),
+    };
+    schedulePersist();
     clearSyncMeta(tenantId);
   },
 
@@ -585,6 +649,15 @@ export const offlineService = {
         const existing = existingSales.find((sale) => (sale.notes ?? "").includes(marker));
 
         if (existing) {
+          const [existingItems, existingPayments] = await Promise.all([
+            salesService.getItemsBySaleId(tenantId, existing.id),
+            salesService.getPaymentsBySaleId(tenantId, existing.id),
+          ]);
+          if (existingItems.length < row.items.length || existingPayments.length === 0) {
+            throw new Error(
+              `La venta ${row.sale_number} quedo incompleta durante una sincronizacion anterior. Requiere revision antes de reintentar.`
+            );
+          }
           linkPendingCashMovementsToSale(tenantId, row.local_id, existing.id);
           summary.synced += 1;
           continue;
@@ -691,5 +764,22 @@ export const offlineService = {
 
     replacePendingCashMovementsForTenant(tenantId, remainingRows);
     return summary;
+  },
+
+  savePosSnapshot: (snapshot: PosOfflineSnapshot): void => {
+    const remaining = (memoryState.posSnapshots as PosOfflineSnapshot[]).filter(
+      (row) => row.tenant_id !== snapshot.tenant_id
+    );
+    memoryState = { ...memoryState, posSnapshots: [...remaining, snapshot] };
+    schedulePersist();
+  },
+
+  getPosSnapshot: (tenantId: string): PosOfflineSnapshot | null =>
+    ((memoryState.posSnapshots as PosOfflineSnapshot[]).find((row) => row.tenant_id === tenantId) ?? null),
+
+  updateCachedCashSession: (tenantId: string, session: CashSession | null): void => {
+    const current = offlineService.getPosSnapshot(tenantId);
+    if (!current) return;
+    offlineService.savePosSnapshot({ ...current, open_cash_session: session, saved_at: nowIso() });
   },
 };

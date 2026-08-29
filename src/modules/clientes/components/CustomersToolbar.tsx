@@ -30,8 +30,8 @@ export const CustomersToolbar = ({
           type="search"
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Buscar por nombre, doc, telefono o email"
-          className="ui-input w-72"
+          placeholder="Buscar por nombre, doc, teléfono o email"
+          className="ui-input w-full md:w-72"
         />
         <IconButton icon={RefreshCw} label="Recargar clientes" onClick={onReload} loading={loading} />
         <button

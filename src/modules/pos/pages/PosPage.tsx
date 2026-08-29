@@ -9,6 +9,7 @@ import { routePaths } from "@/config/routes";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { useOffline } from "@/features/offline/hooks/useOffline";
+import { offlineService } from "@/services/offline.service";
 import { usePwa } from "@/features/pwa/hooks/usePwa";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { PosCustomerModal, type PosCustomerModalValues } from "@/modules/pos/components/PosCustomerModal";
@@ -350,6 +351,15 @@ export const PosPage = () => {
       return;
     }
 
+    if (!navigator.onLine) {
+      await offlineService.hydrate();
+      const cachedSession = offlineService.getPosSnapshot(tenantId)?.open_cash_session ?? null;
+      setOpenCashSessionId(cachedSession?.status === "open" ? cachedSession.id : null);
+      setCashGateFeedback(cachedSession?.status === "open" ? "Caja local disponible sin conexion." : "No hay una caja local abierta para operar sin conexion.");
+      setHasResolvedCashGate(true);
+      return;
+    }
+
     setIsCheckingCashSession(true);
     try {
       const [tenantSettings, openSession] = await Promise.all([
@@ -362,6 +372,7 @@ export const PosPage = () => {
         setHasLoadedCashDefaults(true);
       }
       setOpenCashSessionId(openSession?.id ?? null);
+      offlineService.updateCachedCashSession(tenantId, openSession);
       setCashGateFeedback(null);
       setHasResolvedCashGate(true);
     } catch {

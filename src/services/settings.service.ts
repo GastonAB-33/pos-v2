@@ -349,12 +349,24 @@ const upsertTenantSettings = async (
 };
 
 const readOrCreateTenantSettings = async (tenantId: string): Promise<TenantSettings> => {
-  const allRows = await crud.getAllByTenant(tenantId);
-  const existing = allRows[0] ?? null;
-  if (existing) return normalizeTenantSettings(existing);
+  try {
+    const allRows = await crud.getAllByTenant(tenantId);
+    const existing = allRows[0] ?? null;
+    if (existing) return normalizeTenantSettings(existing);
 
-  const created = await upsertTenantSettings(tenantId, createDefaultSettingsInput());
-  return normalizeTenantSettings(created);
+    const created = await upsertTenantSettings(tenantId, createDefaultSettingsInput());
+    return normalizeTenantSettings(created);
+  } catch (error) {
+    console.warn("Error leyendo/creando tenant_settings:", error);
+    const timestamp = nowIso();
+    return normalizeTenantSettings({
+      id: `settings-${tenantId}`,
+      tenant_id: tenantId,
+      created_at: timestamp,
+      updated_at: timestamp,
+      ...createDefaultSettingsInput(),
+    });
+  }
 };
 
 export const settingsService = {

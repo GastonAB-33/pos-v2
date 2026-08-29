@@ -75,8 +75,10 @@ export const authService = {
       throw new Error("Supabase Auth solo esta disponible con VITE_DATA_PROVIDER=supabase");
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
+      email: normalizedEmail,
       password,
     });
 

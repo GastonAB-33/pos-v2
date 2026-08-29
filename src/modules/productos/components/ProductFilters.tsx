@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Download, Ellipsis, FilterX, Plus, RefreshCw, Upload } from "lucide-react";
+import { Camera, Download, Ellipsis, FilterX, Plus, RefreshCw, Upload } from "lucide-react";
+import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { IconButton } from "@/components/ui/IconButton";
 import type { ProductFiltersState } from "@/modules/productos/types/product.types";
 
@@ -43,6 +44,7 @@ export const ProductFilters = ({
   onClearSelection,
 }: ProductFiltersProps) => {
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   return (
     <div className="workspace-toolbar space-y-3">
@@ -91,13 +93,19 @@ export const ProductFilters = ({
 
       <div className="workspace-filter-strip">
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
-          <div className="xl:col-span-2">
+          <div className="xl:col-span-2 flex items-center gap-2">
             <input
-              className="ui-input"
+              className="ui-input flex-1"
               value={filters.search}
               onChange={(event) => onFiltersChange({ search: event.target.value })}
               placeholder="Nombre, código o código de barras"
               aria-label="Buscar productos"
+            />
+            <IconButton
+              icon={Camera}
+              label="Escanear código de barras con cámara"
+              onClick={() => setScannerOpen(true)}
+              disabled={loading}
             />
           </div>
 
@@ -188,6 +196,17 @@ export const ProductFilters = ({
           </div>
         </div>
       </div>
+
+      <BarcodeScannerModal
+        open={scannerOpen}
+        title="Buscar por código de barras"
+        description="Apuntá la cámara al código de barras para buscar el producto automáticamente."
+        onClose={() => setScannerOpen(false)}
+        onDetected={(barcode) => {
+          onFiltersChange({ search: barcode });
+          setScannerOpen(false);
+        }}
+      />
     </div>
   );
 };
