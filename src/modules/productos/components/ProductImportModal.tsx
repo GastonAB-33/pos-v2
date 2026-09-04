@@ -1,5 +1,6 @@
-﻿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import type {
   ProductImportErrorRow,
   ProductImportMode,
@@ -46,6 +47,7 @@ export const ProductImportModal = ({
   onParseFile,
   onConfirmImport,
 }: ProductImportModalProps) => {
+  useBodyScrollLock(true);
   const [preview, setPreview] = useState<ProductImportPreview | null>(null);
   const [mode, setMode] = useState<ProductImportMode>("create_only");
   const [importResult, setImportResult] = useState<ProductImportResult | null>(null);

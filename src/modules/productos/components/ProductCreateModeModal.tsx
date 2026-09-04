@@ -1,4 +1,5 @@
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 
 interface ProductCreateModeModalProps {
   canWrite: boolean;
@@ -17,6 +18,7 @@ export const ProductCreateModeModal = ({
   onSelectPhoto,
   onSelectVoice,
 }: ProductCreateModeModalProps) => {
+  useBodyScrollLock(true);
   return (
     <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-4">
       <div className="w-full max-w-xl rounded-xl border border-slate-200 bg-white p-4 shadow-panel">

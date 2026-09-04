@@ -19,29 +19,32 @@ export const CustomersToolbar = ({
   onReload,
 }: CustomersToolbarProps) => {
   return (
-    <div className="workspace-toolbar workspace-toolbar--inline">
-      <div>
+    <div className="workspace-toolbar space-y-3">
+      <div className="flex flex-col gap-1">
         <p className="ui-section-label">Agenda comercial</p>
-        <p className="mt-1 text-sm text-slate-500">Busca por nombre, documento, telefono o email.</p>
+        <p className="text-xs text-slate-500">Busca por nombre, documento, teléfono o email.</p>
       </div>
 
-      <div className="workspace-toolbar__actions">
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Buscar por nombre, doc, teléfono o email"
-          className="ui-input w-full md:w-72"
-        />
+      <div className="flex items-center gap-2">
+        <div className="relative min-w-0 flex-1">
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Buscar por nombre, doc, teléfono o email..."
+            className="ui-input w-full"
+          />
+        </div>
         <IconButton icon={RefreshCw} label="Recargar clientes" onClick={onReload} loading={loading} />
         <button
           type="button"
           onClick={onCreate}
-          className="ui-btn-primary"
+          className="ui-btn-primary shrink-0 gap-1.5 px-3 py-2 text-xs font-semibold"
           disabled={!canWrite || loading}
         >
           <Plus aria-hidden="true" className="h-4 w-4" />
-          Nuevo cliente
+          <span className="hidden sm:inline">Nuevo cliente</span>
+          <span className="sm:hidden">Nuevo</span>
         </button>
       </div>
     </div>

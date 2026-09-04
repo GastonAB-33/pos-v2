@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -11,6 +11,7 @@ import { ProductFormModal } from "@/modules/productos/components/ProductFormModa
 import { ProductImportModal } from "@/modules/productos/components/ProductImportModal";
 import { ProductTable } from "@/modules/productos/components/ProductTable";
 import { useProducts } from "@/modules/productos/hooks/useProducts";
+import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
 import type { ProductFormModalValues, ProductViewModel } from "@/modules/productos/types/product.types";
 
 type ProductModalState = {
@@ -30,6 +31,16 @@ export const ProductsPage = () => {
   const [formModal, setFormModal] = useState<ProductModalState | null>(null);
   const [barcodeProduct, setBarcodeProduct] = useState<ProductViewModel | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+
+  useBarcodeScanner({
+    enabled: !formModal && !barcodeProduct && !importOpen,
+    onScan: (scannedBarcode) => {
+      const clean = scannedBarcode.trim();
+      if (clean) {
+        products.setFilters({ search: clean });
+      }
+    },
+  });
 
   const selectedCount = products.selectedIds.length;
   const filteredProductsKey = JSON.stringify(products.filters);
@@ -55,7 +66,7 @@ export const ProductsPage = () => {
   };
 
   return (
-    <section className="ui-panel operational-page product-catalog-page space-y-4">
+    <section className="ui-panel operational-page product-catalog-page space-y-4 w-full min-w-0 max-w-full overflow-hidden">
       <ProductFilters
           canWrite={canWriteProductos}
           loading={products.isLoading || products.isSubmitting}

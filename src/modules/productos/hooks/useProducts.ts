@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Product } from "@/types/entities";
 import { useProductsCrud } from "@/modules/productos/hooks/useProductsCrud";
 import { mapEntityToProductViewModel, productsModuleService } from "@/modules/productos/services/products.service";
@@ -58,6 +58,17 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
     [productsView]
   );
 
+  const barcodesByProductId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const item of crud.allBarcodes) {
+      if (!item.barcode) continue;
+      const list = map.get(item.product_id) ?? [];
+      list.push(item.barcode.trim().toLowerCase());
+      map.set(item.product_id, list);
+    }
+    return map;
+  }, [crud.allBarcodes]);
+
   const filteredProducts = useMemo(() => {
     const search = normalize(filters.search);
 
@@ -68,19 +79,27 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
 
       if (!search) return true;
 
+      const extraBarcodes = barcodesByProductId.get(product.entity.id) ?? [];
+      const hasBarcodeMatch = extraBarcodes.some(
+        (b) => b.includes(search) || search.includes(b)
+      );
+
+      if (hasBarcodeMatch) return true;
+
       const searchTarget = [
         product.nombre,
         product.codigoProducto,
         product.codigoBarras,
         product.categoria,
         product.subcategoria,
+        ...extraBarcodes,
       ]
         .join(" ")
         .toLowerCase();
 
       return searchTarget.includes(search);
     });
-  }, [filters, productsView]);
+  }, [barcodesByProductId, filters, productsView]);
 
   const visibleSelectedIds = useMemo(
     () => selectedIds.filter((id) => filteredProducts.some((product) => product.entity.id === id)),

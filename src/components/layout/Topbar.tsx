@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bell, CircleEllipsis, Headphones, Menu, Newspaper, RefreshCw, Type, UserRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/useToast";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { env } from "@/config/env";
 import { routePaths } from "@/config/routes";
 import { useAuthStore } from "@/features/auth/store/auth.store";
@@ -184,6 +185,7 @@ export const Topbar = () => {
 
   const [now, setNow] = useState(() => new Date());
   const [activePanel, setActivePanel] = useState<TopbarPanel>(null);
+  useBodyScrollLock(Boolean(activePanel));
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -754,11 +756,10 @@ export const Topbar = () => {
           ) : null}
         </div>
       </div>
-
-      <div className="app-topbar-actions flex items-center gap-2 md:gap-3">
+      <div className="app-topbar-actions flex items-center gap-1 md:gap-2">
         {supportWhatsappUrl ? (
           <a
-            className="ui-btn-primary app-topbar-support text-xs"
+            className="ui-btn-primary app-topbar-support hidden lg:inline-flex text-xs"
             href={supportWhatsappUrl}
             target="_blank"
             rel="noreferrer"
@@ -766,46 +767,98 @@ export const Topbar = () => {
             WhatsApp soporte
           </a>
         ) : null}
-        <button
+        <button
           type="button"
-          className="ui-btn-ghost gap-1.5 text-xs font-semibold"
+          className="ui-btn-ghost gap-1 px-2 text-xs font-semibold"
           title={`Tamaño de interfaz: ${fontSize === "compact" ? "Compacto" : fontSize === "large" ? "Grande" : fontSize === "extra-large" ? "Muy grande" : "Normal"}. Clic para cambiar.`}
-          onClick={cycleFontSize}
+          onClick={(e) => {
+            e.stopPropagation();
+            cycleFontSize();
+          }}
         >
           <Type aria-hidden="true" size={15} />
           <span>{fontSize === "compact" ? "A-" : fontSize === "large" ? "A+" : fontSize === "extra-large" ? "A++" : "A"}</span>
         </button>
 
-        <button type="button" className="ui-btn-ghost gap-1.5 text-xs" onClick={() => togglePanel("support")}>
+        <button
+          type="button"
+          className="ui-btn-ghost gap-1 px-2 text-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePanel("support");
+          }}
+          title="Soporte"
+        >
           <Headphones aria-hidden="true" size={15} />
-          <span>Soporte</span>
+          <span className="hidden sm:inline">Soporte</span>
         </button>
 
-        <button type="button" className="ui-btn-ghost gap-1.5 text-xs" onClick={() => togglePanel("notifications")}>
+        <button
+          type="button"
+          className="ui-btn-ghost relative gap-1 px-2 text-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePanel("notifications");
+          }}
+          title="Alertas"
+        >
           <Bell aria-hidden="true" size={15} />
-          <span>Alertas {notificationCount > 0 ? `(${notificationCount})` : ""}</span>
+          <span className="hidden sm:inline">Alertas</span>
+          {notificationCount > 0 ? (
+            <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700 dark:bg-red-950 dark:text-red-300">
+              {notificationCount}
+            </span>
+          ) : null}
         </button>
 
-        <button type="button" className="ui-btn-ghost gap-1.5 text-xs" onClick={() => togglePanel("more")}>
+        <button
+          type="button"
+          className="ui-btn-ghost relative gap-1 px-2 text-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePanel("more");
+          }}
+          title="Más herramientas"
+        >
           <CircleEllipsis aria-hidden="true" size={16} />
-          <span>Mas {pendingTasksCount + unreadChatCount > 0 ? `(${pendingTasksCount + unreadChatCount})` : ""}</span>
+          <span className="hidden sm:inline">Mas</span>
+          {pendingTasksCount + unreadChatCount > 0 ? (
+            <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+              {pendingTasksCount + unreadChatCount}
+            </span>
+          ) : null}
         </button>
         <button
           type="button"
-          className="ui-btn-ghost app-topbar-user gap-2 text-right"
+          className="ui-btn-ghost app-topbar-user gap-2 px-2 text-right"
           aria-label={`Opciones de ${currentUserLabel}`}
-          onClick={() => togglePanel("user")}
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePanel("user");
+          }}
+          title={currentUserLabel}
         >
           <UserRound aria-hidden="true" size={16} />
-          <span className="min-w-0">
+          <span className="hidden min-w-0 md:block">
             <span className="block truncate text-sm font-medium text-slate-900">{currentUserLabel}</span>
             <span className="block truncate text-xs text-slate-500">{user?.email ?? "sin-sesion@local"}</span>
           </span>
         </button>
       </div>
 
+      {activePanel ? (
+        <div
+          className="fixed inset-0 z-40 bg-black/25 backdrop-blur-[0.5px]"
+          onClick={() => setActivePanel(null)}
+          aria-hidden="true"
+        />
+      ) : null}
+
       {activePanel === "more" ? (
-        <div className="ui-card app-topbar-popover absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[280px] space-y-2">
+        <div
+          className="ui-card app-topbar-popover fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[280px] space-y-2 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
           <p className="ui-section-label">Herramientas</p>
           <button type="button" className="ui-popover-action" onClick={() => togglePanel("tasks")}>
             <span>Tareas del equipo</span>
@@ -825,10 +878,18 @@ export const Topbar = () => {
       ) : null}
 
       {activePanel === "changelog" ? (
-        <div className="ui-card app-topbar-popover absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[460px] space-y-3">
-          <div>
-            <p className="ui-section-label">Actualizaciones</p>
-            <h2 className="mt-1 text-base font-semibold text-slate-900">Novedades del sistema</h2>
+        <div
+          className="ui-card app-topbar-popover fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[460px] space-y-3 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="ui-section-label">Actualizaciones</p>
+              <h2 className="mt-1 text-base font-semibold text-slate-900">Novedades del sistema</h2>
+            </div>
+            <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => setActivePanel(null)}>
+              Cerrar
+            </button>
           </div>
 
           {publicChangelogEntries.length ? (
@@ -861,12 +922,20 @@ export const Topbar = () => {
       ) : null}
 
       {activePanel === "support" ? (
-        <div className="ui-card absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[460px] space-y-3">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Soporte</p>
-            <p className="text-xs text-slate-500">
-              Envía sugerencias o reportes de fallas con los datos necesarios para ayudarte.
-            </p>
+        <div
+          className="ui-card fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[460px] space-y-3 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Soporte</p>
+              <p className="text-xs text-slate-500">
+                Envía sugerencias o reportes de fallas con los datos necesarios para ayudarte.
+              </p>
+            </div>
+            <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => setActivePanel(null)}>
+              Cerrar
+            </button>
           </div>
 
           {supportWhatsappUrl ? (
@@ -927,10 +996,18 @@ export const Topbar = () => {
       ) : null}
 
       {activePanel === "tasks" ? (
-        <div className="ui-card absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[560px] space-y-3">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Tareas del equipo</p>
-            <p className="text-xs text-slate-500">Crea tareas y delégalas entre usuarios del comercio.</p>
+        <div
+          className="ui-card fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[560px] space-y-3 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Tareas del equipo</p>
+              <p className="text-xs text-slate-500">Crea tareas y delégalas entre usuarios del comercio.</p>
+            </div>
+            <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => setActivePanel(null)}>
+              Cerrar
+            </button>
           </div>
 
           <div className="grid gap-2 md:grid-cols-2">
@@ -996,10 +1073,18 @@ export const Topbar = () => {
       ) : null}
 
       {activePanel === "chat" ? (
-        <div className="ui-card absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[620px] space-y-3">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Chat interno</p>
-            <p className="text-xs text-slate-500">Comunicate con usuarios del sistema y revisa lectura/conexion.</p>
+        <div
+          className="ui-card fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[620px] space-y-3 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Chat interno</p>
+              <p className="text-xs text-slate-500">Comunicate con usuarios del sistema y revisa lectura/conexion.</p>
+            </div>
+            <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => setActivePanel(null)}>
+              Cerrar
+            </button>
           </div>
 
           <select
@@ -1074,10 +1159,18 @@ export const Topbar = () => {
       ) : null}
 
       {activePanel === "notifications" ? (
-        <div className="ui-card absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[460px] space-y-3">
+        <div
+          className="ui-card fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[460px] space-y-3 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-slate-900">Notificaciones</p>
-            <span className="ui-badge ui-badge--info">Total: {notificationCount}</span>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-slate-900">Notificaciones</p>
+              <span className="ui-badge ui-badge--info">Total: {notificationCount}</span>
+            </div>
+            <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => setActivePanel(null)}>
+              Cerrar
+            </button>
           </div>
 
           <section className="space-y-2 rounded-lg border border-slate-200 p-3">
@@ -1181,10 +1274,18 @@ export const Topbar = () => {
       ) : null}
 
       {activePanel === "user" ? (
-        <div className="ui-card absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[360px] space-y-3">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">{user?.fullName ?? "Invitado"}</p>
-            <p className="text-xs text-slate-500">{user?.email ?? "sin-sesion@local"}</p>
+        <div
+          className="ui-card fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[360px] space-y-3 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">{user?.fullName ?? "Invitado"}</p>
+              <p className="text-xs text-slate-500">{user?.email ?? "sin-sesion@local"}</p>
+            </div>
+            <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => setActivePanel(null)}>
+              Cerrar
+            </button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

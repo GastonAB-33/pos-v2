@@ -119,14 +119,17 @@ export const productsService = {
 
   getPrimaryBarcodesMapByTenant: async (tenantId: string): Promise<Record<string, string>> => {
     const allBarcodes = await barcodeCrud.getAllByTenant(tenantId);
-    const primaryMap: Record<string, string> = {};
+    const barcodeMap: Record<string, string> = {};
 
     for (const barcode of allBarcodes) {
-      if (!barcode.is_primary) continue;
-      primaryMap[barcode.product_id] = barcode.barcode;
+      if (!barcode.barcode) continue;
+      // Asignar el código si no existe aún, o si este tiene is_primary = true
+      if (!barcodeMap[barcode.product_id] || barcode.is_primary) {
+        barcodeMap[barcode.product_id] = barcode.barcode;
+      }
     }
 
-    return primaryMap;
+    return barcodeMap;
   },
 
   setPrimaryBarcode: async (

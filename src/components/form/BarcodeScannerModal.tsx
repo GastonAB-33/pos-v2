@@ -1,6 +1,6 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
-
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 
 interface BarcodeScannerModalProps {
   open: boolean;
@@ -35,6 +35,7 @@ export const BarcodeScannerModal = ({
   onDetected,
   onClose,
 }: BarcodeScannerModalProps) => {
+  useBodyScrollLock(open);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<number | null>(null);

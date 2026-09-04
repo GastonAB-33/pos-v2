@@ -1,6 +1,6 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
-
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 
 interface ProductImageEditorModalProps {
   open: boolean;
@@ -96,6 +96,7 @@ export const ProductImageEditorModal = ({
   onClose,
   onConfirm,
 }: ProductImageEditorModalProps) => {
+  useBodyScrollLock(open);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [zoom, setZoom] = useState(1.2);
   const [offsetX, setOffsetX] = useState(0);
