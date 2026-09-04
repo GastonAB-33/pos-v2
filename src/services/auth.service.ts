@@ -106,4 +106,42 @@ export const authService = {
     if (dataProvider !== "supabase") return;
     await supabase.auth.signOut();
   },
+
+  getStoredPosSession: async (): Promise<PosSession | null> => {
+    if (dataProvider !== "supabase") return null;
+
+    try {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (error || !session?.user?.id) {
+        return null;
+      }
+
+      return await resolvePosSessionFromAuthUser(session.user.id);
+    } catch {
+      return null;
+    }
+  },
+
+  refreshPosSession: async (): Promise<PosSession | null> => {
+    if (dataProvider !== "supabase") return null;
+
+    try {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.refreshSession();
+
+      if (error || !session?.user?.id) {
+        return null;
+      }
+
+      return await resolvePosSessionFromAuthUser(session.user.id);
+    } catch {
+      return null;
+    }
+  },
 };

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { PaymentMethodSelector } from "@/components/payments/PaymentMethodSelector";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import {
   getPaymentMethodPosConfig,
   normalizePaymentMethodCode,
@@ -125,6 +126,7 @@ export const CurrentAccountPaymentModal = ({
   onClose,
   onSubmit,
 }: CurrentAccountPaymentModalProps) => {
+  useBodyScrollLock(open);
   const [selectedMethodId, setSelectedMethodId] = useState("");
   const [amountInput, setAmountInput] = useState("");
   const [notes, setNotes] = useState("");

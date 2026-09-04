@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import JsBarcode from "jsbarcode";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { buildPromotionBarcode, type PromotionWithDetails } from "@/services/promotions.service";
 
 interface PromotionBarcodeModalProps {
@@ -19,6 +20,7 @@ const downloadSvg = (svgMarkup: string, fileName: string) => {
 };
 
 export const PromotionBarcodeModal = ({ promotion, onClose }: PromotionBarcodeModalProps) => {
+  useBodyScrollLock(Boolean(promotion));
   const svgRef = useRef<SVGSVGElement | null>(null);
   const barcode = promotion?.barcodes?.[0]?.barcode ?? (promotion ? buildPromotionBarcode(promotion.code) : "");
 

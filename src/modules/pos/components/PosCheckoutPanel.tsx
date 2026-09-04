@@ -1,6 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { FileText, Pencil, Plus, Search, X } from "lucide-react";
 import type {
   MercadoPagoOperationalStatus,
   MercadoPagoPaymentIntent,
@@ -951,6 +952,8 @@ export const PosCheckoutPanel = ({
       return details.length ? details.join(" | ") : "Cheque configurado";
     }
 
+
+
     if (isMercadoPagoManual) {
       if (!arePaymentDetailsReady) {
         return "Completa los datos manuales de Mercado Pago.";
@@ -989,18 +992,18 @@ export const PosCheckoutPanel = ({
   ]);
 
   return (
-    <section id={panelId} className={isModalLayout ? "space-y-3" : "pos-surface space-y-3"}>
-      <div className="flex items-center justify-between gap-2">
+    <section id={panelId} className={isModalLayout ? "space-y-4" : "pos-surface space-y-4"}>
+      <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
             {isModalLayout ? "Confirmar venta" : "Checkout"}
           </h2>
           {isModalLayout ? (
-            <p className="text-xs text-slate-500">Elegi cliente, medio de pago y datos contables.</p>
+            <p className="text-xs text-slate-500">Elegí cliente, medio de pago y datos contables.</p>
           ) : null}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="font-kpi text-2xl font-semibold text-brand-700">
+        <div className="flex items-center gap-3">
+          <span className="font-kpi text-2xl font-black text-blue-700 dark:text-blue-400">
             {new Intl.NumberFormat("es-AR", {
               style: "currency",
               currency: "ARS",
@@ -1008,94 +1011,98 @@ export const PosCheckoutPanel = ({
             }).format(checkoutTotal)}
           </span>
           {onClose ? (
-            <button type="button" className="ui-btn-ghost px-2.5 py-1.5 text-xs" onClick={onClose}>
-              Cerrar
+            <button
+              type="button"
+              className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:text-slate-300 transition"
+              onClick={onClose}
+              title="Cerrar ventana"
+            >
+              <X size={20} />
             </button>
           ) : null}
         </div>
       </div>
 
-      <div className="pos-summary-panel text-xs">
-        <p className="flex items-center justify-between gap-2">
-          <span className="text-slate-500">Cliente</span>
-          <span className="text-right font-medium text-slate-900">
+      <div className="grid grid-cols-3 gap-2 rounded-xl border border-slate-200/90 bg-slate-50/80 p-3 text-xs dark:border-slate-800 dark:bg-slate-900/60">
+        <div className="min-w-0">
+          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cliente</span>
+          <span className="mt-0.5 block truncate font-semibold text-slate-800 dark:text-slate-200">
             {selectedCustomer?.full_name ?? "Consumidor final"}
           </span>
-        </p>
-        <p className="mt-1 flex items-center justify-between gap-2">
-          <span className="text-slate-500">Medio de pago</span>
-          <span className="text-right font-medium text-slate-900">
-            {selectedMethod ? `${selectedMethod.name}` : "No seleccionado"}
+        </div>
+        <div className="min-w-0">
+          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Medio de pago</span>
+          <span className="mt-0.5 block truncate font-semibold text-slate-800 dark:text-slate-200">
+            {selectedMethod ? selectedMethod.name : "No seleccionado"}
           </span>
-        </p>
-        <p className="mt-1 flex items-center justify-between gap-2">
-          <span className="text-slate-500">Total</span>
-          <span className="font-kpi text-base font-semibold text-brand-700">
+        </div>
+        <div className="text-right min-w-0">
+          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total</span>
+          <span className="mt-0.5 block font-bold text-blue-700 dark:text-blue-400 text-sm">
             {new Intl.NumberFormat("es-AR", {
               style: "currency",
               currency: "ARS",
               maximumFractionDigits: 2,
             }).format(checkoutTotal)}
           </span>
-        </p>
+        </div>
       </div>
 
-      <form id={formId} className="grid gap-3" onSubmit={handleSubmit(submit)}>
+      <form id={formId} className="grid gap-4" onSubmit={handleSubmit(submit)}>
         <input type="hidden" {...register("customerId")} />
         <input type="hidden" {...register("paymentMethodId")} />
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Cliente</label>
+          <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Cliente
+          </label>
           <div className="relative" ref={customerLookupRef} data-customer-lookup="true">
             <div className="flex items-center gap-2">
-              <input
-                type="search"
-                value={customerQuery}
-                onChange={(event) => {
-                  setCustomerQuery(event.target.value);
-                  setIsCustomerMenuOpen(true);
-                }}
-                onFocus={() => setIsCustomerMenuOpen(true)}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    setIsCustomerMenuOpen(false);
-                    return;
-                  }
-
-                  if (event.key === "Enter") {
-                    if (!isCustomerMenuOpen) return;
-                    event.preventDefault();
-
-                    if (filteredCustomers.length) {
-                      selectCustomer(filteredCustomers[0]);
+              <div className="relative flex-1">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  type="search"
+                  value={customerQuery}
+                  onChange={(event) => {
+                    setCustomerQuery(event.target.value);
+                    setIsCustomerMenuOpen(true);
+                  }}
+                  onFocus={() => setIsCustomerMenuOpen(true)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      setIsCustomerMenuOpen(false);
                       return;
                     }
 
-                    selectCustomer(null);
-                  }
-                }}
-                placeholder="Buscar cliente por nombre o DNI"
-                className="ui-input"
-                disabled={disabled || !canWrite}
-              />
+                    if (event.key === "Enter") {
+                      if (!isCustomerMenuOpen) return;
+                      event.preventDefault();
+
+                      if (filteredCustomers.length) {
+                        selectCustomer(filteredCustomers[0]);
+                        return;
+                      }
+
+                      selectCustomer(null);
+                    }
+                  }}
+                  placeholder="Buscar cliente por nombre o DNI..."
+                  className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-3 text-xs text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  disabled={disabled || !canWrite}
+                />
+              </div>
               <button
                 type="button"
                 title={customerActionLabel}
                 aria-label={customerActionLabel}
-                className="ui-btn-ghost p-2"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-400 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
                 disabled={disabled || !canWrite || !canManageCustomers}
                 onClick={() => onOpenCustomerModal(selectedCustomer ?? null)}
               >
                 {selectedCustomer ? (
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 20h9" />
-                    <path d="m16.5 3.5 4 4L7 21H3v-4z" />
-                  </svg>
+                  <Pencil size={15} />
                 ) : (
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 5v14" />
-                    <path d="M5 12h14" />
-                  </svg>
+                  <Plus size={16} />
                 )}
               </button>
             </div>
@@ -1131,7 +1138,9 @@ export const PosCheckoutPanel = ({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Medio de pago</label>
+          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Medio de pago
+          </label>
           <PaymentMethodSelector
             paymentMethods={paymentMethodsOrdered}
             selectedPaymentMethodId={watchedPaymentMethodId}
@@ -1774,8 +1783,17 @@ export const PosCheckoutPanel = ({
           </div>
         ) : null}
 
-        <div className="flex items-center justify-end">
-          <label className="pos-switch" aria-label="Emitir factura">
+        <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3.5 transition-colors hover:bg-slate-100/70">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-100/80 text-blue-600">
+              <FileText className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800">Emitir Factura Electrónica</p>
+              <p className="text-xs text-slate-500">Genera comprobante fiscal formal con AFIP</p>
+            </div>
+          </div>
+          <label className="pos-switch relative inline-flex shrink-0 cursor-pointer items-center" aria-label="Emitir factura electrónica AFIP">
             <input
               type="checkbox"
               {...register("issueInvoice")}

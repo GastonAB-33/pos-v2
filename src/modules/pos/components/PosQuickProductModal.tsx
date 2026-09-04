@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { PosQuickProductInput } from "@/modules/pos/hooks/usePosSale";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 
 interface PosQuickProductModalProps {
   open: boolean;
@@ -28,6 +29,7 @@ export const PosQuickProductModal = ({
   onAddManual,
   onCreateAndAdd,
 }: PosQuickProductModalProps) => {
+  useBodyScrollLock(open);
   const [saveMode, setSaveMode] = useState<SaveMode>("sale_only");
   const [saleMode, setSaleMode] = useState<"unit" | "weight">("unit");
   const [name, setName] = useState("");

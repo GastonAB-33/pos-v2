@@ -185,7 +185,7 @@ export const ClientesPage = () => {
 
   return (
     <PagePlaceholder title="Clientes" description="Clientes, datos de contacto y cuenta corriente">
-      <div className="space-y-4">
+      <div className="customers-page operational-page space-y-4 w-full min-w-0 max-w-full overflow-hidden">
         <CustomersToolbar
           canWrite={canWriteClientes}
           loading={isLoading || isSubmitting}

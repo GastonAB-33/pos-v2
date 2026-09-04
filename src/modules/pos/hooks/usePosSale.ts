@@ -106,6 +106,13 @@ export interface PosCartItemEditInput {
   unitPrice: number;
 }
 
+export interface PosSaleTab {
+  id: string;
+  label: string;
+  cart: PosCartItem[];
+  selectedCustomerId: string;
+}
+
 const roundQty = (value: number): number => Number(value.toFixed(3));
 const roundAmount = (value: number): number => Number(value.toFixed(2));
 const buildSaleNumber = (): string => {
@@ -255,6 +262,10 @@ export const usePosSale = (tenantId: string | null) => {
     useState<InvoiceDocumentType>("B");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [cartState, setCartState] = useState<PosCartItem[]>([]);
+  const [saleTabs, setSaleTabs] = useState<PosSaleTab[]>([
+    { id: "sale-1", label: "Venta 1", cart: [], selectedCustomerId: "" },
+  ]);
+  const [activeTabId, setActiveTabId] = useState<string>("sale-1");
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMercadoPagoLoading, setIsMercadoPagoLoading] = useState(false);
@@ -266,7 +277,78 @@ export const usePosSale = (tenantId: string | null) => {
 
   useEffect(() => {
     cartRef.current = cartState;
-  }, [cartState]);
+    setSaleTabs((prevTabs) =>
+      prevTabs.map((tab) => (tab.id === activeTabId ? { ...tab, cart: cartState } : tab))
+    );
+  }, [cartState, activeTabId]);
+
+  const switchSaleTab = useCallback(
+    (tabId: string) => {
+      setSaleTabs((currentTabs) => {
+        const target = currentTabs.find((t) => t.id === tabId);
+        if (!target) return currentTabs;
+        setActiveTabId(tabId);
+        setCartState(target.cart);
+        setSelectedCustomerId(target.selectedCustomerId);
+        return currentTabs;
+      });
+    },
+    []
+  );
+
+  const createNewSaleTab = useCallback(() => {
+    setSaleTabs((currentTabs) => {
+      const existingNumbers = currentTabs
+        .map((t) => {
+          const match = t.label.match(/\d+/);
+          return match ? Number(match[0]) : 0;
+        })
+        .filter((n) => n > 0);
+      const nextNumber =
+        existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : currentTabs.length + 1;
+
+      const newTab: PosSaleTab = {
+        id: `sale-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        label: `Venta ${nextNumber}`,
+        cart: [],
+        selectedCustomerId: "",
+      };
+
+      setActiveTabId(newTab.id);
+      setCartState([]);
+      setSelectedCustomerId("");
+      return [...currentTabs, newTab];
+    });
+  }, []);
+
+  const closeSaleTab = useCallback(
+    (tabId: string) => {
+      setSaleTabs((currentTabs) => {
+        if (currentTabs.length <= 1) {
+          const resetTab: PosSaleTab = {
+            id: `sale-${Date.now()}`,
+            label: "Venta 1",
+            cart: [],
+            selectedCustomerId: "",
+          };
+          setActiveTabId(resetTab.id);
+          setCartState([]);
+          setSelectedCustomerId("");
+          return [resetTab];
+        }
+
+        const remaining = currentTabs.filter((t) => t.id !== tabId);
+        if (activeTabId === tabId) {
+          const nextActive = remaining[remaining.length - 1];
+          setActiveTabId(nextActive.id);
+          setCartState(nextActive.cart);
+          setSelectedCustomerId(nextActive.selectedCustomerId);
+        }
+        return remaining;
+      });
+    },
+    [activeTabId]
+  );
 
   const clearFeedback = useCallback(() => {
     setFeedback(null);
@@ -1250,7 +1332,10 @@ export const usePosSale = (tenantId: string | null) => {
   const setSelectedCustomer = useCallback((customerId: string) => {
     const normalized = customerId.trim();
     setSelectedCustomerId(normalized);
-  }, []);
+    setSaleTabs((prevTabs) =>
+      prevTabs.map((tab) => (tab.id === activeTabId ? { ...tab, selectedCustomerId: normalized } : tab))
+    );
+  }, [activeTabId]);
 
   const createOriginBank = useCallback(
     async (name: string) => {
@@ -2227,8 +2312,7 @@ export const usePosSale = (tenantId: string | null) => {
       });
 
       setMercadoPagoIntent(null);
-      clearCart();
-      setSelectedCustomerId("");
+      closeSaleTab(activeTabId);
       if (updatedStockByProductId.size) {
         setProducts((previous) =>
           previous.map((product) => {
@@ -2282,6 +2366,11 @@ export const usePosSale = (tenantId: string | null) => {
     requireOpenSessionForSale,
     arcaEnabledForPos,
     isArcaConnected,
+    saleTabs,
+    activeTabId,
+    switchSaleTab,
+    createNewSaleTab,
+    closeSaleTab,
     selectedCustomerId,
     selectedCustomer,
     appliedPriceList,

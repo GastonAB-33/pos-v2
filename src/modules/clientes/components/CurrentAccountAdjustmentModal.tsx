@@ -3,6 +3,7 @@ import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import type {
   CurrentAccountSummary,
   CurrentAccountDebtSaleOption,
@@ -75,6 +76,8 @@ export const CurrentAccountAdjustmentModal = ({
   onClose,
   onSubmit,
 }: CurrentAccountAdjustmentModalProps) => {
+  useBodyScrollLock(open);
+
   const {
     register,
     watch,

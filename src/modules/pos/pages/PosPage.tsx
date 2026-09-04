@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
-import { Camera, RefreshCw, ShoppingCart } from "lucide-react";
+import { Camera, FileText, RefreshCw, ShoppingCart, X } from "lucide-react";
 import { useToast } from "@/components/ui/useToast";
 import { routePaths } from "@/config/routes";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -122,6 +122,11 @@ export const PosPage = () => {
     posSettings,
     mercadoPagoSettings,
     mercadoPagoStatus,
+    saleTabs,
+    activeTabId,
+    switchSaleTab,
+    createNewSaleTab,
+    closeSaleTab,
     selectedCustomerId,
     selectedCustomer,
     appliedPriceList,
@@ -145,7 +150,6 @@ export const PosPage = () => {
     increaseQuantity,
     decreaseQuantity,
     removeFromCart,
-    clearCart,
     createOriginBank,
     mercadoPagoIntent,
     startMercadoPagoPayment,
@@ -156,6 +160,7 @@ export const PosPage = () => {
     clearMercadoPagoIntent,
     getCheckoutSummary,
     confirmSale,
+    clearCart,
     generatedReceipt,
     generatedInvoice,
     clearGeneratedReceipt,
@@ -163,7 +168,7 @@ export const PosPage = () => {
 
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState("");
   const [visibleBarcodeValue, setVisibleBarcodeValue] = useState("");
-  const [rightPanelTab, setRightPanelTab] = useState<"cart" | "receipts">("cart");
+  const [isReceiptsListModalOpen, setIsReceiptsListModalOpen] = useState(false);
   const [recentReceipts, setRecentReceipts] = useState<PosRecentReceiptItem[]>([]);
   const [isLoadingReceipts, setIsLoadingReceipts] = useState(false);
   const [receiptModal, setReceiptModal] = useState<PosReceiptModalState | null>(null);
@@ -721,9 +726,8 @@ export const PosPage = () => {
 
   useEffect(() => {
     if (isCashGateBlocking) return;
-    if (rightPanelTab !== "cart") return;
     if (isSubmitting) return;
-    if (customerModalState || receiptModal) return;
+    if (customerModalState || receiptModal || isReceiptsListModalOpen) return;
     if (isCameraScannerOpen) return;
     focusScannerCapture();
   }, [
@@ -731,9 +735,9 @@ export const PosPage = () => {
     focusScannerCapture,
     isCameraScannerOpen,
     isCashGateBlocking,
+    isReceiptsListModalOpen,
     isSubmitting,
     receiptModal,
-    rightPanelTab,
   ]);
 
   useEffect(() => {
@@ -1115,8 +1119,7 @@ export const PosPage = () => {
     const handleCheckoutEnter = (event: KeyboardEvent) => {
       if (event.key !== "Enter") return;
       if (event.defaultPrevented) return;
-      if (customerModalState || receiptModal || isCheckoutModalOpen) return;
-      if (rightPanelTab !== "cart") return;
+      if (customerModalState || receiptModal || isReceiptsListModalOpen || isCheckoutModalOpen) return;
       if (!canWritePos || isLoading || isSubmitting) return;
       if (isCashGateBlocking) return;
       if (!cart.length || !paymentMethods.length) return;
@@ -1150,10 +1153,10 @@ export const PosPage = () => {
     isCashGateBlocking,
     isLoading,
     isCheckoutModalOpen,
+    isReceiptsListModalOpen,
     isSubmitting,
     paymentMethods.length,
     receiptModal,
-    rightPanelTab,
   ]);
 
   useEffect(() => {
@@ -1263,32 +1266,49 @@ export const PosPage = () => {
 
   return (
     <div className="pos-page space-y-4 pb-24 lg:pb-2">
-      <section className="pos-surface pos-surface--header">
-        <div className="pos-topbar">
+      <section className="pos-surface pos-surface--header space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             {clientLogoUrl ? (
               <img
                 src={clientLogoUrl}
                 alt={clientDisplayName}
-                className="h-12 w-12 rounded-xl bg-slate-50 object-cover"
+                className="h-10 w-10 rounded-xl bg-slate-50 object-cover"
               />
             ) : (
-              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-sm font-semibold text-white">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-sm font-semibold text-white">
                 {clientDisplayName.slice(0, 2).toUpperCase()}
               </span>
             )}
             <div>
-              <p className="pos-overline">{clientDisplayName}</p>
-              <h1 className="pos-title">Punto de venta</h1>
+              <p className="pos-overline uppercase tracking-wider text-[11px] font-bold text-slate-500">{clientDisplayName}</p>
+              <h1 className="pos-title font-bold text-slate-900 dark:text-slate-100">Punto de venta</h1>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2 xl:col-start-3">
+          <div className="flex items-center">
+            {isCashGateResolving && !openCashSessionId ? (
+              <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+                Validando caja...
+              </span>
+            ) : openCashSessionId ? (
+              <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                Caja abierta
+              </span>
+            ) : (
+              <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                Caja cerrada
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
             {shouldShowReturnToPanel ? (
               <button
                 type="button"
                 onClick={handleReturnToPanel}
-                className="ui-btn-ghost"
+                className="ui-btn-ghost text-xs"
               >
                 Volver al panel
               </button>
@@ -1319,33 +1339,19 @@ export const PosPage = () => {
                     Boolean((activeElement as HTMLElement | null)?.isContentEditable);
 
                   if (!isEditableElement) {
-                    focusScannerCapture();
+                    scannerCaptureRef.current?.focus();
                   }
-                }, 0);
+                }, 80);
               }}
             />
             <IconButton
               icon={RefreshCw}
               label="Sincronizar punto de venta"
+              className={isManualSyncing || isSyncing ? "animate-spin" : ""}
               onClick={() => {
                 void handleSynchronize();
               }}
-              loading={isManualSyncing || isSyncing}
               disabled={isManualSyncing || isSubmitting}
-            />
-            <button
-              type="button"
-              className="ui-btn-ghost"
-              onClick={() => setIsQuickProductModalOpen(true)}
-              disabled={isSubmitting || !canWritePos || isCashGateBlocking}
-            >
-              Producto rapido
-            </button>
-            <IconButton
-              icon={Camera}
-              label="Escanear con cámara"
-              onClick={() => setIsCameraScannerOpen(true)}
-              disabled={isSubmitting || !canWritePos || isCashGateBlocking}
             />
             {isInstallSupported && canInstall ? (
               <button
@@ -1353,27 +1359,60 @@ export const PosPage = () => {
                 onClick={() => {
                   void installApp();
                 }}
-                className="ui-btn-ghost"
+                className="ui-btn-ghost text-xs"
                 disabled={isInstalling}
               >
                 {isInstalling ? "Instalando..." : "Instalar app"}
               </button>
             ) : null}
+            {canWritePos ? (
+              <button
+                type="button"
+                onClick={() => setIsQuickProductModalOpen(true)}
+                className="ui-btn-ghost text-xs"
+              >
+                Producto rápido
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                setIsReceiptsListModalOpen(true);
+                void loadRecentReceipts();
+              }}
+              className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
+              title="Ver comprobantes y tickets recientes"
+            >
+              <FileText size={14} />
+              Comprobantes
+            </button>
             <IconButton
-              icon={ShoppingCart}
-              label="Limpiar carrito"
-              onClick={clearCart}
-              disabled={isSubmitting || !canWritePos || isCashGateBlocking}
+              icon={Camera}
+              label="Escanear con cámara"
+              onClick={() => setIsCameraScannerOpen(true)}
+              disabled={!canWritePos}
             />
-            <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-2.5 py-2">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-sm font-semibold text-white">
+            {canWritePos && selectedCustomerId ? (
+              <IconButton
+                icon={ShoppingCart}
+                label="Ver perfil del cliente"
+                onClick={() => {
+                  const customer = customers.find((item) => item.id === selectedCustomerId);
+                  if (customer) {
+                    openCustomerModal(customer);
+                  }
+                }}
+              />
+            ) : null}
+            <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-2.5 py-1 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-600 text-[11px] font-bold text-white">
                 {operatorInitials}
               </span>
-              <div className="min-w-0 text-left">
-                <p className="truncate text-sm font-semibold text-slate-900">
+              <div className="leading-tight">
+                <p className="font-semibold text-slate-900 dark:text-slate-100">
                   {user?.fullName ?? "Operador"}
                 </p>
-                <p className="truncate text-xs text-slate-500">Operador de caja</p>
+                <p className="text-[10px] text-slate-500">Operador de caja</p>
               </div>
             </div>
           </div>
@@ -1384,230 +1423,75 @@ export const PosPage = () => {
             {lastSyncMessage}
           </p>
         ) : null}
-        <p
-          className={`text-xs ${
-            isCashGateResolving
-              ? "text-slate-500"
-              : openCashSessionId
-                ? "text-emerald-700"
-                : "text-amber-700"
-          }`}
-        >
-          {isCashGateResolving && !openCashSessionId
-            ? "Validando usuario y caja..."
-            : openCashSessionId
-              ? "Caja abierta"
-              : "Abre la caja para comenzar a vender."}
+      </section>
+
+      {selectedCustomer && appliedPriceList && !appliedPriceList.is_active ? (
+        <p className="text-xs text-amber-700">
+          El cliente tiene una lista inactiva asignada. Se mantiene por compatibilidad.
         </p>
-        {isCashGateResolving && !openCashSessionId ? (
-          <div className="inline-flex items-center gap-2 text-xs text-slate-500">
-            <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
-            Cargando informacion de caja...
-          </div>
-        ) : null}
+      ) : null}
 
-        {selectedCustomer && appliedPriceList && !appliedPriceList.is_active ? (
-          <p className="text-xs text-amber-700">
-            El cliente tiene una lista inactiva asignada. Se mantiene por compatibilidad.
-          </p>
-        ) : null}
+      {!paymentMethods.length ? (
+        <div className="ui-empty-state">
+          No hay medios de pago activos. Configuralos desde el modulo Medios de pago.
+        </div>
+      ) : null}
 
-        {!paymentMethods.length ? (
-          <div className="ui-empty-state">
-            No hay medios de pago activos. Configuralos desde el modulo Medios de pago.
-          </div>
-        ) : null}
-
-        {isLoading ? (
-          <div className="ui-loading">Cargando POS...</div>
-        ) : (
-          <div className="pos-content-grid">
-            <PosProductList
-              products={products}
-              favoriteProducts={favoriteProducts}
-              primaryBarcodes={primaryBarcodes}
-              checkoutAnchorId={cartPanelId}
-              onOpenCheckout={() => setRightPanelTab("cart")}
-              canWrite={canWritePos}
-              disabled={isSubmitting || isCashGateBlocking}
-              onAddProduct={async (product, quantity) => {
-                if (!canWritePos || isCashGateBlocking) return;
-                const added = await addProductToCart(product, quantity);
-                if (added) {
-                  window.setTimeout(() => {
-                    focusScannerCapture();
-                  }, 0);
-                }
-                return added;
-              }}
-            />
+      {isLoading ? (
+        <div className="ui-loading">Cargando POS...</div>
+      ) : (
+        <div className="pos-content-grid">
+          <PosProductList
+            products={products}
+            favoriteProducts={favoriteProducts}
+            primaryBarcodes={primaryBarcodes}
+            saleTabs={saleTabs}
+            activeTabId={activeTabId}
+            onSwitchSaleTab={switchSaleTab}
+            onCreateSaleTab={createNewSaleTab}
+            onCloseSaleTab={closeSaleTab}
+            canWrite={canWritePos}
+            disabled={isSubmitting || isCashGateBlocking}
+            onAddProduct={async (product, quantity) => {
+              if (!canWritePos || isCashGateBlocking) return;
+              const added = await addProductToCart(product, quantity);
+              if (added) {
+                window.setTimeout(() => {
+                  focusScannerCapture();
+                }, 0);
+              }
+              return added;
+            }}
+          />
 
             <div className="pos-side-column">
-              <div className="pos-side-tabs">
-                <button
-                  type="button"
-                  onClick={() => setRightPanelTab("cart")}
-                  className={
-                    rightPanelTab === "cart"
-                      ? "pos-side-tab pos-side-tab--active"
-                      : "pos-side-tab"
-                  }
-                >
-                  Carrito
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRightPanelTab("receipts")}
-                  className={
-                    rightPanelTab === "receipts"
-                      ? "pos-side-tab pos-side-tab--active"
-                      : "pos-side-tab"
-                  }
-                >
-                  Comprobantes
-                </button>
-              </div>
-
-              {rightPanelTab === "cart" ? (
-                <>
-                  <PosCart
-                    id={cartPanelId}
-                    items={cart}
-                    barcodeValue={visibleBarcodeValue}
-                    subtotalBeforePromotions={subtotalBeforePromotions}
-                    promotionDiscountTotal={promotionDiscountTotal}
-                    cartPromotionDiscountTotal={cartPromotionDiscountTotal}
-                    subtotal={checkoutSummary.subtotal}
-                    surchargeTotal={0}
-                    paymentDiscountTotal={0}
-                    paymentAdjustment={0}
-                    total={checkoutSummary.subtotal}
-                    canWrite={canWritePos}
-                    disabled={isSubmitting || isCashGateBlocking}
-                    onBarcodeChange={setVisibleBarcodeValue}
-                    onBarcodeSubmit={handleVisibleBarcodeSubmit}
-                    onIncrease={increaseQuantity}
-                    onDecrease={decreaseQuantity}
-                    onSetQuantity={setCartItemQuantity}
-                    onEdit={(item) => setEditingCartItemId(item.product_id)}
-                    onRemove={removeFromCart}
-                    onOpenQuickProduct={() => setIsQuickProductModalOpen(true)}
-                    onCheckout={() => setIsCheckoutModalOpen(true)}
-                  />
-                </>
-              ) : (
-                <section className="pos-surface space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <h2 className="text-lg font-semibold text-slate-900">Comprobantes recientes</h2>
-                    <IconButton
-                      size="sm"
-                      icon={RefreshCw}
-                      label="Actualizar comprobantes"
-                      onClick={() => {
-                        void loadRecentReceipts();
-                      }}
-                      loading={isLoadingReceipts}
-                    />
-                  </div>
-
-                  {isLoadingReceipts ? (
-                    <div className="ui-loading">Cargando comprobantes...</div>
-                  ) : !recentReceipts.length ? (
-                    <div className="ui-empty-state">Todavia no hay comprobantes recientes.</div>
-                  ) : (
-                    <div className="pos-receipts-list">
-                      {recentReceipts.map((item) => {
-                        const { receipt, invoice } = item;
-                        return (
-                          <article key={receipt.id} className="pos-receipt-item">
-                            <div>
-                              <p className="text-sm font-semibold text-slate-900">
-                                {receipt.sale_number || receipt.receipt_number}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {new Date(receipt.issued_at).toLocaleString("es-AR")}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                Cliente: {receipt.customer_name ?? "Consumidor final"}
-                              </p>
-                            </div>
-
-                            <div className="text-right">
-                              <p className="font-kpi text-sm font-semibold text-slate-900">
-                                {currency.format(receipt.total)}
-                              </p>
-                              <div className="mt-1 flex items-center justify-end gap-1">
-                                <span className="ui-badge ui-badge--info">Ticket disponible</span>
-                                {invoice ? (
-                                  <span className="ui-badge ui-badge--success">Factura disponible</span>
-                                ) : (
-                                  <span className="ui-badge ui-badge--warn">Sin factura</span>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="col-span-2 flex flex-wrap items-center gap-2">
-                              <button
-                                type="button"
-                                className="ui-btn-ghost px-2.5 py-1.5 text-xs"
-                                onClick={() => openReceiptModal(item, "ticket")}
-                              >
-                                Ver ticket
-                              </button>
-                              {invoice ? (
-                                <button
-                                  type="button"
-                                  className="ui-btn-ghost px-2.5 py-1.5 text-xs"
-                                  onClick={() => openReceiptModal(item, "invoice")}
-                                >
-                                  Ver factura
-                                </button>
-                              ) : null}
-                              <div className="relative" data-print-menu="true">
-                                <button
-                                  type="button"
-                                  className="ui-btn-ghost px-2.5 py-1.5 text-xs"
-                                  onClick={() =>
-                                    setPrintMenuReceiptId((current) =>
-                                      current === receipt.id ? null : receipt.id
-                                    )
-                                  }
-                                >
-                                  Imprimir
-                                </button>
-                                {printMenuReceiptId === receipt.id ? (
-                                  <div className="absolute right-0 z-10 mt-1 min-w-[164px] rounded-lg border border-slate-200 bg-white p-1.5 shadow-panel">
-                                    <button
-                                      type="button"
-                                      className="ui-btn-ghost w-full justify-start px-2 py-1.5 text-xs"
-                                      onClick={() => openReceiptModal(item, "ticket", true)}
-                                    >
-                                      Imprimir ticket
-                                    </button>
-                                    {invoice ? (
-                                      <button
-                                        type="button"
-                                        className="ui-btn-ghost w-full justify-start px-2 py-1.5 text-xs"
-                                        onClick={() => openReceiptModal(item, "invoice", true)}
-                                      >
-                                        Imprimir factura
-                                      </button>
-                                    ) : null}
-                                  </div>
-                                ) : null}
-                              </div>
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  )}
-                </section>
-              )}
+              <PosCart
+                id={cartPanelId}
+                items={cart}
+                barcodeValue={visibleBarcodeValue}
+                subtotalBeforePromotions={subtotalBeforePromotions}
+                promotionDiscountTotal={promotionDiscountTotal}
+                cartPromotionDiscountTotal={cartPromotionDiscountTotal}
+                subtotal={checkoutSummary.subtotal}
+                surchargeTotal={0}
+                paymentDiscountTotal={0}
+                total={checkoutSummary.subtotal}
+                canWrite={canWritePos}
+                disabled={isSubmitting || isCashGateBlocking}
+                onBarcodeChange={setVisibleBarcodeValue}
+                onBarcodeSubmit={handleVisibleBarcodeSubmit}
+                onIncrease={increaseQuantity}
+                onDecrease={decreaseQuantity}
+                onSetQuantity={setCartItemQuantity}
+                onEdit={(item) => setEditingCartItemId(item.product_id)}
+                onRemove={removeFromCart}
+                onClearCart={clearCart}
+                onOpenQuickProduct={() => setIsQuickProductModalOpen(true)}
+                onCheckout={() => setIsCheckoutModalOpen(true)}
+              />
             </div>
           </div>
         )}
-      </section>
 
       {!isLoading && cart.length && !isCashGateBlocking ? (
         <div className="pos-mobile-dock">
@@ -1621,7 +1505,6 @@ export const PosPage = () => {
             type="button"
             className="ui-btn-primary whitespace-nowrap"
             onClick={() => {
-              setRightPanelTab("cart");
               setIsCheckoutModalOpen(true);
             }}
           >
@@ -1671,7 +1554,7 @@ export const PosPage = () => {
               }, 0);
             }}
           />
-          <div className="relative z-10 w-full max-w-4xl rounded-2xl bg-white p-4 shadow-panel">
+          <div className="relative z-10 w-full max-w-2xl rounded-2xl bg-white p-5 shadow-panel">
             <div className="max-h-[88vh] overflow-auto pr-1">
               <PosCheckoutPanel
                 panelId={checkoutPanelId}
@@ -1744,7 +1627,6 @@ export const PosPage = () => {
         onAddManual={(values) => {
           const ok = addManualProductToCart(values);
           if (ok) {
-            setRightPanelTab("cart");
             window.setTimeout(() => {
               focusScannerCapture();
             }, 0);
@@ -1754,7 +1636,6 @@ export const PosPage = () => {
         onCreateAndAdd={async (values) => {
           const ok = await createProductFromPosAndAddToCart(values);
           if (ok) {
-            setRightPanelTab("cart");
             window.setTimeout(() => {
               focusScannerCapture();
             }, 0);
@@ -1792,6 +1673,150 @@ export const PosPage = () => {
           void handleBarcodeScan(barcode);
         }}
       />
+
+      {isReceiptsListModalOpen ? (
+        <section className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
+          <button
+            type="button"
+            aria-label="Cerrar comprobantes recientes"
+            className="absolute inset-0"
+            onClick={() => {
+              setIsReceiptsListModalOpen(false);
+              window.setTimeout(() => {
+                focusScannerCapture();
+              }, 0);
+            }}
+          />
+          <div className="relative z-10 w-full max-w-2xl space-y-4 rounded-2xl bg-white p-5 shadow-panel dark:bg-slate-900">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <FileText className="text-blue-600 dark:text-blue-400" size={20} />
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  Comprobantes recientes
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <IconButton
+                  size="sm"
+                  icon={RefreshCw}
+                  label="Actualizar comprobantes"
+                  onClick={() => {
+                    void loadRecentReceipts();
+                  }}
+                  loading={isLoadingReceipts}
+                />
+                <button
+                  type="button"
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:text-slate-400"
+                  onClick={() => {
+                    setIsReceiptsListModalOpen(false);
+                    window.setTimeout(() => {
+                      focusScannerCapture();
+                    }, 0);
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="max-h-[70vh] overflow-y-auto pr-1">
+              {isLoadingReceipts ? (
+                <div className="ui-loading py-8">Cargando comprobantes...</div>
+              ) : !recentReceipts.length ? (
+                <div className="ui-empty-state py-8">Todavía no hay comprobantes recientes.</div>
+              ) : (
+                <div className="pos-receipts-list divide-y divide-slate-100 dark:divide-slate-800">
+                  {recentReceipts.map((item) => {
+                    const { receipt, invoice } = item;
+                    return (
+                      <article key={receipt.id} className="pos-receipt-item py-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {receipt.sale_number || receipt.receipt_number}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {new Date(receipt.issued_at).toLocaleString("es-AR")}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Cliente: {receipt.customer_name ?? "Consumidor final"}
+                          </p>
+                        </div>
+
+                        <div className="text-right">
+                          <p className="font-kpi text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {currency.format(receipt.total)}
+                          </p>
+                          <div className="mt-1 flex items-center justify-end gap-1">
+                            <span className="ui-badge ui-badge--info">Ticket disponible</span>
+                            {invoice ? (
+                              <span className="ui-badge ui-badge--success">Factura disponible</span>
+                            ) : (
+                              <span className="ui-badge ui-badge--warn">Sin factura</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="col-span-2 flex flex-wrap items-center gap-2 mt-2">
+                          <button
+                            type="button"
+                            className="ui-btn-ghost px-2.5 py-1.5 text-xs"
+                            onClick={() => openReceiptModal(item, "ticket")}
+                          >
+                            Ver ticket
+                          </button>
+                          {invoice ? (
+                            <button
+                              type="button"
+                              className="ui-btn-ghost px-2.5 py-1.5 text-xs"
+                              onClick={() => openReceiptModal(item, "invoice")}
+                            >
+                              Ver factura
+                            </button>
+                          ) : null}
+                          <div className="relative" data-print-menu="true">
+                            <button
+                              type="button"
+                              className="ui-btn-ghost px-2.5 py-1.5 text-xs"
+                              onClick={() =>
+                                setPrintMenuReceiptId((current) =>
+                                  current === receipt.id ? null : receipt.id
+                                )
+                              }
+                            >
+                              Imprimir
+                            </button>
+                            {printMenuReceiptId === receipt.id ? (
+                              <div className="absolute right-0 z-10 mt-1 min-w-[164px] rounded-lg border border-slate-200 bg-white p-1.5 shadow-panel dark:border-slate-800 dark:bg-slate-900">
+                                <button
+                                  type="button"
+                                  className="ui-btn-ghost w-full justify-start px-2 py-1.5 text-xs"
+                                  onClick={() => openReceiptModal(item, "ticket", true)}
+                                >
+                                  Imprimir ticket
+                                </button>
+                                {invoice ? (
+                                  <button
+                                    type="button"
+                                    className="ui-btn-ghost w-full justify-start px-2 py-1.5 text-xs"
+                                    onClick={() => openReceiptModal(item, "invoice", true)}
+                                  >
+                                    Imprimir factura
+                                  </button>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {receiptModal ? (
         <section className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">

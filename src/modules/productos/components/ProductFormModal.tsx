@@ -1,10 +1,11 @@
-﻿import { zodResolver } from "@hookform/resolvers/zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { VoiceDictationButton } from "@/components/form/VoiceDictationButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { ProductImageEditorModal } from "@/modules/productos/components/ProductImageEditorModal";
 import {
   computePricingBackward,
@@ -184,6 +185,8 @@ export const ProductFormModal = ({
     resolver: zodResolver(productFormModalSchema),
     defaultValues: createDefaults(),
   });
+
+  useBodyScrollLock(open);
 
   const [calcMode, setCalcMode] = useState<CalcMode>("forward");
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -450,8 +453,8 @@ export const ProductFormModal = ({
   if (!open) return null;
 
   return (
-    <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-4">
-      <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-panel md:p-6">
+    <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-3 sm:p-4 backdrop-blur-[1px]">
+      <div className="max-h-[88dvh] sm:max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl md:p-6 dark:border-slate-800 dark:bg-slate-900">
         <div className="mb-5 flex items-center justify-between gap-3 border-b border-slate-200 pb-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-700">Gestión de productos</p>
@@ -902,16 +905,22 @@ export const ProductFormModal = ({
             </div>
           </div>
 
-          <div className="sticky bottom-0 -mx-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
-            <p className="text-xs text-slate-500">Los cambios se aplican solo al presionar el botón de guardado.</p>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <button type="button" className="ui-btn-ghost" onClick={onClose} disabled={disabled}>
-                Cancelar
-              </button>
-              <button type="submit" className="ui-btn-primary" disabled={disabled}>
-                {mode === "create" ? "Crear producto" : "Guardar cambios"}
-              </button>
-            </div>
+          <div className="sticky bottom-0 -mx-4 -mb-4 flex items-center justify-end gap-2 border-t border-slate-200 bg-white/95 px-4 py-2.5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:-mx-6 md:-mb-6 md:px-6">
+            <button
+              type="button"
+              className="ui-btn-ghost px-4 py-2 text-xs font-semibold"
+              onClick={onClose}
+              disabled={disabled}
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="ui-btn-primary px-5 py-2 text-xs font-semibold"
+              disabled={disabled}
+            >
+              {mode === "create" ? "Crear producto" : "Guardar cambios"}
+            </button>
           </div>
         </form>
       </div>

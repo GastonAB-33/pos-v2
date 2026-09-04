@@ -14,11 +14,51 @@ export type UpdateEntityInput<TEntity extends TenantScopedEntity> = Partial<
   Omit<TEntity, "id" | "tenant_id" | "created_at" | "updated_at">
 >;
 
+const isAuthExpiredError = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: string; message?: string; status?: number };
+  const message = String(candidate.message ?? "").toLowerCase();
+  const code = String(candidate.code ?? "");
+  const status = Number(candidate.status ?? 0);
+  return (
+    status === 401 ||
+    code === "PGRST301" ||
+    message.includes("jwt expired") ||
+    message.includes("invalid claim") ||
+    message.includes("token is expired")
+  );
+};
+
 export class TenantCrudService<TEntity extends TenantScopedEntity> {
   constructor(private readonly tableName: TenantScopedTableName) {}
 
   private getMockRows(): TEntity[] {
     return getMockTable(this.tableName) as unknown as TEntity[];
+  }
+
+  private async execWithAuthRetry<TResult>(
+    operation: () => Promise<{ data: TResult | null; error: unknown }>
+  ): Promise<TResult | null> {
+    const firstResult = await operation();
+    if (!firstResult.error) {
+      return firstResult.data;
+    }
+
+    if (dataProvider === "supabase" && isAuthExpiredError(firstResult.error)) {
+      try {
+        const { error: refreshError } = await supabase.auth.refreshSession();
+        if (!refreshError) {
+          const retryResult = await operation();
+          if (!retryResult.error) {
+            return retryResult.data;
+          }
+        }
+      } catch {
+        // Ignorar y lanzar error original
+      }
+    }
+
+    throw firstResult.error;
   }
 
   async getAllByTenant(tenantId: string): Promise<TEntity[]> {
@@ -27,9 +67,10 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
       return table.filter((row) => row.tenant_id === tenantId);
     }
 
-    const { data, error } = await supabase.from(this.tableName).select("*").eq("tenant_id", tenantId);
+    const data = await this.execWithAuthRetry(async () =>
+      supabase.from(this.tableName).select("*").eq("tenant_id", tenantId)
+    );
 
-    if (error) throw error;
     return (data ?? []) as TEntity[];
   }
 
@@ -39,14 +80,15 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
       return table.find((row) => row.tenant_id === tenantId && row.id === id) ?? null;
     }
 
-    const { data, error } = await supabase
-      .from(this.tableName)
-      .select("*")
-      .eq("tenant_id", tenantId)
-      .eq("id", id)
-      .maybeSingle();
+    const data = await this.execWithAuthRetry(async () =>
+      supabase
+        .from(this.tableName)
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .eq("id", id)
+        .maybeSingle()
+    );
 
-    if (error) throw error;
     return (data as TEntity | null) ?? null;
   }
 
@@ -68,10 +110,15 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
       return row;
     }
 
-    const { data, error } = await supabase.from(this.tableName).insert(row).select("*").single();
+    const data = await this.execWithAuthRetry(async () =>
+      supabase.from(this.tableName).insert(row).select("*").single()
+    );
 
-    if (error) throw error;
-    return data as TEntity;
+    if (!data) {
+      throw new Error("No se pudo crear el registro");
+    }
+
+    return data;
   }
 
   async update(tenantId: string, id: string, input: UpdateEntityInput<TEntity>): Promise<TEntity | null> {
@@ -96,15 +143,16 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
       return updated;
     }
 
-    const { data, error } = await supabase
-      .from(this.tableName)
-      .update(payload)
-      .eq("tenant_id", tenantId)
-      .eq("id", id)
-      .select("*")
-      .maybeSingle();
+    const data = await this.execWithAuthRetry(async () =>
+      supabase
+        .from(this.tableName)
+        .update(payload)
+        .eq("tenant_id", tenantId)
+        .eq("id", id)
+        .select("*")
+        .maybeSingle()
+    );
 
-    if (error) throw error;
     return (data as TEntity | null) ?? null;
   }
 
@@ -120,13 +168,15 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
       return true;
     }
 
-    const { error, count } = await supabase
-      .from(this.tableName)
-      .delete({ count: "exact" })
-      .eq("tenant_id", tenantId)
-      .eq("id", id);
+    const result = await this.execWithAuthRetry(async () => {
+      const response = await supabase
+        .from(this.tableName)
+        .delete({ count: "exact" })
+        .eq("tenant_id", tenantId)
+        .eq("id", id);
+      return { data: response.count, error: response.error };
+    });
 
-    if (error) throw error;
-    return Boolean(count && count > 0);
+    return Boolean(result && result > 0);
   }
 }

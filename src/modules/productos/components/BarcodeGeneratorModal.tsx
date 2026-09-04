@@ -1,6 +1,7 @@
-﻿import { useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import JsBarcode from "jsbarcode";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import type { ProductViewModel } from "@/modules/productos/types/product.types";
 
 interface BarcodeGeneratorModalProps {
@@ -23,6 +24,7 @@ const downloadSvg = (svgMarkup: string, fileName: string) => {
 
 export const BarcodeGeneratorModal = ({ open, product, onClose }: BarcodeGeneratorModalProps) => {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  useBodyScrollLock(open);
 
   const barcodeValue = sanitizeBarcode(product?.codigoBarras ?? "");
 

@@ -4,6 +4,7 @@ import type { FieldErrors } from "react-hook-form";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 
 const posCustomerModalSchema = z.object({
   firstName: z.string().min(2, "Nombre obligatorio"),
@@ -54,6 +55,8 @@ export const PosCustomerModal = ({
 }: PosCustomerModalProps) => {
   const [tab, setTab] = useState<PosCustomerModalTab>("personal");
   const [highlightedTab, setHighlightedTab] = useState<PosCustomerModalTab | null>(null);
+
+  useBodyScrollLock(true);
 
   const {
     register,

@@ -15,4 +15,10 @@ const runtimeConfig =
         anonKey: "public-anon-key",
       };
 
-export const supabase = createClient(runtimeConfig.url, runtimeConfig.anonKey);
+export const supabase = createClient(runtimeConfig.url, runtimeConfig.anonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});

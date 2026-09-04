@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { PosCartItemEditInput } from "@/modules/pos/hooks/usePosSale";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 
 interface PosCartItemView {
   product_id: string;
@@ -31,6 +32,7 @@ export const PosCartItemEditModal = ({
   onClose,
   onSubmit,
 }: PosCartItemEditModalProps) => {
+  useBodyScrollLock(Boolean(item));
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
   const [quantity, setQuantity] = useState("");

@@ -1300,6 +1300,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
   return {
     products: sortedProducts,
     primaryBarcodes,
+    allBarcodes,
     priceLists,
     isLoading,
     isSubmitting,

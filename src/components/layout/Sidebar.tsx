@@ -14,7 +14,6 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { routePaths } from "@/config/routes";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
-import { usePwa } from "@/features/pwa/hooks/usePwa";
 import { isSupportOperator } from "@/features/support/support-operator";
 import { useDeviceProfile } from "@/hooks/useDeviceProfile";
 import { useUiStore } from "@/store/ui.store";
@@ -121,7 +120,6 @@ export const Sidebar = () => {
   const { canRead } = usePermissions();
   const supportOperator = isSupportOperator(user);
   const { isDesktop } = useDeviceProfile();
-  const { isInstalled } = usePwa();
   const setSidebarOpen = useUiStore((state) => state.setSidebarOpen);
 
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(() => {
@@ -145,28 +143,9 @@ export const Sidebar = () => {
     setExpandedGroupId(activeGroup.id);
   }, [location.pathname]);
 
-  const openPosInNewTab = () => {
-    if (typeof window === "undefined") return;
-
-    const posUrl = new URL(quickAccessItem.to, window.location.origin);
-    posUrl.searchParams.set("from", "panel-web");
-    posUrl.searchParams.set("returnTo", `${location.pathname}${location.search}`);
-
-    if (isInstalled) {
-      navigate(`${posUrl.pathname}${posUrl.search}`);
-      closeDrawerAfterNavigation();
-      return;
-    }
-
-    posUrl.searchParams.set("view", "browser");
-    const opened = window.open(posUrl.toString(), "_blank");
-    if (!opened) {
-      navigate(`${posUrl.pathname}${posUrl.search}`);
-      closeDrawerAfterNavigation();
-      return;
-    }
-
-    opened.opener = null;
+  const handleOpenPos = () => {
+    navigate(quickAccessItem.to);
+    closeDrawerAfterNavigation();
   };
 
   const isItemActive = (to: string) =>
@@ -226,7 +205,7 @@ export const Sidebar = () => {
             </p>
             <button
               type="button"
-              onClick={openPosInNewTab}
+              onClick={handleOpenPos}
               className={cn(
                 "app-sidebar-pos flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm font-semibold transition",
                 isItemActive(quickAccessItem.to)
@@ -234,8 +213,7 @@ export const Sidebar = () => {
                   : "border-brand-500/30 bg-brand-500/10 text-slate-700 hover:bg-brand-500/20 hover:text-slate-900"
               )}
             >
-              <span className="flex items-center gap-2"><ShoppingCart aria-hidden="true" size={16} /> Abrir punto de venta</span>
-              <span aria-hidden="true">↗</span>
+              <span className="flex items-center gap-2"><ShoppingCart aria-hidden="true" size={16} /> Punto de venta</span>
             </button>
           </section>
         ) : null}

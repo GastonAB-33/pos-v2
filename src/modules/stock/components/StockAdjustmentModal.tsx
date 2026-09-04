@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { PaginationControls } from "@/components/ui/PaginationControls";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { usePagination } from "@/hooks/usePagination";
 import type { Product } from "@/types/entities";
 import type { StockBatchAdjustmentValues } from "@/modules/stock/types/stock-adjustment.types";
@@ -35,6 +36,7 @@ export const StockAdjustmentModal = ({
   onClose,
   onSubmit,
 }: StockAdjustmentModalProps) => {
+  useBodyScrollLock(open);
   const [search, setSearch] = useState("");
   const [notes, setNotes] = useState("");
   const [drafts, setDrafts] = useState<Record<string, DraftValues>>({});
