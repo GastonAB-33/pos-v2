@@ -37,7 +37,12 @@ export const ProductsPage = () => {
     onScan: (scannedBarcode) => {
       const clean = scannedBarcode.trim();
       if (clean) {
-        products.setFilters({ search: clean });
+        products.setFilters({
+          search: clean,
+          category: "",
+          subcategory: "",
+          supplier: "",
+        });
       }
     },
   });

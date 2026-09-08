@@ -63,28 +63,43 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
     for (const item of crud.allBarcodes) {
       if (!item.barcode) continue;
       const list = map.get(item.product_id) ?? [];
-      list.push(item.barcode.trim().toLowerCase());
+      const trimmed = item.barcode.trim().toLowerCase();
+      const stripped = trimmed.replace(/\s+/g, "");
+      if (stripped) list.push(stripped);
+      if (trimmed && trimmed !== stripped) list.push(trimmed);
       map.set(item.product_id, list);
     }
     return map;
   }, [crud.allBarcodes]);
 
   const filteredProducts = useMemo(() => {
-    const search = normalize(filters.search);
+    const rawSearch = filters.search.trim();
+    const search = normalize(rawSearch);
+    const searchCompact = search.replace(/\s+/g, "");
 
     return productsView.filter((product) => {
-      if (filters.category && product.categoria !== filters.category) return false;
-      if (filters.subcategory && product.subcategoria !== filters.subcategory) return false;
-      if (filters.supplier && product.proveedor !== filters.supplier) return false;
-
-      if (!search) return true;
-
       const extraBarcodes = barcodesByProductId.get(product.entity.id) ?? [];
-      const hasBarcodeMatch = extraBarcodes.some(
-        (b) => b.includes(search) || search.includes(b)
+      const prodBarcodeCompact = product.codigoBarras.trim().toLowerCase().replace(/\s+/g, "");
+      const prodCodeCompact = product.codigoProducto.trim().toLowerCase().replace(/\s+/g, "");
+
+      const hasBarcodeOrCodeMatch = Boolean(
+        searchCompact &&
+          (
+            (prodBarcodeCompact && (prodBarcodeCompact.includes(searchCompact) || searchCompact.includes(prodBarcodeCompact))) ||
+            (prodCodeCompact && (prodCodeCompact.includes(searchCompact) || searchCompact.includes(prodCodeCompact))) ||
+            extraBarcodes.some((b) => b.includes(searchCompact) || searchCompact.includes(b))
+          )
       );
 
-      if (hasBarcodeMatch) return true;
+      // Si hay una coincidencia de código o código de barras, no lo bloqueamos por filtro de categoría previo
+      if (!hasBarcodeOrCodeMatch) {
+        if (filters.category && product.categoria !== filters.category) return false;
+        if (filters.subcategory && product.subcategoria !== filters.subcategory) return false;
+        if (filters.supplier && product.proveedor !== filters.supplier) return false;
+      }
+
+      if (!search) return true;
+      if (hasBarcodeOrCodeMatch) return true;
 
       const searchTarget = [
         product.nombre,
@@ -92,6 +107,7 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
         product.codigoBarras,
         product.categoria,
         product.subcategoria,
+        product.proveedor,
         ...extraBarcodes,
       ]
         .join(" ")

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditService } from "@/services/audit.service";
 import { cashService } from "@/services/cash.service";
 import { productsService } from "@/services/products.service";
+import { useProductsStore } from "@/features/products/store/products.store";
 import { purchasesService } from "@/services/purchases.service";
 import { stockService } from "@/services/stock.service";
 import { suppliersService } from "@/services/suppliers.service";
@@ -95,7 +96,14 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       return;
     }
 
-    setIsLoading(true);
+    const cachedStore = useProductsStore.getState();
+    if (cachedStore.loadedTenantId === tenantId && cachedStore.products.length > 0) {
+      setProducts(cachedStore.products);
+      setProductBarcodes(cachedStore.allBarcodes);
+    } else {
+      setIsLoading(true);
+    }
+
     try {
       const [allProducts, allProductBarcodes, allSuppliers, allPurchases, allPurchaseItems] = await Promise.all([
         productsService.getAllByTenant(tenantId),

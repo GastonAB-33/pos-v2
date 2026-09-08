@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, CircleEllipsis, Headphones, Menu, Newspaper, RefreshCw, Type, UserRound } from "lucide-react";
+import { Bell, CircleEllipsis, LifeBuoy, Menu, Newspaper, RefreshCw, Type, UserRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/useToast";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
@@ -10,6 +10,7 @@ import { publicChangelogEntries } from "@/features/changelog/public-changelog";
 import { useOffline } from "@/features/offline/hooks/useOffline";
 import { usePwa } from "@/features/pwa/hooks/usePwa";
 import { supportCenterStorage, type SupportTicket } from "@/features/support/support-center.storage";
+import { SupportReportModal } from "@/features/support/components/SupportReportModal";
 import { isSupportOperator } from "@/features/support/support-operator";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { authService } from "@/services/auth.service";
@@ -20,26 +21,7 @@ import type { Product, UserRecord } from "@/types/entities";
 import { storageKeys } from "@/utils/local-storage";
 
 type TopbarPanel = "support" | "tasks" | "chat" | "notifications" | "user" | "more" | "changelog" | null;
-type SupportType = "sugerencia" | "falla";
 type TaskStatus = "pendiente" | "completada";
-
-interface SupportOutboxItem {
-  id: string;
-  ticketId: string;
-  tenantId: string;
-  tenantName: string;
-  createdAt: string;
-  type: SupportType;
-  subject: string;
-  message: string;
-  status: "sent" | "queued";
-  user: {
-    id: string;
-    fullName: string;
-    email: string | null;
-    username: string | null;
-  };
-}
 
 interface TaskItem {
   id: string;
@@ -185,6 +167,7 @@ export const Topbar = () => {
 
   const [now, setNow] = useState(() => new Date());
   const [activePanel, setActivePanel] = useState<TopbarPanel>(null);
+  const [isSupportReportModalOpen, setIsSupportReportModalOpen] = useState(false);
   useBodyScrollLock(Boolean(activePanel));
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -192,11 +175,6 @@ export const Topbar = () => {
   const [presenceMap, setPresenceMap] = useState<PresenceMap>({});
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
-
-  const [supportType, setSupportType] = useState<SupportType>("sugerencia");
-  const [supportSubject, setSupportSubject] = useState("");
-  const [supportMessage, setSupportMessage] = useState("");
-  const [isSendingSupport, setIsSendingSupport] = useState(false);
 
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
@@ -243,18 +221,6 @@ export const Topbar = () => {
     email: user?.email,
     fallback: "Invitado",
   });
-  const supportWhatsappUrl = useMemo(() => {
-    if (!env.supportWhatsappPhone) return "";
-
-    const message = [
-      "Hola, necesito soporte para el sistema POS.",
-      `Comercio: ${tenantName}`,
-      `Usuario: ${currentUserLabel}`,
-      `Modulo actual: ${currentTitle}`,
-    ].join("\n");
-
-    return `https://wa.me/${env.supportWhatsappPhone}?text=${encodeURIComponent(message)}`;
-  }, [currentTitle, currentUserLabel, tenantName]);
 
   const usersForAssignments = useMemo(() => {
     const deduped = new Map<string, UserRecord>();
@@ -506,114 +472,6 @@ export const Topbar = () => {
     }
   };
 
-  const submitSupport = async () => {
-    if (!user || !tenantId) {
-      toast.error("Debes iniciar sesion para enviar soporte");
-      return;
-    }
-
-    const subject = supportSubject.trim();
-    const message = supportMessage.trim();
-
-    if (!subject || !message) {
-      toast.error("Completa asunto y detalle para enviar soporte");
-      return;
-    }
-
-    const ticket = supportCenterStorage.createTicket({
-      tenantId,
-      type: supportType,
-      subject,
-      body: message,
-      requesterUserId: user.id,
-      requesterLabel: user.fullName,
-      requesterEmail: user.email,
-    });
-
-    const baseRecord: SupportOutboxItem = {
-      id: crypto.randomUUID(),
-      ticketId: ticket.id,
-      tenantId,
-      tenantName,
-      createdAt: new Date().toISOString(),
-      type: supportType,
-      subject,
-      message,
-      status: "queued",
-      user: {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        username: user.username,
-      },
-    };
-
-    setIsSendingSupport(true);
-
-    const payload = {
-      category: supportType,
-      subject,
-      message,
-      tenant: {
-        id: tenantId,
-        name: tenantName,
-      },
-      ticket: {
-        id: ticket.id,
-      },
-      context: {
-        createdAt: baseRecord.createdAt,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        locale: "es-AR",
-      },
-      requester: {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        username: user.username,
-        responseEmail: user.email,
-      },
-    };
-
-    let status: "sent" | "queued" = "queued";
-
-    try {
-      const supportUrl = env.apiUrl ? `${env.apiUrl.replace(/\/$/, "")}/support/requests` : "";
-      if (!supportUrl) {
-        throw new Error("missing-api-url");
-      }
-
-      const response = await fetch(supportUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error(`support-http-${response.status}`);
-      }
-
-      status = "sent";
-      toast.success("Soporte enviado correctamente");
-    } catch {
-      toast.info("Solicitud guardada en cola local. Se enviara al conectar backend de soporte.");
-    } finally {
-      const outbox = readStorageArray<SupportOutboxItem>(storageKeys.topbarSupportOutbox);
-      outbox.unshift({
-        ...baseRecord,
-        status,
-      });
-      writeStorageArray(storageKeys.topbarSupportOutbox, outbox.slice(0, 200));
-      setSupportSubject("");
-      setSupportMessage("");
-      setIsSendingSupport(false);
-      setActivePanel(null);
-      refreshTenantStreams();
-    }
-  };
-
   const createTask = () => {
     if (!tenantId || !currentUserId) {
       toast.error("Debes iniciar sesion para crear tareas");
@@ -757,16 +615,19 @@ export const Topbar = () => {
         </div>
       </div>
       <div className="app-topbar-actions flex items-center gap-1 md:gap-2">
-        {supportWhatsappUrl ? (
-          <a
-            className="ui-btn-primary app-topbar-support hidden lg:inline-flex text-xs"
-            href={supportWhatsappUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            WhatsApp soporte
-          </a>
-        ) : null}
+        <button
+          type="button"
+          className="ui-btn-ghost gap-1.5 px-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
+          onClick={() => {
+            setActivePanel(null);
+            setIsSupportReportModalOpen(true);
+          }}
+          title="Soporte y reporte de problemas"
+        >
+          <LifeBuoy aria-hidden="true" size={16} />
+          <span className="hidden sm:inline">Soporte</span>
+        </button>
+
         <button
           type="button"
           className="ui-btn-ghost gap-1 px-2 text-xs font-semibold"
@@ -778,19 +639,6 @@ export const Topbar = () => {
         >
           <Type aria-hidden="true" size={15} />
           <span>{fontSize === "compact" ? "A-" : fontSize === "large" ? "A+" : fontSize === "extra-large" ? "A++" : "A"}</span>
-        </button>
-
-        <button
-          type="button"
-          className="ui-btn-ghost gap-1 px-2 text-xs"
-          onClick={(e) => {
-            e.stopPropagation();
-            togglePanel("support");
-          }}
-          title="Soporte"
-        >
-          <Headphones aria-hidden="true" size={15} />
-          <span className="hidden sm:inline">Soporte</span>
         </button>
 
         <button
@@ -921,79 +769,7 @@ export const Topbar = () => {
         </div>
       ) : null}
 
-      {activePanel === "support" ? (
-        <div
-          className="ui-card fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[460px] space-y-3 shadow-2xl"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-slate-900">Soporte</p>
-              <p className="text-xs text-slate-500">
-                Envía sugerencias o reportes de fallas con los datos necesarios para ayudarte.
-              </p>
-            </div>
-            <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => setActivePanel(null)}>
-              Cerrar
-            </button>
-          </div>
 
-          {supportWhatsappUrl ? (
-            <a
-              className="ui-btn-primary justify-center text-xs"
-              href={supportWhatsappUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Contactar por WhatsApp
-            </a>
-          ) : null}
-
-          <label className="block text-xs text-slate-500" htmlFor="support-type">
-            Tipo
-          </label>
-          <select
-            id="support-type"
-            className="ui-input"
-            value={supportType}
-            onChange={(event) => setSupportType(event.target.value as SupportType)}
-          >
-            <option value="sugerencia">Sugerencia</option>
-            <option value="falla">Reporte de falla</option>
-          </select>
-
-          <label className="block text-xs text-slate-500" htmlFor="support-subject">
-            Asunto
-          </label>
-          <input
-            id="support-subject"
-            className="ui-input"
-            value={supportSubject}
-            onChange={(event) => setSupportSubject(event.target.value)}
-            placeholder="Resumen corto"
-          />
-
-          <label className="block text-xs text-slate-500" htmlFor="support-message">
-            Detalle
-          </label>
-          <textarea
-            id="support-message"
-            className="ui-input min-h-28"
-            value={supportMessage}
-            onChange={(event) => setSupportMessage(event.target.value)}
-            placeholder="Describe la sugerencia o la falla"
-          />
-
-          <div className="flex justify-end gap-2">
-            <button type="button" className="ui-btn-ghost" onClick={() => setActivePanel(null)}>
-              Cerrar
-            </button>
-            <button type="button" className="ui-btn-primary" onClick={() => void submitSupport()} disabled={isSendingSupport}>
-              {isSendingSupport ? "Enviando..." : "Enviar"}
-            </button>
-          </div>
-        </div>
-      ) : null}
 
       {activePanel === "tasks" ? (
         <div
@@ -1347,6 +1123,12 @@ export const Topbar = () => {
           </div>
         </div>
       ) : null}
+
+      <SupportReportModal
+        isOpen={isSupportReportModalOpen}
+        onClose={() => setIsSupportReportModalOpen(false)}
+        adminWhatsAppNumber={env.supportWhatsappPhone}
+      />
     </header>
   );
 };

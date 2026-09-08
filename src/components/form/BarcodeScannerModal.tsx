@@ -174,6 +174,13 @@ export const BarcodeScannerModal = ({
             </label>
             <div className="flex items-center gap-2">
               <input
+                type="text"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-lpignore="true"
+                data-form-type="other"
                 className="ui-input"
                 value={manualBarcode}
                 onChange={(event) => setManualBarcode(event.target.value)}

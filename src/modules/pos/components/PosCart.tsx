@@ -161,6 +161,11 @@ export const PosCart = ({
             type="text"
             inputMode="numeric"
             autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
+            data-form-type="other"
             value={barcodeValue}
             onChange={(event) => onBarcodeChange(event.target.value)}
             placeholder="Escanear o código..."

@@ -3,7 +3,8 @@ import { z } from "zod";
 import { auditService } from "@/services/audit.service";
 import { priceListsService } from "@/services/price-lists.service";
 import { productsService } from "@/services/products.service";
-import type { PriceList, Product, ProductBarcode } from "@/types/entities";
+import { useProductsStore } from "@/features/products/store/products.store";
+import type { Product } from "@/types/entities";
 import { downloadCsv } from "@/utils/csv";
 import { downloadXlsx, parseXlsxFile, type XlsxRow } from "@/utils/xlsx";
 import type { ProductFormValues } from "@/modules/productos/schemas/product-form.schema";
@@ -440,84 +441,31 @@ const parseImportRow = (row: XlsxRow, rowNumber: number): ProductImportRowParseR
 };
 
 export const useProductsCrud = (tenantId: string | null, userId: string | null) => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [allBarcodes, setAllBarcodes] = useState<ProductBarcode[]>([]);
-  const [primaryBarcodes, setPrimaryBarcodes] = useState<Record<string, string>>({});
-  const [priceLists, setPriceLists] = useState<PriceList[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const products = useProductsStore((state) => state.products);
+  const allBarcodes = useProductsStore((state) => state.allBarcodes);
+  const primaryBarcodes = useProductsStore((state) => state.primaryBarcodes);
+  const priceLists = useProductsStore((state) => state.priceLists);
+  const isLoading = useProductsStore((state) => state.isLoading);
+  const loadCatalog = useProductsStore((state) => state.loadCatalog);
+  const upsertProductInState = useProductsStore((state) => state.upsertProduct);
+  const removeProductFromState = useProductsStore((state) => state.removeProduct);
+  const patchPrimaryBarcodeState = useProductsStore((state) => state.patchPrimaryBarcode);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<CrudFeedback | null>(null);
 
   const clearFeedback = () => setFeedback(null);
 
-  const sortByName = useCallback((rows: Product[]) => {
-    return [...rows].sort((a, b) => a.name.localeCompare(b.name));
-  }, []);
-
-  const upsertProductInState = useCallback((product: Product) => {
-    const safeProduct = { ...product };
-
-    setProducts((current) => {
-      const withoutCurrent = current.filter((item) => item.id !== safeProduct.id);
-      return sortByName([...withoutCurrent, safeProduct]);
-    });
-  }, [sortByName]);
-
-  const removeProductFromState = useCallback((productId: string) => {
-    setProducts((current) => current.filter((item) => item.id !== productId));
-    setPrimaryBarcodes((current) => {
-      const next = { ...current };
-      delete next[productId];
-      return next;
-    });
-    setAllBarcodes((current) => current.filter((row) => row.product_id !== productId));
-  }, []);
-
-  const patchPrimaryBarcodeState = useCallback((productId: string, barcodeValue: string) => {
-    const normalized = normalizeBarcode(barcodeValue) ?? "";
-
-    setPrimaryBarcodes((current) => {
-      const next = { ...current };
-      if (!normalized) {
-        delete next[productId];
-      } else {
-        next[productId] = normalized;
-      }
-      return next;
-    });
-  }, []);
-
-  const loadProducts = useCallback(async () => {
-    if (!tenantId) {
-      setProducts([]);
-      setAllBarcodes([]);
-      setPrimaryBarcodes({});
-      setPriceLists([]);
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const [list, barcodeMap, barcodes, lists] = await Promise.all([
-        productsService.getAllByTenant(tenantId),
-        productsService.getPrimaryBarcodesMapByTenant(tenantId),
-        productsService.getBarcodesByTenant(tenantId),
-        priceListsService.getAllByTenant(tenantId),
-      ]);
-      setProducts(sortByName(list.map((row) => ({ ...row }))));
-      setAllBarcodes(barcodes.map((row) => ({ ...row })));
-      setPrimaryBarcodes({ ...barcodeMap });
-      setPriceLists(lists.sort((a, b) => a.name.localeCompare(b.name)));
-    } catch {
-      setFeedback({ type: "error", message: "No se pudieron cargar los productos" });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [sortByName, tenantId]);
+  const loadProducts = useCallback(async (force = false) => {
+    if (!tenantId) return;
+    await loadCatalog(tenantId, force);
+  }, [loadCatalog, tenantId]);
 
   useEffect(() => {
-    void loadProducts();
-  }, [loadProducts]);
+    if (tenantId) {
+      void loadCatalog(tenantId, false);
+    }
+  }, [loadCatalog, tenantId]);
 
   const createProduct = async (
     values: ProductWriteValues,
