@@ -16,6 +16,9 @@ interface StockTrackingTableProps {
   products: Product[];
   categories: string[];
   disabled?: boolean;
+  statusFilter?: StockStatusFilter;
+  onStatusFilterChange?: (filter: StockStatusFilter) => void;
+  globalLowThreshold?: number;
   onUpdateOne: (productId: string, values: { stockMin: number | null; stockMax: number | null }) => Promise<void>;
   onUpdateBulk: (productIds: string[], values: { stockMin?: number | null; stockMax?: number | null }) => Promise<void>;
 }
@@ -42,9 +45,10 @@ const unitLabel = (product: Product): string => (product.sale_mode === "weight" 
 const buildReportDateStamp = (): string => new Date().toISOString().slice(0, 10);
 
 const getStatusBadgeClassName = (status: StockStatus): string => {
+  if (status === "no_stock") return "ui-badge ui-badge--danger";
   if (status === "low") return "ui-badge ui-badge--warn";
   if (status === "over") return "ui-badge ui-badge--info";
-  if (status === "unassigned") return "ui-badge ui-badge--danger";
+  if (status === "unassigned") return "ui-badge ui-badge--neutral";
   return "ui-badge ui-badge--success";
 };
 
@@ -72,12 +76,25 @@ export const StockTrackingTable = ({
   products,
   categories,
   disabled,
+  statusFilter: controlledStatusFilter,
+  onStatusFilterChange,
+  globalLowThreshold = 5,
   onUpdateOne,
   onUpdateBulk,
 }: StockTrackingTableProps) => {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StockStatusFilter>("all");
+  const [internalStatusFilter, setInternalStatusFilter] = useState<StockStatusFilter>("all");
+  const statusFilter = controlledStatusFilter ?? internalStatusFilter;
+
+  const handleStatusFilterChange = (filter: StockStatusFilter) => {
+    if (onStatusFilterChange) {
+      onStatusFilterChange(filter);
+    } else {
+      setInternalStatusFilter(filter);
+    }
+  };
+
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Record<string, StockDraft>>({});
   const [bulkScope, setBulkScope] = useState<BulkScope>("selected");
@@ -108,7 +125,7 @@ export const StockTrackingTable = ({
       if (categoryFilter && product.category !== categoryFilter) return false;
 
       const { stockMin, stockMax } = resolveThresholds(product, drafts[product.id]);
-      const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
+      const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax, globalLowThreshold);
       if (statusFilter !== "all" && status !== statusFilter) return false;
 
       if (!normalizedSearch) return true;
@@ -116,7 +133,7 @@ export const StockTrackingTable = ({
       const searchTarget = `${product.name} ${product.code} ${product.category} ${product.subcategory ?? ""}`.toLowerCase();
       return searchTarget.includes(normalizedSearch);
     });
-  }, [products, search, categoryFilter, statusFilter, drafts]);
+  }, [products, search, categoryFilter, statusFilter, drafts, globalLowThreshold]);
 
   const reportCandidates = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -273,6 +290,7 @@ export const StockTrackingTable = ({
 
     const fileNameByStatus: Record<StockStatus, string> = {
       low: "stock-bajo",
+      no_stock: "sin-stock",
       normal: "normal",
       over: "sobrestock",
       unassigned: "sin-asignar",
@@ -310,7 +328,7 @@ export const StockTrackingTable = ({
 
             {isReportMenuOpen ? (
               <div className="absolute right-0 top-full z-10 mt-1 min-w-[220px] rounded-lg border border-slate-200 bg-white p-1 shadow-panel">
-                {(["low", "normal", "over", "unassigned"] as StockStatus[]).map((status) => (
+                {(["low", "no_stock", "normal", "over", "unassigned"] as StockStatus[]).map((status) => (
                   <button
                     key={status}
                     type="button"
@@ -348,7 +366,7 @@ export const StockTrackingTable = ({
         </select>
         <select
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as StockStatusFilter)}
+          onChange={(event) => handleStatusFilterChange(event.target.value as StockStatusFilter)}
           className="ui-input"
         >
           {Object.entries(stockStatusLabel).map(([value, label]) => (
