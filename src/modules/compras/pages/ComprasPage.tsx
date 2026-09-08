@@ -273,21 +273,22 @@ export const ComprasPage = () => {
           /* ========================================================================= */
           /* VISTA: REGISTRAR NUEVA COMPRA (PANEL COMPLETO EN PANTALLA)                */
           /* ========================================================================= */
-          <div className="space-y-4">
-            <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="space-y-3">
+            {/* 1. Panel de Registrar Nueva Compra (Barra superior compacta minimalista) */}
+            <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setViewMode("history")}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
                 >
-                  <ArrowLeft className="h-4 w-4" />
+                  <ArrowLeft className="h-3.5 w-3.5" />
                   Volver al historial
                 </button>
                 <div>
-                  <h1 className="text-lg font-bold text-slate-900">Registrar nueva compra</h1>
-                  <p className="text-xs text-slate-500">
-                    Carga los productos comprados y ajusta los datos de factura y pago.
+                  <h1 className="text-base font-bold text-slate-900">Registrar nueva compra</h1>
+                  <p className="text-[11px] text-slate-500">
+                    Carga los datos del comprobante y los productos comprados
                   </p>
                 </div>
               </div>
@@ -297,9 +298,9 @@ export const ComprasPage = () => {
                   type="button"
                   onClick={() => setIsSelectProductModalOpen(true)}
                   disabled={isSubmitting || !canWritePurchases}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
                 >
-                  <Plus className="h-4 w-4" />
+                  <Plus className="h-3.5 w-3.5" />
                   Agregar producto
                 </button>
 
@@ -307,9 +308,9 @@ export const ComprasPage = () => {
                   type="button"
                   onClick={() => setIsProductModalOpen(true)}
                   disabled={isSubmitting || !canWritePurchases}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                 >
-                  <PackagePlus className="h-4 w-4 text-slate-500" />
+                  <PackagePlus className="h-3.5 w-3.5 text-slate-500" />
                   Agregar nuevo producto
                 </button>
 
@@ -318,45 +319,42 @@ export const ComprasPage = () => {
                     type="button"
                     onClick={clearCart}
                     disabled={isSubmitting || !canWritePurchases}
-                    className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
-                    title="Vaciar todos los productos de esta compra"
+                    className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                    title="Vaciar lista de productos"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    Vaciar compra
+                    Vaciar
                   </button>
                 )}
               </div>
             </section>
 
-            {/* Layout principal: Carrito espacioso a la izquierda / panel de checkout a la derecha */}
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <div className="lg:col-span-2">
-                <PurchaseCart
-                  items={cart}
-                  summary={summary}
-                  disabled={isSubmitting}
-                  canWrite={canWritePurchases}
-                  onSetQuantity={setItemQuantity}
-                  onSetUnitCost={setItemUnitCost}
-                  onSetVatPercent={setItemVatPercent}
-                  onSetBonifiedQuantity={setItemBonifiedQuantity}
-                  onRemove={removeItem}
-                  onOpenAddProductModal={() => setIsSelectProductModalOpen(true)}
-                  onOpenCreateProductModal={() => setIsProductModalOpen(true)}
-                />
-              </div>
+            {/* 2. Panel de Datos de Compra y Factura */}
+            <PurchaseCheckoutPanel
+              suppliers={suppliers}
+              canWrite={canWritePurchases}
+              disabled={isSubmitting}
+              preferredSupplierId={preferredSupplierId}
+              formId="purchase-checkout-form"
+              onCreateSupplier={() => setIsSupplierModalOpen(true)}
+              onSubmit={handleConfirmPurchase}
+            />
 
-              <div className="lg:col-span-1">
-                <PurchaseCheckoutPanel
-                  suppliers={suppliers}
-                  canWrite={canWritePurchases}
-                  disabled={isSubmitting || cart.length === 0}
-                  preferredSupplierId={preferredSupplierId}
-                  onCreateSupplier={() => setIsSupplierModalOpen(true)}
-                  onSubmit={handleConfirmPurchase}
-                />
-              </div>
-            </div>
+            {/* 3. Panel de Productos de Compra y Resumen / Confirmación */}
+            <PurchaseCart
+              items={cart}
+              summary={summary}
+              disabled={isSubmitting}
+              canWrite={canWritePurchases}
+              formId="purchase-checkout-form"
+              onSetQuantity={setItemQuantity}
+              onSetUnitCost={setItemUnitCost}
+              onSetVatPercent={setItemVatPercent}
+              onSetBonifiedQuantity={setItemBonifiedQuantity}
+              onRemove={removeItem}
+              onOpenAddProductModal={() => setIsSelectProductModalOpen(true)}
+              onOpenCreateProductModal={() => setIsProductModalOpen(true)}
+            />
           </div>
         )}
       </div>
