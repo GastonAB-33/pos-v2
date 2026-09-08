@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Gift, Percent, Trash2 } from "lucide-react";
+import { Gift, PackagePlus, Percent, Plus, ShoppingBag, Trash2 } from "lucide-react";
 
 export interface PurchaseCartItemView {
   product_id: string;
@@ -29,6 +29,8 @@ interface PurchaseCartProps {
   onSetVatPercent: (productId: string, vatPercent: number) => void;
   onSetBonifiedQuantity: (productId: string, bonifiedQty: number) => void;
   onRemove: (productId: string) => void;
+  onOpenAddProductModal?: () => void;
+  onOpenCreateProductModal?: () => void;
 }
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -54,6 +56,8 @@ export const PurchaseCart = ({
   onSetVatPercent,
   onSetBonifiedQuantity,
   onRemove,
+  onOpenAddProductModal,
+  onOpenCreateProductModal,
 }: PurchaseCartProps) => {
   const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
   const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
@@ -115,19 +119,81 @@ export const PurchaseCart = ({
   };
 
   return (
-    <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-2">
-        <h2 className="text-base font-semibold text-slate-900">
-          Items de compra ({items.length})
-        </h2>
-        <span className="text-xs text-slate-500">
-          Total unidades ingresando: {summary.totalUnits.toLocaleString("es-AR")}
-        </span>
+    <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-panel">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <div>
+          <h2 className="text-base font-bold text-slate-900">
+            Productos en la compra ({items.length})
+          </h2>
+          <p className="text-xs text-slate-500">
+            Total unidades a ingresar al inventario: <strong>{summary.totalUnits.toLocaleString("es-AR")}</strong>
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {onOpenAddProductModal && (
+            <button
+              type="button"
+              onClick={onOpenAddProductModal}
+              disabled={disabled || !canWrite}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Agregar producto
+            </button>
+          )}
+
+          {onOpenCreateProductModal && (
+            <button
+              type="button"
+              onClick={onOpenCreateProductModal}
+              disabled={disabled || !canWrite}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <PackagePlus className="h-3.5 w-3.5 text-slate-500" />
+              Nuevo producto
+            </button>
+          )}
+        </div>
       </div>
 
       {!items.length ? (
-        <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
-          Aún no agregaste productos a la compra. Escanea un código o selecciónalos de la lista.
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 p-10 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-100 text-brand-700">
+            <ShoppingBag className="h-6 w-6" />
+          </div>
+          <h3 className="mt-3 text-sm font-bold text-slate-800">
+            Aún no agregaste productos a esta compra
+          </h3>
+          <p className="mt-1 max-w-md text-xs text-slate-500">
+            Utiliza los botones a continuación para seleccionar productos existentes del catálogo o crear uno nuevo.
+          </p>
+
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+            {onOpenAddProductModal && (
+              <button
+                type="button"
+                onClick={onOpenAddProductModal}
+                disabled={disabled || !canWrite}
+                className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" />
+                Agregar producto del catálogo
+              </button>
+            )}
+
+            {onOpenCreateProductModal && (
+              <button
+                type="button"
+                onClick={onOpenCreateProductModal}
+                disabled={disabled || !canWrite}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+              >
+                <PackagePlus className="h-4 w-4 text-slate-500" />
+                Crear producto nuevo
+              </button>
+            )}
+          </div>
         </div>
       ) : (
         <div className="max-h-[420px] space-y-3 overflow-auto pr-1">
