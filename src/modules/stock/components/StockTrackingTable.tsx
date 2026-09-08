@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Camera, X } from "lucide-react";
 import { PaginationControls } from "@/components/ui/PaginationControls";
 import { usePagination } from "@/hooks/usePagination";
 import type { Product } from "@/types/entities";
 import { downloadXlsx } from "@/utils/xlsx";
+import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
+import { useProductsStore } from "@/features/products/store/products.store";
 import {
   getStockStatusFromValues,
   stockStatusLabel,
@@ -80,7 +83,9 @@ export const StockTrackingTable = ({
   onUpdateOne,
   onUpdateBulk,
 }: StockTrackingTableProps) => {
+  const allBarcodes = useProductsStore((state) => state.allBarcodes);
   const [search, setSearch] = useState("");
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [internalStatusFilter, setInternalStatusFilter] = useState<StockStatusFilter>("all");
   const statusFilter = controlledStatusFilter ?? internalStatusFilter;
@@ -101,6 +106,39 @@ export const StockTrackingTable = ({
   const [reportMessage, setReportMessage] = useState<string | null>(null);
   const [isReportMenuOpen, setIsReportMenuOpen] = useState(false);
   const reportMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const barcodesByProductId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const item of allBarcodes) {
+      const list = map.get(item.product_id) ?? [];
+      list.push(item.barcode.trim().toLowerCase());
+      map.set(item.product_id, list);
+    }
+    return map;
+  }, [allBarcodes]);
+
+  const handleBarcodeDetected = (scannedBarcode: string) => {
+    setIsCameraOpen(false);
+    const normalized = scannedBarcode.trim().toLowerCase();
+    const barcodeMatch = allBarcodes.find(
+      (b) => b.barcode.trim().toLowerCase() === normalized
+    );
+    let matchedProduct = barcodeMatch
+      ? products.find((p) => p.id === barcodeMatch.product_id)
+      : null;
+    if (!matchedProduct) {
+      matchedProduct =
+        products.find((p) => p.code.trim().toLowerCase() === normalized) ?? null;
+    }
+
+    if (matchedProduct) {
+      setSearch(matchedProduct.name);
+      setReportMessage(`Producto encontrado: ${matchedProduct.name}`);
+    } else {
+      setSearch(scannedBarcode);
+      setReportMessage(`Código escaneado: ${scannedBarcode}`);
+    }
+  };
 
   useEffect(() => {
     if (!isReportMenuOpen) return;
@@ -128,10 +166,11 @@ export const StockTrackingTable = ({
 
       if (!normalizedSearch) return true;
 
-      const searchTarget = `${product.name} ${product.code} ${product.category} ${product.subcategory ?? ""}`.toLowerCase();
+      const productBarcodes = (barcodesByProductId.get(product.id) ?? []).join(" ");
+      const searchTarget = `${product.name} ${product.code} ${product.category} ${product.subcategory ?? ""} ${productBarcodes}`.toLowerCase();
       return searchTarget.includes(normalizedSearch);
     });
-  }, [products, search, categoryFilter, statusFilter, drafts]);
+  }, [products, search, categoryFilter, statusFilter, drafts, barcodesByProductId]);
 
   const reportCandidates = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -142,10 +181,11 @@ export const StockTrackingTable = ({
 
       if (!normalizedSearch) return true;
 
-      const searchTarget = `${product.name} ${product.code} ${product.category} ${product.subcategory ?? ""}`.toLowerCase();
+      const productBarcodes = (barcodesByProductId.get(product.id) ?? []).join(" ");
+      const searchTarget = `${product.name} ${product.code} ${product.category} ${product.subcategory ?? ""} ${productBarcodes}`.toLowerCase();
       return searchTarget.includes(normalizedSearch);
     });
-  }, [products, search, categoryFilter]);
+  }, [products, search, categoryFilter, barcodesByProductId]);
 
   const selectedVisibleIds = useMemo(
     () => selectedIds.filter((id) => rows.some((row) => row.id === id)),
@@ -347,12 +387,36 @@ export const StockTrackingTable = ({
       {reportMessage ? <div className="ui-info-state">{reportMessage}</div> : null}
 
       <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_180px]">
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          className="ui-input"
-          placeholder="Buscar por nombre o codigo"
-        />
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="ui-input pr-8"
+              placeholder="Buscar por nombre, código o código de barras"
+            />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                title="Limpiar búsqueda"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsCameraOpen(true)}
+            disabled={disabled}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-50"
+            title="Escanear código de barras con la cámara"
+          >
+            <Camera className="h-4 w-4" />
+            <span className="hidden sm:inline">Cámara</span>
+          </button>
+        </div>
         <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="ui-input">
           <option value="">Todas las categorias</option>
           {categories.map((category) => (
@@ -520,6 +584,14 @@ export const StockTrackingTable = ({
         endItem={paginatedRows.endItem}
         totalItems={paginatedRows.totalItems}
         onPageChange={paginatedRows.setCurrentPage}
+      />
+
+      <BarcodeScannerModal
+        open={isCameraOpen}
+        title="Buscar producto en stock"
+        description="Apuntá la cámara al código de barras del producto para filtrarlo."
+        onClose={() => setIsCameraOpen(false)}
+        onDetected={handleBarcodeDetected}
       />
     </section>
   );

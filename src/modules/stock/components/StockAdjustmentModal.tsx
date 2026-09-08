@@ -1,8 +1,11 @@
 import { useMemo, useState } from "react";
+import { Camera, X } from "lucide-react";
 import { PaginationControls } from "@/components/ui/PaginationControls";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { usePagination } from "@/hooks/usePagination";
+import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
+import { useProductsStore } from "@/features/products/store/products.store";
 import type { Product } from "@/types/entities";
 import type { StockBatchAdjustmentValues } from "@/modules/stock/types/stock-adjustment.types";
 
@@ -37,22 +40,56 @@ export const StockAdjustmentModal = ({
   onSubmit,
 }: StockAdjustmentModalProps) => {
   useBodyScrollLock(open);
+  const allBarcodes = useProductsStore((state) => state.allBarcodes);
   const [search, setSearch] = useState("");
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [notes, setNotes] = useState("");
   const [drafts, setDrafts] = useState<Record<string, DraftValues>>({});
   const [isSubmittingLocal, setIsSubmittingLocal] = useState(false);
 
   const busy = Boolean(disabled || isSubmittingLocal);
 
+  const barcodesByProductId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const item of allBarcodes) {
+      const list = map.get(item.product_id) ?? [];
+      list.push(item.barcode.trim().toLowerCase());
+      map.set(item.product_id, list);
+    }
+    return map;
+  }, [allBarcodes]);
+
+  const handleBarcodeDetected = (scannedBarcode: string) => {
+    setIsCameraOpen(false);
+    const normalized = scannedBarcode.trim().toLowerCase();
+    const barcodeMatch = allBarcodes.find(
+      (b) => b.barcode.trim().toLowerCase() === normalized
+    );
+    let matchedProduct = barcodeMatch
+      ? products.find((p) => p.id === barcodeMatch.product_id)
+      : null;
+    if (!matchedProduct) {
+      matchedProduct =
+        products.find((p) => p.code.trim().toLowerCase() === normalized) ?? null;
+    }
+
+    if (matchedProduct) {
+      setSearch(matchedProduct.name);
+    } else {
+      setSearch(scannedBarcode);
+    }
+  };
+
   const visibleProducts = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     if (!normalizedSearch) return products;
 
     return products.filter((product) => {
-      const target = `${product.name} ${product.code} ${product.category} ${product.subcategory ?? ""}`.toLowerCase();
+      const productBarcodes = (barcodesByProductId.get(product.id) ?? []).join(" ");
+      const target = `${product.name} ${product.code} ${product.category} ${product.subcategory ?? ""} ${productBarcodes}`.toLowerCase();
       return target.includes(normalizedSearch);
     });
-  }, [products, search]);
+  }, [products, search, barcodesByProductId]);
 
   const rowsToSubmit = useMemo(() => {
     return products
@@ -131,13 +168,37 @@ export const StockAdjustmentModal = ({
         </div>
 
         <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_280px]">
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            className="ui-input"
-            placeholder="Buscar por nombre, codigo o categoria"
-            disabled={busy}
-          />
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className="ui-input pr-8"
+                placeholder="Buscar por nombre, código o código de barras"
+                disabled={busy}
+              />
+              {search ? (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  title="Limpiar búsqueda"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsCameraOpen(true)}
+              disabled={busy || !canWrite}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-50"
+              title="Escanear código de barras con la cámara"
+            >
+              <Camera className="h-4 w-4" />
+              <span className="hidden sm:inline">Cámara</span>
+            </button>
+          </div>
 
           <textarea
             value={notes}
@@ -245,6 +306,14 @@ export const StockAdjustmentModal = ({
           </button>
         </div>
       </div>
+
+      <BarcodeScannerModal
+        open={isCameraOpen}
+        title="Buscar producto para ajuste"
+        description="Apuntá la cámara al código de barras para encontrar el producto a ajustar."
+        onClose={() => setIsCameraOpen(false)}
+        onDetected={handleBarcodeDetected}
+      />
     </section>
   );
 };
