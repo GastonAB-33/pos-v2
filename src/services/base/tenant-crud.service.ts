@@ -67,11 +67,28 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
       return table.filter((row) => row.tenant_id === tenantId);
     }
 
-    const data = await this.execWithAuthRetry(async () =>
-      supabase.from(this.tableName).select("*").eq("tenant_id", tenantId)
-    );
+    const pageSize = 1000;
+    let from = 0;
+    const allRecords: TEntity[] = [];
 
-    return (data ?? []) as TEntity[];
+    while (true) {
+      const to = from + pageSize - 1;
+      const data = await this.execWithAuthRetry(async () =>
+        supabase
+          .from(this.tableName)
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .range(from, to)
+      );
+
+      const chunk = (data ?? []) as TEntity[];
+      if (chunk.length === 0) break;
+      allRecords.push(...chunk);
+      if (chunk.length < pageSize) break;
+      from += pageSize;
+    }
+
+    return allRecords;
   }
 
   async getById(tenantId: string, id: string): Promise<TEntity | null> {

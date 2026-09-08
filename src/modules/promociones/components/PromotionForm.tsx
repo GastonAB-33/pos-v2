@@ -145,13 +145,35 @@ export const PromotionForm = ({
 
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Codigo</label>
-          <input {...register("code")} className="ui-input" disabled={disabled} />
+          <input
+            {...register("code")}
+            type="text"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
+            data-form-type="other"
+            className="ui-input"
+            disabled={disabled}
+          />
           {errors.code ? <p className="mt-1 text-xs text-red-600">{errors.code.message}</p> : null}
         </div>
 
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Barcode promo</label>
-          <input {...register("barcode")} className="ui-input font-mono text-sm" disabled={disabled} />
+          <input
+            {...register("barcode")}
+            type="text"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
+            data-form-type="other"
+            className="ui-input font-mono text-sm"
+            disabled={disabled}
+          />
         </div>
       </div>
 

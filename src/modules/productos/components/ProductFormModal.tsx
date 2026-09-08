@@ -596,6 +596,13 @@ export const ProductFormModal = ({
                     {...register("codigoBarras", {
                       setValueAs: (value) => normalizeVoiceBarcode(String(value ?? "")),
                     })}
+                    type="text"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-lpignore="true"
+                    data-form-type="other"
                     className="ui-input"
                     disabled={disabled}
                   />
@@ -628,6 +635,13 @@ export const ProductFormModal = ({
                     {...register("codigoProducto", {
                       setValueAs: (value) => normalizeVoiceProductCode(String(value ?? "")),
                     })}
+                    type="text"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-lpignore="true"
+                    data-form-type="other"
                     className="ui-input"
                     disabled={disabled}
                   />

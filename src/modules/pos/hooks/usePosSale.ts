@@ -24,6 +24,7 @@ import {
 import { posCustomerProfilesService } from "@/services/pos-customer-profiles.service";
 import { priceListsService } from "@/services/price-lists.service";
 import { productsService } from "@/services/products.service";
+import { useProductsStore } from "@/features/products/store/products.store";
 import { buildPromotionBarcode, promotionsService, type PromotionWithDetails } from "@/services/promotions.service";
 import { receiptsService } from "@/services/receipts.service";
 import { salesService } from "@/services/sales.service";
@@ -407,7 +408,17 @@ export const usePosSale = (tenantId: string | null) => {
       return;
     }
 
-    setIsLoading(true);
+    // Hidratar instantáneamente con caché en memoria si existe
+    const cachedStore = useProductsStore.getState();
+    if (cachedStore.loadedTenantId === tenantId && cachedStore.products.length > 0) {
+      setProducts(cachedStore.products.filter((product) => product.is_active !== false));
+      setProductBarcodes(cachedStore.allBarcodes);
+      setPrimaryBarcodes(cachedStore.primaryBarcodes);
+      setPriceLists(cachedStore.priceLists);
+    } else {
+      setIsLoading(true);
+    }
+
     try {
       await offlineService.hydrate();
       if (!isOnline) {
@@ -512,6 +523,19 @@ export const usePosSale = (tenantId: string | null) => {
       setProducts(activeProducts);
       setProductBarcodes(allProductBarcodes);
       setPrimaryBarcodes(primaryBarcodeMap);
+      setPriceLists(allPriceLists);
+
+      if (allProducts.length > 0) {
+        useProductsStore.setState({
+          products: allProducts,
+          allBarcodes: allProductBarcodes,
+          primaryBarcodes: primaryBarcodeMap,
+          priceLists: allPriceLists,
+          loadedTenantId: tenantId,
+          lastLoadedAt: Date.now(),
+        });
+      }
+
       setCustomers(activeCustomers);
       setPaymentMethods(
         [...allActivePaymentMethods].sort((a, b) => {
@@ -964,20 +988,24 @@ export const usePosSale = (tenantId: string | null) => {
             a.name.localeCompare(b.name)
           )
         );
+        useProductsStore.getState().upsertProduct(created);
+
         if (input.barcode.trim()) {
-          setPrimaryBarcodes((current) => ({ ...current, [created.id]: input.barcode.trim() }));
+          const barcodeClean = input.barcode.trim();
+          setPrimaryBarcodes((current) => ({ ...current, [created.id]: barcodeClean }));
           setProductBarcodes((current) => [
             ...current.filter((barcode) => barcode.product_id !== created.id || !barcode.is_primary),
             {
               id: `local-barcode-${created.id}`,
               tenant_id: tenantId,
               product_id: created.id,
-              barcode: input.barcode.trim(),
+              barcode: barcodeClean,
               is_primary: true,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             },
           ]);
+          useProductsStore.getState().patchPrimaryBarcode(created.id, barcodeClean);
         }
 
         await auditService.createSafe(tenantId, {
@@ -1096,8 +1124,17 @@ export const usePosSale = (tenantId: string | null) => {
         productBarcodes.find((row) => normalizeBarcodeValue(row.barcode) === normalizedBarcode) ??
         null;
 
-      if (!barcodeRow) return null;
-      return products.find((candidate) => candidate.id === barcodeRow.product_id) ?? null;
+      if (barcodeRow) {
+        const candidate = products.find((product) => product.id === barcodeRow.product_id);
+        if (candidate) return candidate;
+      }
+
+      // Fallback: coincidencia por código de producto directo
+      return (
+        products.find(
+          (product) => normalizeBarcodeValue(product.code) === normalizedBarcode
+        ) ?? null
+      );
     },
     [productBarcodes, products]
   );

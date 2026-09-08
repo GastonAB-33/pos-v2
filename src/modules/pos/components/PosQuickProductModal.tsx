@@ -30,7 +30,7 @@ export const PosQuickProductModal = ({
   onCreateAndAdd,
 }: PosQuickProductModalProps) => {
   useBodyScrollLock(open);
-  const [saveMode, setSaveMode] = useState<SaveMode>("sale_only");
+  const [saveMode, setSaveMode] = useState<SaveMode>("catalog");
   const [saleMode, setSaleMode] = useState<"unit" | "weight">("unit");
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
@@ -45,7 +45,7 @@ export const PosQuickProductModal = ({
 
   useEffect(() => {
     if (!open) return;
-    setSaveMode("sale_only");
+    setSaveMode("catalog");
     setSaleMode("unit");
     setName("");
     setCategory(categories[0] ?? "General");
@@ -201,12 +201,34 @@ export const PosQuickProductModal = ({
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Codigo interno</label>
-                  <input value={code} onChange={(event) => setCode(event.target.value)} className="ui-input" />
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-lpignore="true"
+                    data-form-type="other"
+                    value={code}
+                    onChange={(event) => setCode(event.target.value)}
+                    className="ui-input"
+                  />
                 </div>
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Codigo de barras</label>
-                  <input value={barcode} onChange={(event) => setBarcode(event.target.value)} className="ui-input" />
+                  <input
+                    type="text"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-lpignore="true"
+                    data-form-type="other"
+                    value={barcode}
+                    onChange={(event) => setBarcode(event.target.value)}
+                    className="ui-input"
+                  />
                 </div>
 
                 <label className="flex items-center gap-2 text-sm text-slate-700">

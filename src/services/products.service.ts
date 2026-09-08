@@ -111,7 +111,13 @@ export const productsService = {
 
     const allBarcodes = await barcodeCrud.getAllByTenant(tenantId);
     const matches = allBarcodes.filter((item) => normalizeBarcode(item.barcode) === barcode);
-    if (!matches.length) return null;
+    if (!matches.length) {
+      const allProducts = await crud.getAllByTenant(tenantId);
+      const matchedProduct = allProducts.find(
+        (item) => normalizeBarcode(item.code) === barcode
+      );
+      return matchedProduct ?? null;
+    }
 
     const preferred = matches.find((item) => item.is_primary) ?? matches[0];
     return crud.getById(tenantId, preferred.product_id);

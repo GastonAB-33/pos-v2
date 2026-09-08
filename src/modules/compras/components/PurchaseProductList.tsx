@@ -76,6 +76,11 @@ export const PurchaseProductList = ({
             id="purchase-barcode"
             type="text"
             autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
+            data-form-type="other"
             autoFocus
             value={barcodeValue}
             onChange={(event) => {
