@@ -45,7 +45,6 @@ const unitLabel = (product: Product): string => (product.sale_mode === "weight" 
 const buildReportDateStamp = (): string => new Date().toISOString().slice(0, 10);
 
 const getStatusBadgeClassName = (status: StockStatus): string => {
-  if (status === "no_stock") return "ui-badge ui-badge--danger";
   if (status === "low") return "ui-badge ui-badge--warn";
   if (status === "over") return "ui-badge ui-badge--info";
   if (status === "unassigned") return "ui-badge ui-badge--neutral";
@@ -78,7 +77,6 @@ export const StockTrackingTable = ({
   disabled,
   statusFilter: controlledStatusFilter,
   onStatusFilterChange,
-  globalLowThreshold = 5,
   onUpdateOne,
   onUpdateBulk,
 }: StockTrackingTableProps) => {
@@ -125,7 +123,7 @@ export const StockTrackingTable = ({
       if (categoryFilter && product.category !== categoryFilter) return false;
 
       const { stockMin, stockMax } = resolveThresholds(product, drafts[product.id]);
-      const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax, globalLowThreshold);
+      const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
       if (statusFilter !== "all" && status !== statusFilter) return false;
 
       if (!normalizedSearch) return true;
@@ -133,7 +131,7 @@ export const StockTrackingTable = ({
       const searchTarget = `${product.name} ${product.code} ${product.category} ${product.subcategory ?? ""}`.toLowerCase();
       return searchTarget.includes(normalizedSearch);
     });
-  }, [products, search, categoryFilter, statusFilter, drafts, globalLowThreshold]);
+  }, [products, search, categoryFilter, statusFilter, drafts]);
 
   const reportCandidates = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -290,7 +288,6 @@ export const StockTrackingTable = ({
 
     const fileNameByStatus: Record<StockStatus, string> = {
       low: "stock-bajo",
-      no_stock: "sin-stock",
       normal: "normal",
       over: "sobrestock",
       unassigned: "sin-asignar",

@@ -10,16 +10,9 @@ import type { Product, ProductBarcode, Purchase, PurchaseItem, Supplier } from "
 import type { ProductFormModalValues } from "@/modules/productos/types/product.types";
 import type { PurchaseCheckoutValues } from "@/modules/compras/schemas/purchase-checkout.schema";
 import type { SupplierFormValues } from "@/modules/proveedores/schemas/supplier-form.schema";
+import type { PurchaseReturnPayload } from "@/modules/compras/components/PurchaseReturnModal";
+import type { PurchaseCartItemView, PurchaseSummary } from "@/modules/compras/components/PurchaseCart";
 import { toSupplierServiceInput } from "@/modules/proveedores/utils/supplier-input";
-
-interface PurchaseCartItem {
-  product_id: string;
-  name: string;
-  sale_mode: Product["sale_mode"];
-  quantity: number;
-  unit_cost: number;
-  stock_current: number;
-}
 
 type FeedbackType = "success" | "error";
 
@@ -30,6 +23,11 @@ interface PurchaseFeedback {
 
 const roundAmount = (value: number): number => Number(value.toFixed(2));
 const roundQty = (value: number): number => Number(value.toFixed(3));
+const currency = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  maximumFractionDigits: 2,
+});
 const normalizeText = (value: string): string =>
   value
     .normalize("NFD")
@@ -80,7 +78,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [search, setSearch] = useState("");
-  const [cart, setCart] = useState<PurchaseCartItem[]>([]);
+  const [cart, setCart] = useState<PurchaseCartItemView[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<PurchaseFeedback | null>(null);
@@ -90,6 +88,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
   const loadData = useCallback(async () => {
     if (!tenantId) {
       setProducts([]);
+      setProductBarcodes([]);
       setSuppliers([]);
       setPurchases([]);
       setCart([]);
@@ -105,13 +104,14 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     }
 
     try {
-      const [allProducts, allProductBarcodes, allSuppliers, allPurchases, allPurchaseItems] = await Promise.all([
-        productsService.getAllByTenant(tenantId),
-        productsService.getBarcodesByTenant(tenantId),
-        suppliersService.getAllByTenant(tenantId),
-        purchasesService.getAllByTenant(tenantId),
-        purchasesService.getAllItemsByTenant(tenantId),
-      ]);
+      const [allProducts, allProductBarcodes, allSuppliers, allPurchases, allPurchaseItems] =
+        await Promise.all([
+          productsService.getAllByTenant(tenantId),
+          productsService.getBarcodesByTenant(tenantId),
+          suppliersService.getAllByTenant(tenantId),
+          purchasesService.getAllByTenant(tenantId),
+          purchasesService.getAllItemsByTenant(tenantId),
+        ]);
 
       const purchaseItemsByPurchaseId = allPurchaseItems.reduce<Map<string, PurchaseItem[]>>(
         (acc, item) => {
@@ -182,6 +182,8 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
           sale_mode: product.sale_mode,
           quantity: 1,
           unit_cost: product.cost_price,
+          vat_percent: product.vat_percent ?? 21,
+          bonified_quantity: 0,
           stock_current: product.stock_current,
         },
       ];
@@ -190,7 +192,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
 
   const setItemQuantity = (productId: string, quantity: number) => {
     const normalized = roundQty(quantity);
-    if (!Number.isFinite(normalized)) return;
+    if (!Number.isFinite(normalized) || normalized < 0) return;
 
     setCart((prev) =>
       prev.map((item) => (item.product_id === productId ? { ...item, quantity: normalized } : item))
@@ -199,10 +201,32 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
 
   const setItemUnitCost = (productId: string, unitCost: number) => {
     const normalized = roundAmount(unitCost);
-    if (!Number.isFinite(normalized)) return;
+    if (!Number.isFinite(normalized) || normalized < 0) return;
 
     setCart((prev) =>
       prev.map((item) => (item.product_id === productId ? { ...item, unit_cost: normalized } : item))
+    );
+  };
+
+  const setItemVatPercent = (productId: string, vatPercent: number) => {
+    const normalized = Number(vatPercent);
+    if (!Number.isFinite(normalized) || normalized < 0) return;
+
+    setCart((prev) =>
+      prev.map((item) =>
+        item.product_id === productId ? { ...item, vat_percent: normalized } : item
+      )
+    );
+  };
+
+  const setItemBonifiedQuantity = (productId: string, bonifiedQty: number) => {
+    const normalized = roundQty(bonifiedQty);
+    if (!Number.isFinite(normalized) || normalized < 0) return;
+
+    setCart((prev) =>
+      prev.map((item) =>
+        item.product_id === productId ? { ...item, bonified_quantity: normalized } : item
+      )
     );
   };
 
@@ -212,20 +236,38 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
 
   const clearCart = () => setCart([]);
 
-  const summary = useMemo(() => {
-    const total = roundAmount(cart.reduce((acc, item) => acc + item.quantity * item.unit_cost, 0));
-    return { total };
+  const summary: PurchaseSummary = useMemo(() => {
+    let subtotal = 0;
+    let vatTotal = 0;
+    let totalUnits = 0;
+
+    for (const item of cart) {
+      const lineNet = item.quantity * item.unit_cost;
+      const lineVat = lineNet * ((item.vat_percent || 0) / 100);
+      subtotal += lineNet;
+      vatTotal += lineVat;
+      totalUnits += item.quantity + (item.bonified_quantity || 0);
+    }
+
+    subtotal = roundAmount(subtotal);
+    vatTotal = roundAmount(vatTotal);
+    const total = roundAmount(subtotal + vatTotal);
+    totalUnits = roundQty(totalUnits);
+
+    return { subtotal, vatTotal, total, totalUnits };
   }, [cart]);
 
   const confirmPurchase = async (values: PurchaseCheckoutValues): Promise<Purchase | null> => {
     if (!tenantId) return null;
 
     if (!cart.length) {
-      setFeedback({ type: "error", message: "No se puede registrar una compra sin items" });
+      setFeedback({ type: "error", message: "No se puede registrar una compra sin ítems" });
       return null;
     }
 
-    const hasInvalid = cart.some((item) => item.quantity <= 0 || item.unit_cost < 0);
+    const hasInvalid = cart.some(
+      (item) => (item.quantity <= 0 && (item.bonified_quantity || 0) <= 0) || item.unit_cost < 0
+    );
     if (hasInvalid) {
       setFeedback({ type: "error", message: "Revisar cantidades y costos del carrito" });
       return null;
@@ -233,25 +275,35 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
 
     setIsSubmitting(true);
     try {
-      const openCashSession =
-        userId != null
-          ? (await cashService.getOpenSessionByUser(tenantId, userId)) ??
-            (await cashService.getOpenSession(tenantId))
-          : await cashService.getOpenSession(tenantId);
+      const affectsCash = values.paymentMethod === "cash";
+      let openCashSession = null;
 
-      if (!openCashSession) {
-        setFeedback({
-          type: "error",
-          message: "Debes tener una caja abierta para registrar el pago al proveedor",
-        });
-        return null;
+      if (affectsCash) {
+        openCashSession =
+          userId != null
+            ? (await cashService.getOpenSessionByUser(tenantId, userId)) ??
+              (await cashService.getOpenSession(tenantId))
+            : await cashService.getOpenSession(tenantId);
+
+        if (!openCashSession) {
+          setFeedback({
+            type: "error",
+            message: "Debes tener una caja abierta para registrar el pago en efectivo al proveedor",
+          });
+          return null;
+        }
       }
 
       const purchase = await purchasesService.create(tenantId, {
         supplier_id: values.supplierId,
         purchase_number: `CP-${Date.now()}`,
+        document_type: values.documentType,
+        document_number: values.documentNumber?.trim() || null,
+        issue_date: values.issueDate,
+        payment_method: values.paymentMethod,
         status: "confirmed",
-        subtotal: summary.total,
+        subtotal: summary.subtotal,
+        vat_total: summary.vatTotal,
         total: summary.total,
         notes: values.notes?.trim() || null,
         created_by: userId,
@@ -260,7 +312,10 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       });
 
       for (const item of cart) {
-        const lineTotal = roundAmount(item.quantity * item.unit_cost);
+        const lineNet = roundAmount(item.quantity * item.unit_cost);
+        const vatAmount = roundAmount(lineNet * ((item.vat_percent || 0) / 100));
+        const lineTotal = roundAmount(lineNet + vatAmount);
+        const totalIncomingQty = roundQty(item.quantity + (item.bonified_quantity || 0));
 
         await purchasesService.createItem(tenantId, {
           purchase_id: purchase.id,
@@ -268,38 +323,51 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
           product_name_snapshot: item.name,
           quantity: item.quantity,
           unit_cost: item.unit_cost,
+          vat_percent: item.vat_percent,
+          vat_amount: vatAmount,
+          bonified_quantity: item.bonified_quantity || 0,
           line_total: lineTotal,
         });
 
         await stockService.create(tenantId, {
           product_id: item.product_id,
           movement_type: "purchase",
-          quantity: item.quantity,
+          quantity: totalIncomingQty,
           reference_type: "purchase",
           reference_id: purchase.id,
-          notes: `Compra ${purchase.purchase_number}`,
+          notes: `Compra ${purchase.purchase_number}${
+            item.bonified_quantity ? ` (inc. ${item.bonified_quantity} bonif.)` : ""
+          }`,
           created_by: userId,
         });
 
         const currentProduct = await productsService.getById(tenantId, item.product_id);
         const currentStock = currentProduct?.stock_current ?? item.stock_current;
-        await productsService.updateStock(
-          tenantId,
-          item.product_id,
-          roundQty(currentStock + item.quantity)
-        );
+        const newStock = roundQty(currentStock + totalIncomingQty);
+
+        await productsService.update(tenantId, item.product_id, {
+          stock_current: newStock,
+          cost_price: item.unit_cost > 0 ? item.unit_cost : currentProduct?.cost_price,
+          vat_percent: item.vat_percent,
+        });
       }
 
-      const cashMovement = await cashService.createMovement(tenantId, {
-        cash_session_id: openCashSession.id,
-        movement_type: "expense",
-        amount: summary.total,
-        currency_code: "ARS",
-        reference_type: "purchase_payment",
-        reference_id: purchase.id,
-        notes: `Pago a proveedor - ${purchase.purchase_number}`,
-        created_by: userId,
-      });
+      let cashMovementId: string | null = null;
+      if (affectsCash && openCashSession && summary.total > 0) {
+        const cashMovement = await cashService.createMovement(tenantId, {
+          cash_session_id: openCashSession.id,
+          movement_type: "expense",
+          amount: summary.total,
+          currency_code: "ARS",
+          reference_type: "purchase_payment",
+          reference_id: purchase.id,
+          notes: `Pago compra ${purchase.purchase_number} - ${values.documentType} ${
+            values.documentNumber || ""
+          }`.trim(),
+          created_by: userId,
+        });
+        cashMovementId = cashMovement.id;
+      }
 
       await auditService.createSafe(tenantId, {
         user_id: userId,
@@ -310,16 +378,23 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         description: `Compra confirmada: ${purchase.purchase_number}`,
         metadata: {
           supplier_id: purchase.supplier_id,
+          document_type: values.documentType,
+          document_number: values.documentNumber,
           item_count: cart.length,
           total: purchase.total,
-          cash_session_id: openCashSession.id,
-          cash_movement_id: cashMovement.id,
+          vat_total: summary.vatTotal,
+          total_units: summary.totalUnits,
+          payment_method: values.paymentMethod,
+          cash_session_id: openCashSession?.id ?? null,
+          cash_movement_id: cashMovementId,
         },
       });
 
       setFeedback({
         type: "success",
-        message: `Compra ${purchase.purchase_number} registrada y pagada en caja`,
+        message: `Compra ${purchase.purchase_number} registrada correctamente${
+          affectsCash ? " y debitada de la caja diaria" : ""
+        }`,
       });
       clearCart();
       await loadData();
@@ -327,6 +402,131 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     } catch {
       setFeedback({ type: "error", message: "No se pudo registrar la compra" });
       return null;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const createPurchaseReturn = async (payload: PurchaseReturnPayload): Promise<boolean> => {
+    if (!tenantId) return false;
+
+    const purchase = purchases.find((p) => p.id === payload.purchaseId);
+    if (!purchase) {
+      setFeedback({ type: "error", message: "Compra no encontrada" });
+      return false;
+    }
+
+    setIsSubmitting(true);
+    try {
+      let openCashSession = null;
+      if (payload.refundToCash && payload.totalRefund > 0) {
+        openCashSession =
+          userId != null
+            ? (await cashService.getOpenSessionByUser(tenantId, userId)) ??
+              (await cashService.getOpenSession(tenantId))
+            : await cashService.getOpenSession(tenantId);
+
+        if (!openCashSession) {
+          setFeedback({
+            type: "error",
+            message: "Debes tener una caja abierta para registrar el reintegro de dinero",
+          });
+          return false;
+        }
+      }
+
+      const purchaseItems = await purchasesService.getItemsByPurchaseId(tenantId, purchase.id);
+
+      for (const returnedItem of payload.items) {
+        const itemRecord = purchaseItems.find((i) => i.product_id === returnedItem.productId);
+        if (itemRecord) {
+          const updatedReturnedQty = roundQty(
+            (itemRecord.returned_quantity || 0) + returnedItem.returnQuantity
+          );
+          await purchasesService.updateItem(tenantId, itemRecord.id, {
+            returned_quantity: updatedReturnedQty,
+          });
+        }
+
+        await stockService.create(tenantId, {
+          product_id: returnedItem.productId,
+          movement_type: "adjustment",
+          quantity: -returnedItem.returnQuantity,
+          reference_type: "purchase_return",
+          reference_id: purchase.id,
+          notes: `Devolución compra ${purchase.purchase_number}: ${payload.reason}`,
+          created_by: userId,
+        });
+
+        const product = await productsService.getById(tenantId, returnedItem.productId);
+        if (product) {
+          const nextStock = roundQty(product.stock_current - returnedItem.returnQuantity);
+          await productsService.updateStock(tenantId, product.id, nextStock);
+        }
+      }
+
+      let cashMovementId: string | null = null;
+      if (payload.refundToCash && openCashSession && payload.totalRefund > 0) {
+        const movement = await cashService.createMovement(tenantId, {
+          cash_session_id: openCashSession.id,
+          movement_type: "income",
+          amount: payload.totalRefund,
+          currency_code: "ARS",
+          reference_type: "purchase_refund",
+          reference_id: purchase.id,
+          notes: `Reintegro devolución compra ${purchase.purchase_number}: ${payload.reason}`,
+          created_by: userId,
+        });
+        cashMovementId = movement.id;
+      }
+
+      const newReturnedTotal = roundAmount((purchase.returned_total || 0) + payload.totalRefund);
+      const isFullyReturned = newReturnedTotal >= purchase.total;
+
+      const appendNotes = [
+        purchase.notes,
+        `[Devolución ${new Date().toLocaleDateString("es-AR")}]: ${payload.reason} (-${payload.totalRefund})`,
+      ]
+        .filter(Boolean)
+        .join(" | ");
+
+      await purchasesService.update(tenantId, purchase.id, {
+        status: isFullyReturned ? "returned" : "partial_return",
+        returned_total: newReturnedTotal,
+        notes: appendNotes,
+      });
+
+      await auditService.createSafe(tenantId, {
+        user_id: userId,
+        module: "compras",
+        action: "purchase_return",
+        entity_type: "purchase",
+        entity_id: purchase.id,
+        description: `Devolución registrada en compra ${purchase.purchase_number}: ${currency.format(
+          payload.totalRefund
+        )}`,
+        metadata: {
+          purchase_id: purchase.id,
+          reason: payload.reason,
+          refund_to_cash: payload.refundToCash,
+          total_refund: payload.totalRefund,
+          cash_session_id: openCashSession?.id ?? null,
+          cash_movement_id: cashMovementId,
+          items: payload.items,
+        },
+      });
+
+      setFeedback({
+        type: "success",
+        message: `Devolución de ${currency.format(payload.totalRefund)} confirmada${
+          payload.refundToCash ? " y acreditada en la caja diaria" : ""
+        }`,
+      });
+      await loadData();
+      return true;
+    } catch {
+      setFeedback({ type: "error", message: "No se pudo procesar la devolución" });
+      return false;
     } finally {
       setIsSubmitting(false);
     }
@@ -343,7 +543,8 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
   );
 
   const subcategoryOptions = useMemo(
-    () => [...new Set(products.map((product) => product.subcategory).filter(Boolean) as string[])].sort(),
+    () =>
+      [...new Set(products.map((product) => product.subcategory).filter(Boolean) as string[])].sort(),
     [products]
   );
 
@@ -381,7 +582,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     if (!tenantId) return { ok: false, error: "No hay un comercio activo" };
 
     const barcode = normalizeBarcode(rawBarcode);
-    if (!barcode) return { ok: false, error: "Ingresa un codigo de barras" };
+    if (!barcode) return { ok: false, error: "Ingresa un código de barras" };
 
     const barcodeRow =
       productBarcodes.find(
@@ -396,19 +597,21 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       try {
         product = await productsService.getByBarcode(tenantId, barcode);
       } catch {
-        return { ok: false, error: "No se pudo consultar el codigo de barras" };
+        return { ok: false, error: "No se pudo consultar el código de barras" };
       }
     }
 
     if (!product || !product.is_active) {
-      return { ok: false, error: `No se encontro un producto activo para ${barcode}` };
+      return { ok: false, error: `No se encontró un producto activo para ${barcode}` };
     }
 
     addProductToCart(product);
     return { ok: true, product };
   };
 
-  const createProductAndAddToCart = async (values: ProductFormModalValues): Promise<Product | null> => {
+  const createProductAndAddToCart = async (
+    values: ProductFormModalValues
+  ): Promise<Product | null> => {
     if (!tenantId) return null;
 
     setIsSubmitting(true);
@@ -416,8 +619,12 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       let created = await productsService.create(tenantId, toProductCreateInput(values));
 
       if (values.imagenFile) {
-        const imageUrl = await productsService.uploadProductImage(tenantId, created.id, values.imagenFile);
-        created = await productsService.update(tenantId, created.id, { image_url: imageUrl }) ?? {
+        const imageUrl = await productsService.uploadProductImage(
+          tenantId,
+          created.id,
+          values.imagenFile
+        );
+        created = (await productsService.update(tenantId, created.id, { image_url: imageUrl })) ?? {
           ...created,
           image_url: imageUrl,
         };
@@ -500,11 +707,15 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     addProductByBarcode,
     setItemQuantity,
     setItemUnitCost,
+    setItemVatPercent,
+    setItemBonifiedQuantity,
     removeItem,
     clearCart,
     confirmPurchase,
+    createPurchaseReturn,
     findPotentialDuplicateProducts,
     createProductAndAddToCart,
     createSupplier,
   };
 };
+

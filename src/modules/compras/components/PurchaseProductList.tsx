@@ -1,8 +1,9 @@
 import { PaginationControls } from "@/components/ui/PaginationControls";
 import { usePagination } from "@/hooks/usePagination";
-import { Barcode, CheckCircle2 } from "lucide-react";
+import { Barcode, Camera, CheckCircle2 } from "lucide-react";
 import { useRef, useState } from "react";
 import type { Product } from "@/types/entities";
+import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 
 interface PurchaseProductListProps {
   products: Product[];
@@ -37,6 +38,7 @@ export const PurchaseProductList = ({
   const paginatedProducts = usePagination(products, 10, `${search}|${products.length}`);
   const scannerInputRef = useRef<HTMLInputElement | null>(null);
   const [barcodeValue, setBarcodeValue] = useState("");
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [scannerFeedback, setScannerFeedback] = useState<
     { type: "success" | "error"; message: string } | undefined
   >();
@@ -104,6 +106,16 @@ export const PurchaseProductList = ({
           >
             Leer
           </button>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-50"
+            onClick={() => setIsCameraOpen(true)}
+            disabled={disabled || !canWrite || isScanning}
+            title="Escanear con la cámara del celular"
+          >
+            <Camera aria-hidden="true" className="h-4 w-4" />
+            <span className="hidden sm:inline">Cámara</span>
+          </button>
         </div>
         {scannerFeedback ? (
           <p
@@ -118,6 +130,26 @@ export const PurchaseProductList = ({
           </p>
         ) : null}
       </div>
+
+      <BarcodeScannerModal
+        open={isCameraOpen}
+        title="Escanear producto para compra"
+        description="Apuntá la cámara al código de barras del producto."
+        onClose={() => setIsCameraOpen(false)}
+        onDetected={async (scannedCode) => {
+          setIsCameraOpen(false);
+          setBarcodeValue(scannedCode);
+          setIsScanning(true);
+          const result = await onBarcodeScan(scannedCode);
+          if (result.ok && result.product) {
+            setBarcodeValue("");
+            setScannerFeedback({ type: "success", message: `${result.product.name} agregado` });
+          } else {
+            setScannerFeedback({ type: "error", message: result.error ?? "Código no encontrado" });
+          }
+          setIsScanning(false);
+        }}
+      />
 
       <div className="space-y-1">
         <h2 className="text-base font-semibold text-slate-900">Productos</h2>

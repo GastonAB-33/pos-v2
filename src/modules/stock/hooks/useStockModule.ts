@@ -402,48 +402,36 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
     [activeProducts]
   );
 
-  const alertRows = useMemo(() => {
-    const globalThreshold = stockSettings.global_low_stock_threshold ?? 5;
-
-    return activeProducts.map((product) => {
-      const threshold = stockSettings.use_min_max
-        ? (product.stock_min ?? globalThreshold)
-        : globalThreshold;
-
-      const isNoStock = product.stock_current <= 0;
-      const isLow = !isNoStock && threshold > 0 && product.stock_current <= threshold;
-      const isOver =
-        stockSettings.use_min_max &&
-        product.stock_max != null &&
-        product.stock_max > 0 &&
-        product.stock_current > product.stock_max;
-
-      return { product, isNoStock, isLow, isOver };
-    });
-  }, [
-    activeProducts,
-    stockSettings.global_low_stock_threshold,
-    stockSettings.use_min_max,
-  ]);
-
   const summary = useMemo(() => {
-    const noStock = alertRows.filter((row) => row.isNoStock).length;
-    const lowStock = alertRows.filter((row) => row.isLow).length;
-    const overMax = alertRows.filter((row) => row.isOver).length;
+    let lowStock = 0;
+    let overMax = 0;
+    let unassigned = 0;
+
+    for (const product of activeProducts) {
+      const min = product.stock_min;
+      const max = product.stock_max != null && product.stock_max > 0 ? product.stock_max : null;
+
+      if (min == null && max == null) {
+        unassigned += 1;
+      } else if (min != null && product.stock_current <= min) {
+        lowStock += 1;
+      } else if (max != null && product.stock_current > max) {
+        overMax += 1;
+      }
+    }
 
     return {
       activeProducts: activeProducts.length,
       lowStock,
-      noStock,
       overMax,
+      unassigned,
     };
-  }, [activeProducts.length, alertRows]);
+  }, [activeProducts]);
 
   return {
     products,
     stockSettings,
     productsById,
-    alertRows,
     movementRows,
     summary,
     movementTypeFilter,

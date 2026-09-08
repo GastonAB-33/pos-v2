@@ -1,12 +1,11 @@
 import type { Product, StockMovementType } from "@/types/entities";
 
-export type StockStatus = "low" | "no_stock" | "normal" | "over" | "unassigned";
+export type StockStatus = "low" | "normal" | "over" | "unassigned";
 export type StockStatusFilter = "all" | StockStatus;
 
 export const stockStatusLabel: Record<StockStatusFilter, string> = {
   all: "Todos",
-  low: "Bajo mínimo",
-  no_stock: "Sin stock",
+  low: "Stock bajo",
   normal: "Normal",
   over: "Sobrestock",
   unassigned: "Sin asignar",
@@ -29,28 +28,21 @@ const normalizeMax = (max: number | null): number | null => {
 export const getStockStatusFromValues = (
   stockCurrent: number,
   min: number | null,
-  max: number | null,
-  globalLowThreshold = 5
+  max: number | null
 ): StockStatus => {
   const normalizedMax = normalizeMax(max);
 
-  // 1. Sin stock (0 o negativo)
-  if (stockCurrent <= 0) return "no_stock";
-
-  // 2. Stock bajo por mínimo configurado
-  if (min != null && min > 0 && stockCurrent <= min) return "low";
-
-  // 3. Stock bajo por umbral global cuando no tiene mínimo configurado
-  if (min == null && globalLowThreshold > 0 && stockCurrent <= globalLowThreshold) return "low";
-
-  // 4. Sobrestock
-  if (normalizedMax != null && stockCurrent > normalizedMax) return "over";
-
-  // 5. Sin asignar (si no tiene límites)
+  // Si no tiene ni mínimo ni máximo asignado, siempre es "Sin asignar"
   if (min == null && normalizedMax == null) return "unassigned";
+
+  // Si tiene mínimo y el stock actual es menor o igual, es "Stock bajo"
+  if (min != null && stockCurrent <= min) return "low";
+
+  // Si tiene máximo y el stock actual es mayor, es "Sobrestock"
+  if (normalizedMax != null && stockCurrent > normalizedMax) return "over";
 
   return "normal";
 };
 
-export const getStockStatus = (product: Product, globalLowThreshold = 5): StockStatus =>
-  getStockStatusFromValues(product.stock_current, product.stock_min, product.stock_max, globalLowThreshold);
+export const getStockStatus = (product: Product): StockStatus =>
+  getStockStatusFromValues(product.stock_current, product.stock_min, product.stock_max);

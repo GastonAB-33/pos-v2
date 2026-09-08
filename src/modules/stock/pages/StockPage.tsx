@@ -146,8 +146,8 @@ export const StockPage = () => {
             <StockSummaryCards
               activeProducts={summary.activeProducts}
               lowStock={summary.lowStock}
-              noStock={summary.noStock}
               overMax={summary.overMax}
+              unassigned={summary.unassigned}
               activeFilter={statusFilter}
               onSelectFilter={setStatusFilter}
             />

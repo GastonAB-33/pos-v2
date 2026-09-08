@@ -9,13 +9,14 @@ import { PurchaseCart } from "@/modules/compras/components/PurchaseCart";
 import { PurchaseCheckoutPanel } from "@/modules/compras/components/PurchaseCheckoutPanel";
 import { PurchaseProductList } from "@/modules/compras/components/PurchaseProductList";
 import { PurchasesHistoryTable } from "@/modules/compras/components/PurchasesHistoryTable";
+import { PurchaseReturnModal } from "@/modules/compras/components/PurchaseReturnModal";
 import { usePurchasesModule } from "@/modules/compras/hooks/usePurchasesModule";
 import { ProductFormModal } from "@/modules/productos/components/ProductFormModal";
 import { SupplierForm } from "@/modules/proveedores/components/SupplierForm";
 import type { ProductFormModalValues } from "@/modules/productos/types/product.types";
 import type { PurchaseCheckoutValues } from "@/modules/compras/schemas/purchase-checkout.schema";
 import type { SupplierFormValues } from "@/modules/proveedores/schemas/supplier-form.schema";
-import type { Product } from "@/types/entities";
+import type { Product, Purchase, Supplier } from "@/types/entities";
 
 interface DuplicateReviewState {
   values: ProductFormModalValues;
@@ -56,7 +57,7 @@ const DuplicateProductReviewModal = ({
             <div>
               <p className="font-semibold text-slate-900">{product.name}</p>
               <p className="text-xs text-slate-500">
-                Codigo: {product.code} | Stock: {product.stock_current.toLocaleString("es-AR")}{" "}
+                Código: {product.code} | Stock: {product.stock_current.toLocaleString("es-AR")}{" "}
                 {product.sale_mode === "weight" ? "kg" : "u."}
               </p>
             </div>
@@ -95,6 +96,10 @@ export const ComprasPage = () => {
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
   const [preferredSupplierId, setPreferredSupplierId] = useState<string>();
   const [duplicateReview, setDuplicateReview] = useState<DuplicateReviewState | null>(null);
+  const [returnModalTarget, setReturnModalTarget] = useState<{
+    purchase: Purchase;
+    supplier: Supplier | null;
+  } | null>(null);
 
   const {
     products,
@@ -116,9 +121,12 @@ export const ComprasPage = () => {
     addProductByBarcode,
     setItemQuantity,
     setItemUnitCost,
+    setItemVatPercent,
+    setItemBonifiedQuantity,
     removeItem,
     clearCart,
     confirmPurchase,
+    createPurchaseReturn,
     findPotentialDuplicateProducts,
     createProductAndAddToCart,
     createSupplier,
@@ -185,18 +193,21 @@ export const ComprasPage = () => {
     return (
       <PagePlaceholder
         title="Compras a proveedores"
-        description="No tenes permisos de lectura para este modulo"
+        description="No tenés permisos de lectura para este módulo"
       />
     );
   }
 
   return (
-    <PagePlaceholder title="Compras a proveedores" description="Registro de compras con impacto en stock y caja">
+    <PagePlaceholder
+      title="Compras a proveedores"
+      description="Registro de compras con impacto en stock y caja diaria"
+    >
       <div className="purchases-operational-page space-y-4">
         <section className="workspace-toolbar workspace-toolbar--inline">
           <div className="workspace-meta">
             <span>{purchases.length} compras registradas</span>
-            <span>El historial se ordena desde la compra mas reciente</span>
+            <span>El historial se ordena desde la compra más reciente</span>
           </div>
           <div className="workspace-toolbar__actions">
             <button
@@ -224,7 +235,11 @@ export const ComprasPage = () => {
           </div>
         </section>
 
-        {feedback ? <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>{feedback.message}</div> : null}
+        {feedback ? (
+          <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>
+            {feedback.message}
+          </div>
+        ) : null}
 
         <section className="workspace-history space-y-3">
           <div className="flex items-center justify-between gap-3">
@@ -236,7 +251,14 @@ export const ComprasPage = () => {
               Cargando historial...
             </div>
           ) : (
-            <PurchasesHistoryTable rows={historyRows} />
+            <PurchasesHistoryTable
+              rows={historyRows}
+              canWrite={canWritePurchases}
+              disabled={isSubmitting}
+              onOpenReturnModal={(purchase, supplier) =>
+                setReturnModalTarget({ purchase, supplier })
+              }
+            />
           )}
         </section>
       </div>
@@ -249,7 +271,7 @@ export const ComprasPage = () => {
                 <p className="ui-section-label">Compras a proveedores</p>
                 <h2 className="mt-1 text-lg font-semibold text-slate-900">Nueva compra</h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Agrega productos, confirma el proveedor y registra el pago en la caja abierta.
+                  1. Carga los productos comprados • 2. Ajusta los datos del comprobante y pago.
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -270,6 +292,7 @@ export const ComprasPage = () => {
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
               <div className="workspace-layout">
+                {/* Paso 1: Selección / Escaneo de productos */}
                 <PurchaseProductList
                   products={products}
                   search={search}
@@ -283,6 +306,7 @@ export const ComprasPage = () => {
                   onBarcodeScan={addProductByBarcode}
                 />
 
+                {/* Paso 2: Carrito con IVA y Bonificados + Ajuste de Datos de Compra */}
                 <div className="workspace-aside">
                   <div className="flex justify-end">
                     <button
@@ -297,11 +321,13 @@ export const ComprasPage = () => {
                   </div>
                   <PurchaseCart
                     items={cart}
-                    total={summary.total}
+                    summary={summary}
                     disabled={isSubmitting}
                     canWrite={canWritePurchases}
                     onSetQuantity={setItemQuantity}
                     onSetUnitCost={setItemUnitCost}
+                    onSetVatPercent={setItemVatPercent}
+                    onSetBonifiedQuantity={setItemBonifiedQuantity}
                     onRemove={removeItem}
                   />
 
@@ -327,7 +353,7 @@ export const ComprasPage = () => {
               <div>
                 <h2 className="text-base font-semibold text-slate-900">Nuevo proveedor</h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Se guardara en Proveedores y quedara seleccionado en esta compra.
+                  Se guardará en Proveedores y quedará seleccionado en esta compra.
                 </p>
               </div>
               <IconButton
@@ -369,6 +395,19 @@ export const ComprasPage = () => {
           onClose={() => setDuplicateReview(null)}
         />
       ) : null}
+
+      {/* Modal de Devolución / Nota de Crédito */}
+      {returnModalTarget ? (
+        <PurchaseReturnModal
+          open={Boolean(returnModalTarget)}
+          purchase={returnModalTarget.purchase}
+          supplier={returnModalTarget.supplier}
+          disabled={isSubmitting}
+          onClose={() => setReturnModalTarget(null)}
+          onConfirmReturn={createPurchaseReturn}
+        />
+      ) : null}
     </PagePlaceholder>
   );
 };
+
