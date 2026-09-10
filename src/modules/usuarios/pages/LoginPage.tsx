@@ -8,6 +8,8 @@ import { useMockLogin } from "@/modules/usuarios/hooks/useMockLogin";
 import { dataProvider } from "@/services/config/data-provider";
 import { tenantsService } from "@/services/tenants.service";
 import { normalizeTenantSlug } from "@/utils/tenant-slug";
+import { JirehLogo } from "@/components/brand/JirehLogo";
+import { Sparkles } from "lucide-react";
 
 export const LoginPage = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -106,15 +108,28 @@ export const LoginPage = () => {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
       <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-panel">
+        <div className="mb-5 flex items-center justify-between border-b border-slate-100 pb-4">
+          <Link to="/" title="Ir a la página principal">
+            <JirehLogo size="md" />
+          </Link>
+          <Link
+            to="/landing"
+            className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+            <span>Prueba 15 Días</span>
+          </Link>
+        </div>
+
         <h1 className="text-2xl font-semibold text-slate-900">
-          {publicTenantName ? `Ingresar a ${publicTenantName}` : "Ingresar a POS V2"}
+          {publicTenantName ? `Ingresar a ${publicTenantName}` : "Ingresar a Jireh POS"}
         </h1>
         <p className="mt-1 text-sm text-slate-600">
           {normalizedTenantSlug
             ? "Acceso privado del comercio"
             : dataProvider === "supabase"
               ? "Acceso del comercio"
-              : "Acceso de desarrollo"}
+              : "Acceso al sistema"}
         </p>
 
         {dataProvider === "mock" ? (
