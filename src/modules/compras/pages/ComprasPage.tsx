@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
-import { ArrowLeft, PackagePlus, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { ArrowLeft, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -125,6 +125,8 @@ export const ComprasPage = () => {
     setItemUnitCost,
     setItemVatPercent,
     setItemBonifiedQuantity,
+    setItemUpdateSalePrice,
+    setItemNewSalePrice,
     removeItem,
     clearCart,
     confirmPurchase,
@@ -293,28 +295,8 @@ export const ComprasPage = () => {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsSelectProductModalOpen(true)}
-                  disabled={isSubmitting || !canWritePurchases}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Agregar producto
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsProductModalOpen(true)}
-                  disabled={isSubmitting || !canWritePurchases}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  <PackagePlus className="h-3.5 w-3.5 text-slate-500" />
-                  Agregar nuevo producto
-                </button>
-
-                {cart.length > 0 && (
+              {cart.length > 0 && (
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={clearCart}
@@ -323,10 +305,10 @@ export const ComprasPage = () => {
                     title="Vaciar lista de productos"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    Vaciar
+                    Vaciar lista
                   </button>
-                )}
-              </div>
+                </div>
+              )}
             </section>
 
             {/* 2. Panel de Datos de Compra y Factura */}
@@ -351,6 +333,8 @@ export const ComprasPage = () => {
               onSetUnitCost={setItemUnitCost}
               onSetVatPercent={setItemVatPercent}
               onSetBonifiedQuantity={setItemBonifiedQuantity}
+              onSetUpdateSalePrice={setItemUpdateSalePrice}
+              onSetNewSalePrice={setItemNewSalePrice}
               onRemove={removeItem}
               onOpenAddProductModal={() => setIsSelectProductModalOpen(true)}
               onOpenCreateProductModal={() => setIsProductModalOpen(true)}

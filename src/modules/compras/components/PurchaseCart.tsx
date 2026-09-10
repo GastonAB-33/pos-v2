@@ -10,6 +10,10 @@ export interface PurchaseCartItemView {
   vat_percent: number;
   bonified_quantity: number;
   stock_current: number;
+  previous_cost: number;
+  current_sale_price: number;
+  update_sale_price: boolean;
+  new_sale_price: number;
 }
 
 export interface PurchaseSummary {
@@ -29,6 +33,8 @@ interface PurchaseCartProps {
   onSetUnitCost: (productId: string, unitCost: number) => void;
   onSetVatPercent: (productId: string, vatPercent: number) => void;
   onSetBonifiedQuantity: (productId: string, bonifiedQty: number) => void;
+  onSetUpdateSalePrice?: (productId: string, update: boolean) => void;
+  onSetNewSalePrice?: (productId: string, newPrice: number) => void;
   onRemove: (productId: string) => void;
   onOpenAddProductModal?: () => void;
   onOpenCreateProductModal?: () => void;
@@ -57,6 +63,8 @@ export const PurchaseCart = ({
   onSetUnitCost,
   onSetVatPercent,
   onSetBonifiedQuantity,
+  onSetUpdateSalePrice,
+  onSetNewSalePrice,
   onRemove,
   onOpenAddProductModal,
   onOpenCreateProductModal,
@@ -64,6 +72,7 @@ export const PurchaseCart = ({
   const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
   const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
   const [bonifiedDrafts, setBonifiedDrafts] = useState<Record<string, string>>({});
+  const [salePriceDrafts, setSalePriceDrafts] = useState<Record<string, string>>({});
 
   const getUnitLabel = (item: PurchaseCartItemView) =>
     item.sale_mode === "weight" ? "kg" : "u.";
@@ -77,6 +86,9 @@ export const PurchaseCart = ({
       Object.fromEntries(Object.entries(current).filter(([id]) => ids.has(id)))
     );
     setBonifiedDrafts((current) =>
+      Object.fromEntries(Object.entries(current).filter(([id]) => ids.has(id)))
+    );
+    setSalePriceDrafts((current) =>
       Object.fromEntries(Object.entries(current).filter(([id]) => ids.has(id)))
     );
   }, [items]);
@@ -115,6 +127,19 @@ export const PurchaseCart = ({
       onSetBonifiedQuantity(item.product_id, parsed);
     }
     setBonifiedDrafts((current) => {
+      const { [item.product_id]: _discard, ...next } = current;
+      return next;
+    });
+  };
+
+  const commitNewSalePrice = (item: PurchaseCartItemView) => {
+    const raw = salePriceDrafts[item.product_id];
+    if (raw == null) return;
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed >= 0 && onSetNewSalePrice) {
+      onSetNewSalePrice(item.product_id, parsed);
+    }
+    setSalePriceDrafts((current) => {
       const { [item.product_id]: _discard, ...next } = current;
       return next;
     });
@@ -210,12 +235,18 @@ export const PurchaseCart = ({
           </div>
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-3">
           {items.map((item) => {
             const lineSubtotal = item.quantity * item.unit_cost;
             const lineVat = lineSubtotal * ((item.vat_percent || 0) / 100);
             const lineTotal = lineSubtotal + lineVat;
             const totalStockIn = item.quantity + (item.bonified_quantity || 0);
+
+            // Variación de costo neto
+            const prevCost = item.previous_cost || 0;
+            const unitCostDiff = item.unit_cost - prevCost;
+            const hasCostDiff = Math.abs(unitCostDiff) > 0.001 && prevCost > 0;
+            const costPctDiff = prevCost > 0 ? (unitCostDiff / prevCost) * 100 : 0;
 
             return (
               <article
@@ -350,10 +381,34 @@ export const PurchaseCart = ({
                   </div>
                 </div>
 
-                {/* Subtotal e IVA por fila */}
-                <div className="mt-2 flex flex-wrap items-center justify-between border-t border-slate-200/60 pt-1.5 text-[11px]">
-                  <div className="flex items-center gap-2 text-slate-500">
-                    <span>Neto: <strong className="text-slate-700">{currency.format(lineSubtotal)}</strong></span>
+                {/* Subtotal, Neto antes y Totales por fila */}
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200/60 pt-1.5 text-[11px]">
+                  <div className="flex flex-wrap items-center gap-2 text-slate-600">
+                    <span>
+                      Neto: <strong className="text-slate-800">{currency.format(lineSubtotal)}</strong>
+                    </span>
+
+                    {/* Neto antes con variación: rojo si aumentó, verde si disminuyó; no se muestra si es igual */}
+                    {hasCostDiff ? (
+                      <>
+                        <span>•</span>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                            unitCostDiff > 0
+                              ? "border border-red-200 bg-red-50 text-red-700"
+                              : "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                          }`}
+                        >
+                          <span>Neto antes: {currency.format(prevCost)}</span>
+                          <span>
+                            ({unitCostDiff > 0 ? "+" : ""}
+                            {currency.format(unitCostDiff)} / {unitCostDiff > 0 ? "+" : ""}
+                            {costPctDiff.toFixed(1)}% {unitCostDiff > 0 ? "▲" : "▼"})
+                          </span>
+                        </span>
+                      </>
+                    ) : null}
+
                     {item.vat_percent > 0 ? (
                       <>
                         <span>•</span>
@@ -363,6 +418,92 @@ export const PurchaseCart = ({
                   </div>
                   <div className="font-bold text-slate-900">
                     Total ítem: <span className="text-brand-700">{currency.format(lineTotal)}</span>
+                  </div>
+                </div>
+
+                {/* Opciones de actualización de precio de venta por cada producto */}
+                <div className="mt-2.5 rounded-lg border border-slate-200 bg-white/90 p-2.5 shadow-xs">
+                  <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Actualización de precios para este producto:
+                  </span>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4">
+                      {/* Casilla 1: Mantener precio venta */}
+                      <label className="inline-flex cursor-pointer items-center gap-2 select-none">
+                        <input
+                          type="radio"
+                          name={`sale-price-policy-${item.product_id}`}
+                          checked={!item.update_sale_price}
+                          onChange={() => onSetUpdateSalePrice?.(item.product_id, false)}
+                          disabled={disabled || !canWrite}
+                          className="h-3.5 w-3.5 text-brand-600 focus:ring-brand-500"
+                        />
+                        <span className="text-[11px] font-medium text-slate-700">
+                          Actualizar precio neto pero mantener precio venta{" "}
+                          <span className="font-semibold text-slate-500">
+                            ({currency.format(item.current_sale_price || 0)})
+                          </span>
+                        </span>
+                      </label>
+
+                      {/* Casilla 2: Actualizar precio venta */}
+                      <label className="inline-flex cursor-pointer items-center gap-2 select-none">
+                        <input
+                          type="radio"
+                          name={`sale-price-policy-${item.product_id}`}
+                          checked={Boolean(item.update_sale_price)}
+                          onChange={() => onSetUpdateSalePrice?.(item.product_id, true)}
+                          disabled={disabled || !canWrite}
+                          className="h-3.5 w-3.5 text-brand-600 focus:ring-brand-500"
+                        />
+                        <span className="text-[11px] font-medium text-slate-700">
+                          Actualizar precio neto y actualizar precio venta:
+                        </span>
+                      </label>
+                    </div>
+
+                    {/* Input editable de nuevo precio de venta */}
+                    <div className="flex items-center gap-1 pl-5 sm:pl-0">
+                      <span className="text-xs font-bold text-slate-400">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder={String(item.current_sale_price || 0)}
+                        value={
+                          salePriceDrafts[item.product_id] ??
+                          String(item.new_sale_price ?? item.current_sale_price ?? 0)
+                        }
+                        onChange={(event) => {
+                          const nextValue = event.target.value;
+                          setSalePriceDrafts((current) => ({
+                            ...current,
+                            [item.product_id]: nextValue,
+                          }));
+                          if (!nextValue.trim()) return;
+                          const parsed = Number(nextValue);
+                          if (Number.isFinite(parsed) && parsed >= 0) {
+                            onSetNewSalePrice?.(item.product_id, parsed);
+                            if (!item.update_sale_price) {
+                              onSetUpdateSalePrice?.(item.product_id, true);
+                            }
+                          }
+                        }}
+                        onFocus={() => {
+                          if (!item.update_sale_price) {
+                            onSetUpdateSalePrice?.(item.product_id, true);
+                          }
+                        }}
+                        onBlur={() => commitNewSalePrice(item)}
+                        disabled={disabled || !canWrite}
+                        className={`w-28 rounded-md border px-2 py-1 text-xs font-bold transition ${
+                          item.update_sale_price
+                            ? "border-brand-500 bg-brand-50/20 text-brand-800 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                            : "border-slate-300 bg-slate-100 text-slate-400"
+                        }`}
+                        title="Nuevo precio de venta"
+                      />
+                    </div>
                   </div>
                 </div>
               </article>

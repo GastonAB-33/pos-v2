@@ -181,10 +181,14 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
           name: product.name,
           sale_mode: product.sale_mode,
           quantity: 1,
-          unit_cost: product.cost_price,
+          unit_cost: product.cost_price ?? 0,
           vat_percent: product.vat_percent ?? 21,
           bonified_quantity: 0,
-          stock_current: product.stock_current,
+          stock_current: product.stock_current ?? 0,
+          previous_cost: product.cost_price ?? 0,
+          current_sale_price: product.price ?? 0,
+          update_sale_price: false,
+          new_sale_price: product.price ?? 0,
         },
       ];
     });
@@ -204,7 +208,25 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     if (!Number.isFinite(normalized) || normalized < 0) return;
 
     setCart((prev) =>
-      prev.map((item) => (item.product_id === productId ? { ...item, unit_cost: normalized } : item))
+      prev.map((item) => {
+        if (item.product_id !== productId) return item;
+        // Si el precio de venta debe actualizarse proporcionalmente
+        let updatedNewSalePrice = item.new_sale_price;
+        if (
+          item.update_sale_price &&
+          item.previous_cost > 0 &&
+          normalized > 0 &&
+          item.current_sale_price > 0
+        ) {
+          const ratio = normalized / item.previous_cost;
+          updatedNewSalePrice = roundAmount(item.current_sale_price * ratio);
+        }
+        return {
+          ...item,
+          unit_cost: normalized,
+          new_sale_price: updatedNewSalePrice,
+        };
+      })
     );
   };
 
@@ -226,6 +248,44 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     setCart((prev) =>
       prev.map((item) =>
         item.product_id === productId ? { ...item, bonified_quantity: normalized } : item
+      )
+    );
+  };
+
+  const setItemUpdateSalePrice = (productId: string, updateSalePrice: boolean) => {
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.product_id !== productId) return item;
+        let nextSalePrice = item.new_sale_price;
+        // Si activa la actualización y el costo varió respecto al anterior, sugerir precio proporcional
+        if (
+          updateSalePrice &&
+          item.previous_cost > 0 &&
+          item.unit_cost !== item.previous_cost &&
+          item.current_sale_price > 0 &&
+          item.new_sale_price === item.current_sale_price
+        ) {
+          const ratio = item.unit_cost / item.previous_cost;
+          nextSalePrice = roundAmount(item.current_sale_price * ratio);
+        }
+        return {
+          ...item,
+          update_sale_price: updateSalePrice,
+          new_sale_price: nextSalePrice,
+        };
+      })
+    );
+  };
+
+  const setItemNewSalePrice = (productId: string, newSalePrice: number) => {
+    const normalized = roundAmount(newSalePrice);
+    if (!Number.isFinite(normalized) || normalized < 0) return;
+
+    setCart((prev) =>
+      prev.map((item) =>
+        item.product_id === productId
+          ? { ...item, new_sale_price: normalized, update_sale_price: true }
+          : item
       )
     );
   };
@@ -345,11 +405,17 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         const currentStock = currentProduct?.stock_current ?? item.stock_current;
         const newStock = roundQty(currentStock + totalIncomingQty);
 
-        await productsService.update(tenantId, item.product_id, {
+        const productUpdatePayload: Partial<Product> = {
           stock_current: newStock,
           cost_price: item.unit_cost > 0 ? item.unit_cost : currentProduct?.cost_price,
           vat_percent: item.vat_percent,
-        });
+        };
+
+        if (item.update_sale_price && item.new_sale_price > 0) {
+          productUpdatePayload.price = item.new_sale_price;
+        }
+
+        await productsService.update(tenantId, item.product_id, productUpdatePayload);
       }
 
       let cashMovementId: string | null = null;
@@ -709,6 +775,8 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     setItemUnitCost,
     setItemVatPercent,
     setItemBonifiedQuantity,
+    setItemUpdateSalePrice,
+    setItemNewSalePrice,
     removeItem,
     clearCart,
     confirmPurchase,
