@@ -12,6 +12,7 @@ export interface PurchaseCartItemView {
   stock_current: number;
   previous_cost: number;
   current_sale_price: number;
+  profit_percent: number;
   update_sale_price: boolean;
   new_sale_price: number;
 }
@@ -34,7 +35,6 @@ interface PurchaseCartProps {
   onSetVatPercent: (productId: string, vatPercent: number) => void;
   onSetBonifiedQuantity: (productId: string, bonifiedQty: number) => void;
   onSetUpdateSalePrice?: (productId: string, update: boolean) => void;
-  onSetNewSalePrice?: (productId: string, newPrice: number) => void;
   onRemove: (productId: string) => void;
   onOpenAddProductModal?: () => void;
   onOpenCreateProductModal?: () => void;
@@ -64,7 +64,6 @@ export const PurchaseCart = ({
   onSetVatPercent,
   onSetBonifiedQuantity,
   onSetUpdateSalePrice,
-  onSetNewSalePrice,
   onRemove,
   onOpenAddProductModal,
   onOpenCreateProductModal,
@@ -72,7 +71,6 @@ export const PurchaseCart = ({
   const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
   const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
   const [bonifiedDrafts, setBonifiedDrafts] = useState<Record<string, string>>({});
-  const [salePriceDrafts, setSalePriceDrafts] = useState<Record<string, string>>({});
 
   const getUnitLabel = (item: PurchaseCartItemView) =>
     item.sale_mode === "weight" ? "kg" : "u.";
@@ -86,9 +84,6 @@ export const PurchaseCart = ({
       Object.fromEntries(Object.entries(current).filter(([id]) => ids.has(id)))
     );
     setBonifiedDrafts((current) =>
-      Object.fromEntries(Object.entries(current).filter(([id]) => ids.has(id)))
-    );
-    setSalePriceDrafts((current) =>
       Object.fromEntries(Object.entries(current).filter(([id]) => ids.has(id)))
     );
   }, [items]);
@@ -127,19 +122,6 @@ export const PurchaseCart = ({
       onSetBonifiedQuantity(item.product_id, parsed);
     }
     setBonifiedDrafts((current) => {
-      const { [item.product_id]: _discard, ...next } = current;
-      return next;
-    });
-  };
-
-  const commitNewSalePrice = (item: PurchaseCartItemView) => {
-    const raw = salePriceDrafts[item.product_id];
-    if (raw == null) return;
-    const parsed = Number(raw);
-    if (Number.isFinite(parsed) && parsed >= 0 && onSetNewSalePrice) {
-      onSetNewSalePrice(item.product_id, parsed);
-    }
-    setSalePriceDrafts((current) => {
       const { [item.product_id]: _discard, ...next } = current;
       return next;
     });
@@ -451,48 +433,7 @@ export const PurchaseCart = ({
                         />
                         <span className="font-medium">
                           <span className="hidden 2xl:inline">Actualizar precio neto y </span>
-                          actualizar precio venta:
-                        </span>
-                        <span className="inline-flex items-center font-bold text-slate-800">
-                          $
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder={String(item.current_sale_price || 0)}
-                            value={
-                              salePriceDrafts[item.product_id] ??
-                              String(item.new_sale_price ?? item.current_sale_price ?? 0)
-                            }
-                            onChange={(event) => {
-                              const nextValue = event.target.value;
-                              setSalePriceDrafts((current) => ({
-                                ...current,
-                                [item.product_id]: nextValue,
-                              }));
-                              if (!nextValue.trim()) return;
-                              const parsed = Number(nextValue);
-                              if (Number.isFinite(parsed) && parsed >= 0) {
-                                onSetNewSalePrice?.(item.product_id, parsed);
-                                if (!item.update_sale_price) {
-                                  onSetUpdateSalePrice?.(item.product_id, true);
-                                }
-                              }
-                            }}
-                            onFocus={() => {
-                              if (!item.update_sale_price) {
-                                onSetUpdateSalePrice?.(item.product_id, true);
-                              }
-                            }}
-                            onBlur={() => commitNewSalePrice(item)}
-                            disabled={disabled || !canWrite}
-                            className={`ml-1 w-20 rounded border px-1.5 py-0.5 text-center text-xs font-bold transition ${
-                              item.update_sale_price
-                                ? "border-brand-500 bg-white text-brand-800 focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                                : "border-slate-300 bg-slate-100 text-slate-400"
-                            }`}
-                            title="Nuevo precio de venta"
-                          />
+                          actualizar precio venta ({currency.format(item.new_sale_price || 0)})
                         </span>
                       </label>
                     </div>

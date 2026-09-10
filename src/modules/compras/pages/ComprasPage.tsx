@@ -126,7 +126,6 @@ export const ComprasPage = () => {
     setItemVatPercent,
     setItemBonifiedQuantity,
     setItemUpdateSalePrice,
-    setItemNewSalePrice,
     removeItem,
     clearCart,
     confirmPurchase,
@@ -334,7 +333,6 @@ export const ComprasPage = () => {
               onSetVatPercent={setItemVatPercent}
               onSetBonifiedQuantity={setItemBonifiedQuantity}
               onSetUpdateSalePrice={setItemUpdateSalePrice}
-              onSetNewSalePrice={setItemNewSalePrice}
               onRemove={removeItem}
               onOpenAddProductModal={() => setIsSelectProductModalOpen(true)}
               onOpenCreateProductModal={() => setIsProductModalOpen(true)}

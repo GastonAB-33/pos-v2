@@ -13,6 +13,7 @@ import type { SupplierFormValues } from "@/modules/proveedores/schemas/supplier-
 import type { PurchaseReturnPayload } from "@/modules/compras/components/PurchaseReturnModal";
 import type { PurchaseCartItemView, PurchaseSummary } from "@/modules/compras/components/PurchaseCart";
 import { toSupplierServiceInput } from "@/modules/proveedores/utils/supplier-input";
+import { computePricingForward, computePricingBackward } from "@/modules/productos/utils/product-pricing";
 
 type FeedbackType = "success" | "error";
 
@@ -174,6 +175,32 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         );
       }
 
+      const costPrice = product.cost_price ?? 0;
+      const salePrice = product.price ?? 0;
+      const vatPercent = product.vat_percent ?? 21;
+
+      // Determinar % de ganancia configurado o calcularlo hacia atrás
+      const effectiveProfit = (() => {
+        if (typeof product.profit_percent === "number" && product.profit_percent >= 0) {
+          return product.profit_percent;
+        }
+        if (costPrice > 0 && salePrice > 0) {
+          return computePricingBackward({
+            precioCosto: costPrice,
+            precioFinal: salePrice,
+            porcentajeIva: vatPercent,
+          }).porcentajeGanancia;
+        }
+        return 0;
+      })();
+
+      // Precio de venta calculado con % de ganancia aplicado al costo
+      const calculatedNewSale = computePricingForward({
+        precioCosto: costPrice,
+        porcentajeGanancia: effectiveProfit,
+        porcentajeIva: vatPercent,
+      }).precioFinal;
+
       return [
         ...prev,
         {
@@ -181,14 +208,15 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
           name: product.name,
           sale_mode: product.sale_mode,
           quantity: 1,
-          unit_cost: product.cost_price ?? 0,
-          vat_percent: product.vat_percent ?? 21,
+          unit_cost: costPrice,
+          vat_percent: vatPercent,
           bonified_quantity: 0,
           stock_current: product.stock_current ?? 0,
-          previous_cost: product.cost_price ?? 0,
-          current_sale_price: product.price ?? 0,
+          previous_cost: costPrice,
+          current_sale_price: salePrice,
+          profit_percent: effectiveProfit,
           update_sale_price: false,
-          new_sale_price: product.price ?? 0,
+          new_sale_price: calculatedNewSale || salePrice,
         },
       ];
     });
@@ -210,21 +238,16 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     setCart((prev) =>
       prev.map((item) => {
         if (item.product_id !== productId) return item;
-        // Si el precio de venta debe actualizarse proporcionalmente
-        let updatedNewSalePrice = item.new_sale_price;
-        if (
-          item.update_sale_price &&
-          item.previous_cost > 0 &&
-          normalized > 0 &&
-          item.current_sale_price > 0
-        ) {
-          const ratio = normalized / item.previous_cost;
-          updatedNewSalePrice = roundAmount(item.current_sale_price * ratio);
-        }
+        // Recalcular nuevo precio de venta manteniendo el % de ganancia configurado
+        const forward = computePricingForward({
+          precioCosto: normalized,
+          porcentajeGanancia: item.profit_percent,
+          porcentajeIva: item.vat_percent || 0,
+        });
         return {
           ...item,
           unit_cost: normalized,
-          new_sale_price: updatedNewSalePrice,
+          new_sale_price: forward.precioFinal,
         };
       })
     );
@@ -235,9 +258,19 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     if (!Number.isFinite(normalized) || normalized < 0) return;
 
     setCart((prev) =>
-      prev.map((item) =>
-        item.product_id === productId ? { ...item, vat_percent: normalized } : item
-      )
+      prev.map((item) => {
+        if (item.product_id !== productId) return item;
+        const forward = computePricingForward({
+          precioCosto: item.unit_cost,
+          porcentajeGanancia: item.profit_percent,
+          porcentajeIva: normalized || 0,
+        });
+        return {
+          ...item,
+          vat_percent: normalized,
+          new_sale_price: forward.precioFinal,
+        };
+      })
     );
   };
 
@@ -254,37 +287,12 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
 
   const setItemUpdateSalePrice = (productId: string, updateSalePrice: boolean) => {
     setCart((prev) =>
-      prev.map((item) => {
-        if (item.product_id !== productId) return item;
-        let nextSalePrice = item.new_sale_price;
-        // Si activa la actualización y el costo varió respecto al anterior, sugerir precio proporcional
-        if (
-          updateSalePrice &&
-          item.previous_cost > 0 &&
-          item.unit_cost !== item.previous_cost &&
-          item.current_sale_price > 0 &&
-          item.new_sale_price === item.current_sale_price
-        ) {
-          const ratio = item.unit_cost / item.previous_cost;
-          nextSalePrice = roundAmount(item.current_sale_price * ratio);
-        }
-        return {
-          ...item,
-          update_sale_price: updateSalePrice,
-          new_sale_price: nextSalePrice,
-        };
-      })
-    );
-  };
-
-  const setItemNewSalePrice = (productId: string, newSalePrice: number) => {
-    const normalized = roundAmount(newSalePrice);
-    if (!Number.isFinite(normalized) || normalized < 0) return;
-
-    setCart((prev) =>
       prev.map((item) =>
         item.product_id === productId
-          ? { ...item, new_sale_price: normalized, update_sale_price: true }
+          ? {
+              ...item,
+              update_sale_price: updateSalePrice,
+            }
           : item
       )
     );
@@ -411,8 +419,26 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
           vat_percent: item.vat_percent,
         };
 
-        if (item.update_sale_price && item.new_sale_price > 0) {
-          productUpdatePayload.price = item.new_sale_price;
+        if (item.update_sale_price) {
+          // Opción 2: actualiza precio venta manteniendo el % de ganancia configurado
+          const forward = computePricingForward({
+            precioCosto: item.unit_cost,
+            porcentajeGanancia: item.profit_percent,
+            porcentajeIva: item.vat_percent || 0,
+          });
+          productUpdatePayload.price = forward.precioFinal;
+          productUpdatePayload.price_without_vat = forward.precioSinIva;
+          productUpdatePayload.profit_percent = item.profit_percent;
+        } else {
+          // Opción 1: mantiene precio venta pero recalcula/modifica el % de ganancia
+          const backward = computePricingBackward({
+            precioCosto: item.unit_cost,
+            precioFinal: item.current_sale_price,
+            porcentajeIva: item.vat_percent || 0,
+          });
+          productUpdatePayload.price = item.current_sale_price;
+          productUpdatePayload.price_without_vat = backward.precioSinIva;
+          productUpdatePayload.profit_percent = backward.porcentajeGanancia;
         }
 
         await productsService.update(tenantId, item.product_id, productUpdatePayload);
@@ -776,7 +802,6 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     setItemVatPercent,
     setItemBonifiedQuantity,
     setItemUpdateSalePrice,
-    setItemNewSalePrice,
     removeItem,
     clearCart,
     confirmPurchase,
