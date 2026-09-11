@@ -8,12 +8,9 @@ import { useLandingPath } from "@/features/auth/hooks/useLandingPath";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { LoginPage } from "@/modules/usuarios/pages/LoginPage";
 import { UnauthorizedPage } from "@/modules/usuarios/pages/UnauthorizedPage";
+import { LandingPage } from "@/features/landing/LandingPage";
 import { getTenantSlugFromRecord, normalizeTenantSlug } from "@/utils/tenant-slug";
 
-const InitialRedirect = () => {
-  const landingPath = useLandingPath();
-  return <Navigate to={landingPath} replace />;
-};
 
 const TenantSlugGateway = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
@@ -49,26 +46,31 @@ const TenantSlugGateway = () => {
 export const AppRouter = () => {
   return (
     <Routes>
+      {/* 1. Landing Page pública oficial en la raíz / y en /landing */}
+      <Route path={routePaths.home} element={<LandingPage />} />
+      <Route path={routePaths.landing} element={<LandingPage />} />
+
+      {/* 2. Acceso y autenticación */}
       <Route path={routePaths.login} element={<LoginPage />} />
       <Route path="/:tenantSlug/login" element={<LoginPage />} />
       <Route path={routePaths.unauthorized} element={<UnauthorizedPage />} />
 
+      {/* 3. Módulos del sistema protegidos por AuthGuard */}
       <Route
-        path={routePaths.home}
         element={
           <AuthGuard>
             <AppLayout />
           </AuthGuard>
         }
       >
-        <Route index element={<InitialRedirect />} />
         {moduleRoutes.map((route) => (
           <Route key={route.path} path={route.path.slice(1)} element={withOptionalPermission(route)} />
         ))}
       </Route>
 
+      {/* 4. Gateway por comercio y fallback */}
       <Route path="/:tenantSlug/*" element={<TenantSlugGateway />} />
-      <Route path="*" element={<InitialRedirect />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 };

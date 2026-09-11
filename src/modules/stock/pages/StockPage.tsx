@@ -1,4 +1,4 @@
-﻿import { useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
 import { RefreshCw } from "lucide-react";
@@ -10,7 +10,7 @@ import { StockMovementsTable } from "@/modules/stock/components/StockMovementsTa
 import { StockTrackingTable } from "@/modules/stock/components/StockTrackingTable";
 import { StockSummaryCards } from "@/modules/stock/components/StockSummaryCards";
 import { useStockModule } from "@/modules/stock/hooks/useStockModule";
-import { movementTypeLabel } from "@/modules/stock/utils/stock-labels";
+import { movementTypeLabel, type StockStatusFilter } from "@/modules/stock/utils/stock-labels";
 import { downloadXlsx } from "@/utils/xlsx";
 import type { StockMovement } from "@/types/entities";
 
@@ -70,6 +70,7 @@ export const StockPage = () => {
   const canReadStock = canRead("stock");
   const canWriteStock = canWrite("stock");
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StockStatusFilter>("all");
 
   const {
     products,
@@ -145,8 +146,10 @@ export const StockPage = () => {
             <StockSummaryCards
               activeProducts={summary.activeProducts}
               lowStock={summary.lowStock}
-              noStock={summary.noStock}
               overMax={summary.overMax}
+              unassigned={summary.unassigned}
+              activeFilter={statusFilter}
+              onSelectFilter={setStatusFilter}
             />
           </div>
           <div className="flex items-center gap-2">
@@ -182,6 +185,9 @@ export const StockPage = () => {
           products={products}
           categories={categoryOptions}
           disabled={isSubmitting || !canWriteStock}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          globalLowThreshold={stockSettings.global_low_stock_threshold}
           onUpdateOne={updateStockThreshold}
           onUpdateBulk={updateStockThresholdBulk}
         />

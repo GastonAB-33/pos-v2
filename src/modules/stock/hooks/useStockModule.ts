@@ -1,4 +1,5 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useProductsStore } from "@/features/products/store/products.store";
 import { auditService } from "@/services/audit.service";
 import { productsService } from "@/services/products.service";
 import { settingsService } from "@/services/settings.service";
@@ -36,7 +37,12 @@ const defaultStockSettings: StockSettings = {
 };
 
 export const useStockModule = (tenantId: string | null, userId: string | null) => {
-  const [products, setProducts] = useState<Product[]>([]);
+  // Conectar con el store global en memoria para carga instantánea (0ms)
+  const products = useProductsStore((state) => state.products);
+  const loadCatalog = useProductsStore((state) => state.loadCatalog);
+  const updateProductStockInStore = useProductsStore((state) => state.updateProductStock);
+  const upsertProductInStore = useProductsStore((state) => state.upsertProduct);
+
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [stockSettings, setStockSettings] = useState<StockSettings>(defaultStockSettings);
   const [movementTypeFilter, setMovementTypeFilter] = useState<StockMovementFilter>("all");
@@ -49,20 +55,18 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
   const clearFeedback = () => setFeedback(null);
 
   const patchProductInState = useCallback((productId: string, patch: Partial<Product>) => {
-    setProducts((current) =>
-      current.map((item) =>
-        item.id === productId ? { ...item, ...patch, updated_at: new Date().toISOString() } : item
-      )
-    );
-  }, []);
+    const existing = products.find((p) => p.id === productId);
+    if (existing) {
+      upsertProductInStore({ ...existing, ...patch, updated_at: new Date().toISOString() });
+    }
+  }, [products, upsertProductInStore]);
 
   const appendMovementInState = useCallback((movement: StockMovement) => {
     setMovements((current) => sortMovementsDesc([movement, ...current]));
   }, []);
 
-  const loadStockData = useCallback(async () => {
+  const loadStockData = useCallback(async (force = false) => {
     if (!tenantId) {
-      setProducts([]);
       setMovements([]);
       setStockSettings(defaultStockSettings);
       return;
@@ -70,17 +74,11 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
 
     setIsLoading(true);
     try {
-      const [productsResult, movementsResult, settingsResult] = await Promise.allSettled([
-        productsService.getAllByTenant(tenantId),
+      const [movementsResult, settingsResult] = await Promise.allSettled([
         stockService.getAllByTenant(tenantId),
         settingsService.getByTenant(tenantId),
+        loadCatalog(tenantId, force),
       ]);
-
-      if (productsResult.status === "fulfilled") {
-        setProducts(productsResult.value);
-      } else {
-        setProducts([]);
-      }
 
       if (movementsResult.status === "fulfilled") {
         setMovements(sortMovementsDesc(movementsResult.value));
@@ -93,19 +91,15 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
       } else {
         setStockSettings(defaultStockSettings);
       }
-
-      if (productsResult.status === "rejected" && movementsResult.status === "rejected") {
-        setFeedback({ type: "error", message: "No se pudieron cargar datos de stock" });
-      }
     } catch {
       setFeedback({ type: "error", message: "No se pudieron cargar datos de stock" });
     } finally {
       setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [loadCatalog, tenantId]);
 
   useEffect(() => {
-    void loadStockData();
+    void loadStockData(false);
   }, [loadStockData]);
 
   const applyManualAdjustmentsBulk = async (
@@ -116,7 +110,7 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
     if (!stockSettings.allow_manual_adjustments) {
       setFeedback({
         type: "error",
-        message: "Los ajustes manuales estan desactivados en configuracion",
+        message: "Los ajustes manuales están desactivados en configuración",
       });
       return false;
     }
@@ -137,7 +131,7 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
     if (!normalizedAdjustments.length) {
       setFeedback({
         type: "error",
-        message: "No hay cantidades validas para aplicar",
+        message: "No hay cantidades válidas para aplicar",
       });
       return false;
     }
@@ -195,7 +189,7 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
 
           await productsService.updateStock(tenantId, product.id, nextStock);
 
-          patchProductInState(product.id, { stock_current: nextStock });
+          updateProductStockInStore(product.id, nextStock);
 
           productsMap.set(product.id, {
             ...product,
@@ -228,7 +222,7 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
       if (!applied) {
         setFeedback({
           type: "error",
-          message: "No se pudo aplicar ningun ajuste",
+          message: "No se pudo aplicar ningún ajuste",
         });
         return false;
       }
@@ -268,13 +262,13 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
 
     const normalizedMax = normalizeMaxForRules(values.stockMax);
     if (values.stockMin != null && normalizedMax != null && values.stockMin > normalizedMax) {
-      setFeedback({ type: "error", message: "El stock minimo no puede ser mayor al maximo" });
+      setFeedback({ type: "error", message: "El stock mínimo no puede ser mayor al máximo" });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await productsService.update(tenantId, productId, {
+      const updated = await productsService.update(tenantId, productId, {
         stock_min: values.stockMin,
         stock_max: values.stockMax,
       });
@@ -282,6 +276,9 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
         stock_min: values.stockMin,
         stock_max: values.stockMax,
       });
+      if (updated) {
+        upsertProductInStore(updated);
+      }
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "stock",
@@ -296,9 +293,9 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
           next_stock_max: values.stockMax,
         },
       });
-      setFeedback({ type: "success", message: `Minimo/maximo actualizado en ${product.name}` });
+      setFeedback({ type: "success", message: `Mínimo/máximo actualizado en ${product.name}` });
     } catch {
-      setFeedback({ type: "error", message: "No se pudo actualizar minimo/maximo" });
+      setFeedback({ type: "error", message: "No se pudo actualizar mínimo/máximo" });
     } finally {
       setIsSubmitting(false);
     }
@@ -317,7 +314,7 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
 
     const normalizedMax = normalizeMaxForRules(values.stockMax);
     if (values.stockMin != null && normalizedMax != null && values.stockMin > normalizedMax) {
-      setFeedback({ type: "error", message: "El stock minimo no puede ser mayor al maximo" });
+      setFeedback({ type: "error", message: "El stock mínimo no puede ser mayor al máximo" });
       return;
     }
 
@@ -326,7 +323,7 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
     if ("stockMax" in values) payload.stock_max = values.stockMax ?? null;
 
     if (!Object.keys(payload).length) {
-      setFeedback({ type: "error", message: "Indica al menos minimo o maximo para aplicar" });
+      setFeedback({ type: "error", message: "Indica al menos mínimo o máximo para aplicar" });
       return;
     }
 
@@ -336,8 +333,9 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
     try {
       for (const productId of uniqueIds) {
         try {
-          await productsService.update(tenantId, productId, payload);
+          const res = await productsService.update(tenantId, productId, payload);
           patchProductInState(productId, payload);
+          if (res) upsertProductInStore(res);
           updated += 1;
         } catch {
           failed += 1;
@@ -350,7 +348,7 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
         action: "bulk_threshold_update",
         entity_type: "product",
         entity_id: null,
-        description: "Actualizacion masiva de umbrales de stock",
+        description: "Actualización masiva de umbrales de stock",
         metadata: {
           product_ids: uniqueIds,
           stock_min: payload.stock_min ?? null,
@@ -363,7 +361,7 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
       if (failed > 0) {
         setFeedback({
           type: "error",
-          message: `Actualizacion parcial. Actualizados: ${updated} | Errores: ${failed}`,
+          message: `Actualización parcial. Actualizados: ${updated} | Errores: ${failed}`,
         });
       } else {
         setFeedback({
@@ -404,53 +402,36 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
     [activeProducts]
   );
 
-  const alertRows = useMemo(() => {
-    if (!stockSettings.alerts_active) {
-      return [] as Array<{ product: Product; isNoStock: boolean; isLow: boolean; isOver: boolean }>;
-    }
-
-    return activeProducts
-      .map((product) => {
-        const threshold = stockSettings.use_min_max
-          ? product.stock_min ?? stockSettings.global_low_stock_threshold
-          : stockSettings.global_low_stock_threshold;
-
-        const isNoStock = product.stock_current <= 0;
-        const isLow = !isNoStock && threshold > 0 && product.stock_current <= threshold;
-        const isOver =
-          stockSettings.use_min_max &&
-          product.stock_max != null &&
-          product.stock_max > 0 &&
-          product.stock_current > product.stock_max;
-
-        return { product, isNoStock, isLow, isOver };
-      })
-      .filter((row) => row.isNoStock || row.isLow || row.isOver);
-  }, [
-    activeProducts,
-    stockSettings.alerts_active,
-    stockSettings.global_low_stock_threshold,
-    stockSettings.use_min_max,
-  ]);
-
   const summary = useMemo(() => {
-    const noStock = alertRows.filter((row) => row.isNoStock).length;
-    const lowStock = alertRows.filter((row) => row.isLow).length;
-    const overMax = alertRows.filter((row) => row.isOver).length;
+    let lowStock = 0;
+    let overMax = 0;
+    let unassigned = 0;
+
+    for (const product of activeProducts) {
+      const min = product.stock_min;
+      const max = product.stock_max != null && product.stock_max > 0 ? product.stock_max : null;
+
+      if (min == null && max == null) {
+        unassigned += 1;
+      } else if (min != null && product.stock_current <= min) {
+        lowStock += 1;
+      } else if (max != null && product.stock_current > max) {
+        overMax += 1;
+      }
+    }
 
     return {
       activeProducts: activeProducts.length,
       lowStock,
-      noStock,
       overMax,
+      unassigned,
     };
-  }, [activeProducts.length, alertRows]);
+  }, [activeProducts]);
 
   return {
     products,
     stockSettings,
     productsById,
-    alertRows,
     movementRows,
     summary,
     movementTypeFilter,
@@ -463,7 +444,7 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
     isSubmitting,
     feedback,
     clearFeedback,
-    reload: loadStockData,
+    reload: () => loadStockData(true),
     applyManualAdjustmentsBulk,
     updateStockThreshold,
     updateStockThresholdBulk,

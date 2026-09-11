@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
-  Building2,
   ChevronDown,
   ClipboardList,
   Package,
@@ -19,6 +18,7 @@ import { useDeviceProfile } from "@/hooks/useDeviceProfile";
 import { useUiStore } from "@/store/ui.store";
 import type { AppModule } from "@/types/modules";
 import { cn } from "@/utils/cn";
+import { JirehLogo } from "@/components/brand/JirehLogo";
 
 interface SidebarItem {
   label: string;
@@ -180,21 +180,13 @@ export const Sidebar = () => {
     <aside className="app-sidebar">
       <button
         type="button"
-        className="app-sidebar-brand w-full border-b border-slate-200 px-4 py-4 text-left transition hover:bg-slate-50"
+        className="app-sidebar-brand w-full border-b border-slate-200 px-4 py-3.5 text-left transition hover:bg-slate-50"
         onClick={() => {
           closeDrawerAfterNavigation();
           navigate(routePaths.menuPrincipal);
         }}
       >
-        <span className="flex items-center gap-2.5">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--ui-accent)] text-white">
-            <Building2 aria-hidden="true" size={18} />
-          </span>
-          <span>
-            <span className="block text-sm font-semibold text-slate-900">Gestion POS</span>
-            <span className="mt-0.5 block text-[11px] font-medium text-slate-500">Panel operativo</span>
-          </span>
-        </span>
+        <JirehLogo size="sm" showTagline={true} />
       </button>
 
       <nav className="app-sidebar-nav space-y-5 p-3">

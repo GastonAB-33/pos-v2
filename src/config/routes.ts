@@ -1,4 +1,5 @@
-﻿export const routePaths = {
+export const routePaths = {
+  landing: "/landing",
   login: "/login",
   home: "/",
   menuPrincipal: "/menu-principal",

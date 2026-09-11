@@ -32,9 +32,15 @@ export const getStockStatusFromValues = (
 ): StockStatus => {
   const normalizedMax = normalizeMax(max);
 
+  // Si no tiene ni mínimo ni máximo asignado, siempre es "Sin asignar"
   if (min == null && normalizedMax == null) return "unassigned";
+
+  // Si tiene mínimo y el stock actual es menor o igual, es "Stock bajo"
   if (min != null && stockCurrent <= min) return "low";
+
+  // Si tiene máximo y el stock actual es mayor, es "Sobrestock"
   if (normalizedMax != null && stockCurrent > normalizedMax) return "over";
+
   return "normal";
 };
 

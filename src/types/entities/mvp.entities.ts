@@ -198,14 +198,20 @@ export interface PromotionBarcode extends TenantScopedEntity {
   is_primary: boolean;
 }
 
-export type PurchaseStatus = "confirmed" | "cancelled";
+export type PurchaseStatus = "confirmed" | "cancelled" | "partial_return" | "returned";
 
 export interface Purchase extends TenantScopedEntity {
   supplier_id: string;
   purchase_number: string;
+  document_type?: string | null;
+  document_number?: string | null;
+  issue_date?: string | null;
+  payment_method?: string | null;
   status: PurchaseStatus;
   subtotal: number;
+  vat_total?: number;
   total: number;
+  returned_total?: number;
   notes: string | null;
   created_by: string | null;
   items?: PurchaseItem[];
@@ -218,6 +224,10 @@ export interface PurchaseItem extends TenantScopedEntity {
   product_name_snapshot: string;
   quantity: number;
   unit_cost: number;
+  vat_percent?: number;
+  vat_amount?: number;
+  bonified_quantity?: number;
+  returned_quantity?: number;
   line_total: number;
 }
 
