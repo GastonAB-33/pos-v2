@@ -100,7 +100,7 @@ const createDefaultBarcodeScaleSettings = (): BarcodeScaleSettings => ({
   code_length: 13,
   plu_start: 3,
   plu_length: 4,
-  weight_start: 7,
+  weight_start: 8,
   weight_length: 5,
   weight_decimals: 3,
   amount_start: 7,

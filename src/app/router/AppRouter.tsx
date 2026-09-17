@@ -9,7 +9,7 @@ import { useAuthStore } from "@/features/auth/store/auth.store";
 import { LoginPage } from "@/modules/usuarios/pages/LoginPage";
 import { UnauthorizedPage } from "@/modules/usuarios/pages/UnauthorizedPage";
 import { LandingPage } from "@/features/landing/LandingPage";
-import { getTenantSlugFromRecord, normalizeTenantSlug } from "@/utils/tenant-slug";
+import { isTenantMatchingInput, normalizeTenantSlug } from "@/utils/tenant-slug";
 
 
 const TenantSlugGateway = () => {
@@ -31,7 +31,7 @@ const TenantSlugGateway = () => {
     return <Navigate to={tenantLoginPath} replace state={{ from: location.pathname }} />;
   }
 
-  if (getTenantSlugFromRecord(tenant) !== normalizedSlug) {
+  if (!isTenantMatchingInput(tenant, tenantSlug ?? normalizedSlug)) {
     return <Navigate to={tenantLoginPath} replace state={{ from: location.pathname }} />;
   }
 
