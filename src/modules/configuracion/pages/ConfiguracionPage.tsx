@@ -3,6 +3,7 @@ import { LoadingState } from "@/components/ui/UiStates";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
 import {
+  AlertTriangle,
   Building2,
   CheckCircle2,
   FileText,
@@ -17,6 +18,7 @@ import {
   Type,
   Wallet,
 } from "lucide-react";
+import { parseScaleBarcode } from "@/services/barcode/scale-barcode.service";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -329,6 +331,12 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     notes: "",
     is_active: true,
   });
+
+  const [scaleTesterBarcode, setScaleTesterBarcode] = useState("2000010012756");
+  const scaleTesterResult = useMemo(() => {
+    if (!draft?.codigos_balanza) return null;
+    return parseScaleBarcode(scaleTesterBarcode, draft.codigos_balanza);
+  }, [scaleTesterBarcode, draft?.codigos_balanza]);
 
   const customerNameById = useMemo(
     () => new Map(customers.map((customer) => [customer.id, customer.full_name])),
@@ -1490,6 +1498,121 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Largo del Código PLU</label>
               <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.plu_length} onChange={(event) => updateSection("codigos_balanza", { plu_length: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.plu_length))) })} placeholder="4" disabled={!canWriteConfiguracion} />
+            </div>
+
+            {draft.codigos_balanza.scale_mode === "weight" ? (
+              <>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Inicio de Posición Peso</label>
+                  <input className="ui-input" type="number" min="1" max="13" value={draft.codigos_balanza.weight_start ?? 8} onChange={(event) => updateSection("codigos_balanza", { weight_start: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.weight_start ?? 8))) })} placeholder="8" disabled={!canWriteConfiguracion} />
+                  <span className="text-[11px] text-slate-500">En EAN-13 estándar de peso suele ser la posición 8</span>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Largo del Peso (Dígitos)</label>
+                  <input className="ui-input" type="number" min="1" max="6" value={draft.codigos_balanza.weight_length ?? 5} onChange={(event) => updateSection("codigos_balanza", { weight_length: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.weight_length ?? 5))) })} placeholder="5" disabled={!canWriteConfiguracion} />
+                  <span className="text-[11px] text-slate-500">Comúnmente 5 dígitos (ej: 01275 para 1,275 kg)</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Inicio de Posición Importe</label>
+                  <input className="ui-input" type="number" min="1" max="13" value={draft.codigos_balanza.amount_start ?? 7} onChange={(event) => updateSection("codigos_balanza", { amount_start: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.amount_start ?? 7))) })} placeholder="7" disabled={!canWriteConfiguracion} />
+                  <span className="text-[11px] text-slate-500">Posición donde arranca el monto</span>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Largo del Importe (Dígitos)</label>
+                  <input className="ui-input" type="number" min="1" max="8" value={draft.codigos_balanza.amount_length ?? 6} onChange={(event) => updateSection("codigos_balanza", { amount_length: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.amount_length ?? 6))) })} placeholder="6" disabled={!canWriteConfiguracion} />
+                  <span className="text-[11px] text-slate-500">Comúnmente 6 dígitos con 2 decimales</span>
+                </div>
+              </>
+            )}
+
+            {/* SIMULADOR EN TIEMPO REAL */}
+            <div className="md:col-span-2 rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <Scale size={18} className="text-blue-600 dark:text-blue-400" />
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    Simulador / Probador de Código en Tiempo Real
+                  </h4>
+                </div>
+                <button
+                  type="button"
+                  className="text-xs text-blue-600 hover:underline dark:text-blue-400 font-medium"
+                  onClick={() => setScaleTesterBarcode("2000010012756")}
+                >
+                  Cargar código de prueba (2000010012756)
+                </button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3 items-end">
+                <div className="sm:col-span-1">
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Escanear o tipear código de etiqueta:
+                  </label>
+                  <input
+                    type="text"
+                    className="ui-input bg-white font-mono font-bold tracking-wider dark:bg-slate-900"
+                    value={scaleTesterBarcode}
+                    onChange={(e) => setScaleTesterBarcode(e.target.value)}
+                    placeholder="Ej: 2000010012756"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 flex flex-wrap gap-2 items-center">
+                  {scaleTesterResult ? (
+                    <>
+                      <div className="flex flex-col rounded-lg bg-white px-3 py-2 shadow-sm border border-emerald-200 dark:bg-slate-900 dark:border-emerald-800/60">
+                        <span className="text-[10px] uppercase font-bold text-slate-500">PLU Extraído</span>
+                        <span className="font-mono text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
+                          {scaleTesterResult.productCode}{" "}
+                          <span className="text-xs font-medium text-slate-500">
+                            (PLU: {scaleTesterResult.productCode.replace(/^0+/, "") || "0"})
+                          </span>
+                        </span>
+                      </div>
+
+                      {scaleTesterResult.mode === "weight" && scaleTesterResult.weight != null && (
+                        <div className="flex flex-col rounded-lg bg-white px-3 py-2 shadow-sm border border-emerald-200 dark:bg-slate-900 dark:border-emerald-800/60">
+                          <span className="text-[10px] uppercase font-bold text-slate-500">Peso Extraído</span>
+                          <span className="font-mono text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
+                            {scaleTesterResult.weight.toLocaleString("es-AR", { minimumFractionDigits: 3 })} kg{" "}
+                            <span className="text-xs font-medium text-slate-500">
+                              ({Math.round(scaleTesterResult.weight * 1000)} g)
+                            </span>
+                          </span>
+                        </div>
+                      )}
+
+                      {scaleTesterResult.mode === "total_price" && scaleTesterResult.totalPrice != null && (
+                        <div className="flex flex-col rounded-lg bg-white px-3 py-2 shadow-sm border border-emerald-200 dark:bg-slate-900 dark:border-emerald-800/60">
+                          <span className="text-[10px] uppercase font-bold text-slate-500">Importe Extraído</span>
+                          <span className="font-mono text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
+                            $ {scaleTesterResult.totalPrice.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold dark:text-emerald-400">
+                        <CheckCircle2 size={16} />
+                        <span>¡Código válido e interpretado con éxito!</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800/50 dark:text-amber-300">
+                      <AlertTriangle size={16} className="shrink-0" />
+                      <span>
+                        {!draft.codigos_balanza.scale_parser_enabled
+                          ? "Activá 'Activar Parser de Balanzas Comercial' para procesar códigos."
+                          : "El código no coincide con las posiciones, prefijo o largo configurados."}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </section>

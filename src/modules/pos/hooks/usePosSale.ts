@@ -159,7 +159,7 @@ const defaultBarcodeScaleSettings: BarcodeScaleSettings = {
   code_length: 13,
   plu_start: 3,
   plu_length: 4,
-  weight_start: 7,
+  weight_start: 8,
   weight_length: 5,
   weight_decimals: 3,
   amount_start: 7,
@@ -1155,9 +1155,6 @@ export const usePosSale = (tenantId: string | null) => {
           return { ok: false, barcode, parsedScale, error: message };
         }
 
-        const hasAssignedPriceList = Boolean(
-          getCustomerPriceList(selectedCustomerId || null)
-        );
         const pricing = await resolvePricingForProduct(scaleProduct, selectedCustomerId || null);
         const pricePerWeightUnit = pricing.unitPrice > 0 ? pricing.unitPrice : scaleProduct.price;
 
@@ -1171,14 +1168,8 @@ export const usePosSale = (tenantId: string | null) => {
               ? roundQty(parsedScale.totalPrice / pricePerWeightUnit)
               : Math.max(0.001, posSettings.barcode_scan_quantity || 1);
 
-        const overrideUnitPrice =
-          !hasAssignedPriceList &&
-          parsedScale.totalPrice != null &&
-          parsedScale.totalPrice > 0 &&
-          parsedScale.mode === "weight" &&
-          detectedWeight > 0
-            ? roundAmount(parsedScale.totalPrice / detectedWeight)
-            : null;
+        // En modo peso, el precio unitario SIEMPRE debe ser el configurado en el sistema/lista de precios
+        const overrideUnitPrice = null;
 
         const added = await addProductToCart(scaleProduct, detectedWeight, {
           overrideUnitPrice,

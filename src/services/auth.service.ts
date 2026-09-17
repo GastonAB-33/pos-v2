@@ -6,7 +6,7 @@ import { usersService } from "@/services/users.service";
 import type { TenantRecord, UserRecord } from "@/types/entities";
 import type { AppUser } from "@/types/user";
 import { normalizePermissionProfile } from "@/types/permissions";
-import { getTenantSlugFromRecord, normalizeTenantSlug } from "@/utils/tenant-slug";
+import { isTenantMatchingInput } from "@/utils/tenant-slug";
 
 interface PosSession {
   tenant: ReturnType<typeof tenantsService.toTenant>;
@@ -83,7 +83,19 @@ export const authService = {
     });
 
     if (error) {
-      throw new Error(error.message || "No se pudo iniciar sesion");
+      const msg = error.message?.toLowerCase() || "";
+      if (msg.includes("failed to fetch") || msg.includes("fetch failed") || msg.includes("network")) {
+        throw new Error(
+          "Error de conexión: No se pudo comunicar con el servidor en la nube. Verificá que el equipo tenga conexión a internet y reintentá."
+        );
+      }
+      if (msg.includes("invalid login credentials") || msg.includes("invalid_credentials")) {
+        throw new Error("Usuario (email) o contraseña incorrectos. Por favor verificá tus datos.");
+      }
+      if (msg.includes("email not confirmed")) {
+        throw new Error("El correo electrónico aún no ha sido confirmado.");
+      }
+      throw new Error(error.message || "No se pudo iniciar sesión");
     }
 
     const authUserId = data.user?.id;
@@ -92,11 +104,17 @@ export const authService = {
     }
 
     const session = await resolvePosSessionFromAuthUser(authUserId);
-    const expectedSlug = normalizeTenantSlug(expectedTenantSlug);
+    const expectedInput = expectedTenantSlug?.trim();
 
-    if (expectedSlug && getTenantSlugFromRecord(session.tenant) !== expectedSlug) {
-      await supabase.auth.signOut();
-      throw new Error("El usuario no pertenece al comercio indicado en el enlace");
+    if (expectedInput) {
+      const matchesTenant = isTenantMatchingInput(session.tenant, expectedInput);
+      if (!matchesTenant) {
+        await supabase.auth.signOut();
+        const tenantDisplayName = session.tenant.tradeName || session.tenant.legalName || "asignado";
+        throw new Error(
+          `El comercio ingresado ("${expectedInput}") no coincide con tu usuario. Tu usuario pertenece a "${tenantDisplayName}". Por favor verificá el nombre del comercio.`
+        );
+      }
     }
 
     return session;

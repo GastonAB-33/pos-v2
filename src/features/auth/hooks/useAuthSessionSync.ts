@@ -25,7 +25,7 @@ export const useAuthSessionSync = () => {
           const expiresAtSeconds = session.expires_at ?? 0;
           const expiresInSeconds = expiresAtSeconds - Math.floor(Date.now() / 1000);
 
-          if (expiresInSeconds < 600) {
+          if (expiresAtSeconds > 0 && expiresInSeconds < 600 && expiresInSeconds > 0) {
             await supabase.auth.refreshSession();
           }
 
@@ -54,10 +54,10 @@ export const useAuthSessionSync = () => {
     // 2. Suscripción a eventos de ciclo de vida de autenticación de Supabase
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, _session) => {
       if (!isMounted) return;
 
-      if (event === "SIGNED_OUT" || !session) {
+      if (event === "SIGNED_OUT") {
         useAuthStore.getState().clearSession();
         return;
       }

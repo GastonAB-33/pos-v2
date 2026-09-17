@@ -101,7 +101,7 @@ export const LoginPage = () => {
     };
   }, [normalizedTenantSlug]);
 
-  if (hasValidSession && landingPath !== routePaths.login && location.pathname !== landingPath) {
+  if (!isSubmitting && hasValidSession && landingPath !== routePaths.login && location.pathname !== landingPath) {
     return <Navigate to={landingPath} replace />;
   }
 
