@@ -90,10 +90,13 @@ export const ProductsPage = () => {
           onOpenCreate={() => setFormModal({ mode: "create", product: null })}
           onOpenImport={() => setImportOpen(true)}
           onExportXlsx={() => {
+            const idsToExport = products.selectedIds.length > 0
+              ? products.selectedIds
+              : products.filteredProducts.map((item) => item.entity.id);
             void products.exportProducts({
               format: "xlsx",
               priceListId: "base",
-              productIds: products.filteredProducts.map((item) => item.entity.id),
+              productIds: idsToExport,
             });
           }}
           onDeleteSelected={() => {

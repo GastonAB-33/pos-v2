@@ -1300,7 +1300,7 @@ tbody td {
 .workspace-action-menu {
   position: absolute;
   right: 0;
-  z-index: 25;
+  z-index: 50 !important;
   display: grid;
   width: 13.5rem;
   margin-top: 0.5rem;
