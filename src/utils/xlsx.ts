@@ -9,7 +9,10 @@ const sanitizeSheetName = (value: string): string => {
 const assertBrowserContext = (): boolean =>
   typeof window !== "undefined" && typeof document !== "undefined";
 
-const loadXlsxModule = async () => import("xlsx");
+const loadXlsxModule = async (): Promise<typeof import("xlsx")> => {
+  const mod = await import("xlsx");
+  return ((mod as any).default?.utils ? (mod as any).default : mod) as typeof import("xlsx");
+};
 
 export const downloadXlsx = async (
   fileName: string,
@@ -20,32 +23,56 @@ export const downloadXlsx = async (
     return false;
   }
 
-  const XLSX = await loadXlsxModule();
+  try {
+    const XLSX = await loadXlsxModule();
 
-  const workbook = XLSX.utils.book_new();
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-  XLSX.utils.book_append_sheet(workbook, worksheet, sanitizeSheetName(sheetName));
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    XLSX.utils.book_append_sheet(workbook, worksheet, sanitizeSheetName(sheetName));
 
-  const workbookArray = XLSX.write(workbook, {
-    bookType: "xlsx",
-    type: "array",
-  });
+    const safeFileName = fileName.endsWith(".xlsx") ? fileName : `${fileName}.xlsx`;
 
-  const blob = new Blob([workbookArray], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
+    // 1. Intentar con writeFile nativo de SheetJS para browser
+    if (typeof (XLSX as any).writeFile === "function") {
+      try {
+        (XLSX as any).writeFile(workbook, safeFileName);
+        return true;
+      } catch (writeErr) {
+        console.warn("XLSX.writeFile no completó, usando fallback de Blob:", writeErr);
+      }
+    }
 
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = fileName.endsWith(".xlsx") ? fileName : `${fileName}.xlsx`;
+    // 2. Fallback con Blob y anchor click (sin revocar síncronamente)
+    const workbookArray = XLSX.write(workbook, {
+      bookType: "xlsx",
+      type: "array",
+    });
 
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(objectUrl);
+    const blob = new Blob([workbookArray], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
 
-  return true;
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = safeFileName;
+    anchor.style.display = "none";
+
+    document.body.appendChild(anchor);
+    anchor.click();
+
+    setTimeout(() => {
+      if (anchor.parentNode) {
+        anchor.parentNode.removeChild(anchor);
+      }
+      URL.revokeObjectURL(objectUrl);
+    }, 2000);
+
+    return true;
+  } catch (error) {
+    console.error("Error al generar o descargar el archivo XLSX:", error);
+    return false;
+  }
 };
 
 export const parseXlsxFile = async (file: File): Promise<XlsxRow[]> => {
@@ -62,8 +89,8 @@ export const parseXlsxFile = async (file: File): Promise<XlsxRow[]> => {
   const worksheet = workbook.Sheets[firstSheetName];
   if (!worksheet) return [];
 
-  return XLSX.utils.sheet_to_json<XlsxRow>(worksheet, {
+  return (XLSX.utils.sheet_to_json(worksheet, {
     raw: false,
     defval: "",
-  });
+  }) as unknown) as XlsxRow[];
 };

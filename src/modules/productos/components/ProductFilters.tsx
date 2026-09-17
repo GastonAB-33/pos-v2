@@ -65,7 +65,7 @@ export const ProductFilters = ({
         </div>
 
         <div className="workspace-toolbar__actions">
-          <div className="relative">
+          <div className="relative z-30">
             <IconButton
               icon={Ellipsis}
               label="Más acciones"
@@ -74,17 +74,22 @@ export const ProductFilters = ({
             {actionsOpen ? (
               <>
                 <div
-                  className="fixed inset-0 z-30 bg-transparent"
+                  className="fixed inset-0 z-40 bg-transparent"
                   onClick={() => setActionsOpen(false)}
                   aria-hidden="true"
                 />
-                <div className="workspace-action-menu left-0 right-auto z-40 shadow-2xl">
+                <div
+                  className="workspace-action-menu left-0 right-auto z-50 shadow-2xl"
+                  style={{ zIndex: 50 }}
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <button
                     type="button"
                     className="ui-popover-action"
-                    onClick={() => {
-                      onReload();
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setActionsOpen(false);
+                      onReload();
                     }}
                     disabled={loading}
                   >
@@ -94,11 +99,12 @@ export const ProductFilters = ({
                   <button
                     type="button"
                     className="ui-popover-action"
-                    onClick={() => {
-                      onOpenImport();
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setActionsOpen(false);
+                      onOpenImport();
                     }}
-                    disabled={!canWrite || loading}
+                    disabled={!canWrite}
                   >
                     <Upload aria-hidden="true" className="h-4 w-4" />
                     Importar XLSX
@@ -106,11 +112,11 @@ export const ProductFilters = ({
                   <button
                     type="button"
                     className="ui-popover-action"
-                    onClick={() => {
-                      onExportXlsx();
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setActionsOpen(false);
+                      onExportXlsx();
                     }}
-                    disabled={loading}
                   >
                     <Download aria-hidden="true" className="h-4 w-4" />
                     Exportar XLSX

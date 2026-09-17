@@ -845,11 +845,24 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       "lista de precio": "BASE (solo lectura - no editar)",
     };
 
-    return downloadXlsx("plantilla-productos", "Plantilla Productos", [templateRow]);
+    const ok = await downloadXlsx("plantilla-productos", "Plantilla Productos", [templateRow]);
+    if (ok) {
+      setFeedback({
+        type: "success",
+        message: "Plantilla XLSX descargada con éxito.",
+      });
+    }
+    return ok;
   };
 
   const downloadImportErrors = async (errors: ProductImportErrorRow[]): Promise<boolean> => {
-    if (!errors.length) return false;
+    if (!errors.length) {
+      setFeedback({
+        type: "error",
+        message: "No hay errores de importación para descargar.",
+      });
+      return false;
+    }
 
     return downloadXlsx(
       `errores-importacion-productos-${new Date().toISOString().slice(0, 10)}`,
@@ -1187,7 +1200,13 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       ? products.filter((product) => options.productIds?.includes(product.id))
       : products;
 
-    if (!targetProducts.length) return false;
+    if (!targetProducts.length) {
+      setFeedback({
+        type: "error",
+        message: "No hay productos para exportar con los filtros seleccionados.",
+      });
+      return false;
+    }
 
     setIsSubmitting(true);
     try {
@@ -1237,7 +1256,26 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           ? await downloadXlsx(fileName, "Productos", rows)
           : downloadCsv(fileName, rows);
 
+      if (ok) {
+        setFeedback({
+          type: "success",
+          message: `Se exportaron ${rows.length} producto${rows.length === 1 ? "" : "s"} en formato ${options.format.toUpperCase()} con éxito.`,
+        });
+      } else {
+        setFeedback({
+          type: "error",
+          message: "No se pudo generar la exportación del archivo.",
+        });
+      }
+
       return ok;
+    } catch (error) {
+      console.error("Error al exportar productos:", error);
+      setFeedback({
+        type: "error",
+        message: error instanceof Error ? error.message : "Error inesperado al exportar productos.",
+      });
+      return false;
     } finally {
       setIsSubmitting(false);
     }
