@@ -5,6 +5,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import type { ProductFiltersState } from "@/modules/productos/types/product.types";
+import { PRODUCT_SEARCH_SCOPE_OPTIONS, getSearchPlaceholder, type ProductSearchScope } from "@/utils/search";
 
 interface ProductFiltersProps {
   canWrite: boolean;
@@ -140,14 +141,39 @@ export const ProductFilters = ({
       <div className="workspace-filter-strip">
         {/* Barra principal de búsqueda compacta */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-1 min-w-[200px] items-center gap-2">
+          <div className="flex flex-1 min-w-[280px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden px-2 py-1">
             <input
-              className="ui-input flex-1"
+              className="flex-1 min-w-0 border-0 bg-transparent px-2 py-1 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100"
               value={filters.search}
               onChange={(event) => onFiltersChange({ search: event.target.value })}
-              placeholder="Nombre, código o código de barras"
+              placeholder={getSearchPlaceholder(filters.searchScope)}
               aria-label="Buscar productos"
             />
+            {filters.search ? (
+              <button
+                type="button"
+                onClick={() => onFiltersChange({ search: "" })}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                aria-label="Limpiar búsqueda"
+              >
+                <X size={14} />
+              </button>
+            ) : null}
+            <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700" />
+            <select
+              value={filters.searchScope ?? "all"}
+              onChange={(event) =>
+                onFiltersChange({ searchScope: event.target.value as ProductSearchScope })
+              }
+              className="bg-transparent text-xs font-medium text-slate-600 focus:outline-none dark:text-slate-300 cursor-pointer py-1 px-1"
+              aria-label="Tipo de búsqueda"
+            >
+              {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
             <IconButton
               icon={Camera}
               label="Escanear código de barras con cámara"

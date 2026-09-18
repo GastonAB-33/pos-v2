@@ -11,7 +11,8 @@ const assertBrowserContext = (): boolean =>
 
 const loadXlsxModule = async (): Promise<typeof import("xlsx")> => {
   const mod = await import("xlsx");
-  return ((mod as any).default?.utils ? (mod as any).default : mod) as typeof import("xlsx");
+  const candidate = mod as unknown as { default?: typeof import("xlsx") } & typeof import("xlsx");
+  return candidate.default?.utils ? candidate.default : candidate;
 };
 
 export const downloadXlsx = async (
@@ -33,9 +34,10 @@ export const downloadXlsx = async (
     const safeFileName = fileName.endsWith(".xlsx") ? fileName : `${fileName}.xlsx`;
 
     // 1. Intentar con writeFile nativo de SheetJS para browser
-    if (typeof (XLSX as any).writeFile === "function") {
+    const writer = XLSX as unknown as { writeFile?: (wb: unknown, filename: string) => void };
+    if (typeof writer.writeFile === "function") {
       try {
-        (XLSX as any).writeFile(workbook, safeFileName);
+        writer.writeFile(workbook, safeFileName);
         return true;
       } catch (writeErr) {
         console.warn("XLSX.writeFile no completó, usando fallback de Blob:", writeErr);
