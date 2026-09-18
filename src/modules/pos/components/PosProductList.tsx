@@ -4,6 +4,12 @@ import { usePagination } from "@/hooks/usePagination";
 import { Plus, ShoppingCart, X } from "lucide-react";
 import type { Product } from "@/types/entities";
 import { cn } from "@/utils/cn";
+import {
+  matchesProductSearch,
+  PRODUCT_SEARCH_SCOPE_OPTIONS,
+  getSearchPlaceholder,
+  type ProductSearchScope,
+} from "@/utils/search";
 
 export interface PosSaleTabItem {
   id: string;
@@ -31,8 +37,6 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
-const normalizeSearchText = (value: string): string => value.trim().toLowerCase();
-
 const productUnitLabel = (product: Product): string =>
   product.sale_mode === "weight" ? "kg" : "u.";
 
@@ -57,6 +61,7 @@ export const PosProductList = ({
   const [activeTab, setActiveTab] = useState<"favorites" | "products">("favorites");
   const [favoritesSearch, setFavoritesSearch] = useState("");
   const [productsSearch, setProductsSearch] = useState("");
+  const [searchScope, setSearchScope] = useState<ProductSearchScope>("all");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [weightInputs, setWeightInputs] = useState<Record<string, string>>({});
   const categories = useMemo(
@@ -66,59 +71,64 @@ export const PosProductList = ({
   );
 
   const filteredFavorites = useMemo(() => {
-    const term = normalizeSearchText(favoritesSearch);
-    if (!term) return favoriteProducts;
+    const rawSearch = favoritesSearch.trim();
+    if (!rawSearch) return favoriteProducts;
 
     return favoriteProducts.filter((product) => {
       const barcode = primaryBarcodes[product.id] ?? "";
-
-      return [
-        product.name,
-        product.code,
-        product.brand ?? "",
-        product.category,
-        product.subcategory ?? "",
-        barcode,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(term);
+      return matchesProductSearch(
+        {
+          name: product.name,
+          code: product.code,
+          barcode,
+          brand: product.brand,
+          category: product.category,
+          subcategory: product.subcategory,
+        },
+        rawSearch,
+        searchScope
+      );
     });
-  }, [favoriteProducts, favoritesSearch, primaryBarcodes]);
+  }, [favoriteProducts, favoritesSearch, primaryBarcodes, searchScope]);
 
   const filteredProducts = useMemo(() => {
-    const term = normalizeSearchText(productsSearch);
+    const rawSearch = productsSearch.trim();
 
     return products.filter((product) => {
       const barcode = primaryBarcodes[product.id] ?? "";
-      const matchesTerm =
-        !term ||
-        [
-          product.name,
-          product.code,
-          product.brand ?? "",
-          product.category,
-          product.subcategory ?? "",
-          barcode,
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(term);
-      const matchesCategory = selectedCategory === "all" || product.category === selectedCategory;
+      const matchesSearch =
+        !rawSearch ||
+        matchesProductSearch(
+          {
+            name: product.name,
+            code: product.code,
+            barcode,
+            brand: product.brand,
+            category: product.category,
+            subcategory: product.subcategory,
+          },
+          rawSearch,
+          searchScope
+        );
 
-      return matchesTerm && matchesCategory;
+      if (!matchesSearch) return false;
+
+      // Si busca por código o código de barras, no lo bloqueamos por categoría
+      if (searchScope === "code" || searchScope === "barcode") return true;
+
+      return selectedCategory === "all" || product.category === selectedCategory;
     });
-  }, [primaryBarcodes, products, productsSearch, selectedCategory]);
+  }, [primaryBarcodes, products, productsSearch, searchScope, selectedCategory]);
 
   const paginatedFavorites = usePagination(
     filteredFavorites,
     10,
-    `${favoritesSearch}|${favoriteProducts.length}`
+    `${favoritesSearch}|${searchScope}|${favoriteProducts.length}`
   );
   const paginatedProducts = usePagination(
     filteredProducts,
     10,
-    `${productsSearch}|${selectedCategory}|${products.length}`
+    `${productsSearch}|${searchScope}|${selectedCategory}|${products.length}`
   );
 
   const resolveWeightQuantity = (productId: string) => {
@@ -285,7 +295,7 @@ export const PosProductList = ({
       ) : null}
 
       {/* 2. Barra de Búsqueda */}
-      <label className="pos-search-wrap">
+      <div className="pos-search-wrap flex items-center gap-2">
         <svg
           aria-hidden="true"
           viewBox="0 0 24 24"
@@ -317,13 +327,36 @@ export const PosProductList = ({
               void quickAddProduct(filteredProducts[0]);
             }
           }}
-          placeholder={activeTab === "favorites" ? "Buscar en favoritos" : "Buscar productos..."}
-          className="pos-search-input"
+          placeholder={getSearchPlaceholder(searchScope)}
+          className="pos-search-input flex-1 min-w-0"
+          aria-label="Buscar productos en venta"
         />
-        <span className="hidden rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-400 sm:inline-flex">
-          {activeTab === "favorites" ? "TOP" : "SKU"}
-        </span>
-      </label>
+        {(activeTab === "favorites" ? favoritesSearch : productsSearch) ? (
+          <button
+            type="button"
+            onClick={() =>
+              activeTab === "favorites" ? setFavoritesSearch("") : setProductsSearch("")
+            }
+            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            aria-label="Limpiar búsqueda"
+          >
+            <X size={14} />
+          </button>
+        ) : null}
+        <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-1 shrink-0" />
+        <select
+          value={searchScope}
+          onChange={(e) => setSearchScope(e.target.value as ProductSearchScope)}
+          className="bg-transparent text-xs font-medium text-slate-600 focus:outline-none dark:text-slate-300 cursor-pointer py-1 px-1 shrink-0"
+          aria-label="Tipo de búsqueda"
+        >
+          {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {/* 3. Encabezado de Sección: Título + Toggle Favoritos/Productos */}
       <div className="flex items-center justify-between gap-2">

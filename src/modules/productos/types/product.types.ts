@@ -1,5 +1,6 @@
-﻿import type { ProductFormValues } from "@/modules/productos/schemas/product-form.schema";
+import type { ProductFormValues } from "@/modules/productos/schemas/product-form.schema";
 import type { Product as ProductEntity } from "@/types/entities";
+import type { ProductSearchScope } from "@/utils/search";
 
 export interface Product {
   id: string;
@@ -24,6 +25,7 @@ export interface Product {
 
 export interface ProductFiltersState {
   search: string;
+  searchScope?: ProductSearchScope;
   category: string;
   subcategory: string;
   supplier: string;

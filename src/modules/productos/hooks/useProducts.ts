@@ -3,6 +3,7 @@ import type { Product } from "@/types/entities";
 import { useProductsCrud } from "@/modules/productos/hooks/useProductsCrud";
 import { mapEntityToProductViewModel, productsModuleService } from "@/modules/productos/services/products.service";
 import { downloadXlsx } from "@/utils/xlsx";
+import { matchesProductSearch } from "@/utils/search";
 import type {
   ProductAuditEntry,
   ProductFiltersState,
@@ -12,12 +13,11 @@ import type {
 
 const defaultFilters: ProductFiltersState = {
   search: "",
+  searchScope: "all",
   category: "",
   subcategory: "",
   supplier: "",
 };
-
-const normalize = (value: string): string => value.trim().toLowerCase();
 
 export const useProducts = (tenantId: string | null, userId: string | null) => {
   const crud = useProductsCrud(tenantId, userId);
@@ -63,10 +63,8 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
     for (const item of crud.allBarcodes) {
       if (!item.barcode) continue;
       const list = map.get(item.product_id) ?? [];
-      const trimmed = item.barcode.trim().toLowerCase();
-      const stripped = trimmed.replace(/\s+/g, "");
-      if (stripped) list.push(stripped);
-      if (trimmed && trimmed !== stripped) list.push(trimmed);
+      const trimmed = item.barcode.trim();
+      if (trimmed) list.push(trimmed);
       map.set(item.product_id, list);
     }
     return map;
@@ -74,46 +72,37 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
 
   const filteredProducts = useMemo(() => {
     const rawSearch = filters.search.trim();
-    const search = normalize(rawSearch);
-    const searchCompact = search.replace(/\s+/g, "");
+    const scope = filters.searchScope || "all";
 
     return productsView.filter((product) => {
       const extraBarcodes = barcodesByProductId.get(product.entity.id) ?? [];
-      const prodBarcodeCompact = product.codigoBarras.trim().toLowerCase().replace(/\s+/g, "");
-      const prodCodeCompact = product.codigoProducto.trim().toLowerCase().replace(/\s+/g, "");
 
-      const hasBarcodeOrCodeMatch = Boolean(
-        searchCompact &&
-          (
-            (prodBarcodeCompact && (prodBarcodeCompact.includes(searchCompact) || searchCompact.includes(prodBarcodeCompact))) ||
-            (prodCodeCompact && (prodCodeCompact.includes(searchCompact) || searchCompact.includes(prodCodeCompact))) ||
-            extraBarcodes.some((b) => b.includes(searchCompact) || searchCompact.includes(b))
-          )
+      const matches = !rawSearch || matchesProductSearch(
+        {
+          name: product.nombre,
+          code: product.codigoProducto,
+          barcode: product.codigoBarras,
+          barcodes: extraBarcodes,
+          category: product.categoria,
+          subcategory: product.subcategoria,
+          supplier: product.proveedor,
+        },
+        rawSearch,
+        scope
       );
 
-      // Si hay una coincidencia de código o código de barras, no lo bloqueamos por filtro de categoría previo
-      if (!hasBarcodeOrCodeMatch) {
+      if (!matches) return false;
+
+      // Si no hay búsqueda o la búsqueda es solo por nombre, aplicar filtros de categoría estrictos.
+      // Si se busca por código o código de barras y coincide, se permite encontrar el producto.
+      const isCodeOrBarcodeSearch = scope === "code" || scope === "barcode";
+      if (!isCodeOrBarcodeSearch) {
         if (filters.category && product.categoria !== filters.category) return false;
         if (filters.subcategory && product.subcategoria !== filters.subcategory) return false;
         if (filters.supplier && product.proveedor !== filters.supplier) return false;
       }
 
-      if (!search) return true;
-      if (hasBarcodeOrCodeMatch) return true;
-
-      const searchTarget = [
-        product.nombre,
-        product.codigoProducto,
-        product.codigoBarras,
-        product.categoria,
-        product.subcategoria,
-        product.proveedor,
-        ...extraBarcodes,
-      ]
-        .join(" ")
-        .toLowerCase();
-
-      return searchTarget.includes(search);
+      return true;
     });
   }, [barcodesByProductId, filters, productsView]);
 

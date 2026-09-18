@@ -14,6 +14,7 @@ import type { PurchaseReturnPayload } from "@/modules/compras/components/Purchas
 import type { PurchaseCartItemView, PurchaseSummary } from "@/modules/compras/components/PurchaseCart";
 import { toSupplierServiceInput } from "@/modules/proveedores/utils/supplier-input";
 import { computePricingForward, computePricingBackward } from "@/modules/productos/utils/product-pricing";
+import { matchesProductSearch } from "@/utils/search";
 
 type FeedbackType = "success" | "error";
 
@@ -147,15 +148,21 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
   }, [loadData]);
 
   const filteredProducts = useMemo(() => {
-    const term = search.trim().toLowerCase();
+    const rawSearch = search.trim();
     const activeProducts = products.filter((product) => product.is_active);
-    if (!term) return activeProducts;
+    if (!rawSearch) return activeProducts;
 
     return activeProducts.filter((product) =>
-      [product.name, product.code, product.category, product.subcategory ?? ""]
-        .join(" ")
-        .toLowerCase()
-        .includes(term)
+      matchesProductSearch(
+        {
+          name: product.name,
+          code: product.code,
+          category: product.category,
+          subcategory: product.subcategory,
+        },
+        rawSearch,
+        "all"
+      )
     );
   }, [products, search]);
 

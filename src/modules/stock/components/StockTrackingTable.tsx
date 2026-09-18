@@ -4,6 +4,12 @@ import { PaginationControls } from "@/components/ui/PaginationControls";
 import { usePagination } from "@/hooks/usePagination";
 import type { Product } from "@/types/entities";
 import { downloadXlsx } from "@/utils/xlsx";
+import {
+  matchesProductSearch,
+  PRODUCT_SEARCH_SCOPE_OPTIONS,
+  getSearchPlaceholder,
+  type ProductSearchScope,
+} from "@/utils/search";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { useProductsStore } from "@/features/products/store/products.store";
 import {
@@ -85,6 +91,7 @@ export const StockTrackingTable = ({
 }: StockTrackingTableProps) => {
   const allBarcodes = useProductsStore((state) => state.allBarcodes);
   const [search, setSearch] = useState("");
+  const [searchScope, setSearchScope] = useState<ProductSearchScope>("all");
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [internalStatusFilter, setInternalStatusFilter] = useState<StockStatusFilter>("all");
@@ -154,38 +161,72 @@ export const StockTrackingTable = ({
   }, [isReportMenuOpen]);
 
   const rows = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
+    const rawSearch = search.trim();
 
     return products.filter((product) => {
       if (!product.is_active) return false;
-      if (categoryFilter && product.category !== categoryFilter) return false;
+
+      const productBarcodes = barcodesByProductId.get(product.id) ?? [];
+      const matches =
+        !rawSearch ||
+        matchesProductSearch(
+          {
+            name: product.name,
+            code: product.code,
+            barcodes: productBarcodes,
+            category: product.category,
+            subcategory: product.subcategory,
+          },
+          rawSearch,
+          searchScope
+        );
+
+      if (!matches) return false;
+
+      const isCodeOrBarcodeSearch = searchScope === "code" || searchScope === "barcode";
+      if (!isCodeOrBarcodeSearch) {
+        if (categoryFilter && product.category !== categoryFilter) return false;
+      }
 
       const { stockMin, stockMax } = resolveThresholds(product, drafts[product.id]);
       const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
       if (statusFilter !== "all" && status !== statusFilter) return false;
 
-      if (!normalizedSearch) return true;
-
-      const productBarcodes = (barcodesByProductId.get(product.id) ?? []).join(" ");
-      const searchTarget = `${product.name} ${product.code} ${product.category} ${product.subcategory ?? ""} ${productBarcodes}`.toLowerCase();
-      return searchTarget.includes(normalizedSearch);
+      return true;
     });
-  }, [products, search, categoryFilter, statusFilter, drafts, barcodesByProductId]);
+  }, [products, search, searchScope, categoryFilter, statusFilter, drafts, barcodesByProductId]);
 
   const reportCandidates = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
+    const rawSearch = search.trim();
 
     return products.filter((product) => {
       if (!product.is_active) return false;
-      if (categoryFilter && product.category !== categoryFilter) return false;
 
-      if (!normalizedSearch) return true;
+      const productBarcodes = barcodesByProductId.get(product.id) ?? [];
+      const matches =
+        !rawSearch ||
+        matchesProductSearch(
+          {
+            name: product.name,
+            code: product.code,
+            barcodes: productBarcodes,
+            category: product.category,
+            subcategory: product.subcategory,
+          },
+          rawSearch,
+          searchScope
+        );
 
-      const productBarcodes = (barcodesByProductId.get(product.id) ?? []).join(" ");
-      const searchTarget = `${product.name} ${product.code} ${product.category} ${product.subcategory ?? ""} ${productBarcodes}`.toLowerCase();
-      return searchTarget.includes(normalizedSearch);
+      if (!matches) return false;
+
+      const isCodeOrBarcodeSearch = searchScope === "code" || searchScope === "barcode";
+      if (!isCodeOrBarcodeSearch) {
+        if (categoryFilter && product.category !== categoryFilter) return false;
+      }
+
+      return true;
     });
-  }, [products, search, categoryFilter, barcodesByProductId]);
+  }, [products, search, searchScope, categoryFilter, barcodesByProductId]);
 
   const selectedVisibleIds = useMemo(
     () => selectedIds.filter((id) => rows.some((row) => row.id === id)),
@@ -195,7 +236,7 @@ export const StockTrackingTable = ({
   const paginatedRows = usePagination(
     rows,
     10,
-    `${search}|${categoryFilter}|${statusFilter}|${rows.length}`
+    `${search}|${searchScope}|${categoryFilter}|${statusFilter}|${rows.length}`
   );
   const selectedPageIds = useMemo(
     () => selectedIds.filter((id) => paginatedRows.pageItems.some((row) => row.id === id)),
@@ -388,23 +429,37 @@ export const StockTrackingTable = ({
 
       <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_180px]">
         <div className="flex gap-2">
-          <div className="relative flex-1">
+          <div className="flex flex-1 min-w-[260px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden px-2 py-1">
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="ui-input pr-8"
-              placeholder="Buscar por nombre, código o código de barras"
+              className="flex-1 min-w-0 border-0 bg-transparent px-2 py-1 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100"
+              placeholder={getSearchPlaceholder(searchScope)}
+              aria-label="Buscar en stock"
             />
             {search ? (
               <button
                 type="button"
                 onClick={() => setSearch("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                 title="Limpiar búsqueda"
               >
                 <X className="h-4 w-4" />
               </button>
             ) : null}
+            <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700" />
+            <select
+              value={searchScope}
+              onChange={(e) => setSearchScope(e.target.value as ProductSearchScope)}
+              className="bg-transparent text-xs font-medium text-slate-600 focus:outline-none dark:text-slate-300 cursor-pointer py-1 px-1"
+              aria-label="Tipo de búsqueda"
+            >
+              {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
           <button
             type="button"
