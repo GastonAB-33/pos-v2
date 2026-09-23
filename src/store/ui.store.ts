@@ -5,6 +5,7 @@ import { storageKeys } from "@/utils/local-storage";
 export type UiTheme = "light" | "dark";
 export type UiDensity = "standard" | "compact";
 export type UiFontSize = "compact" | "normal" | "large" | "extra-large";
+export type PosWindowMode = "same_tab" | "new_window";
 export type UiToastType = "success" | "error" | "info";
 
 export interface UiToast {
@@ -19,6 +20,7 @@ interface UiStore {
   theme: UiTheme;
   density: UiDensity;
   fontSize: UiFontSize;
+  posWindowMode: PosWindowMode;
   accentColor: string;
   toasts: UiToast[];
   setSidebarOpen: (open: boolean) => void;
@@ -26,6 +28,7 @@ interface UiStore {
   setTheme: (theme: UiTheme) => void;
   setDensity: (density: UiDensity) => void;
   setFontSize: (fontSize: UiFontSize) => void;
+  setPosWindowMode: (mode: PosWindowMode) => void;
   cycleFontSize: () => void;
   setAccentColor: (color: string) => void;
   toggleTheme: () => void;
@@ -67,6 +70,7 @@ export const useUiStore = create<UiStore>()(
       theme: getInitialTheme(),
       density: "standard",
       fontSize: "normal",
+      posWindowMode: "same_tab",
       accentColor: "#0056b3",
       toasts: [],
 
@@ -76,6 +80,7 @@ export const useUiStore = create<UiStore>()(
       setTheme: (theme) => set({ theme }),
       setDensity: (density) => set({ density }),
       setFontSize: (fontSize) => set({ fontSize }),
+      setPosWindowMode: (posWindowMode) => set({ posWindowMode }),
       cycleFontSize: () =>
         set((state) => {
           const currentIndex = fontSizeCycleOrder.indexOf(state.fontSize);
@@ -115,6 +120,7 @@ export const useUiStore = create<UiStore>()(
         theme: state.theme,
         density: state.density,
         fontSize: state.fontSize,
+        posWindowMode: state.posWindowMode,
         accentColor: state.accentColor,
       }),
     }

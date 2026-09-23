@@ -1,7 +1,9 @@
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 import { priceListsService } from "@/services/price-lists.service";
 import { productsService } from "@/services/products.service";
 import type { PriceList, Product, ProductBarcode } from "@/types/entities";
+import { storageKeys } from "@/utils/local-storage";
 
 const normalizeBarcode = (value: string | null | undefined): string =>
   (value ?? "").trim().replace(/\s+/g, "");
@@ -9,7 +11,29 @@ const normalizeBarcode = (value: string | null | undefined): string =>
 const sortByName = (rows: Product[]): Product[] =>
   [...rows].sort((a, b) => a.name.localeCompare(b.name));
 
-const CACHE_TTL_MS = 60 * 1000; // 60 segundos de frescura antes de revalidación silenciosa
+const safeLocalStorage = {
+  getItem: (name: string): string | null => {
+    try {
+      return localStorage.getItem(name);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (name: string, value: string): void => {
+    try {
+      localStorage.setItem(name, value);
+    } catch (err) {
+      console.warn("No se pudo persistir el catálogo en localStorage", err);
+    }
+  },
+  removeItem: (name: string): void => {
+    try {
+      localStorage.removeItem(name);
+    } catch {
+      // ignore
+    }
+  },
+};
 
 interface ProductsCatalogState {
   products: Product[];
@@ -30,40 +54,36 @@ interface ProductsCatalogState {
   clearCatalog: () => void;
 }
 
-export const useProductsStore = create<ProductsCatalogState>((set, get) => ({
-  products: [],
-  allBarcodes: [],
-  primaryBarcodes: {},
-  priceLists: [],
-  loadedTenantId: null,
-  lastLoadedAt: null,
-  isLoading: false,
-  isBackgroundRefreshing: false,
-  error: null,
+export const useProductsStore = create<ProductsCatalogState>()(
+  persist(
+    (set, get) => ({
+      products: [],
+      allBarcodes: [],
+      primaryBarcodes: {},
+      priceLists: [],
+      loadedTenantId: null,
+      lastLoadedAt: null,
+      isLoading: false,
+      isBackgroundRefreshing: false,
+      error: null,
 
-  loadCatalog: async (tenantId: string, force = false) => {
-    if (!tenantId) {
-      get().clearCatalog();
-      return;
-    }
+      loadCatalog: async (tenantId: string, force = false) => {
+        if (!tenantId) {
+          get().clearCatalog();
+          return;
+        }
 
-    const state = get();
-    const isSameTenant = state.loadedTenantId === tenantId;
-    const hasData = state.products.length > 0;
-    const isFresh = state.lastLoadedAt && Date.now() - state.lastLoadedAt < CACHE_TTL_MS;
+        const state = get();
+        const isSameTenant = state.loadedTenantId === tenantId;
+        const hasData = state.products.length > 0;
 
-    // Si ya tenemos datos del mismo tenant y no se forzó recarga:
-    if (isSameTenant && hasData && !force) {
-      if (isFresh) {
-        // Datos frescos: carga instantánea en 0ms
-        return;
-      }
-      // Datos existentes pero expiraron los 60s: revalidar silenciosamente en segundo plano sin mostrar spinner
-      set({ isBackgroundRefreshing: true });
-    } else {
-      // Primera carga o cambio de tenant o recarga forzada: mostrar indicador
-      set({ isLoading: true, error: null });
-    }
+        // Si ya tenemos datos del mismo tenant y no se forzó recarga: carga instantánea en 0ms
+        if (isSameTenant && hasData && !force) {
+          return;
+        }
+
+        // Primera carga o cambio de tenant o recarga forzada: mostrar indicador
+        set({ isLoading: true, error: null });
 
     try {
       const [list, barcodeMap, barcodes, lists] = await Promise.all([
@@ -164,17 +184,31 @@ export const useProductsStore = create<ProductsCatalogState>((set, get) => ({
     }));
   },
 
-  clearCatalog: () => {
-    set({
-      products: [],
-      allBarcodes: [],
-      primaryBarcodes: {},
-      priceLists: [],
-      loadedTenantId: null,
-      lastLoadedAt: null,
-      isLoading: false,
-      isBackgroundRefreshing: false,
-      error: null,
-    });
-  },
-}));
+      clearCatalog: () => {
+        set({
+          products: [],
+          allBarcodes: [],
+          primaryBarcodes: {},
+          priceLists: [],
+          loadedTenantId: null,
+          lastLoadedAt: null,
+          isLoading: false,
+          isBackgroundRefreshing: false,
+          error: null,
+        });
+      },
+    }),
+    {
+      name: storageKeys.productsCatalog,
+      storage: createJSONStorage(() => safeLocalStorage),
+      partialize: (state) => ({
+        products: state.products,
+        allBarcodes: state.allBarcodes,
+        primaryBarcodes: state.primaryBarcodes,
+        priceLists: state.priceLists,
+        loadedTenantId: state.loadedTenantId,
+        lastLoadedAt: state.lastLoadedAt,
+      }),
+    }
+  )
+);

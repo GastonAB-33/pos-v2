@@ -25,6 +25,7 @@ import { posCustomerProfilesService } from "@/services/pos-customer-profiles.ser
 import { priceListsService } from "@/services/price-lists.service";
 import { productsService } from "@/services/products.service";
 import { useProductsStore } from "@/features/products/store/products.store";
+import { storageKeys } from "@/utils/local-storage";
 import { buildPromotionBarcode, promotionsService, type PromotionWithDetails } from "@/services/promotions.service";
 import { receiptsService } from "@/services/receipts.service";
 import { salesService } from "@/services/sales.service";
@@ -384,157 +385,203 @@ export const usePosSale = (tenantId: string | null) => {
     setDefaultInvoiceDocumentType(snapshot.default_invoice_document_type);
   }, []);
 
-  const loadPosData = useCallback(async () => {
-    if (!tenantId) {
-      setProducts([]);
-      setProductBarcodes([]);
-      setPrimaryBarcodes({});
-      setCustomers([]);
-      setPaymentMethods([]);
-      setBankAccounts([]);
-      setOriginBanks([]);
-      setInstallmentPlans([]);
-      setPriceLists([]);
-      setPromotions([]);
-      setPosSettings(defaultPosSettings);
-      setScaleSettings(defaultBarcodeScaleSettings);
-      setMercadoPagoSettings(defaultMercadoPagoSettings);
-      setArcaSettings(defaultArcaSettings);
-      setRequireOpenSessionForSale(false);
-      setDefaultInvoiceDocumentType("B");
-      setSelectedCustomerId("");
-      setCartState([]);
-      setMercadoPagoIntent(null);
-      return;
-    }
-
-    // Hidratar instantáneamente con caché en memoria si existe
-    const cachedStore = useProductsStore.getState();
-    if (cachedStore.loadedTenantId === tenantId && cachedStore.products.length > 0) {
-      setProducts(cachedStore.products.filter((product) => product.is_active !== false));
-      setProductBarcodes(cachedStore.allBarcodes);
-      setPrimaryBarcodes(cachedStore.primaryBarcodes);
-      setPriceLists(cachedStore.priceLists);
-    } else {
-      setIsLoading(true);
-    }
-
-    try {
-      await offlineService.hydrate();
-      if (!isOnline) {
-        const snapshot = offlineService.getPosSnapshot(tenantId);
-        if (!snapshot) {
-          setFeedback({ type: "error", message: "No hay una copia local del POS para este comercio. Conectate una vez para prepararlo." });
-          return;
-        }
-        applyOfflineSnapshot(snapshot);
-        setFeedback({ type: "success", message: "POS listo sin conexion con datos guardados localmente." });
+  const loadPosData = useCallback(
+    async (force = false) => {
+      if (!tenantId) {
+        setProducts([]);
+        setProductBarcodes([]);
+        setPrimaryBarcodes({});
+        setCustomers([]);
+        setPaymentMethods([]);
+        setBankAccounts([]);
+        setOriginBanks([]);
+        setInstallmentPlans([]);
+        setPriceLists([]);
+        setPromotions([]);
+        setPosSettings(defaultPosSettings);
+        setScaleSettings(defaultBarcodeScaleSettings);
+        setMercadoPagoSettings(defaultMercadoPagoSettings);
+        setArcaSettings(defaultArcaSettings);
+        setRequireOpenSessionForSale(false);
+        setDefaultInvoiceDocumentType("B");
+        setSelectedCustomerId("");
+        setCartState([]);
+        setMercadoPagoIntent(null);
         return;
       }
 
-      await Promise.allSettled([
-        originBanksService.ensureDefaults(tenantId),
-        installmentPlansService.ensureDefaults(tenantId),
-      ]);
+      // 1. Hidratar instantáneamente con caché persistente en memoria si existe
+      const cachedStore = useProductsStore.getState();
+      let hasCachedCatalog =
+        cachedStore.loadedTenantId === tenantId && cachedStore.products.length > 0;
 
-      const [
-        allProductsResult,
-        allProductBarcodesResult,
-        allCustomersResult,
-        allActivePaymentMethodsResult,
-        allActiveBankAccountsResult,
-        allActiveOriginBanksResult,
-        allActiveInstallmentPlansResult,
-        allPriceListsResult,
-        allActivePromotionsResult,
-        tenantSettingsResult,
-      ] = await Promise.allSettled([
-        productsService.getAllByTenant(tenantId),
-        productsService.getBarcodesByTenant(tenantId),
-        customersService.getAllByTenant(tenantId),
-        paymentMethodsService.getActiveByTenant(tenantId),
-        bankAccountsService.getActiveByTenant(tenantId),
-        originBanksService.getActiveByTenant(tenantId),
-        installmentPlansService.getActiveByTenant(tenantId),
-        priceListsService.getAllByTenant(tenantId),
-        promotionsService.getActiveByTenantWithDetails(tenantId),
-        settingsService.getByTenant(tenantId),
-      ]);
-
-      const allProducts =
-        allProductsResult.status === "fulfilled" ? allProductsResult.value : [];
-      const allProductBarcodes =
-        allProductBarcodesResult.status === "fulfilled" ? allProductBarcodesResult.value : [];
-      const allCustomers =
-        allCustomersResult.status === "fulfilled" ? allCustomersResult.value : [];
-      const allActivePaymentMethods =
-        allActivePaymentMethodsResult.status === "fulfilled"
-          ? allActivePaymentMethodsResult.value
-          : [];
-      const allActiveBankAccounts =
-        allActiveBankAccountsResult.status === "fulfilled"
-          ? allActiveBankAccountsResult.value
-          : [];
-      const allActiveOriginBanks =
-        allActiveOriginBanksResult.status === "fulfilled"
-          ? allActiveOriginBanksResult.value
-          : [];
-      const allActiveInstallmentPlans =
-        allActiveInstallmentPlansResult.status === "fulfilled"
-          ? allActiveInstallmentPlansResult.value
-          : [];
-      const allPriceLists =
-        allPriceListsResult.status === "fulfilled" ? allPriceListsResult.value : [];
-      const allActivePromotions =
-        allActivePromotionsResult.status === "fulfilled" ? allActivePromotionsResult.value : [];
-      const tenantSettings =
-        tenantSettingsResult.status === "fulfilled" ? tenantSettingsResult.value : null;
-
-      const hasPartialErrors =
-        allProductsResult.status === "rejected" ||
-        allProductBarcodesResult.status === "rejected" ||
-        allCustomersResult.status === "rejected" ||
-        allActivePaymentMethodsResult.status === "rejected" ||
-        allActiveBankAccountsResult.status === "rejected" ||
-        allActiveOriginBanksResult.status === "rejected" ||
-        allActiveInstallmentPlansResult.status === "rejected" ||
-        allPriceListsResult.status === "rejected" ||
-        allActivePromotionsResult.status === "rejected" ||
-        tenantSettingsResult.status === "rejected";
-
-      const activeCustomers = allCustomers.filter((customer) => customer.is_active);
-      const resolvedPosSettings = tenantSettings?.pos ?? defaultPosSettings;
-      const resolvedMercadoPagoSettings = {
-        ...defaultMercadoPagoSettings,
-        ...(tenantSettings?.sistema?.mercado_pago ?? {}),
-      };
-      const resolvedArcaSettings = {
-        ...defaultArcaSettings,
-        ...(tenantSettings?.facturacion?.arca ?? {}),
-      };
-
-      const activeProducts = allProducts.filter((product) => product.is_active !== false);
-      const primaryBarcodeMap = allProductBarcodes.reduce<Record<string, string>>((acc, row) => {
-        if (!row.is_primary) return acc;
-        acc[row.product_id] = row.barcode;
-        return acc;
-      }, {});
-
-      setProducts(activeProducts);
-      setProductBarcodes(allProductBarcodes);
-      setPrimaryBarcodes(primaryBarcodeMap);
-      setPriceLists(allPriceLists);
-
-      if (allProducts.length > 0) {
-        useProductsStore.setState({
-          products: allProducts,
-          allBarcodes: allProductBarcodes,
-          primaryBarcodes: primaryBarcodeMap,
-          priceLists: allPriceLists,
-          loadedTenantId: tenantId,
-          lastLoadedAt: Date.now(),
-        });
+      if (hasCachedCatalog) {
+        setProducts(cachedStore.products.filter((product) => product.is_active !== false));
+        setProductBarcodes(cachedStore.allBarcodes);
+        setPrimaryBarcodes(cachedStore.primaryBarcodes);
+        setPriceLists(cachedStore.priceLists);
+      } else {
+        // Intentar cargar snapshot offline local si existe para este tenant antes de bloquear
+        await offlineService.hydrate();
+        const snapshot = offlineService.getPosSnapshot(tenantId);
+        if (snapshot && snapshot.products.length > 0) {
+          applyOfflineSnapshot(snapshot);
+          useProductsStore.setState({
+            products: snapshot.products,
+            allBarcodes: snapshot.product_barcodes,
+            primaryBarcodes: snapshot.product_barcodes.reduce<Record<string, string>>((acc, row) => {
+              if (row.is_primary) acc[row.product_id] = row.barcode;
+              return acc;
+            }, {}),
+            priceLists: snapshot.price_lists,
+            loadedTenantId: tenantId,
+            lastLoadedAt: Date.now(),
+          });
+          hasCachedCatalog = true;
+        } else {
+          setIsLoading(true);
+        }
       }
+
+      try {
+        await offlineService.hydrate();
+        if (!isOnline) {
+          const snapshot = offlineService.getPosSnapshot(tenantId);
+          if (!snapshot) {
+            setFeedback({
+              type: "error",
+              message:
+                "No hay una copia local del POS para este comercio. Conectate una vez para prepararlo.",
+            });
+            return;
+          }
+          applyOfflineSnapshot(snapshot);
+          setFeedback({
+            type: "success",
+            message: "POS listo sin conexion con datos guardados localmente.",
+          });
+          return;
+        }
+
+        await Promise.allSettled([
+          originBanksService.ensureDefaults(tenantId),
+          installmentPlansService.ensureDefaults(tenantId),
+        ]);
+
+        const shouldFetchCatalog = force || !hasCachedCatalog;
+
+        const [
+          allProductsResult,
+          allProductBarcodesResult,
+          allPriceListsResult,
+          allCustomersResult,
+          allActivePaymentMethodsResult,
+          allActiveBankAccountsResult,
+          allActiveOriginBanksResult,
+          allActiveInstallmentPlansResult,
+          allActivePromotionsResult,
+          tenantSettingsResult,
+        ] = await Promise.allSettled([
+          shouldFetchCatalog
+            ? productsService.getAllByTenant(tenantId)
+            : Promise.resolve(useProductsStore.getState().products),
+          shouldFetchCatalog
+            ? productsService.getBarcodesByTenant(tenantId)
+            : Promise.resolve(useProductsStore.getState().allBarcodes),
+          shouldFetchCatalog
+            ? priceListsService.getAllByTenant(tenantId)
+            : Promise.resolve(useProductsStore.getState().priceLists),
+          customersService.getAllByTenant(tenantId),
+          paymentMethodsService.getActiveByTenant(tenantId),
+          bankAccountsService.getActiveByTenant(tenantId),
+          originBanksService.getActiveByTenant(tenantId),
+          installmentPlansService.getActiveByTenant(tenantId),
+          promotionsService.getActiveByTenantWithDetails(tenantId),
+          settingsService.getByTenant(tenantId),
+        ]);
+
+        const allProducts =
+          allProductsResult.status === "fulfilled"
+            ? allProductsResult.value
+            : useProductsStore.getState().products;
+        const allProductBarcodes =
+          allProductBarcodesResult.status === "fulfilled"
+            ? allProductBarcodesResult.value
+            : useProductsStore.getState().allBarcodes;
+        const allPriceLists =
+          allPriceListsResult.status === "fulfilled"
+            ? allPriceListsResult.value
+            : useProductsStore.getState().priceLists;
+        const allCustomers =
+          allCustomersResult.status === "fulfilled" ? allCustomersResult.value : [];
+        const allActivePaymentMethods =
+          allActivePaymentMethodsResult.status === "fulfilled"
+            ? allActivePaymentMethodsResult.value
+            : [];
+        const allActiveBankAccounts =
+          allActiveBankAccountsResult.status === "fulfilled"
+            ? allActiveBankAccountsResult.value
+            : [];
+        const allActiveOriginBanks =
+          allActiveOriginBanksResult.status === "fulfilled"
+            ? allActiveOriginBanksResult.value
+            : [];
+        const allActiveInstallmentPlans =
+          allActiveInstallmentPlansResult.status === "fulfilled"
+            ? allActiveInstallmentPlansResult.value
+            : [];
+        const allActivePromotions =
+          allActivePromotionsResult.status === "fulfilled"
+            ? allActivePromotionsResult.value
+            : [];
+        const tenantSettings =
+          tenantSettingsResult.status === "fulfilled" ? tenantSettingsResult.value : null;
+
+        const hasPartialErrors =
+          (shouldFetchCatalog && allProductsResult.status === "rejected") ||
+          (shouldFetchCatalog && allProductBarcodesResult.status === "rejected") ||
+          (shouldFetchCatalog && allPriceListsResult.status === "rejected") ||
+          allCustomersResult.status === "rejected" ||
+          allActivePaymentMethodsResult.status === "rejected" ||
+          allActiveBankAccountsResult.status === "rejected" ||
+          allActiveOriginBanksResult.status === "rejected" ||
+          allActiveInstallmentPlansResult.status === "rejected" ||
+          allActivePromotionsResult.status === "rejected" ||
+          tenantSettingsResult.status === "rejected";
+
+        const activeCustomers = allCustomers.filter((customer) => customer.is_active);
+        const resolvedPosSettings = tenantSettings?.pos ?? defaultPosSettings;
+        const resolvedMercadoPagoSettings = {
+          ...defaultMercadoPagoSettings,
+          ...(tenantSettings?.sistema?.mercado_pago ?? {}),
+        };
+        const resolvedArcaSettings = {
+          ...defaultArcaSettings,
+          ...(tenantSettings?.facturacion?.arca ?? {}),
+        };
+
+        const activeProducts = allProducts.filter((product) => product.is_active !== false);
+        const primaryBarcodeMap = allProductBarcodes.reduce<Record<string, string>>((acc, row) => {
+          if (!row.is_primary) return acc;
+          acc[row.product_id] = row.barcode;
+          return acc;
+        }, {});
+
+        setProducts(activeProducts);
+        setProductBarcodes(allProductBarcodes);
+        setPrimaryBarcodes(primaryBarcodeMap);
+        setPriceLists(allPriceLists);
+
+        if (allProducts.length > 0 && shouldFetchCatalog) {
+          useProductsStore.setState({
+            products: allProducts,
+            allBarcodes: allProductBarcodes,
+            primaryBarcodes: primaryBarcodeMap,
+            priceLists: allPriceLists,
+            loadedTenantId: tenantId,
+            lastLoadedAt: Date.now(),
+          });
+        }
 
       setCustomers(activeCustomers);
       setPaymentMethods(
@@ -606,14 +653,26 @@ export const usePosSale = (tenantId: string | null) => {
   }, [applyOfflineSnapshot, isOnline, tenantId]);
 
   useEffect(() => {
-    void loadPosData();
+    void loadPosData(false);
   }, [loadPosData]);
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
-      if (event.key !== "pos-v2-mock-db") return;
+      if (event.key !== "pos-v2-mock-db" && event.key !== storageKeys.productsCatalog) return;
       if (!tenantId) return;
-      void loadPosData();
+
+      if (event.key === storageKeys.productsCatalog) {
+        const updatedStore = useProductsStore.getState();
+        if (updatedStore.loadedTenantId === tenantId && updatedStore.products.length > 0) {
+          setProducts(updatedStore.products.filter((product) => product.is_active !== false));
+          setProductBarcodes(updatedStore.allBarcodes);
+          setPrimaryBarcodes(updatedStore.primaryBarcodes);
+          setPriceLists(updatedStore.priceLists);
+        }
+        return;
+      }
+
+      void loadPosData(false);
     };
 
     window.addEventListener("storage", handleStorage);
@@ -802,7 +861,12 @@ export const usePosSale = (tenantId: string | null) => {
   ): Promise<boolean> => {
     const normalizedQty = roundQty(quantity);
 
-    if (!Number.isFinite(normalizedQty) || normalizedQty <= 0) {
+    if (!Number.isFinite(normalizedQty) || normalizedQty < 0) {
+      setFeedback({ type: "error", message: "La cantidad no es válida" });
+      return false;
+    }
+
+    if (product.sale_mode !== "weight" && normalizedQty <= 0) {
       setFeedback({ type: "error", message: "La cantidad debe ser mayor a 0" });
       return false;
     }
@@ -1095,7 +1159,8 @@ export const usePosSale = (tenantId: string | null) => {
       const byCode =
         products.find(
           (product) =>
-            product.code === pluCode || normalizePluCode(product.code) === normalizedInput
+            Boolean(product.code) &&
+            (product.code === pluCode || normalizePluCode(product.code as string) === normalizedInput)
         ) ?? null;
       if (byCode) return byCode;
 
@@ -1132,7 +1197,8 @@ export const usePosSale = (tenantId: string | null) => {
       // Fallback: coincidencia por código de producto directo
       return (
         products.find(
-          (product) => normalizeBarcodeValue(product.code) === normalizedBarcode
+          (product) =>
+            Boolean(product.code) && normalizeBarcodeValue(product.code as string) === normalizedBarcode
         ) ?? null
       );
     },
@@ -1252,24 +1318,25 @@ export const usePosSale = (tenantId: string | null) => {
 
   const setCartItemQuantity = (productId: string, nextQuantity: number) => {
     const normalizedQty = roundQty(nextQuantity);
-    if (!Number.isFinite(normalizedQty)) {
-      setFeedback({ type: "error", message: "La cantidad debe ser mayor a 0" });
+    if (!Number.isFinite(normalizedQty) || normalizedQty < 0) {
+      setFeedback({ type: "error", message: "La cantidad no es válida" });
       return;
     }
 
-    if (normalizedQty <= 0) {
+    const target = cartState.find((item) => item.product_id === productId);
+    if (target?.sale_mode !== "weight" && normalizedQty <= 0) {
       setFeedback({ type: "error", message: "La cantidad debe ser mayor a 0" });
       return;
     }
 
     setCartState((prev) => {
-      const target = prev.find((item) => item.product_id === productId);
-      if (!target) return prev;
+      const item = prev.find((row) => row.product_id === productId);
+      if (!item) return prev;
 
-      if (!posSettings.allow_negative_stock && normalizedQty > target.stock_available) {
+      if (!posSettings.allow_negative_stock && normalizedQty > item.stock_available) {
         setFeedback({
           type: "error",
-          message: `Stock insuficiente para ${target.name}`,
+          message: `Stock insuficiente para ${item.name}`,
         });
         return prev;
       }
@@ -1340,15 +1407,24 @@ export const usePosSale = (tenantId: string | null) => {
   const increaseQuantity = (productId: string) => {
     const item = cartState.find((row) => row.product_id === productId);
     if (!item) return;
-    const step = item.sale_mode === "weight" ? 0.1 : 1;
-    setCartItemQuantity(productId, item.quantity + step);
+    const step = item.sale_mode === "weight" ? 0.05 : 1;
+    setCartItemQuantity(productId, roundQty(item.quantity + step));
   };
 
   const decreaseQuantity = (productId: string) => {
     const item = cartState.find((row) => row.product_id === productId);
     if (!item) return;
-    const step = item.sale_mode === "weight" ? 0.1 : 1;
-    setCartItemQuantity(productId, item.quantity - step);
+    const step = item.sale_mode === "weight" ? 0.05 : 1;
+    const nextQty = roundQty(item.quantity - step);
+    if (nextQty <= 0) {
+      if (item.sale_mode === "weight") {
+        setCartItemQuantity(productId, 0);
+      } else {
+        removeFromCart(productId);
+      }
+      return;
+    }
+    setCartItemQuantity(productId, nextQty);
   };
 
   const removeFromCart = (productId: string) => {
@@ -1621,6 +1697,15 @@ export const usePosSale = (tenantId: string | null) => {
 
     if (!cart.length) {
       setFeedback({ type: "error", message: "No hay items en el carrito" });
+      return null;
+    }
+
+    const hasZeroQuantity = cart.some((item) => item.quantity <= 0);
+    if (hasZeroQuantity) {
+      setFeedback({
+        type: "error",
+        message: "Hay productos con cantidad o peso en 0 g en el carrito",
+      });
       return null;
     }
 
@@ -2348,6 +2433,9 @@ export const usePosSale = (tenantId: string | null) => {
             return updatedStock == null ? product : { ...product, stock_current: updatedStock };
           })
         );
+        updatedStockByProductId.forEach((stock, prodId) => {
+          useProductsStore.getState().updateProductStock(prodId, stock);
+        });
       }
       if (isCurrentAccountMethod && normalizedCustomerId) {
         setCustomers((previous) =>

@@ -2,6 +2,7 @@ import { Boxes, CircleDollarSign, PackageSearch, ShoppingCart, Users, Wallet } f
 import { useNavigate } from "react-router-dom";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { routePaths } from "@/config/routes";
+import { usePosNavigation } from "@/hooks/usePosNavigation";
 
 const quickActions = [
   { label: "Nueva venta", detail: "Abrir terminal POS", to: routePaths.pos, icon: ShoppingCart },
@@ -14,6 +15,7 @@ const quickActions = [
 
 export const MainMenuPage = () => {
   const navigate = useNavigate();
+  const { openPos } = usePosNavigation();
 
   return (
     <PagePlaceholder title="Inicio operativo" description="Accesos principales y novedades del comercio">
@@ -34,7 +36,13 @@ export const MainMenuPage = () => {
                   key={action.to}
                   type="button"
                   className="operational-quick-action"
-                  onClick={() => navigate(action.to)}
+                  onClick={() => {
+                    if (action.to === routePaths.pos) {
+                      openPos();
+                    } else {
+                      navigate(action.to);
+                    }
+                  }}
                 >
                   <span className="operational-quick-action__icon"><Icon aria-hidden="true" size={19} /></span>
                   <span className="min-w-0 text-left">

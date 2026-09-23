@@ -5,6 +5,7 @@ import {
   stockAdjustmentSchema,
   type StockAdjustmentValues,
 } from "@/modules/stock/schemas/stock-adjustment.schema";
+import { handleNumericInputFocus, handleNumericInputBlur, parseNumericField } from "@/utils/input-helpers";
 
 interface StockAdjustmentFormProps {
   products: Product[];
@@ -23,6 +24,7 @@ export const StockAdjustmentForm = ({
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<StockAdjustmentValues>({
     resolver: zodResolver(stockAdjustmentSchema),
@@ -75,7 +77,21 @@ export const StockAdjustmentForm = ({
           <input
             type="number"
             step="0.001"
-            {...register("quantity")}
+            placeholder="0"
+            {...register("quantity", {
+              setValueAs: (val) => parseNumericField(val, true),
+            })}
+            onFocus={(e) =>
+              handleNumericInputFocus(e, {
+                isNew: true,
+                onClear: () => setValue("quantity", "" as any),
+              })
+            }
+            onBlur={(e) => {
+              handleNumericInputBlur(e, "0", () => {
+                setValue("quantity", 0);
+              });
+            }}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled || !canWrite}
           />

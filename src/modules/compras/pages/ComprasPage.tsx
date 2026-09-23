@@ -57,7 +57,7 @@ const DuplicateProductReviewModal = ({
             <div>
               <p className="font-semibold text-slate-900">{product.name}</p>
               <p className="text-xs text-slate-500">
-                Código: {product.code} | Stock: {product.stock_current.toLocaleString("es-AR")}{" "}
+                {product.code ? `Código: ${product.code} | ` : ""}Stock: {product.stock_current.toLocaleString("es-AR")}{" "}
                 {product.sale_mode === "weight" ? "kg" : "u."}
               </p>
             </div>
@@ -334,7 +334,10 @@ export const ComprasPage = () => {
               onSetBonifiedQuantity={setItemBonifiedQuantity}
               onSetUpdateSalePrice={setItemUpdateSalePrice}
               onRemove={removeItem}
-              onOpenAddProductModal={() => setIsSelectProductModalOpen(true)}
+              onOpenAddProductModal={() => {
+                setSearch("");
+                setIsSelectProductModalOpen(true);
+              }}
               onOpenCreateProductModal={() => setIsProductModalOpen(true)}
             />
           </div>
@@ -355,7 +358,10 @@ export const ComprasPage = () => {
           addProductToCart(product);
         }}
         onBarcodeScan={addProductByBarcode}
-        onClose={() => setIsSelectProductModalOpen(false)}
+        onClose={() => {
+          setSearch("");
+          setIsSelectProductModalOpen(false);
+        }}
       />
 
       {/* Modal 2: Crear Nuevo Producto desde Cero */}

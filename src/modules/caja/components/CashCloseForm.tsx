@@ -4,6 +4,7 @@ import {
   closeCashSchema,
   type CloseCashValues,
 } from "@/modules/caja/schemas/cash.schemas";
+import { handleNumericInputFocus, handleNumericInputBlur, parseNumericField } from "@/utils/input-helpers";
 
 interface CashCloseFormProps {
   disabled?: boolean;
@@ -28,6 +29,7 @@ export const CashCloseForm = ({
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<CloseCashValues>({
     resolver: zodResolver(closeCashSchema),
@@ -54,7 +56,21 @@ export const CashCloseForm = ({
           <input
             type="number"
             step="0.01"
-            {...register("realAmount")}
+            placeholder="0.00"
+            {...register("realAmount", {
+              setValueAs: parseNumericField,
+            })}
+            onFocus={(e) =>
+              handleNumericInputFocus(e, {
+                isNew: expectedBalance === 0,
+                onClear: () => setValue("realAmount", "" as any),
+              })
+            }
+            onBlur={(e) => {
+              handleNumericInputBlur(e, String(expectedBalance), (val) => {
+                setValue("realAmount", Number(val) || 0);
+              });
+            }}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled || !canWrite}
           />

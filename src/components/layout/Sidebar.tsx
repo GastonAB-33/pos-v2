@@ -3,6 +3,7 @@ import {
   BarChart3,
   ChevronDown,
   ClipboardList,
+  ExternalLink,
   Package,
   ShoppingCart,
   Tags,
@@ -15,6 +16,7 @@ import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { isSupportOperator } from "@/features/support/support-operator";
 import { useDeviceProfile } from "@/hooks/useDeviceProfile";
+import { usePosNavigation } from "@/hooks/usePosNavigation";
 import { useUiStore } from "@/store/ui.store";
 import type { AppModule } from "@/types/modules";
 import { cn } from "@/utils/cn";
@@ -76,10 +78,12 @@ const sidebarGroups: SidebarGroup[] = [
     collapsible: true,
     defaultExpanded: true,
     items: [
-      { label: "Caja", to: routePaths.caja, module: "caja" },
+      { label: "Caja diaria", to: routePaths.caja, module: "caja" },
+      { label: "Caja general", to: routePaths.cajaGeneral, module: "caja_general" },
       { label: "Cuentas corrientes", to: routePaths.cuentasCorrientes, module: "cuentas_corrientes" },
+      { label: "Cta. cte. proveedores", to: routePaths.cuentasCorrientesProveedores, module: "cuentas_corrientes_proveedores" },
+      { label: "Bancos", to: routePaths.bancos, module: "bancos" },
       { label: "Comprobantes", to: routePaths.comprobantes, module: "comprobantes" },
-      { label: "Medios de pago", to: routePaths.mediosPago, module: "medios_pago" },
       { label: "Facturacion", to: routePaths.facturacion, module: "facturacion" },
       { label: "Configuracion", to: routePaths.configuracionContable, module: "configuracion_contable" },
     ],
@@ -105,6 +109,7 @@ const sidebarGroups: SidebarGroup[] = [
     defaultExpanded: true,
     items: [
       { label: "Usuarios", to: routePaths.usuarios, module: "usuarios" },
+      { label: "Medios de pago", to: routePaths.mediosPago, module: "medios_pago" },
       { label: "Alta de comercio", to: routePaths.altaComercio, module: "configuracion_sistema" },
       { label: "Centro soporte", to: routePaths.centroSoporte, module: "configuracion_sistema" },
       { label: "Mis consultas", to: routePaths.misConsultas, module: "configuracion_sistema" },
@@ -143,8 +148,10 @@ export const Sidebar = () => {
     setExpandedGroupId(activeGroup.id);
   }, [location.pathname]);
 
+  const { openPos, posWindowMode } = usePosNavigation();
+
   const handleOpenPos = () => {
-    navigate(quickAccessItem.to);
+    openPos();
     closeDrawerAfterNavigation();
   };
 
@@ -204,8 +211,18 @@ export const Sidebar = () => {
                   ? "border-brand-500/40 bg-brand-500/15 text-slate-900"
                   : "border-brand-500/30 bg-brand-500/10 text-slate-700 hover:bg-brand-500/20 hover:text-slate-900"
               )}
+              title={
+                posWindowMode === "new_window"
+                  ? "Abrir Punto de venta (configurado en nueva ventana)"
+                  : "Abrir Punto de venta"
+              }
             >
-              <span className="flex items-center gap-2"><ShoppingCart aria-hidden="true" size={16} /> Punto de venta</span>
+              <span className="flex items-center gap-2">
+                <ShoppingCart aria-hidden="true" size={16} /> Punto de venta
+              </span>
+              {posWindowMode === "new_window" ? (
+                <ExternalLink aria-hidden="true" size={14} className="opacity-60" />
+              ) : null}
             </button>
           </section>
         ) : null}

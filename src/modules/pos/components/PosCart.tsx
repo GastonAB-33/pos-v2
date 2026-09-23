@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Barcode, ShoppingCart, Trash2 } from "lucide-react";
+import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
 
 interface PosCartItemView {
   product_id: string;
@@ -107,7 +108,7 @@ export const PosCart = ({
     if (rawValue == null) return;
 
     const parsedInput = Number(rawValue);
-    if (Number.isFinite(parsedInput) && parsedInput > 0) {
+    if (Number.isFinite(parsedInput) && parsedInput >= 0) {
       onSetQuantity(
         item.product_id,
         item.sale_mode === "weight" ? gramsToKg(parsedInput) : parsedInput
@@ -250,12 +251,23 @@ export const PosCart = ({
                       type="number"
                       step={qtyStep}
                       min={0}
+                      placeholder="0"
                       title={
                         item.sale_mode === "weight"
-                          ? "Cantidad en gramos. Ej: 300 = 300 g"
+                          ? "Cantidad en gramos"
                           : "Cantidad en unidades"
                       }
                       value={quantityDrafts[item.product_id] ?? quantityToInputValue(item)}
+                      onFocus={(event) =>
+                        handleNumericInputFocus(event, {
+                          isNew: true,
+                          onClear: () =>
+                            setQuantityDrafts((current) => ({
+                              ...current,
+                              [item.product_id]: "",
+                            })),
+                        })
+                      }
                       onChange={(event) => {
                         const nextValue = event.target.value;
                         setQuantityDrafts((current) => ({
@@ -264,14 +276,23 @@ export const PosCart = ({
                         }));
 
                         const parsedInput = Number(nextValue);
-                        if (nextValue.trim() && Number.isFinite(parsedInput) && parsedInput > 0) {
+                        if (nextValue.trim() && Number.isFinite(parsedInput) && parsedInput >= 0) {
                           onSetQuantity(
                             item.product_id,
                             item.sale_mode === "weight" ? gramsToKg(parsedInput) : parsedInput
                           );
                         }
                       }}
-                      onBlur={() => commitQuantityDraft(item)}
+                      onBlur={(event) => {
+                        handleNumericInputBlur(event, "0", () => {
+                          setQuantityDrafts((current) => ({
+                            ...current,
+                            [item.product_id]: "0",
+                          }));
+                          onSetQuantity(item.product_id, 0);
+                        });
+                        commitQuantityDraft(item);
+                      }}
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
                           event.currentTarget.blur();

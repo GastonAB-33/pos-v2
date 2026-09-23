@@ -8,6 +8,9 @@ import { ClientesPage } from "@/modules/clientes/pages/ClientesPage";
 import { CuentasCorrientesPage } from "@/modules/cuentas-corrientes/pages/CuentasCorrientesPage";
 import { StockPage } from "@/modules/stock/pages/StockPage";
 import { CajaPage } from "@/modules/caja/pages/CajaPage";
+import { CajaGeneralPage } from "@/modules/caja-general/pages/CajaGeneralPage";
+import { CuentasCorrientesProveedoresPage } from "@/modules/cuentas-corrientes-proveedores/pages/CuentasCorrientesProveedoresPage";
+import { BancosPage } from "@/modules/bancos/pages/BancosPage";
 import { ComprasPage } from "@/modules/compras/pages/ComprasPage";
 import { ProveedoresPage } from "@/modules/proveedores/pages/ProveedoresPage";
 import { ListasPreciosPage } from "@/modules/listas-precios/pages/ListasPreciosPage";
@@ -39,6 +42,9 @@ export const moduleRoutes: ModuleRouteItem[] = [
   { path: routePaths.cuentasCorrientes, Component: CuentasCorrientesPage, requiredPermission: { module: "cuentas_corrientes", level: "read" } },
   { path: routePaths.stock, Component: StockPage, requiredPermission: { module: "stock", level: "read" } },
   { path: routePaths.caja, Component: CajaPage, requiredPermission: { module: "caja", level: "read" } },
+  { path: routePaths.cajaGeneral, Component: CajaGeneralPage, requiredPermission: { module: "caja_general", level: "read" } },
+  { path: routePaths.cuentasCorrientesProveedores, Component: CuentasCorrientesProveedoresPage, requiredPermission: { module: "cuentas_corrientes_proveedores", level: "read" } },
+  { path: routePaths.bancos, Component: BancosPage, requiredPermission: { module: "bancos", level: "read" } },
   { path: routePaths.compras, Component: ComprasPage, requiredPermission: { module: "compras", level: "read" } },
   { path: routePaths.proveedores, Component: ProveedoresPage, requiredPermission: { module: "proveedores", level: "read" } },
   { path: routePaths.listasPrecios, Component: ListasPreciosPage, requiredPermission: { module: "listas_precios", level: "read" } },

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { PosQuickProductInput } from "@/modules/pos/hooks/usePosSale";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
+import { handleNumericInputFocus } from "@/utils/input-helpers";
 
 interface PosQuickProductModalProps {
   open: boolean;
@@ -171,19 +172,57 @@ export const PosQuickProductModal = ({
 
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">{quantityLabel}</label>
-              <input type="number" min="0.001" step="0.001" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="ui-input" />
+              <input
+                type="number"
+                min="0.001"
+                step="0.001"
+                value={quantity}
+                onChange={(event) => setQuantity(event.target.value)}
+                onFocus={(e) =>
+                  handleNumericInputFocus(e, {
+                    isNew: false,
+                  })
+                }
+                className="ui-input"
+              />
             </div>
 
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">{priceLabel}</label>
-              <input type="number" min="0.01" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} className="ui-input" />
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={unitPrice}
+                onChange={(event) => setUnitPrice(event.target.value)}
+                onFocus={(e) =>
+                  handleNumericInputFocus(e, {
+                    isNew: unitPrice === "0" || unitPrice === "0.00",
+                    onClear: () => setUnitPrice(""),
+                  })
+                }
+                className="ui-input"
+              />
             </div>
 
             {saveMode === "catalog" ? (
               <>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">Costo</label>
-                  <input type="number" min="0" step="0.01" value={costPrice} onChange={(event) => setCostPrice(event.target.value)} className="ui-input" />
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={costPrice}
+                    onChange={(event) => setCostPrice(event.target.value)}
+                    onFocus={(e) =>
+                      handleNumericInputFocus(e, {
+                        isNew: costPrice === "0" || costPrice === "0.00",
+                        onClear: () => setCostPrice(""),
+                      })
+                    }
+                    className="ui-input"
+                  />
                 </div>
 
                 <div>
@@ -194,6 +233,12 @@ export const PosQuickProductModal = ({
                     step="0.001"
                     value={stock}
                     onChange={(event) => setStock(event.target.value)}
+                    onFocus={(e) =>
+                      handleNumericInputFocus(e, {
+                        isNew: stock === "0" || stock === "0.00",
+                        onClear: () => setStock(""),
+                      })
+                    }
                     placeholder={suggestedStock}
                     className="ui-input"
                   />

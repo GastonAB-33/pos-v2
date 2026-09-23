@@ -28,6 +28,8 @@ export const dbTables = {
   stock_movements: "stock_movements",
   cash_sessions: "cash_sessions",
   cash_movements: "cash_movements",
+  general_cash_movements: "general_cash_movements",
+  supplier_current_account_movements: "supplier_current_account_movements",
 
   // Preparado para evolucion futura de ventas/pagos.
   sale_payments: "sale_payments",
@@ -63,6 +65,8 @@ export const tenantScopedTables = [
   dbTables.stock_movements,
   dbTables.cash_sessions,
   dbTables.cash_movements,
+  dbTables.general_cash_movements,
+  dbTables.supplier_current_account_movements,
   dbTables.sale_payments,
 ] as const;
 
@@ -75,7 +79,7 @@ export const tableDefinitions: Record<DbTableName, readonly string[]> = {
   products: ["id", "tenant_id", "code", "name", "image_url", "brand", "supplier", "description", "price", "cost_price", "stock_current", "stock_min", "stock_max", "category", "subcategory", "sale_mode", "currency_code", "price_without_vat", "vat_percent", "profit_percent", "is_favorite", "is_active", "created_at", "updated_at"],
   product_barcodes: ["id", "tenant_id", "product_id", "barcode", "is_primary", "created_at", "updated_at"],
   customers: ["id", "tenant_id", "code", "full_name", "document_type", "document_number", "fiscal_business_name", "fiscal_address", "fiscal_condition", "price_list_id", "email", "phone", "address", "observations", "current_balance", "current_account_enabled", "current_account_limit", "current_account_pricing_mode", "current_account_surcharge_percent", "current_account_surcharge_amount", "current_account_pricing_updated_at", "is_active", "created_at", "updated_at"],
-  suppliers: ["id", "tenant_id", "code", "name", "phone", "email", "address", "observations", "is_active", "created_at", "updated_at"],
+  suppliers: ["id", "tenant_id", "code", "name", "phone", "email", "address", "observations", "current_balance", "is_active", "created_at", "updated_at"],
   payment_methods: ["id", "tenant_id", "name", "code", "type", "is_active", "affects_cash", "surcharge_percent", "discount_percent", "notes", "created_at", "updated_at"],
   bank_accounts: ["id", "tenant_id", "bank_name", "account_type", "holder_name", "cbu", "alias", "currency_code", "notes", "is_active", "created_at", "updated_at"],
   origin_banks: ["id", "tenant_id", "code", "name", "is_active", "created_at", "updated_at"],
@@ -98,5 +102,7 @@ export const tableDefinitions: Record<DbTableName, readonly string[]> = {
   stock_movements: ["id", "tenant_id", "product_id", "movement_type", "quantity", "reference_type", "reference_id", "notes", "created_by", "created_at", "updated_at"],
   cash_sessions: ["id", "tenant_id", "branch_id", "opened_by_user_id", "closed_by_user_id", "status", "opened_at", "closed_at", "opening_amount", "closing_amount", "expected_closing_amount", "closing_difference", "notes", "created_at", "updated_at"],
   cash_movements: ["id", "tenant_id", "cash_session_id", "movement_type", "amount", "currency_code", "reference_type", "reference_id", "notes", "created_by", "created_at", "updated_at"],
+  general_cash_movements: ["id", "tenant_id", "type", "amount", "origin_type", "concept", "reference_id", "notes", "created_by", "created_at", "updated_at"],
+  supplier_current_account_movements: ["id", "tenant_id", "supplier_id", "purchase_id", "type", "amount", "balance_after", "payment_method_code", "notes", "created_by", "created_at", "updated_at"],
   sale_payments: ["id", "tenant_id", "sale_id", "payment_method_code", "provider", "provider_code", "amount", "currency_code", "status", "provider_status", "provider_reference", "provider_metadata", "external_reference", "metadata", "created_at", "updated_at"],
 };

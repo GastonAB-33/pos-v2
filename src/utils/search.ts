@@ -68,44 +68,48 @@ export const matchesProductSearch = (
     .filter(Boolean);
   const compactBarcodes = allBarcodes.map((b) => b.replace(/\s+/g, ""));
 
+  const strippedQuery = compactQuery.replace(/^0+/, "");
+  const strippedCode = compactCode.replace(/^0+/, "");
+  const hasLeadingZeros = compactQuery.length > strippedQuery.length;
+
+  const matchesCode = Boolean(
+    compactCode &&
+    (
+      compactCode.startsWith(compactQuery) ||
+      (strippedQuery && strippedCode && strippedCode === strippedQuery) ||
+      (!hasLeadingZeros && strippedQuery && strippedCode && strippedCode.startsWith(strippedQuery))
+    )
+  );
+
+  const matchesBarcode = compactBarcodes.some((b) => {
+    const strippedB = b.replace(/^0+/, "");
+    return (
+      b.startsWith(compactQuery) ||
+      (strippedQuery && strippedB && strippedB === strippedQuery) ||
+      (!hasLeadingZeros && strippedQuery && strippedB && strippedB.startsWith(strippedQuery))
+    );
+  });
+
   // 1. Ámbito: Solo por nombre
   if (scope === "name") {
     const normName = normalizeSearchQuery(item.name);
-    return normName.includes(normQuery);
+    if (normName.includes(normQuery)) return true;
+    const queryWords = normQuery.split(/\s+/).filter(Boolean);
+    return queryWords.length > 1 && queryWords.every((word) => normName.includes(word));
   }
 
   // 2. Ámbito: Solo por código de producto (o PLU)
   if (scope === "code") {
-    if (!compactCode) return false;
-    const strippedQuery = compactQuery.replace(/^0+/, "");
-    const strippedCode = compactCode.replace(/^0+/, "");
-
-    return (
-      compactCode.includes(compactQuery) ||
-      compactQuery.includes(compactCode) ||
-      (Boolean(strippedQuery) && Boolean(strippedCode) && strippedCode === strippedQuery)
-    );
+    return matchesCode;
   }
 
   // 3. Ámbito: Solo por código de barras
   if (scope === "barcode") {
-    if (!compactBarcodes.length) return false;
-    return compactBarcodes.some(
-      (b) => b.includes(compactQuery) || compactQuery.includes(b)
-    );
+    return matchesBarcode;
   }
 
   // 4. Ámbito: "all" (búsqueda general por nombre, código o barra)
-  // Coincidencia por código de producto o PLU
-  if (compactCode) {
-    if (compactCode.includes(compactQuery) || compactQuery.includes(compactCode)) return true;
-    const strippedQuery = compactQuery.replace(/^0+/, "");
-    const strippedCode = compactCode.replace(/^0+/, "");
-    if (strippedQuery && strippedCode && strippedCode === strippedQuery) return true;
-  }
-
-  // Coincidencia por códigos de barras
-  if (compactBarcodes.some((b) => b.includes(compactQuery) || compactQuery.includes(b))) {
+  if (matchesCode || matchesBarcode) {
     return true;
   }
 
@@ -113,18 +117,19 @@ export const matchesProductSearch = (
   const normName = normalizeSearchQuery(item.name);
   if (normName.includes(normQuery)) return true;
 
+  const queryWords = normQuery.split(/\s+/).filter(Boolean);
+  if (queryWords.length > 1 && queryWords.every((word) => normName.includes(word))) {
+    return true;
+  }
+
   // Coincidencia por categoría, subcategoría, marca o proveedor
-  const normCategory = normalizeSearchQuery(item.category);
-  if (normCategory.includes(normQuery)) return true;
+  const otherFields = [item.category, item.subcategory, item.brand, item.supplier]
+    .map((f) => normalizeSearchQuery(f))
+    .filter(Boolean);
 
-  const normSubcategory = normalizeSearchQuery(item.subcategory);
-  if (normSubcategory.includes(normQuery)) return true;
-
-  const normBrand = normalizeSearchQuery(item.brand);
-  if (normBrand.includes(normQuery)) return true;
-
-  const normSupplier = normalizeSearchQuery(item.supplier);
-  if (normSupplier.includes(normQuery)) return true;
+  if (otherFields.some((f) => f.includes(normQuery))) {
+    return true;
+  }
 
   return false;
 };

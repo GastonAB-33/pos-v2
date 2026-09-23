@@ -11,6 +11,7 @@ import {
   paymentMethodFormSchema,
   type PaymentMethodFormValues,
 } from "@/modules/medios-pago/schemas/payment-method-form.schema";
+import { handleNumericInputFocus, handleNumericInputBlur, parseNumericField } from "@/utils/input-helpers";
 
 interface PaymentMethodFormProps {
   paymentMethod?: PaymentMethod;
@@ -111,7 +112,21 @@ export const PaymentMethodForm = ({
             type="number"
             step="0.01"
             min="0"
-            {...register("surcharge_percent")}
+            placeholder="0.00"
+            {...register("surcharge_percent", {
+              setValueAs: parseNumericField,
+            })}
+            onFocus={(e) =>
+              handleNumericInputFocus(e, {
+                isNew: !paymentMethod || paymentMethod.surcharge_percent === 0,
+                onClear: () => setValue("surcharge_percent", "" as any),
+              })
+            }
+            onBlur={(e) => {
+              handleNumericInputBlur(e, "0", () => {
+                setValue("surcharge_percent", 0);
+              });
+            }}
             className="ui-input"
             disabled={disabled}
           />
@@ -126,7 +141,21 @@ export const PaymentMethodForm = ({
             type="number"
             step="0.01"
             min="0"
-            {...register("discount_percent")}
+            placeholder="0.00"
+            {...register("discount_percent", {
+              setValueAs: parseNumericField,
+            })}
+            onFocus={(e) =>
+              handleNumericInputFocus(e, {
+                isNew: !paymentMethod || paymentMethod.discount_percent === 0,
+                onClear: () => setValue("discount_percent", "" as any),
+              })
+            }
+            onBlur={(e) => {
+              handleNumericInputBlur(e, "0", () => {
+                setValue("discount_percent", 0);
+              });
+            }}
             className="ui-input"
             disabled={disabled}
           />

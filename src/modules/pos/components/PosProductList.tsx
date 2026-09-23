@@ -10,6 +10,7 @@ import {
   getSearchPlaceholder,
   type ProductSearchScope,
 } from "@/utils/search";
+import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
 
 export interface PosSaleTabItem {
   id: string;
@@ -132,7 +133,7 @@ export const PosProductList = ({
   );
 
   const resolveWeightQuantity = (productId: string) => {
-    const raw = weightInputs[productId] ?? "500";
+    const raw = weightInputs[productId] ?? "0";
     const parsed = Number(raw);
     return Number.isFinite(parsed) && parsed > 0 ? gramsToKg(parsed) : 0;
   };
@@ -140,51 +141,26 @@ export const PosProductList = ({
   const quickAddProduct = async (product: Product) => {
     if (disabled || !canWrite) return;
     const quantity = product.sale_mode === "weight" ? resolveWeightQuantity(product.id) : 1;
-    if (!Number.isFinite(quantity) || quantity <= 0) return;
     await onAddProduct(product, quantity);
   };
 
   const renderAddProductAction = (product: Product, isFavoriteCard = false) => {
-    const weightValue = weightInputs[product.id] ?? "300";
+    const weightValue = weightInputs[product.id] ?? "0";
     const weightQty = gramsToKg(Number(weightValue));
 
     if (isFavoriteCard) {
       return (
-        <div className="flex w-full items-center gap-1.5">
-          {product.sale_mode === "weight" ? (
-            <div className="flex flex-1 items-center rounded-xl border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800">
-              <input
-                type="number"
-                step="50"
-                min="1"
-                value={weightValue}
-                onChange={(event) =>
-                  setWeightInputs((prev) => ({
-                    ...prev,
-                    [product.id]: event.target.value,
-                  }))
-                }
-                className="w-full bg-transparent text-xs font-semibold focus:outline-none"
-                disabled={disabled || !canWrite}
-                title="Cantidad en gramos. Ej: 300 = 300 g"
-              />
-              <span className="text-[10px] text-slate-400">g</span>
-            </div>
-          ) : null}
-
-          <button
-            type="button"
-            onClick={() => {
-              if (disabled || !canWrite) return;
-              if (product.sale_mode === "weight" && (!Number.isFinite(weightQty) || weightQty <= 0)) return;
-              void onAddProduct(product, product.sale_mode === "weight" ? weightQty : 1);
-            }}
-            disabled={disabled || !canWrite}
-            className="ui-btn-primary flex-1 justify-center py-1.5 text-xs font-semibold"
-          >
-            Agregar
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (disabled || !canWrite) return;
+            void onAddProduct(product, 0);
+          }}
+          disabled={disabled || !canWrite}
+          className="ui-btn-primary w-full justify-center py-2 text-xs font-semibold shadow-sm"
+        >
+          Agregar
+        </button>
       );
     }
 
@@ -194,17 +170,29 @@ export const PosProductList = ({
           <input
             type="number"
             step="1"
-            min="1"
+            min="0"
             value={weightValue}
+            placeholder="0"
             onChange={(event) =>
               setWeightInputs((prev) => ({
                 ...prev,
                 [product.id]: event.target.value,
               }))
             }
-            className="w-24 rounded-xl border border-slate-300 px-2 py-1 text-sm"
+            onFocus={(event) =>
+              handleNumericInputFocus(event, {
+                isNew: true,
+                onClear: () => setWeightInputs((prev) => ({ ...prev, [product.id]: "" })),
+              })
+            }
+            onBlur={(event) =>
+              handleNumericInputBlur(event, "0", (def) =>
+                setWeightInputs((prev) => ({ ...prev, [product.id]: def }))
+              )
+            }
+            className="w-24 rounded-xl border border-slate-300 px-2 py-1 text-sm text-center"
             disabled={disabled || !canWrite}
-            title="Cantidad en gramos. Ej: 300 = 300 g"
+            title="Cantidad en gramos"
           />
         ) : null}
 
@@ -212,7 +200,6 @@ export const PosProductList = ({
           type="button"
           onClick={() => {
             if (disabled || !canWrite) return;
-            if (product.sale_mode === "weight" && (!Number.isFinite(weightQty) || weightQty <= 0)) return;
             void onAddProduct(product, product.sale_mode === "weight" ? weightQty : 1);
           }}
           disabled={disabled || !canWrite}
@@ -308,7 +295,7 @@ export const PosProductList = ({
           <path d="m20 20-3.2-3.2" />
         </svg>
         <input
-          type="search"
+          type="text"
           value={activeTab === "favorites" ? favoritesSearch : productsSearch}
           onChange={(event) =>
             activeTab === "favorites"

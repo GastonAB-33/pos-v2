@@ -8,6 +8,7 @@ import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { useProductsStore } from "@/features/products/store/products.store";
 import type { Product } from "@/types/entities";
 import type { StockBatchAdjustmentValues } from "@/modules/stock/types/stock-adjustment.types";
+import { handleNumericInputFocus, isDefaultZero } from "@/utils/input-helpers";
 
 interface StockAdjustmentModalProps {
   open: boolean;
@@ -70,7 +71,7 @@ export const StockAdjustmentModal = ({
       : null;
     if (!matchedProduct) {
       matchedProduct =
-        products.find((p) => p.code.trim().toLowerCase() === normalized) ?? null;
+        products.find((p) => p.code?.trim().toLowerCase() === normalized) ?? null;
     }
 
     if (matchedProduct) {
@@ -86,7 +87,7 @@ export const StockAdjustmentModal = ({
 
     return products.filter((product) => {
       const productBarcodes = (barcodesByProductId.get(product.id) ?? []).join(" ");
-      const target = `${product.name} ${product.code} ${product.category} ${product.subcategory ?? ""} ${productBarcodes}`.toLowerCase();
+      const target = `${product.name} ${product.code ?? ""} ${product.category} ${product.subcategory ?? ""} ${productBarcodes}`.toLowerCase();
       return target.includes(normalizedSearch);
     });
   }, [products, search, barcodesByProductId]);
@@ -248,6 +249,12 @@ export const StockAdjustmentModal = ({
                             step="0.001"
                             value={draft.quantityIn}
                             onChange={(event) => updateDraft(product.id, { quantityIn: event.target.value })}
+                            onFocus={(e) =>
+                              handleNumericInputFocus(e, {
+                                isNew: isDefaultZero(draft.quantityIn),
+                                onClear: () => updateDraft(product.id, { quantityIn: "" }),
+                              })
+                            }
                             className="ui-input"
                             placeholder="0"
                             title={product.sale_mode === "weight" ? "Cantidad en kg" : "Cantidad en unidades"}
@@ -261,6 +268,12 @@ export const StockAdjustmentModal = ({
                             step="0.001"
                             value={draft.quantityOut}
                             onChange={(event) => updateDraft(product.id, { quantityOut: event.target.value })}
+                            onFocus={(e) =>
+                              handleNumericInputFocus(e, {
+                                isNew: isDefaultZero(draft.quantityOut),
+                                onClear: () => updateDraft(product.id, { quantityOut: "" }),
+                              })
+                            }
                             className="ui-input"
                             placeholder="0"
                             title={product.sale_mode === "weight" ? "Cantidad en kg" : "Cantidad en unidades"}

@@ -4,8 +4,10 @@ import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
 import {
   AlertTriangle,
+  AppWindow,
   Building2,
   CheckCircle2,
+  ExternalLink,
   FileText,
   Package,
   Palette,
@@ -25,6 +27,7 @@ import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { useAccountingCatalogs } from "@/modules/configuracion/hooks/useAccountingCatalogs";
 import { useConfiguracionModule } from "@/modules/configuracion/hooks/useConfiguracionModule";
 import { useUiStore, type UiFontSize } from "@/store/ui.store";
+import { cn } from "@/utils/cn";
 import type { AppModule } from "@/types/modules";
 import type {
   AppearanceSettings,
@@ -266,6 +269,8 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
   const setDensity = useUiStore((state) => state.setDensity);
   const fontSize = useUiStore((state) => state.fontSize);
   const setFontSize = useUiStore((state) => state.setFontSize);
+  const posWindowMode = useUiStore((state) => state.posWindowMode);
+  const setPosWindowMode = useUiStore((state) => state.setPosWindowMode);
 
   const [activeTab, setActiveTab] = useState<ConfigTabKey>(() => {
     if (scopePreset.visibleSections.apariencia && scope === "sistema") return "apariencia";
@@ -790,6 +795,71 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.pos.allow_negative_stock} onChange={(event) => updateSection("pos", { allow_negative_stock: event.target.checked })} disabled={!canWriteConfiguracion} />
                   <span>Permitir venta sin stock disponible</span>
                 </label>
+              </div>
+            </div>
+
+            <div className="md:col-span-2 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Modo de Apertura del Punto de Venta
+                </span>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Elegí cómo preferís que se abra la terminal POS al hacer clic en los accesos directos
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setPosWindowMode("same_tab")}
+                  className={cn(
+                    "flex flex-col rounded-lg border p-3.5 text-left transition-all",
+                    posWindowMode === "same_tab"
+                      ? "border-blue-600 bg-white ring-2 ring-blue-500/20 dark:border-blue-500 dark:bg-slate-900"
+                      : "border-slate-200 bg-white/70 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/50"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100">
+                      <AppWindow size={16} className="text-blue-600 dark:text-blue-400" />
+                      Misma pestaña (Integrado)
+                    </span>
+                    {posWindowMode === "same_tab" ? (
+                      <span className="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                        ACTIVO
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Navega dentro de la ventana actual manteniendo el menú lateral y las demás herramientas del sistema a mano.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPosWindowMode("new_window")}
+                  className={cn(
+                    "flex flex-col rounded-lg border p-3.5 text-left transition-all",
+                    posWindowMode === "new_window"
+                      ? "border-blue-600 bg-white ring-2 ring-blue-500/20 dark:border-blue-500 dark:bg-slate-900"
+                      : "border-slate-200 bg-white/70 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/50"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100">
+                      <ExternalLink size={16} className="text-blue-600 dark:text-blue-400" />
+                      Nueva ventana / pestaña
+                    </span>
+                    {posWindowMode === "new_window" ? (
+                      <span className="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                        ACTIVO
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Abre el Punto de Venta en una ventana independiente. Ideal para trabajar en pantalla completa o utilizar un segundo monitor en caja.
+                  </p>
+                </button>
               </div>
             </div>
           </div>

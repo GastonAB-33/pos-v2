@@ -135,7 +135,7 @@ export const StockTrackingTable = ({
       : null;
     if (!matchedProduct) {
       matchedProduct =
-        products.find((p) => p.code.trim().toLowerCase() === normalized) ?? null;
+        products.find((p) => p.code?.trim().toLowerCase() === normalized) ?? null;
     }
 
     if (matchedProduct) {

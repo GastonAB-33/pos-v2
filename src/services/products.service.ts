@@ -114,7 +114,7 @@ export const productsService = {
     if (!matches.length) {
       const allProducts = await crud.getAllByTenant(tenantId);
       const matchedProduct = allProducts.find(
-        (item) => normalizeBarcode(item.code) === barcode
+        (item) => Boolean(item.code) && normalizeBarcode(item.code as string) === barcode
       );
       return matchedProduct ?? null;
     }

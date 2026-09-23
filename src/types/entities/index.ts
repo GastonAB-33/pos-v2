@@ -68,4 +68,9 @@ export type {
   CashSessionStatus,
   CashMovementType,
   CurrentAccountPricingMode,
+  GeneralCashMovement,
+  GeneralCashMovementType,
+  GeneralCashOriginType,
+  SupplierCurrentAccountMovement,
+  SupplierCurrentAccountMovementType,
 } from "@/types/entities/mvp.entities";

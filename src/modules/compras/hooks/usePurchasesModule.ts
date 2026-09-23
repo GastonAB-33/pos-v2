@@ -6,6 +6,7 @@ import { useProductsStore } from "@/features/products/store/products.store";
 import { purchasesService } from "@/services/purchases.service";
 import { stockService } from "@/services/stock.service";
 import { suppliersService } from "@/services/suppliers.service";
+import { supplierCurrentAccountsService } from "@/services/supplier-current-accounts.service";
 import type { Product, ProductBarcode, Purchase, PurchaseItem, Supplier } from "@/types/entities";
 import type { ProductFormModalValues } from "@/modules/productos/types/product.types";
 import type { PurchaseCheckoutValues } from "@/modules/compras/schemas/purchase-checkout.schema";
@@ -52,7 +53,7 @@ const similarityScore = (left: string, right: string): number => {
 };
 
 const toProductCreateInput = (values: ProductFormModalValues) => ({
-  code: values.codigoProducto || `PRD-${Date.now().toString().slice(-6)}`,
+  code: values.codigoProducto?.trim() || null,
   name: values.nombre,
   image_url: values.imagenUrl?.trim() || null,
   brand: null,
@@ -61,7 +62,9 @@ const toProductCreateInput = (values: ProductFormModalValues) => ({
   description: null,
   price: roundAmount(values.precioFinal),
   cost_price: roundAmount(values.precioCosto),
+  cost: roundAmount(values.precioCosto),
   stock_current: roundQty(values.stock),
+  stock: roundQty(values.stock),
   stock_min: null,
   stock_max: null,
   category: values.categoria || "General",
@@ -147,6 +150,16 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     void loadData();
   }, [loadData]);
 
+  const barcodesByProductId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const b of productBarcodes) {
+      const list = map.get(b.product_id) ?? [];
+      list.push(b.barcode);
+      map.set(b.product_id, list);
+    }
+    return map;
+  }, [productBarcodes]);
+
   const filteredProducts = useMemo(() => {
     const rawSearch = search.trim();
     const activeProducts = products.filter((product) => product.is_active);
@@ -157,6 +170,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         {
           name: product.name,
           code: product.code,
+          barcodes: barcodesByProductId.get(product.id) ?? [],
           category: product.category,
           subcategory: product.subcategory,
         },
@@ -164,9 +178,10 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         "all"
       )
     );
-  }, [products, search]);
+  }, [barcodesByProductId, products, search]);
 
-  const addProductToCart = (product: Product) => {
+  const addProductToCart = (product: Product, initialQuantity?: number) => {
+    const qtyToAdd = initialQuantity && initialQuantity > 0 ? initialQuantity : 1;
     setCart((prev) => {
       const existing = prev.find((item) => item.product_id === product.id);
       if (existing) {
@@ -174,7 +189,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
           item.product_id === product.id
             ? {
                 ...item,
-                quantity: roundQty(item.quantity + 1),
+                quantity: roundQty(item.quantity + qtyToAdd),
                 sale_mode: product.sale_mode,
                 stock_current: product.stock_current,
               }
@@ -214,7 +229,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
           product_id: product.id,
           name: product.name,
           sale_mode: product.sale_mode,
-          quantity: 1,
+          quantity: qtyToAdd,
           unit_cost: costPrice,
           vat_percent: vatPercent,
           bonified_quantity: 0,
@@ -448,7 +463,14 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
           productUpdatePayload.profit_percent = backward.porcentajeGanancia;
         }
 
-        await productsService.update(tenantId, item.product_id, productUpdatePayload);
+        const updated = await productsService.update(tenantId, item.product_id, {
+          ...productUpdatePayload,
+          stock: newStock,
+          cost: productUpdatePayload.cost_price,
+        } as Partial<Product>);
+        if (updated) {
+          useProductsStore.getState().upsertProduct(updated);
+        }
       }
 
       let cashMovementId: string | null = null;
@@ -466,6 +488,20 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
           created_by: userId,
         });
         cashMovementId = cashMovement.id;
+      }
+
+      if (values.paymentMethod === "current_account" && purchase.supplier_id && summary.total > 0) {
+        try {
+          await supplierCurrentAccountsService.registerDebt(tenantId, {
+            supplierId: purchase.supplier_id,
+            purchaseId: purchase.id,
+            amount: summary.total,
+            notes: `Compra a crédito #${purchase.purchase_number} - ${values.documentType} ${values.documentNumber || ""}`.trim(),
+            createdBy: userId ?? undefined,
+          });
+        } catch (debtError) {
+          console.error("Error al registrar deuda en cuenta corriente de proveedor:", debtError);
+        }
       }
 
       await auditService.createSafe(tenantId, {
@@ -496,10 +532,18 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         }`,
       });
       clearCart();
+      useProductsStore.getState().loadCatalog(tenantId, true).catch(() => {});
       await loadData();
       return purchase;
-    } catch {
-      setFeedback({ type: "error", message: "No se pudo registrar la compra" });
+    } catch (error) {
+      console.error("[usePurchasesModule] confirmPurchase failed:", error);
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : typeof error === "object" && error !== null && "message" in error
+          ? String((error as { message: unknown }).message)
+          : "No se pudo registrar la compra";
+      setFeedback({ type: "error", message });
       return null;
     } finally {
       setIsSubmitting(false);
@@ -577,6 +621,19 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
           created_by: userId,
         });
         cashMovementId = movement.id;
+      }
+
+      if (purchase.payment_method === "current_account" && purchase.supplier_id && payload.totalRefund > 0) {
+        try {
+          await supplierCurrentAccountsService.registerPayment(tenantId, {
+            supplierId: purchase.supplier_id,
+            amount: payload.totalRefund,
+            notes: `Crédito por devolución en compra #${purchase.purchase_number}: ${payload.reason}`,
+            createdBy: userId ?? undefined,
+          });
+        } catch (returnDebtErr) {
+          console.error("Error al registrar ajuste en cuenta corriente de proveedor:", returnDebtErr);
+        }
       }
 
       const newReturnedTotal = roundAmount((purchase.returned_total || 0) + payload.totalRefund);
@@ -690,7 +747,52 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
 
     let product = barcodeRow
       ? products.find((candidate) => candidate.id === barcodeRow.product_id) ?? null
-      : products.find((candidate) => normalizeBarcode(candidate.code) === barcode) ?? null;
+      : products.find((candidate) => Boolean(candidate.code) && normalizeBarcode(candidate.code) === barcode) ?? null;
+
+    if (!product) {
+      // Coincidencia quitando ceros a la izquierda (ej: 0045 -> 45)
+      const numericBarcode = barcode.replace(/^0+/, "");
+      if (numericBarcode) {
+        product =
+          products.find(
+            (p) =>
+              Boolean(p.code) &&
+              normalizeBarcode(p.code).replace(/^0+/, "") === numericBarcode
+          ) ?? null;
+      }
+    }
+
+    let detectedWeight: number | undefined = undefined;
+
+    // Reconocimiento de códigos de balanza estándar (EAN-13 que comienzan con 20..29)
+    if (!product && barcode.length === 13 && /^\d{13}$/.test(barcode)) {
+      const prefix = barcode.slice(0, 2);
+      if (["20", "21", "22", "23", "24", "25", "26", "27", "28", "29"].includes(prefix)) {
+        const candidatePlu5 = barcode.slice(2, 7);
+        const candidatePlu4 = barcode.slice(2, 6);
+        const normPlu5 = candidatePlu5.replace(/^0+/, "");
+        const normPlu4 = candidatePlu4.replace(/^0+/, "");
+
+        const matchedByPlu = products.find((p) => {
+          if (!p.code) return false;
+          const pCodeNorm = normalizeBarcode(p.code).replace(/^0+/, "");
+          return (
+            pCodeNorm === normPlu5 ||
+            pCodeNorm === normPlu4 ||
+            p.code === candidatePlu5 ||
+            p.code === candidatePlu4
+          );
+        });
+
+        if (matchedByPlu) {
+          product = matchedByPlu;
+          const weightRaw = Number(barcode.slice(7, 12));
+          if (!Number.isNaN(weightRaw) && weightRaw > 0) {
+            detectedWeight = Number((weightRaw / 1000).toFixed(3));
+          }
+        }
+      }
+    }
 
     if (!product) {
       try {
@@ -704,7 +806,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       return { ok: false, error: `No se encontró un producto activo para ${barcode}` };
     }
 
-    addProductToCart(product);
+    addProductToCart(product, detectedWeight);
     return { ok: true, product };
   };
 
@@ -737,6 +839,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         setProductBarcodes(refreshedBarcodes);
       }
       addProductToCart(created);
+      useProductsStore.getState().upsertProduct(created);
 
       await auditService.createSafe(tenantId, {
         user_id: userId,
