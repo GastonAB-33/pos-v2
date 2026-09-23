@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check, Gift, Package, PackagePlus, Percent, Plus, ShoppingBag, Trash2 } from "lucide-react";
+import { handleNumericInputFocus } from "@/utils/input-helpers";
 
 export interface PurchaseCartItemView {
   product_id: string;
@@ -91,7 +92,8 @@ export const PurchaseCart = ({
   const commitQuantity = (item: PurchaseCartItemView) => {
     const raw = quantityDrafts[item.product_id];
     if (raw == null) return;
-    const parsed = Number(raw);
+    const sanitized = raw.trim().replace(",", ".");
+    const parsed = Number(sanitized);
     if (Number.isFinite(parsed) && parsed >= 0) {
       onSetQuantity(item.product_id, parsed);
     }
@@ -104,7 +106,8 @@ export const PurchaseCart = ({
   const commitCost = (item: PurchaseCartItemView) => {
     const raw = costDrafts[item.product_id];
     if (raw == null) return;
-    const parsed = Number(raw);
+    const sanitized = raw.trim().replace(",", ".");
+    const parsed = Number(sanitized);
     if (Number.isFinite(parsed) && parsed >= 0) {
       onSetUnitCost(item.product_id, parsed);
     }
@@ -117,7 +120,8 @@ export const PurchaseCart = ({
   const commitBonified = (item: PurchaseCartItemView) => {
     const raw = bonifiedDrafts[item.product_id];
     if (raw == null) return;
-    const parsed = Number(raw);
+    const sanitized = raw.trim().replace(",", ".");
+    const parsed = Number(sanitized);
     if (Number.isFinite(parsed) && parsed >= 0) {
       onSetBonifiedQuantity(item.product_id, parsed);
     }
@@ -145,7 +149,15 @@ export const PurchaseCart = ({
               </span>
             </div>
             <p className="text-[11px] text-slate-400">
-              Total unidades a sumar en stock: <strong className="text-slate-700">{summary.totalUnits.toLocaleString("es-AR")} u.</strong>
+              Total mercadería a ingresar en stock:{" "}
+              <strong className="text-slate-700">
+                {summary.totalUnits.toLocaleString("es-AR", { maximumFractionDigits: 3 })}{" "}
+                {items.some((i) => i.sale_mode === "weight")
+                  ? items.every((i) => i.sale_mode === "weight")
+                    ? "kg"
+                    : "u. / kg"
+                  : "u."}
+              </strong>
             </p>
           </div>
         </div>
@@ -237,12 +249,27 @@ export const PurchaseCart = ({
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold text-slate-900 truncate">{item.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-bold text-slate-900 truncate">{item.name}</p>
+                      {item.sale_mode === "weight" && (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+                          Balanza (kg)
+                        </span>
+                      )}
+                    </div>
                     <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                      <span>Stock actual: <strong className="text-slate-700">{item.stock_current} {getUnitLabel(item)}</strong></span>
+                      <span>
+                        Stock actual:{" "}
+                        <strong className="text-slate-700">
+                          {item.stock_current.toLocaleString("es-AR", { maximumFractionDigits: 3 })}{" "}
+                          {getUnitLabel(item)}
+                        </strong>
+                      </span>
                       <span>•</span>
                       <span className="font-semibold text-emerald-700">
-                        Ingresa a stock: +{totalStockIn} {getUnitLabel(item)}
+                        Ingresa a stock: +
+                        {totalStockIn.toLocaleString("es-AR", { maximumFractionDigits: 3 })}{" "}
+                        {getUnitLabel(item)}
                       </span>
                     </div>
                   </div>
@@ -266,7 +293,7 @@ export const PurchaseCart = ({
                     </label>
                     <input
                       type="number"
-                      step={item.sale_mode === "weight" ? "0.001" : "1"}
+                      step={item.sale_mode === "weight" ? "any" : "1"}
                       min="0"
                       value={quantityDrafts[item.product_id] ?? String(item.quantity)}
                       onChange={(event) => {
@@ -276,11 +303,16 @@ export const PurchaseCart = ({
                           [item.product_id]: nextValue,
                         }));
                         if (!nextValue.trim()) return;
-                        const parsed = Number(nextValue);
+                        const parsed = Number(nextValue.trim().replace(",", "."));
                         if (Number.isFinite(parsed) && parsed >= 0) {
                           onSetQuantity(item.product_id, parsed);
                         }
                       }}
+                      onFocus={(e) =>
+                        handleNumericInputFocus(e, {
+                          isNew: false,
+                        })
+                      }
                       onBlur={() => commitQuantity(item)}
                       className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                       disabled={disabled || !canWrite}
@@ -293,7 +325,7 @@ export const PurchaseCart = ({
                     </label>
                     <input
                       type="number"
-                      step="0.01"
+                      step="any"
                       min="0"
                       value={costDrafts[item.product_id] ?? String(item.unit_cost)}
                       onChange={(event) => {
@@ -303,11 +335,21 @@ export const PurchaseCart = ({
                           [item.product_id]: nextValue,
                         }));
                         if (!nextValue.trim()) return;
-                        const parsed = Number(nextValue);
+                        const parsed = Number(nextValue.trim().replace(",", "."));
                         if (Number.isFinite(parsed) && parsed >= 0) {
                           onSetUnitCost(item.product_id, parsed);
                         }
                       }}
+                      onFocus={(e) =>
+                        handleNumericInputFocus(e, {
+                          isNew: item.unit_cost === 0,
+                          onClear: () =>
+                            setCostDrafts((current) => ({
+                              ...current,
+                              [item.product_id]: "",
+                            })),
+                        })
+                      }
                       onBlur={() => commitCost(item)}
                       className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                       disabled={disabled || !canWrite}
@@ -340,7 +382,7 @@ export const PurchaseCart = ({
                     </label>
                     <input
                       type="number"
-                      step={item.sale_mode === "weight" ? "0.001" : "1"}
+                      step={item.sale_mode === "weight" ? "any" : "1"}
                       min="0"
                       placeholder="0"
                       value={bonifiedDrafts[item.product_id] ?? String(item.bonified_quantity || 0)}
@@ -351,11 +393,21 @@ export const PurchaseCart = ({
                           [item.product_id]: nextValue,
                         }));
                         if (!nextValue.trim()) return;
-                        const parsed = Number(nextValue);
+                        const parsed = Number(nextValue.trim().replace(",", "."));
                         if (Number.isFinite(parsed) && parsed >= 0) {
                           onSetBonifiedQuantity(item.product_id, parsed);
                         }
                       }}
+                      onFocus={(e) =>
+                        handleNumericInputFocus(e, {
+                          isNew: (item.bonified_quantity || 0) === 0,
+                          onClear: () =>
+                            setBonifiedDrafts((current) => ({
+                              ...current,
+                              [item.product_id]: "",
+                            })),
+                        })
+                      }
                       onBlur={() => commitBonified(item)}
                       className="w-full rounded-md border border-emerald-300 bg-emerald-50/40 px-2 py-1 text-xs font-bold text-emerald-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                       disabled={disabled || !canWrite}

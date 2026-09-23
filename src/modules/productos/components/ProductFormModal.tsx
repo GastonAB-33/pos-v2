@@ -17,6 +17,7 @@ import {
   type ProductFormValues,
 } from "@/modules/productos/schemas/product-form.schema";
 import type { ProductFormModalValues, ProductViewModel } from "@/modules/productos/types/product.types";
+import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
 
 type CalcMode = "forward" | "backward";
 
@@ -514,9 +515,21 @@ export const ProductFormModal = ({
                     inputMode="decimal"
                     min={0}
                     step="0.001"
+                    placeholder="0"
                     {...register("stock", {
                       setValueAs: parseNumericField,
                     })}
+                    onFocus={(e) =>
+                      handleNumericInputFocus(e, {
+                        isNew: mode === "create",
+                        onClear: () => setValue("stock", "" as any),
+                      })
+                    }
+                    onBlur={(e) => {
+                      handleNumericInputBlur(e, "0", () => {
+                        setValue("stock", 0);
+                      });
+                    }}
                     className="ui-input"
                     disabled={disabled}
                   />
@@ -788,11 +801,23 @@ export const ProductFormModal = ({
                 <input
                   type="number"
                   step="0.01"
+                  placeholder="0.00"
                   {...register("precioCosto", {
                     setValueAs: parseNumericField,
                     onChange: () => setCalcMode("forward"),
-                    onBlur: applyForwardPricing,
                   })}
+                  onFocus={(e) =>
+                    handleNumericInputFocus(e, {
+                      isNew: mode === "create",
+                      onClear: () => setValue("precioCosto", "" as any),
+                    })
+                  }
+                  onBlur={(e) => {
+                    handleNumericInputBlur(e, "0", () => {
+                      setValue("precioCosto", 0);
+                    });
+                    applyForwardPricing();
+                  }}
                   className="ui-input"
                   disabled={disabled}
                 />
@@ -806,11 +831,23 @@ export const ProductFormModal = ({
                 <input
                   type="number"
                   step="0.01"
+                  placeholder="0.00"
                   {...register("porcentajeGanancia", {
                     setValueAs: parseNumericField,
                     onChange: () => setCalcMode("forward"),
-                    onBlur: applyForwardPricing,
                   })}
+                  onFocus={(e) =>
+                    handleNumericInputFocus(e, {
+                      isNew: mode === "create",
+                      onClear: () => setValue("porcentajeGanancia", "" as any),
+                    })
+                  }
+                  onBlur={(e) => {
+                    handleNumericInputBlur(e, "0", () => {
+                      setValue("porcentajeGanancia", 0);
+                    });
+                    applyForwardPricing();
+                  }}
                   className="ui-input"
                   disabled={disabled}
                 />
@@ -844,11 +881,17 @@ export const ProductFormModal = ({
                 <input
                   type="number"
                   step="0.01"
+                  placeholder="21"
                   {...register("porcentajeIva", {
                     setValueAs: parseNumericField,
                     onChange: () => setCalcMode("forward"),
                     onBlur: applyForwardPricing,
                   })}
+                  onFocus={(e) =>
+                    handleNumericInputFocus(e, {
+                      isNew: false,
+                    })
+                  }
                   className="ui-input"
                   disabled={disabled}
                 />
@@ -869,11 +912,23 @@ export const ProductFormModal = ({
                 <input
                   type="number"
                   step="0.01"
+                  placeholder="0.00"
                   {...register("precioFinal", {
                     setValueAs: parseNumericField,
                     onChange: () => setCalcMode("backward"),
-                    onBlur: applyBackwardPricing,
                   })}
+                  onFocus={(e) =>
+                    handleNumericInputFocus(e, {
+                      isNew: mode === "create",
+                      onClear: () => setValue("precioFinal", "" as any),
+                    })
+                  }
+                  onBlur={(e) => {
+                    handleNumericInputBlur(e, "0", () => {
+                      setValue("precioFinal", 0);
+                    });
+                    applyBackwardPricing();
+                  }}
                   className="ui-input border-emerald-200 bg-emerald-50 text-base font-semibold"
                   disabled={disabled}
                 />

@@ -23,6 +23,7 @@ import { PosQuickProductModal } from "@/modules/pos/components/PosQuickProductMo
 import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
 import { usePosSale } from "@/modules/pos/hooks/usePosSale";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
+import { useProductsStore } from "@/features/products/store/products.store";
 import type { OpenCashValues } from "@/modules/caja/schemas/cash.schemas";
 import { auditService } from "@/services/audit.service";
 import { cashService } from "@/services/cash.service";
@@ -181,7 +182,7 @@ export const PosPage = () => {
   const [isCustomerModalSubmitting, setIsCustomerModalSubmitting] = useState(false);
   const [clientLogoUrl, setClientLogoUrl] = useState<string | null>(null);
   const [clientDisplayName, setClientDisplayName] = useState("POS");
-  const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false);
   const [openCashSessionId, setOpenCashSessionId] = useState<string | null>(null);
   const [resolvedOperatorUserId, setResolvedOperatorUserId] = useState<string | null>(null);
   const [isResolvingOperatorUser, setIsResolvingOperatorUser] = useState(false);
@@ -1198,35 +1199,35 @@ export const PosPage = () => {
     };
   }, [tenant?.legalName, tenant?.tradeName, tenantId]);
 
-  const handleSynchronize = useCallback(async () => {
-    if (isManualSyncing) return;
+  const handleRefreshCatalog = useCallback(async () => {
+    if (isRefreshingCatalog) return;
 
-    setIsManualSyncing(true);
+    setIsRefreshingCatalog(true);
     clearSyncError();
 
     try {
       const results = await Promise.allSettled([
         syncNow(),
-        reload(),
+        reload(true),
         loadRecentReceipts(),
         loadCashSessionGate(),
       ]);
       const hasError = results.some((result) => result.status === "rejected");
 
       if (hasError) {
-        toastError("No se pudo completar la sincronizacion.");
-        return;
+        toastError("No se pudieron actualizar todos los datos.");
+      } else {
+        const count = useProductsStore.getState().products.length;
+        toastSuccess(`Catálogo actualizado (${count} productos).`);
       }
-
-      toastSuccess("Sincronizacion completada.");
     } finally {
-      setIsManualSyncing(false);
+      setIsRefreshingCatalog(false);
     }
   }, [
     clearSyncError,
-    isManualSyncing,
-    loadRecentReceipts,
+    isRefreshingCatalog,
     loadCashSessionGate,
+    loadRecentReceipts,
     reload,
     syncNow,
     toastError,
@@ -1344,15 +1345,23 @@ export const PosPage = () => {
                 }, 80);
               }}
             />
-            <IconButton
-              icon={RefreshCw}
-              label="Sincronizar punto de venta"
-              className={isManualSyncing || isSyncing ? "animate-spin" : ""}
+            <button
+              type="button"
               onClick={() => {
-                void handleSynchronize();
+                void handleRefreshCatalog();
               }}
-              disabled={isManualSyncing || isSubmitting}
-            />
+              disabled={isRefreshingCatalog || isSubmitting}
+              className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
+              title="Actualizar productos y catálogo desde el servidor"
+            >
+              <RefreshCw
+                size={14}
+                className={isRefreshingCatalog || isSyncing ? "animate-spin text-brand-600" : ""}
+              />
+              <span className="hidden sm:inline">
+                {isRefreshingCatalog ? "Actualizando..." : "Actualizar productos"}
+              </span>
+            </button>
             {isInstallSupported && canInstall ? (
               <button
                 type="button"

@@ -36,7 +36,7 @@ export interface PermissionProfileRecord extends TenantScopedEntity {
 }
 
 export interface Product extends TenantScopedEntity {
-  code: string;
+  code: string | null;
   name: string;
   image_url?: string | null;
   brand: string | null;
@@ -94,6 +94,7 @@ export interface Supplier extends TenantScopedEntity {
   email: string | null;
   address: string | null;
   observations: string | null;
+  current_balance?: number;
   is_active: boolean;
 }
 
@@ -244,6 +245,40 @@ export interface CurrentAccountMovement extends TenantScopedEntity {
   type: CurrentAccountMovementType;
   amount: number;
   balance_after: number;
+  notes: string | null;
+  created_by: string | null;
+}
+
+export type SupplierCurrentAccountMovementType = "debt" | "payment" | "adjustment";
+
+export interface SupplierCurrentAccountMovement extends TenantScopedEntity {
+  supplier_id: string;
+  purchase_id: string | null;
+  type: SupplierCurrentAccountMovementType;
+  amount: number;
+  balance_after: number;
+  payment_method_code: string | null;
+  payment_method_id?: string | null;
+  notes: string | null;
+  created_by: string | null;
+}
+
+export type GeneralCashMovementType = "income" | "expense";
+export type GeneralCashOriginType =
+  | "daily_cash_close"
+  | "daily_cash_open"
+  | "manual_income"
+  | "manual_expense"
+  | "bank_deposit"
+  | "supplier_payment";
+
+export interface GeneralCashMovement extends TenantScopedEntity {
+  type: GeneralCashMovementType;
+  amount: number;
+  origin_type: GeneralCashOriginType;
+  concept: string;
+  balance_after: number;
+  reference_id: string | null;
   notes: string | null;
   created_by: string | null;
 }

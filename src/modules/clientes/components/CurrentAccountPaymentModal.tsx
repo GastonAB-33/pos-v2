@@ -17,6 +17,7 @@ import type {
   CurrentAccountSummary,
   RegisterCurrentAccountPaymentValues,
 } from "@/modules/clientes/hooks/useCurrentAccount";
+import { handleNumericInputFocus } from "@/utils/input-helpers";
 
 interface CurrentAccountPaymentModalProps {
   open: boolean;
@@ -501,6 +502,12 @@ export const CurrentAccountPaymentModal = ({
                   setAmountInput(event.target.value);
                   setErrorMessage(null);
                 }}
+                onFocus={(e) =>
+                  handleNumericInputFocus(e, {
+                    isNew: amountInput === "0" || amountInput === "0.00" || amountInput === "0,00",
+                    onClear: () => setAmountInput(""),
+                  })
+                }
                 className="ui-input"
                 disabled={busy}
               />
@@ -590,6 +597,12 @@ export const CurrentAccountPaymentModal = ({
                       if (nextPreview > 0) setAmountInput(nextPreview.toFixed(2));
                       setErrorMessage(null);
                     }}
+                    onFocus={(e) =>
+                      handleNumericInputFocus(e, {
+                        isNew: surchargePercent === "" || surchargePercent === "0",
+                        onClear: () => setSurchargePercent(""),
+                      })
+                    }
                     placeholder="Porcentaje de recargo final"
                     disabled={busy}
                   />
@@ -612,6 +625,12 @@ export const CurrentAccountPaymentModal = ({
                       if (nextPreview > 0) setAmountInput(nextPreview.toFixed(2));
                       setErrorMessage(null);
                     }}
+                    onFocus={(e) =>
+                      handleNumericInputFocus(e, {
+                        isNew: surchargeAmount === "" || surchargeAmount === "0",
+                        onClear: () => setSurchargeAmount(""),
+                      })
+                    }
                     placeholder="Monto fijo de recargo final"
                     disabled={busy}
                   />

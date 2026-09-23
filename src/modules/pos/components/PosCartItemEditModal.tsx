@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { PosCartItemEditInput } from "@/modules/pos/hooks/usePosSale";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
+import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
 
 interface PosCartItemView {
   product_id: string;
@@ -85,13 +86,45 @@ export const PosCartItemEditModal = ({
             <label className="mb-1 block text-sm font-medium text-slate-700">
               {item.sale_mode === "weight" ? "Cantidad (gramos)" : "Cantidad"}
             </label>
-            <input type="number" min="0.001" step="0.001" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="ui-input" />
+            <input
+              type="number"
+              min="0"
+              step={item.sale_mode === "weight" ? "50" : "0.001"}
+              value={quantity}
+              onChange={(event) => setQuantity(event.target.value)}
+              onFocus={(e) =>
+                handleNumericInputFocus(e, {
+                  isNew: quantity === "0" || quantity === "0.00" || quantity === "0,00",
+                  onClear: () => setQuantity(""),
+                })
+              }
+              onBlur={(e) =>
+                handleNumericInputBlur(e, item.sale_mode === "weight" ? "0" : "1", (val) => setQuantity(val))
+              }
+              className="ui-input"
+            />
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
               {item.sale_mode === "weight" ? "Precio por kg" : "Precio unitario"}
             </label>
-            <input type="number" min="0.01" step="0.01" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} className="ui-input" />
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={unitPrice}
+              onChange={(event) => setUnitPrice(event.target.value)}
+              onFocus={(e) =>
+                handleNumericInputFocus(e, {
+                  isNew: unitPrice === "0" || unitPrice === "0.00" || unitPrice === "0,00",
+                  onClear: () => setUnitPrice(""),
+                })
+              }
+              onBlur={(e) =>
+                handleNumericInputBlur(e, "0", (val) => setUnitPrice(val))
+              }
+              className="ui-input"
+            />
           </div>
         </div>
 

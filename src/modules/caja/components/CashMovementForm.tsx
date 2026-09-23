@@ -8,6 +8,7 @@ import {
 } from "@/modules/caja/schemas/cash.schemas";
 import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
 import type { PaymentMethod } from "@/types/entities";
+import { handleNumericInputFocus, handleNumericInputBlur, parseNumericField } from "@/utils/input-helpers";
 
 interface CashMovementFormProps {
   mode: "income" | "expense";
@@ -83,7 +84,21 @@ export const CashMovementForm = ({
           <input
             type="number"
             step="0.01"
-            {...register("amount")}
+            placeholder="0.00"
+            {...register("amount", {
+              setValueAs: parseNumericField,
+            })}
+            onFocus={(e) =>
+              handleNumericInputFocus(e, {
+                isNew: true,
+                onClear: () => setValue("amount", "" as any),
+              })
+            }
+            onBlur={(e) => {
+              handleNumericInputBlur(e, "0", () => {
+                setValue("amount", 0);
+              });
+            }}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled || !canWrite}
           />
@@ -109,4 +124,3 @@ export const CashMovementForm = ({
     </section>
   );
 };
-

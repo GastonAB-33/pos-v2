@@ -97,19 +97,6 @@ type ProductWriteValues = ProductFormValues & {
   imagenEliminada?: boolean;
 };
 
-const buildProductCode = (name: string): string => {
-  const normalized = name
-    .toUpperCase()
-    .replace(/[^A-Z0-9\s]/g, "")
-    .trim()
-    .split(/\s+/)
-    .slice(0, 3)
-    .map((part) => part.slice(0, 3))
-    .join("");
-
-  return `${normalized || "PRD"}-${Date.now().toString().slice(-6)}`;
-};
-
 const toServiceInput = (
   values: ProductFormValues,
   options?: {
@@ -131,9 +118,13 @@ const toServiceInput = (
   const normalizedImageUrl =
     typeof values.imagenUrl === "string" ? values.imagenUrl.trim() : undefined;
   const hasForcedImageUrl = options && Object.prototype.hasOwnProperty.call(options, "forcedImageUrl");
+  const normalizedCode =
+    typeof values.codigoProducto === "string"
+      ? values.codigoProducto.trim() || null
+      : options?.existingCode ?? null;
 
   return {
-    code: values.codigoProducto || options?.existingCode || buildProductCode(values.nombre),
+    code: normalizedCode,
     name: values.nombre || options?.existingName || "Producto",
     image_url: hasForcedImageUrl
       ? options?.forcedImageUrl ?? null
@@ -629,8 +620,11 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
         metadata: {
           previous_name: existing.name,
           next_name: values.nombre,
-          previous_code: existing.code,
-          next_code: values.codigoProducto || existing.code,
+          previous_code: existing.code ?? null,
+          next_code:
+            typeof values.codigoProducto === "string"
+              ? values.codigoProducto.trim() || null
+              : existing.code ?? null,
           previous_barcode: previousBarcode,
           next_barcode: nextBarcode,
           previous_category: existing.category,
@@ -1092,7 +1086,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
               barcodeToProductId.set(normalizedBarcode, matchedProductId);
             }
 
-            const nextCode = (row.code || existing.code).trim().toUpperCase();
+            const nextCode = (row.code || existing.code || "").trim().toUpperCase();
             if (nextCode) {
               codeToProductId.set(nextCode, matchedProductId);
             }
@@ -1103,7 +1097,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           }
 
           const createdProduct = await productsService.create(tenantId, {
-            code: row.code || buildProductCode(row.name),
+            code: row.code?.trim() || null,
             name: row.name,
             brand: null,
             supplier: null,

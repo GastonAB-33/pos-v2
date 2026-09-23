@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Barcode, Camera, Check, CheckCircle2, ShoppingCart, X } from "lucide-react";
+import { Barcode, Camera, Check, CheckCircle2, Search, ShoppingCart, X } from "lucide-react";
 import { PaginationControls } from "@/components/ui/PaginationControls";
 import { usePagination } from "@/hooks/usePagination";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
@@ -44,8 +44,7 @@ export const PurchaseProductSelectModal = ({
   onClose,
 }: PurchaseProductSelectModalProps) => {
   const paginatedProducts = usePagination(products, 8, `${search}|${products.length}`);
-  const scannerInputRef = useRef<HTMLInputElement | null>(null);
-  const [barcodeValue, setBarcodeValue] = useState("");
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [scannerFeedback, setScannerFeedback] = useState<
     { type: "success" | "error"; message: string } | undefined
@@ -56,22 +55,61 @@ export const PurchaseProductSelectModal = ({
 
   const cartQuantities = new Map(cart.map((item) => [item.product_id, item.quantity + (item.bonified_quantity || 0)]));
 
-  const submitBarcode = async () => {
-    const barcode = barcodeValue.trim();
-    if (!barcode || isScanning || disabled || !canWrite) return;
+  const handleAddProduct = (product: Product) => {
+    onAddProduct(product);
+    setScannerFeedback({
+      type: "success",
+      message: `${product.name} agregado a la compra`,
+    });
+  };
+
+  const handleSearchSubmit = async () => {
+    const query = search.trim();
+    if (!query || isScanning || disabled || !canWrite) return;
 
     setIsScanning(true);
-    const result = await onBarcodeScan(barcode);
+
+    // 1. Probar como código de barras primero
+    const result = await onBarcodeScan(query);
     if (result.ok && result.product) {
-      setBarcodeValue("");
-      setScannerFeedback({ type: "success", message: `${result.product.name} agregado a la compra` });
-    } else {
-      setScannerFeedback({ type: "error", message: result.error ?? "Código no encontrado" });
+      onSearchChange("");
+      setScannerFeedback({
+        type: "success",
+        message: `${result.product.name} agregado a la compra`,
+      });
+      setIsScanning(false);
+      window.setTimeout(() => {
+        searchInputRef.current?.focus({ preventScroll: true });
+      }, 0);
+      return;
     }
+
+    // 2. Si no fue código de barras exacto pero hay 1 producto filtrado
+    if (products.length === 1) {
+      onAddProduct(products[0]);
+      onSearchChange("");
+      setScannerFeedback({
+        type: "success",
+        message: `${products[0].name} agregado a la compra`,
+      });
+      setIsScanning(false);
+      window.setTimeout(() => {
+        searchInputRef.current?.focus({ preventScroll: true });
+      }, 0);
+      return;
+    }
+
+    // 3. Si no hay coincidencias
+    if (products.length === 0) {
+      setScannerFeedback({
+        type: "error",
+        message: result.error ?? "No se encontró ningún producto con ese código o nombre",
+      });
+    }
+
     setIsScanning(false);
     window.setTimeout(() => {
-      scannerInputRef.current?.focus({ preventScroll: true });
-      if (!result.ok) scannerInputRef.current?.select();
+      searchInputRef.current?.focus({ preventScroll: true });
     }, 0);
   };
 
@@ -85,80 +123,118 @@ export const PurchaseProductSelectModal = ({
               Seleccionar productos para la compra
             </div>
             <h2 className="mt-1 text-lg font-bold text-slate-900">
-              Agregar producto existente
+              Agregar producto a la compra
             </h2>
             <p className="text-xs text-slate-500">
-              Escanea con lector físico / cámara o busca por nombre, código o categoría.
+              Busca por nombre, código interno o escanea el código de barras (con lector físico o cámara).
             </p>
           </div>
           <IconButton icon={X} label="Cerrar" onClick={onClose} disabled={disabled} />
         </header>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5 space-y-4">
-          {/* Lector de código de barras */}
-          <div className="rounded-xl border border-brand-200 bg-brand-50/40 p-3.5">
-            <div className="mb-2 flex items-center gap-2">
-              <Barcode aria-hidden="true" className="h-4 w-4 text-brand-700" />
-              <label htmlFor="purchase-modal-barcode" className="text-xs font-bold uppercase tracking-wider text-brand-900">
-                Lector de código de barras
+          {/* Buscador Unificado: Nombre, Código o Código de Barras */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label htmlFor="purchase-search-input" className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-700">
+                <Search className="h-3.5 w-3.5 text-brand-600" />
+                Buscar o escanear producto
               </label>
+              <span className="text-[11px] text-slate-400">
+                Presiona Enter o haz clic en Agregar
+              </span>
             </div>
+
             <div className="flex gap-2">
-              <input
-                ref={scannerInputRef}
-                id="purchase-modal-barcode"
-                type="text"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                data-lpignore="true"
-                data-form-type="other"
-                autoFocus
-                value={barcodeValue}
-                onChange={(event) => {
-                  setBarcodeValue(event.target.value);
-                  setScannerFeedback(undefined);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter") return;
-                  event.preventDefault();
-                  void submitBarcode();
-                }}
-                placeholder="Escanear código y presionar Enter..."
-                className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-                disabled={disabled || !canWrite || isScanning}
-              />
+              <div className="relative flex flex-1 items-center rounded-xl border border-slate-300 bg-white shadow-sm transition focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20">
+                <Barcode aria-hidden="true" className="ml-3 h-5 w-5 text-slate-400 shrink-0" />
+                <input
+                  ref={searchInputRef}
+                  id="purchase-search-input"
+                  type="text"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                  data-form-type="other"
+                  autoFocus
+                  value={search}
+                  onChange={(event) => {
+                    onSearchChange(event.target.value);
+                    if (scannerFeedback) setScannerFeedback(undefined);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    void handleSearchSubmit();
+                  }}
+                  placeholder="Escanear código de barras o buscar por nombre, código..."
+                  className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                  disabled={disabled || !canWrite || isScanning}
+                />
+                {search ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSearchChange("");
+                      setScannerFeedback(undefined);
+                      searchInputRef.current?.focus();
+                    }}
+                    className="mr-2 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                    title="Limpiar búsqueda"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
+
               <button
                 type="button"
-                className="ui-btn-primary px-3 text-xs"
-                onClick={() => void submitBarcode()}
-                disabled={disabled || !canWrite || isScanning || !barcodeValue.trim()}
+                className="ui-btn-primary px-4 text-xs font-semibold shrink-0"
+                onClick={() => void handleSearchSubmit()}
+                disabled={disabled || !canWrite || isScanning || !search.trim()}
+                title="Buscar o agregar por código"
               >
-                Leer
+                {isScanning ? "Agregando..." : "Agregar"}
               </button>
+
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-brand-300 bg-brand-50 px-3.5 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-50 shrink-0 shadow-sm"
                 onClick={() => setIsCameraOpen(true)}
                 disabled={disabled || !canWrite || isScanning}
-                title="Escanear con la cámara del celular"
+                title="Escanear código de barras con la cámara"
               >
-                <Camera aria-hidden="true" className="h-4 w-4" />
-                <span>Cámara</span>
+                <Camera aria-hidden="true" className="h-4 w-4 text-brand-600" />
+                <span className="hidden sm:inline">Cámara</span>
               </button>
             </div>
+
             {scannerFeedback ? (
-              <p
-                className={`mt-2 flex items-center gap-1.5 text-xs font-medium ${
-                  scannerFeedback.type === "success" ? "text-emerald-700" : "text-red-600"
+              <div
+                className={`flex items-center justify-between rounded-lg px-3 py-2 text-xs font-medium animate-fadeIn ${
+                  scannerFeedback.type === "success"
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    : "bg-red-50 text-red-700 border border-red-200"
                 }`}
               >
-                {scannerFeedback.type === "success" ? (
-                  <CheckCircle2 aria-hidden="true" className="h-4 w-4" />
-                ) : null}
-                {scannerFeedback.message}
-              </p>
+                <div className="flex items-center gap-2">
+                  {scannerFeedback.type === "success" ? (
+                    <CheckCircle2 aria-hidden="true" className="h-4 w-4 shrink-0 text-emerald-600" />
+                  ) : (
+                    <span className="inline-block h-2 w-2 rounded-full bg-red-500 shrink-0" />
+                  )}
+                  <span>{scannerFeedback.message}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setScannerFeedback(undefined)}
+                  className="text-slate-400 hover:text-slate-600 ml-2"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
             ) : null}
           </div>
 
@@ -169,32 +245,27 @@ export const PurchaseProductSelectModal = ({
             onClose={() => setIsCameraOpen(false)}
             onDetected={async (scannedCode) => {
               setIsCameraOpen(false);
-              setBarcodeValue(scannedCode);
               setIsScanning(true);
               const result = await onBarcodeScan(scannedCode);
               if (result.ok && result.product) {
-                setBarcodeValue("");
-                setScannerFeedback({ type: "success", message: `${result.product.name} agregado a la compra` });
+                onSearchChange("");
+                setScannerFeedback({
+                  type: "success",
+                  message: `${result.product.name} agregado a la compra`,
+                });
               } else {
-                setScannerFeedback({ type: "error", message: result.error ?? "Código no encontrado" });
+                onSearchChange(scannedCode);
+                setScannerFeedback({
+                  type: "error",
+                  message: result.error ?? "Código no encontrado",
+                });
               }
               setIsScanning(false);
+              window.setTimeout(() => {
+                searchInputRef.current?.focus({ preventScroll: true });
+              }, 0);
             }}
           />
-
-          {/* Buscador de catálogo */}
-          <div className="space-y-1">
-            <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Buscar en el catálogo
-            </label>
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => onSearchChange(event.target.value)}
-              placeholder="Buscar por nombre, código interno o categoría..."
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-            />
-          </div>
 
           {/* Lista de productos */}
           <div className="max-h-[380px] space-y-2 overflow-auto pr-1">
@@ -215,9 +286,14 @@ export const PurchaseProductSelectModal = ({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="font-semibold text-slate-900 truncate">{product.name}</p>
+                      {product.sale_mode === "weight" && (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+                          Balanza (kg)
+                        </span>
+                      )}
                       {inCartQty > 0 ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
-                          <Check className="h-3 w-3" /> En compra ({inCartQty})
+                          <Check className="h-3 w-3" /> En compra ({inCartQty.toLocaleString("es-AR", { maximumFractionDigits: 3 })} {product.sale_mode === "weight" ? "kg" : "u."})
                         </span>
                       ) : null}
                     </div>
@@ -225,7 +301,13 @@ export const PurchaseProductSelectModal = ({
                       Cód: {product.code} • Cat: {product.category}
                     </p>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                      <span>Costo base: <strong>{currency.format(product.cost_price)}</strong></span>
+                      <span>
+                        Costo base:{" "}
+                        <strong>
+                          {currency.format(product.cost_price)}
+                          {product.sale_mode === "weight" ? " / kg" : ""}
+                        </strong>
+                      </span>
                       <span>•</span>
                       <span>Stock actual: {stockLabel(product)}</span>
                     </div>
@@ -234,7 +316,7 @@ export const PurchaseProductSelectModal = ({
                   <div className="flex items-center">
                     <button
                       type="button"
-                      onClick={() => onAddProduct(product)}
+                      onClick={() => handleAddProduct(product)}
                       disabled={disabled || !canWrite}
                       className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
                     >

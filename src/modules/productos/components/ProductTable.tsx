@@ -1,4 +1,4 @@
-﻿import { ProductActions } from "@/modules/productos/components/ProductActions";
+import { ProductActions } from "@/modules/productos/components/ProductActions";
 import type { ProductViewModel } from "@/modules/productos/types/product.types";
 import { CheckCircle2, CircleX, Star } from "lucide-react";
 
@@ -82,7 +82,9 @@ export const ProductTable = ({
                 </td>
                 <td className="px-3 py-3">
                   <p className="font-medium text-slate-900">{product.nombre}</p>
-                  <p className="text-xs text-slate-500">Código: {product.codigoProducto}</p>
+                  {product.codigoProducto ? (
+                    <p className="text-xs text-slate-500">Código: {product.codigoProducto}</p>
+                  ) : null}
                 </td>
                 <td className="px-3 py-3">{product.categoria}</td>
                 <td className="px-3 py-3">{product.subcategoria || "-"}</td>

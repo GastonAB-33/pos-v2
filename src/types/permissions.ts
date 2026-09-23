@@ -48,6 +48,29 @@ export const normalizePermissionProfile = (profile: PermissionProfile): Permissi
     };
   }
 
+  // Compatibilidad hacia atrás para módulos contables nuevos
+  if (profile.caja && !profile.caja_general) {
+    base.caja_general = { ...base.caja_general, ...profile.caja };
+  }
+  if (
+    (profile.proveedores || profile.compras || profile.cuentas_corrientes) &&
+    !profile.cuentas_corrientes_proveedores
+  ) {
+    base.cuentas_corrientes_proveedores = {
+      ...base.cuentas_corrientes_proveedores,
+      ...(profile.proveedores || profile.compras || profile.cuentas_corrientes),
+    };
+  }
+  if (
+    (profile.configuracion || profile.configuracion_contable || profile.caja) &&
+    !profile.bancos
+  ) {
+    base.bancos = {
+      ...base.bancos,
+      ...(profile.configuracion_contable || profile.configuracion || profile.caja),
+    };
+  }
+
   return base;
 };
 
@@ -58,6 +81,25 @@ export const hasModulePermission = (
   const level = requirement.level ?? "read";
   const directPermission = Boolean(profile[requirement.module]?.[level]);
   if (directPermission) return true;
+
+  // Fallbacks de compatibilidad hacia atrás para módulos contables añadidos
+  if (requirement.module === "caja_general") {
+    return Boolean(profile.caja?.[level]);
+  }
+  if (requirement.module === "cuentas_corrientes_proveedores") {
+    return Boolean(
+      profile.proveedores?.[level] ||
+        profile.compras?.[level] ||
+        profile.cuentas_corrientes?.[level]
+    );
+  }
+  if (requirement.module === "bancos") {
+    return Boolean(
+      profile.configuracion_contable?.[level] ||
+        profile.configuracion?.[level] ||
+        profile.caja?.[level]
+    );
+  }
 
   const isScopedConfigModule = requirement.module.startsWith("configuracion_");
   if (!isScopedConfigModule) return false;

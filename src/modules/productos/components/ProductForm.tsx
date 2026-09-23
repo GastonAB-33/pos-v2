@@ -14,6 +14,7 @@ import {
   DEFAULT_IVA_PERCENT,
   derivePricingFromStoredProduct,
 } from "@/modules/productos/utils/product-pricing";
+import { handleNumericInputFocus, handleNumericInputBlur, parseNumericField } from "@/utils/input-helpers";
 
 interface ProductFormProps {
   mode: "create" | "edit";
@@ -89,7 +90,7 @@ export const ProductForm = ({
       nombre: product.name,
       saleMode: product.sale_mode,
       codigoBarras: primaryBarcode ?? "",
-      codigoProducto: product.code,
+      codigoProducto: product.code ?? "",
       stock: product.stock_current,
       categoria: product.category,
       subcategoria: product.subcategory ?? "",
@@ -147,58 +148,49 @@ export const ProductForm = ({
   return (
     <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
       <div>
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <label className="block text-sm font-medium text-slate-700">Nombre</label>
+        <label className="mb-1 block text-sm font-medium text-slate-700">Nombre del producto</label>
+        <div className="flex items-center gap-2">
+          <input
+            {...register("nombre")}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            disabled={disabled}
+          />
           <VoiceDictationButton
-            value={nombre ?? ""}
+            value={nombre}
             onValueChange={(nextValue) =>
               setValue("nombre", nextValue, { shouldDirty: true, shouldValidate: true })
             }
-            insertMode="replace"
             disabled={disabled}
-            label="Dictar nombre de producto"
           />
         </div>
-        <input
-          {...register("nombre")}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          disabled={disabled}
-        />
         {errors.nombre ? <p className="mt-1 text-xs text-red-600">{errors.nombre.message}</p> : null}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <label className="block text-sm font-medium text-slate-700">Codigo de barras</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Código de barras</label>
+          <div className="flex items-center gap-2">
+            <input
+              {...register("codigoBarras")}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              disabled={disabled}
+            />
             <button
               type="button"
-              className="ui-btn-ghost px-2 py-1 text-xs"
+              className="rounded-lg border border-slate-300 px-2 py-2 text-xs font-semibold text-slate-700"
               onClick={() => setScannerOpen(true)}
               disabled={disabled}
             >
-              Escanear camara
+              Cámara
             </button>
           </div>
-          <input
-            {...register("codigoBarras")}
-            type="text"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            data-lpignore="true"
-            data-form-type="other"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            disabled={disabled}
-          />
           {errors.codigoBarras ? (
             <p className="mt-1 text-xs text-red-600">{errors.codigoBarras.message}</p>
           ) : null}
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Codigo de producto</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Código de producto</label>
           <input
             {...register("codigoProducto")}
             type="text"
@@ -225,9 +217,22 @@ export const ProductForm = ({
           <input
             type="number"
             step="0.001"
+            placeholder="0"
             {...register("stock", {
+              setValueAs: parseNumericField,
               onChange: () => setCalcMode("forward"),
             })}
+            onFocus={(e) =>
+              handleNumericInputFocus(e, {
+                isNew: mode === "create",
+                onClear: () => setValue("stock", "" as any),
+              })
+            }
+            onBlur={(e) => {
+              handleNumericInputBlur(e, "0", () => {
+                setValue("stock", 0);
+              });
+            }}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
@@ -287,9 +292,22 @@ export const ProductForm = ({
           <input
             type="number"
             step="0.01"
+            placeholder="0.00"
             {...register("precioCosto", {
+              setValueAs: parseNumericField,
               onChange: () => setCalcMode("forward"),
             })}
+            onFocus={(e) =>
+              handleNumericInputFocus(e, {
+                isNew: mode === "create",
+                onClear: () => setValue("precioCosto", "" as any),
+              })
+            }
+            onBlur={(e) => {
+              handleNumericInputBlur(e, "0", () => {
+                setValue("precioCosto", 0);
+              });
+            }}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
@@ -303,9 +321,22 @@ export const ProductForm = ({
           <input
             type="number"
             step="0.01"
+            placeholder="0.00"
             {...register("porcentajeGanancia", {
+              setValueAs: parseNumericField,
               onChange: () => setCalcMode("forward"),
             })}
+            onFocus={(e) =>
+              handleNumericInputFocus(e, {
+                isNew: mode === "create",
+                onClear: () => setValue("porcentajeGanancia", "" as any),
+              })
+            }
+            onBlur={(e) => {
+              handleNumericInputBlur(e, "0", () => {
+                setValue("porcentajeGanancia", 0);
+              });
+            }}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
@@ -336,9 +367,16 @@ export const ProductForm = ({
           <input
             type="number"
             step="0.01"
+            placeholder="21"
             {...register("porcentajeIva", {
+              setValueAs: parseNumericField,
               onChange: () => setCalcMode("forward"),
             })}
+            onFocus={(e) =>
+              handleNumericInputFocus(e, {
+                isNew: false,
+              })
+            }
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
@@ -354,9 +392,22 @@ export const ProductForm = ({
           <input
             type="number"
             step="0.01"
+            placeholder="0.00"
             {...register("precioFinal", {
+              setValueAs: parseNumericField,
               onChange: () => setCalcMode("backward"),
             })}
+            onFocus={(e) =>
+              handleNumericInputFocus(e, {
+                isNew: mode === "create",
+                onClear: () => setValue("precioFinal", "" as any),
+              })
+            }
+            onBlur={(e) => {
+              handleNumericInputBlur(e, "0", () => {
+                setValue("precioFinal", 0);
+              });
+            }}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />

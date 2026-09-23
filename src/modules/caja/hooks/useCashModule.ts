@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditService } from "@/services/audit.service";
 import { cashService } from "@/services/cash.service";
+import { generalCashService } from "@/services/general-cash.service";
 import { currentAccountsService } from "@/services/current-accounts.service";
 import { customersService } from "@/services/customers.service";
 import { paymentMethodsService } from "@/services/payment-methods.service";
@@ -763,7 +764,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     try {
       const alreadyOpen = await cashService.getOpenSessionByUser(tenantId, userId);
       if (alreadyOpen) {
-        setFeedback({ type: "error", message: "Ya tenes una caja abierta" });
+        setFeedback({ type: "error", message: "Ya tenes una caja diaria abierta" });
         return;
       }
 
@@ -793,11 +794,25 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         },
       });
 
-      setFeedback({ type: "success", message: "Caja abierta" });
+      if (values.openingAmount > 0) {
+        try {
+          await generalCashService.createMovement(tenantId, {
+            type: "expense",
+            amount: values.openingAmount,
+            origin_type: "daily_cash_open",
+            concept: `Fondo inicial para apertura de Caja diaria - Sesión #${createdSession.id.slice(-6)}`,
+            reference_id: createdSession.id,
+            created_by: userId,
+          });
+        } catch (genCashErr) {
+          console.error("Error al registrar egreso en Caja General al abrir caja:", genCashErr);
+        }
+      }
+      setFeedback({ type: "success", message: "Caja diaria abierta" });
       await loadCashData();
       setSelectedSessionId(createdSession.id);
     } catch {
-      setFeedback({ type: "error", message: "No se pudo abrir la caja" });
+      setFeedback({ type: "error", message: "No se pudo abrir la caja diaria" });
     } finally {
       setIsSubmitting(false);
     }
@@ -805,7 +820,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
   const closeCash = async (values: CloseCashValues) => {
     if (!tenantId || !userId || !currentSession) {
-      setFeedback({ type: "error", message: "No hay una caja abierta para cerrar" });
+      setFeedback({ type: "error", message: "No hay una caja diaria abierta para cerrar" });
       return;
     }
 
@@ -836,10 +851,24 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         },
       });
 
-      setFeedback({ type: "success", message: "Caja cerrada" });
+      if (values.realAmount > 0) {
+        try {
+          await generalCashService.createMovement(tenantId, {
+            type: "income",
+            amount: values.realAmount,
+            origin_type: "daily_cash_close",
+            concept: `Ingreso por cierre de Caja diaria - Sesión #${currentSession.id.slice(-6)}`,
+            reference_id: currentSession.id,
+            created_by: userId,
+          });
+        } catch (genCashErr) {
+          console.error("Error al registrar ingreso en Caja General al cerrar caja:", genCashErr);
+        }
+      }
+      setFeedback({ type: "success", message: "Caja diaria cerrada" });
       await loadCashData();
     } catch {
-      setFeedback({ type: "error", message: "No se pudo cerrar la caja" });
+      setFeedback({ type: "error", message: "No se pudo cerrar la caja diaria" });
     } finally {
       setIsSubmitting(false);
     }
