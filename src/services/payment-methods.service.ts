@@ -50,7 +50,6 @@ export const paymentMethodSystemOrder: PaymentMethodType[] = [
   "card_debit",
   "card_credit",
   "transfer",
-  "mercado_pago",
   "cheque",
   "current_account",
 ];

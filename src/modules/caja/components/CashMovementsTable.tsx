@@ -5,6 +5,14 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { useMemo } from "react";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Receipt as ReceiptIcon,
+  Sliders,
+  FileText,
+  User,
+} from "lucide-react";
 import type { CashMovement } from "@/types/entities";
 
 interface CashMovementsTableProps {
@@ -22,17 +30,10 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
-const movementTypeLabel: Record<CashMovement["movement_type"], string> = {
-  income: "Ingreso",
-  expense: "Egreso",
-  sale_payment: "Cobro venta",
-  adjustment: "Ajuste",
-};
-
 const referenceTypeLabels: Record<string, string> = {
   cash: "Efectivo",
-  card_debit: "Tarjeta de debito",
-  card_credit: "Tarjeta de credito",
+  card_debit: "Tarjeta de débito",
+  card_credit: "Tarjeta de crédito",
   transfer: "Transferencia bancaria",
   mercado_pago: "Mercado Pago",
   cheque: "Cheque",
@@ -60,14 +61,15 @@ const formatReference = (
   if (movement.movement_type === "sale_payment") {
     const saleNumber = saleNumbersById[movement.reference_id];
     if (saleNumber) {
-      return `${label} | ${saleNumber}`;
+      return `${label} · #${saleNumber}`;
     }
   }
 
-  const shortId = movement.reference_id.length > 12
-    ? `${movement.reference_id.slice(0, 8)}...`
-    : movement.reference_id;
-  return `${label} | ${shortId}`;
+  const shortId =
+    movement.reference_id.length > 12
+      ? `${movement.reference_id.slice(0, 8)}...`
+      : movement.reference_id;
+  return `${label} · ${shortId}`;
 };
 
 const getSignedAmount = (movement: CashMovement): number => {
@@ -75,13 +77,6 @@ const getSignedAmount = (movement: CashMovement): number => {
   if (movement.movement_type === "expense") return -amount;
   if (movement.movement_type === "adjustment" && movement.amount < 0) return -amount;
   return amount;
-};
-
-const getMovementBadgeClass = (movementType: CashMovement["movement_type"]) => {
-  if (movementType === "expense") return "ui-badge ui-badge--danger";
-  if (movementType === "income") return "ui-badge ui-badge--success";
-  if (movementType === "sale_payment") return "ui-badge ui-badge--info";
-  return "ui-badge ui-badge--warn";
 };
 
 export const CashMovementsTable = ({
@@ -92,74 +87,121 @@ export const CashMovementsTable = ({
 }: CashMovementsTableProps) => {
   const columns = useMemo(
     () => [
-    columnHelper.accessor("created_at", {
-      header: "Fecha",
-      cell: (info) => (
-        <span className="whitespace-nowrap text-xs">{new Date(info.getValue()).toLocaleString("es-AR")}</span>
-      ),
-    }),
-    columnHelper.accessor("movement_type", {
-      header: "Tipo",
-      cell: (info) => (
-        <span className={getMovementBadgeClass(info.getValue())}>
-          {movementTypeLabel[info.getValue()] ?? info.getValue()}
-        </span>
-      ),
-    }),
-    columnHelper.accessor("amount", {
-      header: "Importe",
-      cell: (info) => {
-        const movement = info.row.original;
-        const signedAmount = getSignedAmount(movement);
-        return (
-          <span
-            className={
-              signedAmount < 0
-                ? "font-kpi text-sm font-semibold text-red-700"
-                : "font-kpi text-sm font-semibold text-emerald-700"
-            }
-          >
-            {currency.format(signedAmount)}
+      columnHelper.accessor("created_at", {
+        header: "Fecha / Hora",
+        cell: (info) => (
+          <span className="whitespace-nowrap text-slate-500">
+            {new Date(info.getValue()).toLocaleString("es-AR", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
           </span>
-        );
-      },
-    }),
-    columnHelper.display({
-      id: "reference",
-      header: "Origen",
-      cell: (info) => {
-        const movement = info.row.original;
-        return <span className="text-sm text-slate-700">{formatReference(movement, saleNumbersById)}</span>;
-      },
-    }),
-    columnHelper.accessor("created_by", {
-      header: "Responsable",
-      cell: (info) => {
-        const userId = info.getValue();
-        if (!userId) return "Sin usuario";
-        return <span className="text-sm">{usersById[userId] ?? userId}</span>;
-      },
-    }),
-    columnHelper.display({
-      id: "actions",
-      header: "Comprobante",
-      cell: (info) => {
-        const movement = info.row.original;
-        if (movement.movement_type !== "sale_payment" || !movement.reference_id) {
-          return <span className="text-xs text-slate-400">-</span>;
-        }
-        return (
-          <button
-            type="button"
-            className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-            onClick={() => onViewSaleDocument?.(movement.reference_id!)}
-          >
-            Ver
-          </button>
-        );
-      },
-    }),
-  ],
+        ),
+      }),
+      columnHelper.accessor("movement_type", {
+        header: "Tipo",
+        cell: (info) => {
+          const type = info.getValue();
+          if (type === "expense") {
+            return (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-rose-50 text-rose-700 border border-rose-200/60 whitespace-nowrap">
+                <ArrowUpRight className="h-3 w-3" /> Egreso
+              </span>
+            );
+          }
+          if (type === "income") {
+            return (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60 whitespace-nowrap">
+                <ArrowDownLeft className="h-3 w-3" /> Ingreso
+              </span>
+            );
+          }
+          if (type === "sale_payment") {
+            return (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200/60 whitespace-nowrap">
+                <ReceiptIcon className="h-3 w-3" /> Cobro venta
+              </span>
+            );
+          }
+          return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200/60 whitespace-nowrap">
+              <Sliders className="h-3 w-3" /> Ajuste
+            </span>
+          );
+        },
+      }),
+      columnHelper.display({
+        id: "reference",
+        header: "Origen / Medio",
+        cell: (info) => {
+          const movement = info.row.original;
+          return (
+            <div className="font-medium text-slate-800">
+              {formatReference(movement, saleNumbersById)}
+              {movement.notes && (
+                <p className="text-[10px] text-slate-400 font-normal mt-0.5">{movement.notes}</p>
+              )}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor("created_by", {
+        header: "Usuario",
+        cell: (info) => {
+          const userId = info.getValue();
+          if (!userId) return <span className="text-slate-400">Sistema</span>;
+          const name = usersById[userId] ?? userId;
+          return (
+            <div className="flex items-center gap-1 text-slate-600 whitespace-nowrap">
+              <User className="h-3 w-3 text-slate-400" />
+              <span>{name}</span>
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor("amount", {
+        header: () => <div className="text-right">Importe</div>,
+        cell: (info) => {
+          const movement = info.row.original;
+          const signedAmount = getSignedAmount(movement);
+          const isNegative = signedAmount < 0;
+          return (
+            <div
+              className={`text-right font-semibold whitespace-nowrap ${
+                isNegative ? "text-rose-600" : "text-emerald-600"
+              }`}
+            >
+              {isNegative ? "-" : "+"} {currency.format(Math.abs(signedAmount))}
+            </div>
+          );
+        },
+      }),
+      columnHelper.display({
+        id: "actions",
+        header: () => <div className="text-right">Ticket</div>,
+        cell: (info) => {
+          const movement = info.row.original;
+          if (movement.movement_type !== "sale_payment" || !movement.reference_id) {
+            return <div className="text-right text-slate-400">-</div>;
+          }
+          return (
+            <div className="text-right">
+              <button
+                type="button"
+                className="h-6 inline-flex items-center gap-1 px-2 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-md transition-colors shadow-xs"
+                onClick={() => onViewSaleDocument?.(movement.reference_id!)}
+              >
+                <FileText className="h-3 w-3 text-slate-400" />
+                Ticket
+              </button>
+            </div>
+          );
+        },
+      }),
+    ],
     [onViewSaleDocument, saleNumbersById, usersById]
   );
 
@@ -171,20 +213,24 @@ export const CashMovementsTable = ({
 
   if (!movements.length) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-        No hay movimientos para esta sesion.
+      <div className="p-8 text-center bg-slate-50/50 rounded-xl border border-slate-200/80">
+        <ReceiptIcon className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+        <p className="text-xs font-medium text-slate-700">No hay movimientos registrados</p>
+        <p className="text-[11px] text-slate-400 mt-0.5">
+          Los cobros de ventas e ingresos/egresos del turno aparecerán aquí.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="max-h-[58vh] overflow-auto rounded-lg border border-slate-200">
-      <table className="min-w-full divide-y divide-slate-200 text-sm">
-        <thead className="sticky top-0 z-10 bg-slate-50">
+    <div className="max-h-[55vh] overflow-auto rounded-xl border border-slate-200/80 shadow-xs">
+      <table className="w-full text-left text-xs">
+        <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
-                <th key={header.id} className="px-4 py-2 text-left font-medium text-slate-700">
+                <th key={header.id} className="py-2 px-3">
                   {header.isPlaceholder
                     ? null
                     : flexRender(header.column.columnDef.header, header.getContext())}
@@ -193,11 +239,11 @@ export const CashMovementsTable = ({
             </tr>
           ))}
         </thead>
-        <tbody className="divide-y divide-slate-200 bg-white">
+        <tbody className="divide-y divide-slate-100/80 bg-white">
           {table.getRowModel().rows.map((row) => (
-            <tr key={row.id}>
+            <tr key={row.id} className="hover:bg-slate-50/70 transition-colors">
               {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} className="px-4 py-2 text-slate-700">
+                <td key={cell.id} className="py-2 px-3">
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}

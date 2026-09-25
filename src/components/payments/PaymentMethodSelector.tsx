@@ -53,7 +53,6 @@ const getPaymentMethodLabel = (paymentMethod: PaymentMethod): string => {
   if (code === "card_debit") return "Tarjeta de débito";
   if (code === "card_credit") return "Tarjeta de crédito";
   if (code === "transfer") return "Transferencia bancaria";
-  if (code === "mercado_pago") return "Mercado Pago";
   if (code === "cheque") return "Cheque";
   if (code === "current_account") return "Cuenta corriente";
   return getPaymentMethodTypeLabel(paymentMethod.type);
@@ -70,16 +69,15 @@ const paymentMethodPriority = (method: PaymentMethod): number => {
   if (code === "card_debit") return 1;
   if (code === "card_credit") return 2;
   if (code === "transfer") return 3;
-  if (code === "mercado_pago") return 4;
-  if (code === "cheque") return 5;
-  if (code === "current_account") return 6;
-  return 7;
+  if (code === "cheque") return 4;
+  if (code === "current_account") return 5;
+  return 6;
 };
 
 const getGridClassName = (columns: PaymentMethodSelectorProps["columns"]): string => {
-  if (columns === 2) return "grid gap-2.5 sm:grid-cols-2";
-  if (columns === 3) return "grid gap-2.5 sm:grid-cols-3";
-  return "grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3";
+  if (columns === 2) return "grid gap-2 sm:grid-cols-2";
+  if (columns === 3) return "grid gap-2 sm:grid-cols-3";
+  return "grid gap-2 sm:grid-cols-2 xl:grid-cols-3";
 };
 
 export const PaymentMethodSelector = ({
@@ -92,7 +90,12 @@ export const PaymentMethodSelector = ({
   getMethodBadges,
   onChange,
 }: PaymentMethodSelectorProps) => {
-  const orderedMethods = [...paymentMethods].sort((a, b) => {
+  // Filtrar mercado_pago a nivel global para unificar bajo "Transferencia bancaria"
+  const availableMethods = paymentMethods.filter(
+    (method) => normalizePaymentMethodCode(method.code) !== "mercado_pago"
+  );
+
+  const orderedMethods = [...availableMethods].sort((a, b) => {
     const byPriority = paymentMethodPriority(a) - paymentMethodPriority(b);
     if (byPriority !== 0) return byPriority;
     return a.name.localeCompare(b.name);
@@ -117,29 +120,29 @@ export const PaymentMethodSelector = ({
               onChange(method.id);
             }}
             className={cn(
-              "flex flex-col justify-between rounded-xl border text-left transition relative select-none",
-              compact ? "p-3" : "p-3.5",
+              "flex flex-col justify-between rounded-lg border text-left transition relative select-none",
+              compact ? "p-2" : "p-3",
               selected
-                ? "border-blue-600 bg-blue-50/70 shadow-sm ring-1 ring-blue-500/30 dark:border-blue-500 dark:bg-blue-950/40"
+                ? "border-blue-600 bg-blue-50/70 shadow-xs ring-1 ring-blue-500/30 dark:border-blue-500 dark:bg-blue-950/40"
                 : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900",
               methodDisabled ? "cursor-not-allowed opacity-50 bg-slate-50/40 dark:bg-slate-900/40" : ""
             )}
           >
-            <div className="flex items-center justify-between gap-2 w-full">
+            <div className="flex items-center justify-between gap-1.5 w-full">
               <div className="flex items-center gap-2 min-w-0">
                 <div
                   className={cn(
-                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition",
+                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition",
                     selected
                       ? "bg-blue-600 text-white"
                       : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
                   )}
                 >
-                  <IconComponent size={15} />
+                  <IconComponent size={13} />
                 </div>
                 <p
                   className={cn(
-                    "truncate text-xs font-bold leading-tight",
+                    "truncate text-xs font-semibold leading-tight",
                     selected
                       ? "text-blue-950 dark:text-blue-100"
                       : "text-slate-800 dark:text-slate-200"
@@ -150,33 +153,35 @@ export const PaymentMethodSelector = ({
               </div>
 
               {selected ? (
-                <CheckCircle2 size={16} className="text-blue-600 shrink-0 dark:text-blue-400" />
+                <CheckCircle2 size={14} className="text-blue-600 shrink-0 dark:text-blue-400" />
               ) : null}
             </div>
 
-            <div className="mt-1.5 flex min-h-4 flex-wrap items-center gap-1">
-              {secondaryLabel ? (
-                <span className="text-[10px] text-slate-500 truncate">{secondaryLabel}</span>
-              ) : null}
-              {method.surcharge_percent > 0 ? (
-                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                  +{method.surcharge_percent}%
-                </span>
-              ) : null}
-              {method.discount_percent > 0 ? (
-                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-                  -{method.discount_percent}%
-                </span>
-              ) : null}
-              {badges.map((badge) => (
-                <span
-                  key={badge}
-                  className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-400"
-                >
-                  {badge}
-                </span>
-              ))}
-            </div>
+            {(secondaryLabel || method.surcharge_percent > 0 || method.discount_percent > 0 || badges.length > 0) && (
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                {secondaryLabel ? (
+                  <span className="text-[10px] text-slate-500 truncate">{secondaryLabel}</span>
+                ) : null}
+                {method.surcharge_percent > 0 ? (
+                  <span className="rounded bg-amber-100 px-1 py-0.2 text-[9px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                    +{method.surcharge_percent}%
+                  </span>
+                ) : null}
+                {method.discount_percent > 0 ? (
+                  <span className="rounded bg-emerald-100 px-1 py-0.2 text-[9px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                    -{method.discount_percent}%
+                  </span>
+                ) : null}
+                {badges.map((badge) => (
+                  <span
+                    key={badge}
+                    className="rounded bg-slate-100 px-1 py-0.2 text-[9px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                  >
+                    {badge}
+                  </span>
+                ))}
+              </div>
+            )}
           </button>
         );
       })}

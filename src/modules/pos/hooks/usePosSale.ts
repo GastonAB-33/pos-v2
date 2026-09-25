@@ -29,6 +29,7 @@ import { storageKeys } from "@/utils/local-storage";
 import { buildPromotionBarcode, promotionsService, type PromotionWithDetails } from "@/services/promotions.service";
 import { receiptsService } from "@/services/receipts.service";
 import { salesService } from "@/services/sales.service";
+import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
 import { settingsService } from "@/services/settings.service";
 import { stockService } from "@/services/stock.service";
 import type { ArcaSettings, BankAccount, BarcodeScaleSettings, Customer, InstallmentPlan, Invoice, InvoiceDocumentType, MercadoPagoSettings, OriginBank, PaymentMethod, PaymentMethodType, PosSettings, PriceList, Product, ProductBarcode, Receipt, Sale } from "@/types/entities";
@@ -1709,10 +1710,33 @@ export const usePosSale = (tenantId: string | null) => {
       return null;
     }
 
-    const paymentMethod = getPaymentMethodById(values.paymentMethodId);
+    const isSplit = Boolean(
+      values.isSplitPayment && values.payments && values.payments.length > 0
+    );
+    const splitPayments = isSplit ? values.payments! : [];
+
+    const paymentMethod = isSplit
+      ? getPaymentMethodById(splitPayments[0].paymentMethodId) ||
+        getPaymentMethodById(values.paymentMethodId)
+      : getPaymentMethodById(values.paymentMethodId);
+
     if (!paymentMethod || !paymentMethod.is_active) {
       setFeedback({ type: "error", message: "Medio de pago invalido o inactivo" });
       return null;
+    }
+
+    if (isSplit) {
+      const invalidSplit = splitPayments.find((p) => {
+        const m = getPaymentMethodById(p.paymentMethodId);
+        return !m || !m.is_active || p.amount <= 0;
+      });
+      if (invalidSplit) {
+        setFeedback({
+          type: "error",
+          message: "Hay medios de pago inválidos o con monto en 0 en el pago combinado",
+        });
+        return null;
+      }
     }
 
     const paymentDetails =
@@ -1723,10 +1747,17 @@ export const usePosSale = (tenantId: string | null) => {
     const paymentMethodConfig = getPaymentMethodPosConfig(paymentMethod);
     const isMercadoPagoMethod = paymentMethodCode === "mercado_pago";
     const isCurrentAccountMethod = paymentMethodCode === "current_account";
+    const hasCurrentAccount = isSplit
+      ? splitPayments.some(
+          (p) =>
+            normalizePaymentMethodCode(getPaymentMethodById(p.paymentMethodId)?.code) ===
+            "current_account"
+        )
+      : isCurrentAccountMethod;
     const isMercadoPagoManual =
       isMercadoPagoMethod && !mercadoPagoSettings.enabled;
 
-    if (isCurrentAccountMethod && !values.customerId) {
+    if (hasCurrentAccount && !values.customerId) {
       setFeedback({ type: "error", message: "Cliente obligatorio para cuenta corriente" });
       return null;
     }
@@ -1800,9 +1831,31 @@ export const usePosSale = (tenantId: string | null) => {
       ? customers.find((customer) => customer.id === normalizedCustomerId) ?? null
       : null;
     const requiresOpenCashSessionForSale = true;
-    const requiresCashMovementRegistration = !isCurrentAccountMethod;
+    const currentAccountDebtAmount = isSplit
+      ? splitPayments
+          .filter(
+            (p) =>
+              normalizePaymentMethodCode(getPaymentMethodById(p.paymentMethodId)?.code) ===
+              "current_account"
+          )
+          .reduce((acc, p) => acc + p.amount, 0)
+      : isCurrentAccountMethod
+      ? summary.total
+      : 0;
 
-    if (isCurrentAccountMethod && normalizedCustomerId) {
+    const splitCashAmount = isSplit
+      ? splitPayments
+          .filter((p) => {
+            const m = getPaymentMethodById(p.paymentMethodId);
+            return m?.affects_cash || normalizePaymentMethodCode(m?.code) === "cash";
+          })
+          .reduce((acc, p) => acc + p.amount, 0)
+      : isCurrentAccountMethod
+      ? 0
+      : summary.total;
+    const requiresCashMovementRegistration = splitCashAmount > 0;
+
+    if (currentAccountDebtAmount > 0 && normalizedCustomerId) {
       const legacyCurrentAccountProfile = posCustomerProfilesService.getProfile(
         tenantId,
         normalizedCustomerId
@@ -1825,7 +1878,9 @@ export const usePosSale = (tenantId: string | null) => {
       }
 
       if (currentAccountProfile.limit != null && selectedCustomerForSale) {
-        const projectedBalance = roundAmount(selectedCustomerForSale.current_balance + summary.total);
+        const projectedBalance = roundAmount(
+          selectedCustomerForSale.current_balance + currentAccountDebtAmount
+        );
         if (projectedBalance > currentAccountProfile.limit) {
           setFeedback({
             type: "error",
@@ -2065,151 +2120,278 @@ export const usePosSale = (tenantId: string | null) => {
           ? paymentDetails.operation_id.trim() || null
           : null;
 
-      await salesService.createPayment(tenantId, {
-        sale_id: sale.id,
-        payment_method_code: paymentMethod.code,
-        provider: isMercadoPagoMethod ? "mercado_pago" : "internal",
-        provider_code:
-          isMercadoPagoMethod
-            ? isMercadoPagoManual
-              ? "mercado_pago_manual"
-              : "mercado_pago"
-            : "internal",
-        amount: summary.total,
-        currency_code: "ARS",
-        status: isCurrentAccountMethod ? "pending" : "approved",
-        provider_status:
-          isMercadoPagoMethod
-            ? isMercadoPagoManual
-              ? "approved"
-              : (mercadoPagoIntent?.status ?? "pending")
-            : isCurrentAccountMethod
-              ? "pending"
-              : "approved",
-        provider_reference:
-          isMercadoPagoMethod
-            ? isMercadoPagoManual
-              ? manualMercadoPagoOperationId
-              : (mercadoPagoIntent?.reference ?? null)
-            : null,
-        provider_metadata:
-          isMercadoPagoMethod
-            ? isMercadoPagoManual
-              ? ({
-                  operation_id: manualMercadoPagoOperationId,
-                  mode: "manual",
-                } as Record<string, unknown>)
-              : ({
-                  payment_intent_id: mercadoPagoIntent?.id ?? null,
-                  status: mercadoPagoIntent?.status ?? "pending",
-                  expires_at: mercadoPagoIntent?.expires_at ?? null,
-                  mode: mercadoPagoStatus.mode,
-                } as Record<string, unknown>)
-            : null,
-        external_reference:
-          isMercadoPagoMethod
-            ? isMercadoPagoManual
-              ? manualMercadoPagoOperationId
-              : (mercadoPagoIntent?.reference ?? null)
-            : null,
-        metadata: {
-          payment_method_snapshot: {
-            id: paymentMethod.id,
-            name: paymentMethod.name,
-            code: paymentMethod.code,
-            type: paymentMethodCode as PaymentMethodType,
-            affects_cash: paymentMethod.affects_cash,
-            surcharge_percent: paymentMethod.surcharge_percent,
-            discount_percent: paymentMethod.discount_percent,
-          },
-          totals_snapshot: {
-            subtotal_before_promotions: subtotalBeforePromotions,
-            promotion_discount_total: promotionDiscountTotal,
-            cart_promotion_discount_total: cartPromotionDiscountTotal,
-            subtotal_after_promotions: summary.subtotal,
-            surcharge_total: summary.surchargeTotal,
-            payment_discount_total: summary.discountTotal,
-            payment_adjustment: summary.paymentAdjustment,
-            total: summary.total,
-          },
-          payment_details: paymentDetails,
-          payment_captured_at: paymentCapturedAt,
-          provider_snapshot:
-            isMercadoPagoMethod
-              ? isMercadoPagoManual
-                ? {
-                    provider: "mercado_pago_manual",
-                    operation_id: manualMercadoPagoOperationId,
-                    provider_reference: manualMercadoPagoOperationId,
-                    provider_status: "approved",
-                    mode: "manual",
-                  }
-                : {
-                    provider: "mercado_pago",
-                    payment_intent_id: mercadoPagoIntent?.id ?? null,
-                    provider_reference: mercadoPagoIntent?.reference ?? null,
-                    provider_status: mercadoPagoIntent?.status ?? "pending",
-                    mode: mercadoPagoStatus.mode,
-                  }
-              : null,
-          cart_promotion_snapshot: promotionsResolution.applied_cart_promotion
-            ? ({ ...promotionsResolution.applied_cart_promotion } as Record<string, unknown>)
-            : null,
-        },
-      });
+      if (isSplit) {
+        for (const p of splitPayments) {
+          const pMethod = getPaymentMethodById(p.paymentMethodId)!;
+          const pCode = normalizePaymentMethodCode(pMethod.code);
+          const pDetails =
+            p.paymentDetails && typeof p.paymentDetails === "object"
+              ? (p.paymentDetails as Record<string, unknown>)
+              : null;
+          const pIsCurrentAccount = pCode === "current_account";
 
-      const paymentAuditAction =
-        paymentMethod.code === "card_credit"
-          ? "sale_payment_credit_card"
-          : paymentMethod.code === "card_debit"
-            ? "sale_payment_debit_card"
-            : paymentMethod.code === "transfer"
-              ? "sale_payment_transfer"
-              : paymentMethod.code === "cheque"
-                ? "sale_payment_cheque"
-              : isMercadoPagoManual
-                ? "sale_payment_mercado_pago_manual"
-                : null;
+          await salesService.createPayment(tenantId, {
+            sale_id: sale.id,
+            payment_method_code: pMethod.code,
+            provider: pCode === "mercado_pago" ? "mercado_pago" : "internal",
+            provider_code: pCode === "mercado_pago" ? "mercado_pago_manual" : "internal",
+            amount: p.amount,
+            currency_code: "ARS",
+            status: pIsCurrentAccount ? "pending" : "approved",
+            provider_status: pIsCurrentAccount ? "pending" : "approved",
+            provider_reference: null,
+            provider_metadata: null,
+            external_reference: null,
+            metadata: {
+              payment_method_snapshot: {
+                id: pMethod.id,
+                name: pMethod.name,
+                code: pMethod.code,
+                type: pCode as PaymentMethodType,
+                affects_cash: pMethod.affects_cash,
+                surcharge_percent: pMethod.surcharge_percent,
+                discount_percent: pMethod.discount_percent,
+              },
+              payment_details: pDetails,
+              payment_captured_at: paymentCapturedAt,
+            },
+          });
 
-      if (paymentAuditAction) {
+          if (pIsCurrentAccount && values.customerId) {
+            await currentAccountsService.createMovement(tenantId, {
+              customer_id: values.customerId,
+              sale_id: sale.id,
+              type: "debt",
+              amount: p.amount,
+              notes: `Venta ${sale.sale_number} (Parcial cta. cte.)`,
+              created_by: resolvedCreatedBy,
+            });
+          }
+
+          if ((pMethod.affects_cash || pCode === "cash") && openSession) {
+            await cashService.createMovement(tenantId, {
+              cash_session_id: openSession.id,
+              movement_type: "sale_payment",
+              amount: p.amount,
+              currency_code: "ARS",
+              reference_type: pMethod.code,
+              reference_id: sale.id,
+              notes: `Cobro venta ${sale.sale_number} - ${pMethod.name} (Parcial: $${p.amount.toFixed(2)})`,
+              created_by: resolvedCreatedBy,
+            });
+          }
+
+          const destAccountId =
+            typeof pDetails?.destination_account_id === "string" && pDetails.destination_account_id
+              ? pDetails.destination_account_id
+              : null;
+          if (destAccountId) {
+            try {
+              await bankAccountMovementsService.createMovement(tenantId, {
+                bank_account_id: destAccountId,
+                type: "income",
+                origin_type: "pos_sale",
+                concept: `Cobro Venta #${sale.sale_number} - ${pMethod.name}`,
+                amount: p.amount,
+                reference_id: sale.id,
+                voucher_number:
+                  (typeof pDetails?.voucher_number === "string" && pDetails.voucher_number) ||
+                  (typeof pDetails?.operation_id === "string" && pDetails.operation_id) ||
+                  null,
+                notes: `Cobro POS en ${pMethod.name}`,
+                created_by: resolvedCreatedBy,
+              });
+            } catch (bankErr) {
+              console.error("Error al registrar ingreso en cuenta bancaria:", bankErr);
+            }
+          }
+        }
+
         await auditService.createSafe(tenantId, {
           user_id: resolvedCreatedBy,
           module: "pos",
-          action: paymentAuditAction,
+          action: "sale_payment_split",
           entity_type: "sale_payment",
           entity_id: sale.id,
-          description: `Pago registrado (${paymentMethod.name}) en venta ${sale.sale_number}`,
+          description: `Pago combinado registrado (${splitPayments.length} métodos) en venta ${sale.sale_number}`,
           metadata: {
             sale_id: sale.id,
-            payment_method_code: paymentMethod.code,
-            payment_details: paymentDetails,
+            split_payments: splitPayments,
             captured_at: paymentCapturedAt,
           },
         });
-      }
-
-      if (isCurrentAccountMethod) {
-        await currentAccountsService.createMovement(tenantId, {
-          customer_id: values.customerId!,
+      } else {
+        await salesService.createPayment(tenantId, {
           sale_id: sale.id,
-          type: "debt",
-          amount: summary.total,
-          notes: `Venta ${sale.sale_number}`,
-          created_by: resolvedCreatedBy,
-        });
-      }
-
-      if (requiresCashMovementRegistration && openSession) {
-        await cashService.createMovement(tenantId, {
-          cash_session_id: openSession.id,
-          movement_type: "sale_payment",
+          payment_method_code: paymentMethod.code,
+          provider: isMercadoPagoMethod ? "mercado_pago" : "internal",
+          provider_code:
+            isMercadoPagoMethod
+              ? isMercadoPagoManual
+                ? "mercado_pago_manual"
+                : "mercado_pago"
+              : "internal",
           amount: summary.total,
           currency_code: "ARS",
-          reference_type: paymentMethod.code,
-          reference_id: sale.id,
-          notes: `Cobro venta ${sale.sale_number} - ${paymentMethod.name}`,
-          created_by: resolvedCreatedBy,
+          status: isCurrentAccountMethod ? "pending" : "approved",
+          provider_status:
+            isMercadoPagoMethod
+              ? isMercadoPagoManual
+                ? "approved"
+                : (mercadoPagoIntent?.status ?? "pending")
+              : isCurrentAccountMethod
+                ? "pending"
+                : "approved",
+          provider_reference:
+            isMercadoPagoMethod
+              ? isMercadoPagoManual
+                ? manualMercadoPagoOperationId
+                : (mercadoPagoIntent?.reference ?? null)
+              : null,
+          provider_metadata:
+            isMercadoPagoMethod
+              ? isMercadoPagoManual
+                ? ({
+                    operation_id: manualMercadoPagoOperationId,
+                    mode: "manual",
+                  } as Record<string, unknown>)
+                : ({
+                    payment_intent_id: mercadoPagoIntent?.id ?? null,
+                    status: mercadoPagoIntent?.status ?? "pending",
+                    expires_at: mercadoPagoIntent?.expires_at ?? null,
+                    mode: mercadoPagoStatus.mode,
+                  } as Record<string, unknown>)
+              : null,
+          external_reference:
+            isMercadoPagoMethod
+              ? isMercadoPagoManual
+                ? manualMercadoPagoOperationId
+                : (mercadoPagoIntent?.reference ?? null)
+              : null,
+          metadata: {
+            payment_method_snapshot: {
+              id: paymentMethod.id,
+              name: paymentMethod.name,
+              code: paymentMethod.code,
+              type: paymentMethodCode as PaymentMethodType,
+              affects_cash: paymentMethod.affects_cash,
+              surcharge_percent: paymentMethod.surcharge_percent,
+              discount_percent: paymentMethod.discount_percent,
+            },
+            totals_snapshot: {
+              subtotal_before_promotions: subtotalBeforePromotions,
+              promotion_discount_total: promotionDiscountTotal,
+              cart_promotion_discount_total: cartPromotionDiscountTotal,
+              subtotal_after_promotions: summary.subtotal,
+              surcharge_total: summary.surchargeTotal,
+              payment_discount_total: summary.discountTotal,
+              payment_adjustment: summary.paymentAdjustment,
+              total: summary.total,
+            },
+            payment_details: paymentDetails,
+            payment_captured_at: paymentCapturedAt,
+            provider_snapshot:
+              isMercadoPagoMethod
+                ? isMercadoPagoManual
+                  ? {
+                      provider: "mercado_pago_manual",
+                      operation_id: manualMercadoPagoOperationId,
+                      provider_reference: manualMercadoPagoOperationId,
+                      provider_status: "approved",
+                      mode: "manual",
+                    }
+                  : {
+                      provider: "mercado_pago",
+                      payment_intent_id: mercadoPagoIntent?.id ?? null,
+                      provider_reference: mercadoPagoIntent?.reference ?? null,
+                      provider_status: mercadoPagoIntent?.status ?? "pending",
+                      mode: mercadoPagoStatus.mode,
+                    }
+                : null,
+            cart_promotion_snapshot: promotionsResolution.applied_cart_promotion
+              ? ({ ...promotionsResolution.applied_cart_promotion } as Record<string, unknown>)
+              : null,
+          },
         });
+
+        const singleDestAccountId =
+          typeof paymentDetails?.destination_account_id === "string" && paymentDetails.destination_account_id
+            ? paymentDetails.destination_account_id
+            : null;
+        if (singleDestAccountId) {
+          try {
+            await bankAccountMovementsService.createMovement(tenantId, {
+              bank_account_id: singleDestAccountId,
+              type: "income",
+              origin_type: "pos_sale",
+              concept: `Cobro Venta #${sale.sale_number} - ${paymentMethod.name}`,
+              amount: summary.total,
+              reference_id: sale.id,
+              voucher_number:
+                (typeof paymentDetails?.voucher_number === "string" && paymentDetails.voucher_number) ||
+                (typeof paymentDetails?.operation_id === "string" && paymentDetails.operation_id) ||
+                null,
+              notes: `Cobro POS en ${paymentMethod.name}`,
+              created_by: resolvedCreatedBy,
+            });
+          } catch (bankErr) {
+            console.error("Error al registrar ingreso en cuenta bancaria:", bankErr);
+          }
+        }
+
+        const paymentAuditAction =
+          paymentMethod.code === "card_credit"
+            ? "sale_payment_credit_card"
+            : paymentMethod.code === "card_debit"
+              ? "sale_payment_debit_card"
+              : paymentMethod.code === "transfer"
+                ? "sale_payment_transfer"
+                : paymentMethod.code === "cheque"
+                  ? "sale_payment_cheque"
+                : isMercadoPagoManual
+                  ? "sale_payment_mercado_pago_manual"
+                  : null;
+
+        if (paymentAuditAction) {
+          await auditService.createSafe(tenantId, {
+            user_id: resolvedCreatedBy,
+            module: "pos",
+            action: paymentAuditAction,
+            entity_type: "sale_payment",
+            entity_id: sale.id,
+            description: `Pago registrado (${paymentMethod.name}) en venta ${sale.sale_number}`,
+            metadata: {
+              sale_id: sale.id,
+              payment_method_code: paymentMethod.code,
+              payment_details: paymentDetails,
+              captured_at: paymentCapturedAt,
+            },
+          });
+        }
+
+        if (isCurrentAccountMethod) {
+          await currentAccountsService.createMovement(tenantId, {
+            customer_id: values.customerId!,
+            sale_id: sale.id,
+            type: "debt",
+            amount: summary.total,
+            notes: `Venta ${sale.sale_number}`,
+            created_by: resolvedCreatedBy,
+          });
+        }
+
+        if (requiresCashMovementRegistration && openSession) {
+          await cashService.createMovement(tenantId, {
+            cash_session_id: openSession.id,
+            movement_type: "sale_payment",
+            amount: summary.total,
+            currency_code: "ARS",
+            reference_type: paymentMethod.code,
+            reference_id: sale.id,
+            notes: `Cobro venta ${sale.sale_number} - ${paymentMethod.name}`,
+            created_by: resolvedCreatedBy,
+          });
+        }
       }
 
       const receipt = await receiptsService.create(tenantId, {
@@ -2226,7 +2408,19 @@ export const usePosSale = (tenantId: string | null) => {
           subtotal: item.line_total,
         })),
         total: summary.total,
-        notes: values.notes?.trim() || null,
+        notes: isSplit
+          ? [
+              `Pago combinado: ${splitPayments
+                .map((p) => {
+                  const m = getPaymentMethodById(p.paymentMethodId);
+                  return `${m?.name || "Medio"}: $${p.amount.toFixed(2)}`;
+                })
+                .join(" + ")}`,
+              values.notes?.trim(),
+            ]
+              .filter(Boolean)
+              .join(" | ")
+          : values.notes?.trim() || null,
         created_by: resolvedCreatedBy,
       });
 
@@ -2421,7 +2615,9 @@ export const usePosSale = (tenantId: string | null) => {
         message:
           values.issueInvoice && generatedInvoiceFromSale
             ? "Factura emitida correctamente"
-            : "Venta registrada correctamente",
+            : isSplit
+              ? `Venta ${sale.sale_number} registrada correctamente con pago combinado (${splitPayments.length} métodos)`
+              : "Venta registrada correctamente",
       });
 
       setMercadoPagoIntent(null);

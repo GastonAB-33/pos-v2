@@ -80,7 +80,7 @@ const sidebarGroups: SidebarGroup[] = [
     items: [
       { label: "Caja diaria", to: routePaths.caja, module: "caja" },
       { label: "Caja general", to: routePaths.cajaGeneral, module: "caja_general" },
-      { label: "Cuentas corrientes", to: routePaths.cuentasCorrientes, module: "cuentas_corrientes" },
+      { label: "Cta. cte. clientes", to: routePaths.cuentasCorrientes, module: "cuentas_corrientes" },
       { label: "Cta. cte. proveedores", to: routePaths.cuentasCorrientesProveedores, module: "cuentas_corrientes_proveedores" },
       { label: "Bancos", to: routePaths.bancos, module: "bancos" },
       { label: "Comprobantes", to: routePaths.comprobantes, module: "comprobantes" },
@@ -156,7 +156,9 @@ export const Sidebar = () => {
   };
 
   const isItemActive = (to: string) =>
-    location.pathname === to || location.pathname.startsWith(`${to}/`);
+    location.pathname === to ||
+    location.pathname.startsWith(`${to}/`) ||
+    (to === routePaths.configuracionSistema && location.pathname === routePaths.configuracion);
 
   const closeDrawerAfterNavigation = () => {
     if (!isDesktop) {
@@ -229,25 +231,54 @@ export const Sidebar = () => {
 
         {visibleGroups.map((group) => {
           const isExpanded = expandedGroupId === group.id;
+          const isGroupActive = group.items.some((item) => isItemActive(item.to));
           const GroupIcon = group.icon;
 
           return (
             <section key={group.id} className="space-y-1">
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-2 py-1 text-left"
+                className={cn(
+                  "app-sidebar-group-btn flex w-full items-center gap-2 rounded-lg px-2.5 py-1 text-left transition-all duration-150",
+                  isGroupActive
+                    ? "app-sidebar-group-btn--active border border-slate-200/90 bg-slate-100/75 text-slate-900 shadow-xs"
+                    : "border border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                )}
                 onClick={() => {
                   if (!group.collapsible) return;
-                  setExpandedGroupId((current) => current === group.id ? null : group.id);
+                  setExpandedGroupId((current) => (current === group.id ? null : group.id));
                 }}
               >
-                <GroupIcon aria-hidden="true" size={14} className="text-slate-500" />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">{group.label}</span>
+                <GroupIcon
+                  aria-hidden="true"
+                  size={14}
+                  className={cn(
+                    "app-sidebar-group-icon shrink-0 transition-colors",
+                    isGroupActive ? "text-brand-600" : "text-slate-400"
+                  )}
+                />
+                <span
+                  className={cn(
+                    "app-sidebar-group-label text-[11px] uppercase tracking-[0.1em] transition-colors",
+                    isGroupActive
+                      ? "font-bold text-slate-900"
+                      : "font-semibold text-slate-500"
+                  )}
+                >
+                  {group.label}
+                </span>
+                {isGroupActive ? (
+                  <span
+                    className="app-sidebar-group-dot h-1.5 w-1.5 rounded-full bg-brand-500 shrink-0"
+                    title="Módulo actual"
+                  />
+                ) : null}
                 <ChevronDown
                   aria-hidden="true"
                   size={15}
                   className={cn(
-                    "ml-auto text-xs text-slate-500 transition-transform",
+                    "app-sidebar-group-chevron ml-auto shrink-0 text-xs transition-transform",
+                    isGroupActive ? "text-slate-700" : "text-slate-400",
                     isExpanded ? "rotate-180" : "rotate-0"
                   )}
                 />

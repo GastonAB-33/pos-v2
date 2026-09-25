@@ -29,6 +29,22 @@ const isAuthExpiredError = (error: unknown): boolean => {
   );
 };
 
+const isMissingTableError = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: string; message?: string; status?: number; details?: string };
+  const message = String(candidate.message ?? "").toLowerCase();
+  const code = String(candidate.code ?? "");
+  const status = Number(candidate.status ?? 0);
+  return (
+    code === "PGRST205" ||
+    code === "42P01" ||
+    status === 404 ||
+    message.includes("could not find the table") ||
+    message.includes("schema cache") ||
+    message.includes("does not exist")
+  );
+};
+
 export class TenantCrudService<TEntity extends TenantScopedEntity> {
   constructor(private readonly tableName: TenantScopedTableName) {}
 
@@ -71,24 +87,35 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
     let from = 0;
     const allRecords: TEntity[] = [];
 
-    while (true) {
-      const to = from + pageSize - 1;
-      const data = await this.execWithAuthRetry(async () =>
-        supabase
-          .from(this.tableName)
-          .select("*")
-          .eq("tenant_id", tenantId)
-          .range(from, to)
-      );
+    try {
+      while (true) {
+        const to = from + pageSize - 1;
+        const data = await this.execWithAuthRetry(async () =>
+          supabase
+            .from(this.tableName)
+            .select("*")
+            .eq("tenant_id", tenantId)
+            .range(from, to)
+        );
 
-      const chunk = (data ?? []) as TEntity[];
-      if (chunk.length === 0) break;
-      allRecords.push(...chunk);
-      if (chunk.length < pageSize) break;
-      from += pageSize;
+        const chunk = (data ?? []) as TEntity[];
+        if (chunk.length === 0) break;
+        allRecords.push(...chunk);
+        if (chunk.length < pageSize) break;
+        from += pageSize;
+      }
+
+      return allRecords;
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        console.warn(
+          `[TenantCrudService] Tabla "${this.tableName}" no encontrada en Supabase (PGRST205). Utilizando almacenamiento local de respaldo.`
+        );
+        const table = this.getMockRows();
+        return table.filter((row) => row.tenant_id === tenantId);
+      }
+      throw error;
     }
-
-    return allRecords;
   }
 
   async getById(tenantId: string, id: string): Promise<TEntity | null> {
@@ -97,16 +124,24 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
       return table.find((row) => row.tenant_id === tenantId && row.id === id) ?? null;
     }
 
-    const data = await this.execWithAuthRetry(async () =>
-      supabase
-        .from(this.tableName)
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .eq("id", id)
-        .maybeSingle()
-    );
+    try {
+      const data = await this.execWithAuthRetry(async () =>
+        supabase
+          .from(this.tableName)
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .eq("id", id)
+          .maybeSingle()
+      );
 
-    return (data as TEntity | null) ?? null;
+      return (data as TEntity | null) ?? null;
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        const table = this.getMockRows();
+        return table.find((row) => row.tenant_id === tenantId && row.id === id) ?? null;
+      }
+      throw error;
+    }
   }
 
   async create(tenantId: string, input: CreateEntityInput<TEntity>): Promise<TEntity> {
@@ -127,15 +162,28 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
       return row;
     }
 
-    const data = await this.execWithAuthRetry(async () =>
-      supabase.from(this.tableName).insert(row).select("*").single()
-    );
+    try {
+      const data = await this.execWithAuthRetry(async () =>
+        supabase.from(this.tableName).insert(row).select("*").single()
+      );
 
-    if (!data) {
-      throw new Error("No se pudo crear el registro");
+      if (!data) {
+        throw new Error("No se pudo crear el registro");
+      }
+
+      return data;
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        console.warn(
+          `[TenantCrudService] Tabla "${this.tableName}" no encontrada en Supabase al crear. Guardando en almacenamiento local.`
+        );
+        const table = this.getMockRows();
+        table.push(row);
+        persistMockDatabase();
+        return row;
+      }
+      throw error;
     }
-
-    return data;
   }
 
   async update(tenantId: string, id: string, input: UpdateEntityInput<TEntity>): Promise<TEntity | null> {
@@ -160,17 +208,33 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
       return updated;
     }
 
-    const data = await this.execWithAuthRetry(async () =>
-      supabase
-        .from(this.tableName)
-        .update(payload)
-        .eq("tenant_id", tenantId)
-        .eq("id", id)
-        .select("*")
-        .maybeSingle()
-    );
+    try {
+      const data = await this.execWithAuthRetry(async () =>
+        supabase
+          .from(this.tableName)
+          .update(payload)
+          .eq("tenant_id", tenantId)
+          .eq("id", id)
+          .select("*")
+          .maybeSingle()
+      );
 
-    return (data as TEntity | null) ?? null;
+      return (data as TEntity | null) ?? null;
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        const table = this.getMockRows();
+        const index = table.findIndex((row) => row.tenant_id === tenantId && row.id === id);
+        if (index < 0) return null;
+        const updated = {
+          ...table[index],
+          ...payload,
+        } as TEntity;
+        table[index] = updated;
+        persistMockDatabase();
+        return updated;
+      }
+      throw error;
+    }
   }
 
   async delete(tenantId: string, id: string): Promise<boolean> {
@@ -185,15 +249,27 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
       return true;
     }
 
-    const result = await this.execWithAuthRetry(async () => {
-      const response = await supabase
-        .from(this.tableName)
-        .delete({ count: "exact" })
-        .eq("tenant_id", tenantId)
-        .eq("id", id);
-      return { data: response.count, error: response.error };
-    });
+    try {
+      const result = await this.execWithAuthRetry(async () => {
+        const response = await supabase
+          .from(this.tableName)
+          .delete({ count: "exact" })
+          .eq("tenant_id", tenantId)
+          .eq("id", id);
+        return { data: response.count, error: response.error };
+      });
 
-    return Boolean(result && result > 0);
+      return Boolean(result && result > 0);
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        const table = this.getMockRows();
+        const index = table.findIndex((row) => row.tenant_id === tenantId && row.id === id);
+        if (index < 0) return false;
+        table.splice(index, 1);
+        persistMockDatabase();
+        return true;
+      }
+      throw error;
+    }
   }
 }

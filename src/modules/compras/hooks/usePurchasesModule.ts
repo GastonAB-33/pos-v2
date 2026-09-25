@@ -3,13 +3,28 @@ import { auditService } from "@/services/audit.service";
 import { cashService } from "@/services/cash.service";
 import { productsService } from "@/services/products.service";
 import { useProductsStore } from "@/features/products/store/products.store";
+import { bankAccountsService } from "@/services/bank-accounts.service";
+import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
+import { generalCashService } from "@/services/general-cash.service";
 import { purchasesService } from "@/services/purchases.service";
 import { stockService } from "@/services/stock.service";
 import { suppliersService } from "@/services/suppliers.service";
 import { supplierCurrentAccountsService } from "@/services/supplier-current-accounts.service";
-import type { Product, ProductBarcode, Purchase, PurchaseItem, Supplier } from "@/types/entities";
+import type {
+  BankAccount,
+  CashSession,
+  Product,
+  ProductBarcode,
+  Purchase,
+  PurchaseItem,
+  Supplier,
+} from "@/types/entities";
 import type { ProductFormModalValues } from "@/modules/productos/types/product.types";
-import type { PurchaseCheckoutValues } from "@/modules/compras/schemas/purchase-checkout.schema";
+import type {
+  PurchaseCheckoutValues,
+  PurchaseHeaderValues,
+  PurchasePaymentValues,
+} from "@/modules/compras/schemas/purchase-checkout.schema";
 import type { SupplierFormValues } from "@/modules/proveedores/schemas/supplier-form.schema";
 import type { PurchaseReturnPayload } from "@/modules/compras/components/PurchaseReturnModal";
 import type { PurchaseCartItemView, PurchaseSummary } from "@/modules/compras/components/PurchaseCart";
@@ -82,6 +97,8 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
   const [productBarcodes, setProductBarcodes] = useState<ProductBarcode[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [openCashSession, setOpenCashSession] = useState<CashSession | null>(null);
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<PurchaseCartItemView[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -96,6 +113,8 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       setProductBarcodes([]);
       setSuppliers([]);
       setPurchases([]);
+      setBankAccounts([]);
+      setOpenCashSession(null);
       setCart([]);
       return;
     }
@@ -109,14 +128,25 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     }
 
     try {
-      const [allProducts, allProductBarcodes, allSuppliers, allPurchases, allPurchaseItems] =
-        await Promise.all([
-          productsService.getAllByTenant(tenantId),
-          productsService.getBarcodesByTenant(tenantId),
-          suppliersService.getAllByTenant(tenantId),
-          purchasesService.getAllByTenant(tenantId),
-          purchasesService.getAllItemsByTenant(tenantId),
-        ]);
+      const [
+        allProducts,
+        allProductBarcodes,
+        allSuppliers,
+        allPurchases,
+        allPurchaseItems,
+        allBankAccounts,
+        activeCashSession,
+      ] = await Promise.all([
+        productsService.getAllByTenant(tenantId),
+        productsService.getBarcodesByTenant(tenantId),
+        suppliersService.getAllByTenant(tenantId),
+        purchasesService.getAllByTenant(tenantId),
+        purchasesService.getAllItemsByTenant(tenantId),
+        bankAccountsService.getActiveByTenant(tenantId),
+        userId != null
+          ? cashService.getOpenSessionByUser(tenantId, userId).then((s) => s ?? cashService.getOpenSession(tenantId))
+          : cashService.getOpenSession(tenantId),
+      ]);
 
       const purchaseItemsByPurchaseId = allPurchaseItems.reduce<Map<string, PurchaseItem[]>>(
         (acc, item) => {
@@ -130,6 +160,8 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
 
       setProducts(allProducts);
       setProductBarcodes(allProductBarcodes);
+      setBankAccounts(allBankAccounts);
+      setOpenCashSession(activeCashSession);
       setSuppliers(allSuppliers.filter((supplier) => supplier.is_active));
       setPurchases(
         allPurchases
@@ -347,7 +379,10 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     return { subtotal, vatTotal, total, totalUnits };
   }, [cart]);
 
-  const confirmPurchase = async (values: PurchaseCheckoutValues): Promise<Purchase | null> => {
+  const confirmPurchase = async (
+    headerOrCheckoutValues: PurchaseHeaderValues | PurchaseCheckoutValues,
+    optionalPaymentValues?: PurchasePaymentValues
+  ): Promise<Purchase | null> => {
     if (!tenantId) return null;
 
     if (!cart.length) {
@@ -363,39 +398,143 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       return null;
     }
 
+    const headerValues: PurchaseHeaderValues = {
+      supplierId: headerOrCheckoutValues.supplierId,
+      documentType: headerOrCheckoutValues.documentType,
+      documentNumber: headerOrCheckoutValues.documentNumber,
+      issueDate: headerOrCheckoutValues.issueDate,
+      notes: headerOrCheckoutValues.notes,
+    };
+
+    const paymentValues: PurchasePaymentValues =
+      optionalPaymentValues ?? {
+        paymentMethod:
+          "paymentMethod" in headerOrCheckoutValues
+            ? (headerOrCheckoutValues.paymentMethod as PurchasePaymentValues["paymentMethod"])
+            : "cash_daily",
+        bankAccountId:
+          "bankAccountId" in headerOrCheckoutValues
+            ? (headerOrCheckoutValues.bankAccountId as string | undefined)
+            : undefined,
+        voucherNumber:
+          "voucherNumber" in headerOrCheckoutValues
+            ? (headerOrCheckoutValues.voucherNumber as string | undefined)
+            : undefined,
+        dueDate:
+          "dueDate" in headerOrCheckoutValues
+            ? (headerOrCheckoutValues.dueDate as string | undefined)
+            : undefined,
+        paymentNotes:
+          "paymentNotes" in headerOrCheckoutValues
+            ? (headerOrCheckoutValues.paymentNotes as string | undefined)
+            : undefined,
+        isSplitPayment:
+          "isSplitPayment" in headerOrCheckoutValues
+            ? Boolean(headerOrCheckoutValues.isSplitPayment)
+            : false,
+        payments:
+          "payments" in headerOrCheckoutValues
+            ? headerOrCheckoutValues.payments
+            : undefined,
+      };
+
     setIsSubmitting(true);
     try {
-      const affectsCash = values.paymentMethod === "cash";
-      let openCashSession = null;
+      const isSplit = Boolean(
+        paymentValues.isSplitPayment &&
+          paymentValues.payments &&
+          paymentValues.payments.length > 0
+      );
 
-      if (affectsCash) {
-        openCashSession =
+      const splitPayments = isSplit ? paymentValues.payments! : [];
+      const dailyCashAmount = isSplit
+        ? splitPayments
+            .filter((p) => p.paymentMethod === "cash_daily")
+            .reduce((acc, p) => acc + p.amount, 0)
+        : paymentValues.paymentMethod === "cash_daily"
+        ? summary.total
+        : 0;
+
+      const hasDailyCash = dailyCashAmount > 0;
+
+      const generalCashAmount = isSplit
+        ? splitPayments
+            .filter((p) => p.paymentMethod === "cash_general")
+            .reduce((acc, p) => acc + p.amount, 0)
+        : paymentValues.paymentMethod === "cash_general"
+        ? summary.total
+        : 0;
+
+      const hasGeneralCash = generalCashAmount > 0;
+      let activeCashSession = openCashSession;
+
+      if (hasDailyCash && !activeCashSession) {
+        activeCashSession =
           userId != null
             ? (await cashService.getOpenSessionByUser(tenantId, userId)) ??
               (await cashService.getOpenSession(tenantId))
             : await cashService.getOpenSession(tenantId);
-
-        if (!openCashSession) {
-          setFeedback({
-            type: "error",
-            message: "Debes tener una caja abierta para registrar el pago en efectivo al proveedor",
-          });
-          return null;
-        }
       }
 
+      const selectedBank =
+        !isSplit && paymentValues.paymentMethod === "transfer" && paymentValues.bankAccountId
+          ? bankAccounts.find((b) => b.id === paymentValues.bankAccountId) ?? null
+          : null;
+
+      const methodNames: Record<string, string> = {
+        cash_daily: "Caja Diaria",
+        cash_general: "Caja General",
+        cash: "Efectivo Directo",
+        transfer: "Transferencia",
+        current_account: "Cta. Cte. Proveedor",
+      };
+
+      const paymentDetailNotes = isSplit
+        ? `Pago Combinado: ${splitPayments
+            .map((p) => {
+              const b = p.bankAccountId ? bankAccounts.find((acc) => acc.id === p.bankAccountId) : null;
+              const details = [
+                methodNames[p.paymentMethod] || p.paymentMethod,
+                b ? `(${b.bank_name})` : null,
+                p.voucherNumber ? `Comp. ${p.voucherNumber}` : null,
+                `$${p.amount.toFixed(2)}`,
+              ]
+                .filter(Boolean)
+                .join(" ");
+              return details;
+            })
+            .join(" + ")}`
+        : [
+            paymentValues.paymentMethod === "cash_daily" && !activeCashSession
+              ? "(Sin caja diaria abierta)"
+              : null,
+            paymentValues.paymentMethod === "cash_general" ? "Pago Caja General" : null,
+            paymentValues.paymentMethod === "cash" ? "Pago Efectivo Directo" : null,
+            paymentValues.paymentMethod === "transfer"
+              ? `Transf. bancaria ${selectedBank ? `(${selectedBank.bank_name})` : ""}`
+              : null,
+            paymentValues.voucherNumber ? `Comp. ${paymentValues.voucherNumber}` : null,
+            paymentValues.dueDate ? `Vence: ${paymentValues.dueDate}` : null,
+            paymentValues.paymentNotes?.trim() || null,
+          ]
+            .filter(Boolean)
+            .join(" - ");
+
+      const combinedNotes =
+        [headerValues.notes?.trim(), paymentDetailNotes].filter(Boolean).join(" | ") || null;
+
       const purchase = await purchasesService.create(tenantId, {
-        supplier_id: values.supplierId,
+        supplier_id: headerValues.supplierId,
         purchase_number: `CP-${Date.now()}`,
-        document_type: values.documentType,
-        document_number: values.documentNumber?.trim() || null,
-        issue_date: values.issueDate,
-        payment_method: values.paymentMethod,
+        document_type: headerValues.documentType,
+        document_number: headerValues.documentNumber?.trim() || null,
+        issue_date: headerValues.issueDate,
+        payment_method: isSplit ? "other" : paymentValues.paymentMethod,
         status: "confirmed",
         subtotal: summary.subtotal,
         vat_total: summary.vatTotal,
         total: summary.total,
-        notes: values.notes?.trim() || null,
+        notes: combinedNotes,
         created_by: userId,
         items: [],
         supplier: null,
@@ -474,33 +613,117 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       }
 
       let cashMovementId: string | null = null;
-      if (affectsCash && openCashSession && summary.total > 0) {
+      if (hasDailyCash && activeCashSession && dailyCashAmount > 0) {
         const cashMovement = await cashService.createMovement(tenantId, {
-          cash_session_id: openCashSession.id,
+          cash_session_id: activeCashSession.id,
           movement_type: "expense",
-          amount: summary.total,
+          amount: dailyCashAmount,
           currency_code: "ARS",
           reference_type: "purchase_payment",
           reference_id: purchase.id,
-          notes: `Pago compra ${purchase.purchase_number} - ${values.documentType} ${
-            values.documentNumber || ""
-          }`.trim(),
+          notes: `Pago compra ${purchase.purchase_number} - ${headerValues.documentType} ${
+            headerValues.documentNumber || ""
+          }${isSplit ? ` (Parcial caja diaria: $${dailyCashAmount.toFixed(2)})` : ""}`.trim(),
           created_by: userId,
         });
         cashMovementId = cashMovement.id;
       }
 
-      if (values.paymentMethod === "current_account" && purchase.supplier_id && summary.total > 0) {
+      const currentAccountDebtAmount = isSplit
+        ? splitPayments
+            .filter((p) => p.paymentMethod === "current_account")
+            .reduce((acc, p) => acc + p.amount, 0)
+        : paymentValues.paymentMethod === "current_account"
+        ? summary.total
+        : 0;
+
+      if (currentAccountDebtAmount > 0 && purchase.supplier_id) {
         try {
+          const splitCtaCteItem = isSplit
+            ? splitPayments.find((p) => p.paymentMethod === "current_account")
+            : null;
+          const debtDueDate = splitCtaCteItem?.dueDate || paymentValues.dueDate;
+          const debtNotes = [
+            `Compra a crédito #${purchase.purchase_number}${
+              isSplit ? ` (Parcial cta. cte.: $${currentAccountDebtAmount.toFixed(2)})` : ""
+            }`,
+            headerValues.documentType
+              ? `${headerValues.documentType} ${headerValues.documentNumber || ""}`.trim()
+              : null,
+            debtDueDate ? `Vencimiento: ${debtDueDate}` : null,
+            paymentValues.paymentNotes?.trim() || null,
+          ]
+            .filter(Boolean)
+            .join(" - ");
+
           await supplierCurrentAccountsService.registerDebt(tenantId, {
             supplierId: purchase.supplier_id,
             purchaseId: purchase.id,
-            amount: summary.total,
-            notes: `Compra a crédito #${purchase.purchase_number} - ${values.documentType} ${values.documentNumber || ""}`.trim(),
+            amount: currentAccountDebtAmount,
+            notes: debtNotes,
             createdBy: userId ?? undefined,
           });
         } catch (debtError) {
           console.error("Error al registrar deuda en cuenta corriente de proveedor:", debtError);
+        }
+      }
+
+      // Registrar egreso en cuenta bancaria si se pagó por transferencia desde cuenta propia
+      const transferItems = isSplit
+        ? splitPayments.filter(
+            (p) => p.paymentMethod === "transfer" && p.bankAccountId && p.amount > 0
+          )
+        : paymentValues.paymentMethod === "transfer" && paymentValues.bankAccountId
+        ? [
+            {
+              bankAccountId: paymentValues.bankAccountId,
+              amount: summary.total,
+              voucherNumber: paymentValues.voucherNumber,
+            },
+          ]
+        : [];
+
+      for (const item of transferItems) {
+        if (!item.bankAccountId) continue;
+        try {
+          await bankAccountMovementsService.createMovement(tenantId, {
+            bank_account_id: item.bankAccountId,
+            type: "expense",
+            origin_type: "supplier_payment",
+            concept: `Pago Compra #${purchase.purchase_number}${
+              headerValues.documentNumber
+                ? ` - ${headerValues.documentType} ${headerValues.documentNumber}`
+                : ""
+            }`,
+            amount: item.amount,
+            reference_id: purchase.id,
+            voucher_number: item.voucherNumber || null,
+            notes: `Pago a proveedor desde cuenta bancaria`,
+            created_by: userId,
+          });
+        } catch (bErr) {
+          console.error("Error al registrar egreso en cuenta bancaria:", bErr);
+        }
+      }
+
+      // Registrar egreso en caja general si se pagó desde caja general
+      if (hasGeneralCash && generalCashAmount > 0) {
+        try {
+          await generalCashService.createMovement(tenantId, {
+            type: "expense",
+            amount: generalCashAmount,
+            origin_type: "supplier_payment",
+            concept: `Pago Compra #${purchase.purchase_number}${
+              headerValues.documentNumber
+                ? ` - ${headerValues.documentType} ${headerValues.documentNumber}`
+                : ""
+            }`,
+            reference_id: purchase.id,
+            created_by: userId,
+            notes: `Pago a proveedor desde Caja General`,
+          });
+        } catch (gcErr) {
+          console.error("Error al registrar egreso en caja general:", gcErr);
         }
       }
 
@@ -513,23 +736,37 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         description: `Compra confirmada: ${purchase.purchase_number}`,
         metadata: {
           supplier_id: purchase.supplier_id,
-          document_type: values.documentType,
-          document_number: values.documentNumber,
+          document_type: headerValues.documentType,
+          document_number: headerValues.documentNumber,
           item_count: cart.length,
           total: purchase.total,
           vat_total: summary.vatTotal,
           total_units: summary.totalUnits,
-          payment_method: values.paymentMethod,
-          cash_session_id: openCashSession?.id ?? null,
+          payment_method: isSplit ? "split" : paymentValues.paymentMethod,
+          is_split_payment: isSplit,
+          split_payments: isSplit ? splitPayments : undefined,
+          bank_account_id: paymentValues.bankAccountId ?? null,
+          cash_session_id: activeCashSession?.id ?? null,
           cash_movement_id: cashMovementId,
         },
       });
 
+      let methodDesc = "en efectivo";
+      if (isSplit) {
+        methodDesc = `con pago combinado (${splitPayments.length} medios de pago)`;
+      } else if (paymentValues.paymentMethod === "cash_daily") {
+        methodDesc = activeCashSession ? "debitada de la caja diaria" : "en efectivo (sin caja abierta)";
+      } else if (paymentValues.paymentMethod === "cash_general") {
+        methodDesc = "con fondos de caja general";
+      } else if (paymentValues.paymentMethod === "transfer") {
+        methodDesc = `por transferencia bancaria ${selectedBank ? `(${selectedBank.bank_name})` : ""}`;
+      } else if (paymentValues.paymentMethod === "current_account") {
+        methodDesc = "asentada en cuenta corriente del proveedor";
+      }
+
       setFeedback({
         type: "success",
-        message: `Compra ${purchase.purchase_number} registrada correctamente${
-          affectsCash ? " y debitada de la caja diaria" : ""
-        }`,
+        message: `Compra ${purchase.purchase_number} registrada correctamente (${methodDesc})`,
       });
       clearCart();
       useProductsStore.getState().loadCatalog(tenantId, true).catch(() => {});
@@ -895,6 +1132,8 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     subcategoryOptions,
     suppliers,
     purchases,
+    bankAccounts,
+    openCashSession,
     suppliersById,
     cart,
     summary,

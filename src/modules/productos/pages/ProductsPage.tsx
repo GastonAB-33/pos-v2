@@ -2,6 +2,9 @@ import { useMemo, useState } from "react";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
+import { useOffline } from "@/features/offline/hooks/useOffline";
+import { useToast } from "@/components/ui/useToast";
+import { useProductsStore } from "@/features/products/store/products.store";
 import { PaginationControls } from "@/components/ui/PaginationControls";
 import { usePagination } from "@/hooks/usePagination";
 import { BarcodeGeneratorModal } from "@/modules/productos/components/BarcodeGeneratorModal";
@@ -25,12 +28,41 @@ export const ProductsPage = () => {
   const { canRead, canWrite } = usePermissions();
   const canReadProductos = canRead("productos");
   const canWriteProductos = canWrite("productos");
+  const { syncNow, isSyncing, clearSyncError } = useOffline();
+  const { success: toastSuccess, error: toastError } = useToast();
 
   const products = useProducts(tenantId, user?.id ?? null);
 
   const [formModal, setFormModal] = useState<ProductModalState | null>(null);
   const [barcodeProduct, setBarcodeProduct] = useState<ProductViewModel | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefreshCatalog = async () => {
+    if (isRefreshing || isSyncing) return;
+    setIsRefreshing(true);
+    clearSyncError();
+
+    try {
+      const results = await Promise.allSettled([
+        syncNow(),
+        products.reload(true),
+        products.reloadAudit(),
+      ]);
+
+      const hasError = results.some((r) => r.status === "rejected");
+      if (hasError) {
+        toastError("No se pudieron actualizar todos los datos del catálogo.");
+      } else {
+        const count = useProductsStore.getState().products.length;
+        toastSuccess(`Catálogo actualizado (${count} productos).`);
+      }
+    } catch {
+      toastError("Error al sincronizar productos desde el servidor.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   useBarcodeScanner({
     enabled: !formModal && !barcodeProduct && !importOpen,
@@ -75,6 +107,7 @@ export const ProductsPage = () => {
       <ProductFilters
           canWrite={canWriteProductos}
           loading={products.isLoading || products.isSubmitting}
+          isRefreshing={isRefreshing || isSyncing}
           selectedCount={selectedCount}
           filteredCount={products.filteredProducts.length}
           filters={products.filters}
@@ -84,8 +117,7 @@ export const ProductsPage = () => {
           onFiltersChange={products.setFilters}
           onClearFilters={products.resetFilters}
           onReload={() => {
-            void products.reload();
-            void products.reloadAudit();
+            void handleRefreshCatalog();
           }}
           onOpenCreate={() => setFormModal({ mode: "create", product: null })}
           onOpenImport={() => setImportOpen(true)}

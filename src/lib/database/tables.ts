@@ -30,6 +30,7 @@ export const dbTables = {
   cash_movements: "cash_movements",
   general_cash_movements: "general_cash_movements",
   supplier_current_account_movements: "supplier_current_account_movements",
+  bank_account_movements: "bank_account_movements",
 
   // Preparado para evolucion futura de ventas/pagos.
   sale_payments: "sale_payments",
@@ -67,6 +68,7 @@ export const tenantScopedTables = [
   dbTables.cash_movements,
   dbTables.general_cash_movements,
   dbTables.supplier_current_account_movements,
+  dbTables.bank_account_movements,
   dbTables.sale_payments,
 ] as const;
 
@@ -102,7 +104,8 @@ export const tableDefinitions: Record<DbTableName, readonly string[]> = {
   stock_movements: ["id", "tenant_id", "product_id", "movement_type", "quantity", "reference_type", "reference_id", "notes", "created_by", "created_at", "updated_at"],
   cash_sessions: ["id", "tenant_id", "branch_id", "opened_by_user_id", "closed_by_user_id", "status", "opened_at", "closed_at", "opening_amount", "closing_amount", "expected_closing_amount", "closing_difference", "notes", "created_at", "updated_at"],
   cash_movements: ["id", "tenant_id", "cash_session_id", "movement_type", "amount", "currency_code", "reference_type", "reference_id", "notes", "created_by", "created_at", "updated_at"],
-  general_cash_movements: ["id", "tenant_id", "type", "amount", "origin_type", "concept", "reference_id", "notes", "created_by", "created_at", "updated_at"],
+  general_cash_movements: ["id", "tenant_id", "type", "amount", "origin_type", "concept", "balance_after", "reference_id", "notes", "created_by", "created_at", "updated_at"],
   supplier_current_account_movements: ["id", "tenant_id", "supplier_id", "purchase_id", "type", "amount", "balance_after", "payment_method_code", "notes", "created_by", "created_at", "updated_at"],
+  bank_account_movements: ["id", "tenant_id", "bank_account_id", "type", "origin_type", "concept", "amount", "balance_after", "reference_id", "voucher_number", "notes", "created_by", "created_at", "updated_at"],
   sale_payments: ["id", "tenant_id", "sale_id", "payment_method_code", "provider", "provider_code", "amount", "currency_code", "status", "provider_status", "provider_reference", "provider_metadata", "external_reference", "metadata", "created_at", "updated_at"],
 };

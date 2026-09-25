@@ -282,7 +282,6 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
   const {
     draft,
     setDraft,
-    customers,
     paymentMethods,
     isLoading,
     isSavingAll,
@@ -343,10 +342,6 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     return parseScaleBarcode(scaleTesterBarcode, draft.codigos_balanza);
   }, [scaleTesterBarcode, draft?.codigos_balanza]);
 
-  const customerNameById = useMemo(
-    () => new Map(customers.map((customer) => [customer.id, customer.full_name])),
-    [customers]
-  );
 
   const visibleTabs = useMemo(
     () => configTabs.filter((tab) => scopePreset.visibleSections[tab.id]),
@@ -725,21 +720,6 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Cliente por defecto al iniciar cobro</label>
-              <select className="ui-input" value={draft.pos.default_customer_id ?? ""} onChange={(event) => updateSection("pos", { default_customer_id: event.target.value || null })} disabled={!canWriteConfiguracion}>
-                <option value="">Consumidor Final (Sin cliente grabado)</option>
-                {customers.map((customer) => (
-                  <option key={customer.id} value={customer.id}>{customer.full_name}</option>
-                ))}
-              </select>
-              {draft.pos.default_customer_id ? (
-                <p className="mt-1 text-[11px] text-slate-500">
-                  Seleccionado: {customerNameById.get(draft.pos.default_customer_id) ?? "Cliente no encontrado"}
-                </p>
-              ) : null}
-            </div>
-
-            <div>
               <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Medio de pago por defecto</label>
               <select className="ui-input" value={draft.pos.default_payment_method_id ?? ""} onChange={(event) => updateSection("pos", { default_payment_method_id: event.target.value || null })} disabled={!canWriteConfiguracion}>
                 <option value="">Efectivo / Selección automática</option>
@@ -747,55 +727,6 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   <option key={method.id} value={method.id}>{method.name}</option>
                 ))}
               </select>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Agrupación de ítems en el carrito</label>
-              <select className="ui-input" value={draft.pos.cart_behavior} onChange={(event) => updateSection("pos", { cart_behavior: event.target.value as TenantSettings["pos"]["cart_behavior"] })} disabled={!canWriteConfiguracion}>
-                <option value="merge_same_product">Sumar cantidad al escanear mismo producto</option>
-                <option value="separate_lines">Agregar cada escaneo en una nueva línea</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Cantidad inicial al escanear código</label>
-              <input
-                className="ui-input"
-                type="number"
-                step="0.001"
-                min="0.001"
-                value={draft.pos.barcode_scan_quantity}
-                onChange={(event) =>
-                  updateSection("pos", {
-                    barcode_scan_quantity: Math.max(
-                      0.001,
-                      toNumber(event.target.value, draft.pos.barcode_scan_quantity)
-                    ),
-                  })
-                }
-                disabled={!canWriteConfiguracion}
-              />
-            </div>
-
-            <div className="md:col-span-2 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Reglas de Operación</span>
-
-              <div className="grid gap-3 sm:grid-cols-3">
-                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.pos.auto_print_receipt} onChange={(event) => updateSection("pos", { auto_print_receipt: event.target.checked })} disabled={!canWriteConfiguracion} />
-                  <span>Impresión automática de ticket</span>
-                </label>
-
-                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.pos.allow_sale_without_customer} onChange={(event) => updateSection("pos", { allow_sale_without_customer: event.target.checked })} disabled={!canWriteConfiguracion} />
-                  <span>Permitir venta sin seleccionar cliente</span>
-                </label>
-
-                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.pos.allow_negative_stock} onChange={(event) => updateSection("pos", { allow_negative_stock: event.target.checked })} disabled={!canWriteConfiguracion} />
-                  <span>Permitir venta sin stock disponible</span>
-                </label>
-              </div>
             </div>
 
             <div className="md:col-span-2 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">

@@ -93,6 +93,7 @@ export interface Supplier extends TenantScopedEntity {
   phone: string | null;
   email: string | null;
   address: string | null;
+  tax_id?: string | null;
   observations: string | null;
   current_balance?: number;
   is_active: boolean;
@@ -133,6 +134,31 @@ export interface BankAccount extends TenantScopedEntity {
   currency_code: string;
   notes: string | null;
   is_active: boolean;
+  current_balance?: number;
+}
+
+export type BankAccountMovementType = "income" | "expense";
+
+export type BankAccountMovementOriginType =
+  | "pos_sale"
+  | "customer_collection"
+  | "supplier_payment"
+  | "service_expense"
+  | "manual_income"
+  | "manual_expense"
+  | "account_transfer";
+
+export interface BankAccountMovement extends TenantScopedEntity {
+  bank_account_id: string;
+  type: BankAccountMovementType;
+  origin_type: BankAccountMovementOriginType;
+  concept: string;
+  amount: number;
+  balance_after: number;
+  reference_id?: string | null;
+  voucher_number?: string | null;
+  notes?: string | null;
+  created_by?: string | null;
 }
 
 export interface OriginBank extends TenantScopedEntity {

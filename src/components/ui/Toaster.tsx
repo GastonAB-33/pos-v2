@@ -28,16 +28,16 @@ const ToastItem = ({ toast, onClose }: ToastItemProps) => {
   const titleText = isSuccess ? "Operación exitosa" : isError ? "Atención / Error" : "Notificación";
 
   const cardStyle = isSuccess
-    ? "border-emerald-300 bg-emerald-50 text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950/90 dark:text-emerald-100 ring-1 ring-emerald-500/20"
+    ? "ui-toast-card--success"
     : isError
-      ? "border-red-300 bg-red-50 text-red-950 dark:border-red-800 dark:bg-red-950/90 dark:text-red-100 ring-1 ring-red-500/20"
-      : "border-sky-300 bg-sky-50 text-sky-950 dark:border-sky-800 dark:bg-sky-950/90 dark:text-sky-100 ring-1 ring-sky-500/20";
+      ? "ui-toast-card--error"
+      : "ui-toast-card--info";
 
   const iconStyle = isSuccess
-    ? "text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/60"
+    ? "ui-toast-icon--success"
     : isError
-      ? "text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/60"
-      : "text-sky-600 dark:text-sky-400 bg-sky-100 dark:bg-sky-900/60";
+      ? "ui-toast-icon--error"
+      : "ui-toast-icon--info";
 
   const accentBar = isSuccess
     ? "bg-emerald-500"
@@ -47,7 +47,7 @@ const ToastItem = ({ toast, onClose }: ToastItemProps) => {
 
   return (
     <article
-      className={`pointer-events-auto relative flex w-full overflow-hidden rounded-xl border p-4 shadow-xl transition-all ${cardStyle}`}
+      className={`ui-toast-card pointer-events-auto relative flex w-full overflow-hidden rounded-xl border p-4 transition-all ${cardStyle}`}
       role="alert"
     >
       {/* Barra lateral de acento de color */}
