@@ -37,17 +37,19 @@ export const generalCashService = {
     const movements = await generalCashCrud.getAllByTenant(tenantId);
 
     const sorted = [...movements].sort((a, b) =>
-      a.created_at.localeCompare(b.created_at)
+      (a.created_at || "").localeCompare(b.created_at || "")
     );
     const lastMovement = sorted[sorted.length - 1];
-    const previousBalance = lastMovement?.balance_after ?? 0;
+    const previousBalance = Number(lastMovement?.balance_after) || 0;
 
+    const numAmount = Number(payload.amount) || 0;
     const delta =
-      payload.type === "income" ? Math.abs(payload.amount) : -Math.abs(payload.amount);
+      payload.type === "income" ? Math.abs(numAmount) : -Math.abs(numAmount);
     const balanceAfter = Number((previousBalance + delta).toFixed(2));
 
     return generalCashCrud.create(tenantId, {
       ...payload,
+      amount: Math.abs(numAmount),
       notes: payload.notes ?? null,
       reference_id: payload.reference_id ?? null,
       created_by: payload.created_by ?? null,
@@ -58,10 +60,10 @@ export const generalCashService = {
   getBalanceSummary: async (tenantId: string): Promise<GeneralCashSummary> => {
     const movements = await generalCashCrud.getAllByTenant(tenantId);
     const sorted = [...movements].sort((a, b) =>
-      a.created_at.localeCompare(b.created_at)
+      (a.created_at || "").localeCompare(b.created_at || "")
     );
     const currentBalance =
-      sorted.length > 0 ? sorted[sorted.length - 1].balance_after : 0;
+      sorted.length > 0 ? Number(sorted[sorted.length - 1].balance_after) || 0 : 0;
 
     let totalIncome = 0;
     let totalExpense = 0;
@@ -69,15 +71,16 @@ export const generalCashService = {
     let outflowToDailyCash = 0;
 
     for (const mov of movements) {
+      const amt = Number(mov.amount) || 0;
       if (mov.type === "income") {
-        totalIncome += mov.amount;
+        totalIncome += amt;
         if (mov.origin_type === "daily_cash_close") {
-          inflowFromDailyCash += mov.amount;
+          inflowFromDailyCash += amt;
         }
       } else {
-        totalExpense += mov.amount;
+        totalExpense += amt;
         if (mov.origin_type === "daily_cash_open") {
-          outflowToDailyCash += mov.amount;
+          outflowToDailyCash += amt;
         }
       }
     }

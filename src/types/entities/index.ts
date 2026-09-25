@@ -73,4 +73,7 @@ export type {
   GeneralCashOriginType,
   SupplierCurrentAccountMovement,
   SupplierCurrentAccountMovementType,
+  BankAccountMovement,
+  BankAccountMovementType,
+  BankAccountMovementOriginType,
 } from "@/types/entities/mvp.entities";

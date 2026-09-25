@@ -31,6 +31,7 @@ import type {
   InstallmentPlan,
   GeneralCashMovement,
   SupplierCurrentAccountMovement,
+  BankAccountMovement,
 } from "@/types/entities";
 import type { DbTableName } from "@/lib/database/tables";
 
@@ -68,6 +69,7 @@ export interface MockDatabase {
   cash_movements: CashMovement[];
   general_cash_movements: GeneralCashMovement[];
   supplier_current_account_movements: SupplierCurrentAccountMovement[];
+  bank_account_movements: BankAccountMovement[];
   sale_payments: SalePayment[];
 }
 
@@ -103,6 +105,7 @@ const createEmptyMockDatabase = (): MockDatabase => ({
   cash_movements: [],
   general_cash_movements: [],
   supplier_current_account_movements: [],
+  bank_account_movements: [],
   sale_payments: [],
 });
 

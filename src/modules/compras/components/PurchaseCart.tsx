@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Gift, Package, PackagePlus, Percent, Plus, ShoppingBag, Trash2 } from "lucide-react";
+import { ArrowRight, Gift, Package, PackagePlus, Percent, Plus, ShoppingBag, Trash2 } from "lucide-react";
 import { handleNumericInputFocus } from "@/utils/input-helpers";
 
 export interface PurchaseCartItemView {
@@ -530,8 +530,8 @@ export const PurchaseCart = ({
             disabled={disabled || !canWrite}
             className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-50"
           >
-            <Check className="h-4 w-4" />
-            Confirmar y registrar compra
+            <span>Proceder al pago</span>
+            <ArrowRight className="h-4 w-4" />
           </button>
         </div>
       )}

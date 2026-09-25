@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { LoadingState } from "@/components/ui/UiStates";
 import { IconButton } from "@/components/ui/IconButton";
@@ -14,6 +15,9 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   FileText,
+  ArrowLeft,
+  ArrowRight,
+  PlusCircle,
 } from "lucide-react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -36,6 +40,7 @@ const currency = new Intl.NumberFormat("es-AR", {
 });
 
 export const CuentasCorrientesProveedoresPage = () => {
+  const [searchParams] = useSearchParams();
   const { tenantId } = useTenant();
   const user = useAuthStore((state) => state.user);
   const { canRead, canWrite } = usePermissions();
@@ -45,7 +50,9 @@ export const CuentasCorrientesProveedoresPage = () => {
   const canWriteModule = canWrite("cuentas_corrientes_proveedores");
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
+  const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(
+    searchParams.get("supplierId") ?? searchParams.get("proveedorId") ?? null
+  );
   const [movements, setMovements] = useState<SupplierCurrentAccountMovement[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -58,6 +65,7 @@ export const CuentasCorrientesProveedoresPage = () => {
   // Modals
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
+  const [isDebtModalOpen, setIsDebtModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Payment form state
@@ -71,6 +79,10 @@ export const CuentasCorrientesProveedoresPage = () => {
   const [adjustmentAmount, setAdjustmentAmount] = useState("");
   const [adjustmentNotes, setAdjustmentNotes] = useState("");
 
+  // Debt form state
+  const [debtAmount, setDebtAmount] = useState("");
+  const [debtNotes, setDebtNotes] = useState("");
+
   const loadSuppliers = async () => {
     if (!tenantId) return;
     setIsLoading(true);
@@ -83,8 +95,9 @@ export const CuentasCorrientesProveedoresPage = () => {
       setSuppliers(activeSuppliers);
       setBankAccounts(accounts.filter((a) => a.is_active));
 
-      if (!selectedSupplierId && activeSuppliers.length > 0) {
-        setSelectedSupplierId(activeSuppliers[0].id);
+      const initialId = searchParams.get("supplierId") ?? searchParams.get("proveedorId");
+      if (initialId && activeSuppliers.some((s) => s.id === initialId)) {
+        setSelectedSupplierId(initialId);
       }
     } catch {
       toast.error("No se pudieron cargar los proveedores");
@@ -265,6 +278,38 @@ export const CuentasCorrientesProveedoresPage = () => {
     }
   };
 
+  const handleRegisterDebt = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSupplier || !tenantId) return;
+
+    const numAmount = parseFloat(debtAmount.replace(",", "."));
+    if (isNaN(numAmount) || numAmount <= 0) {
+      toast.error("Ingresá un monto válido a adeudar mayor a 0");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await supplierCurrentAccountsService.registerDebt(tenantId, {
+        supplierId: selectedSupplier.id,
+        amount: numAmount,
+        notes: debtNotes.trim() || "Compra a crédito / Deuda manual",
+        createdBy: user?.id,
+      });
+
+      toast.success("Deuda registrada correctamente");
+      setIsDebtModalOpen(false);
+      setDebtAmount("");
+      setDebtNotes("");
+      await loadSuppliers();
+      await loadMovements(selectedSupplier.id);
+    } catch {
+      toast.error("Error al registrar la deuda con el proveedor");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (!tenantId) {
     return <PagePlaceholder title="Cta. cte. proveedores" description="No hay un comercio activo" />;
   }
@@ -332,277 +377,361 @@ export const CuentasCorrientesProveedoresPage = () => {
           </article>
         </div>
 
-        {/* Master - Detail Workspace */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* Left Column: Suppliers List */}
-          <div className="lg:col-span-4 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-[650px] overflow-hidden">
-            <div className="p-3 border-b border-slate-200 space-y-2 bg-slate-50/60">
-              <div className="relative">
+        {/* Flujo: Si hay un proveedor seleccionado, se muestra su pantalla de detalle a ancho completo */}
+        {selectedSupplier ? (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden dark:bg-slate-900 dark:border-slate-800">
+            {/* Barra superior con botón Volver */}
+            <div className="p-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between dark:border-slate-800 dark:bg-slate-800/40">
+              <button
+                type="button"
+                onClick={() => setSelectedSupplierId(null)}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                <ArrowLeft size={14} />
+                <span>Volver al listado de proveedores</span>
+              </button>
+
+              <IconButton
+                icon={RefreshCw}
+                label="Recargar cuenta corriente"
+                onClick={() => {
+                  void loadSuppliers();
+                  void loadMovements(selectedSupplier.id);
+                }}
+                loading={isMovementsLoading}
+              />
+            </div>
+
+            {/* Cabecera del Proveedor seleccionado */}
+            <div className="p-4 border-b border-slate-200 bg-white flex flex-wrap items-center justify-between gap-3 dark:border-slate-800 dark:bg-slate-900">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                  {selectedSupplier.name}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Código: {selectedSupplier.code || "-"} {selectedSupplier.phone ? `• Tel: ${selectedSupplier.phone}` : ""} {selectedSupplier.email ? `• Email: ${selectedSupplier.email}` : ""}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className="text-right">
+                  <span className="text-[10px] uppercase tracking-wider text-slate-500 block font-semibold">
+                    Saldo Adeudado
+                  </span>
+                  <span
+                    className={`text-2xl font-bold tracking-tight ${
+                      (selectedSupplier.current_balance ?? 0) > 0
+                        ? "text-rose-600 dark:text-rose-400"
+                        : (selectedSupplier.current_balance ?? 0) < 0
+                        ? "text-blue-600 dark:text-blue-400"
+                        : "text-emerald-600 dark:text-emerald-400"
+                    }`}
+                  >
+                    {currency.format(selectedSupplier.current_balance ?? 0)}
+                  </span>
+                </div>
+
+                {canWriteModule && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentAmount(
+                          (selectedSupplier.current_balance ?? 0) > 0
+                            ? String(selectedSupplier.current_balance)
+                            : ""
+                        );
+                        setPaymentSource("general_cash");
+                        setPaymentNotes("");
+                        setIsPaymentModalOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-sm transition dark:bg-slate-100 dark:text-slate-900"
+                    >
+                      <DollarSign size={14} />
+                      <span>Registrar Pago</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDebtAmount("");
+                        setDebtNotes("");
+                        setIsDebtModalOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl shadow-sm transition dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300"
+                    >
+                      <PlusCircle size={14} />
+                      <span>Adeudar / Compra</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAdjustmentAmount("");
+                        setAdjustmentType("credit_note");
+                        setAdjustmentNotes("");
+                        setIsAdjustmentModalOpen(true);
+                      }}
+                      className="ui-btn-ghost text-xs py-2"
+                    >
+                      Ajuste / Nota de Crédito
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Movements Table */}
+            <div className="flex-1 overflow-x-auto min-h-[300px]">
+              {isMovementsLoading ? (
+                <div className="p-12">
+                  <LoadingState message="Cargando movimientos de cuenta corriente..." />
+                </div>
+              ) : movements.length === 0 ? (
+                <div className="p-12 text-center text-slate-400">
+                  <FileText className="h-10 w-10 text-slate-300 mx-auto mb-2 dark:text-slate-600" />
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Sin movimientos registrados</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Las compras a crédito y pagos al proveedor se registrarán aquí.
+                  </p>
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-600 border-b border-slate-200 sticky top-0 z-10 dark:bg-slate-800/60 dark:text-slate-400 dark:border-slate-800">
+                    <tr>
+                      <th className="py-3 px-4">Fecha</th>
+                      <th className="py-3 px-4">Tipo</th>
+                      <th className="py-3 px-4">Detalle / Notas</th>
+                      <th className="py-3 px-4 text-right">Monto</th>
+                      <th className="py-3 px-4 text-right">Saldo Deudor</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {movements.map((mov) => {
+                      const isDebt = mov.type === "debt";
+                      const isPayment = mov.type === "payment";
+
+                      return (
+                        <tr key={mov.id} className="hover:bg-slate-50/80 transition-colors dark:hover:bg-slate-800/50">
+                          <td className="py-3 px-4 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                            {new Date(mov.created_at).toLocaleDateString("es-AR", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                isDebt
+                                  ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
+                                  : isPayment
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                  : "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
+                              }`}
+                            >
+                              {isDebt ? (
+                                <>
+                                  <ArrowUpRight className="h-3 w-3" /> Deuda (Compra)
+                                </>
+                              ) : isPayment ? (
+                                <>
+                                  <ArrowDownLeft className="h-3 w-3" /> Pago
+                                </>
+                              ) : (
+                                "Ajuste"
+                              )}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-700 dark:text-slate-300 max-w-xs truncate">
+                            {mov.notes || "Sin observaciones"}
+                          </td>
+                          <td
+                            className={`py-3 px-4 text-right font-bold whitespace-nowrap ${
+                              isDebt ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"
+                            }`}
+                          >
+                            {isDebt ? "+" : "-"} {currency.format(mov.amount)}
+                          </td>
+                          <td className="py-3 px-4 text-right font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                            {currency.format(mov.balance_after)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* Si no hay proveedor seleccionado, se muestra el listado completo a ancho completo */
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden dark:bg-slate-900 dark:border-slate-800">
+            {/* Toolbar con buscador y filtros */}
+            <div className="p-4 border-b border-slate-200 bg-slate-50/60 flex flex-wrap items-center justify-between gap-3 dark:border-slate-800 dark:bg-slate-800/40">
+              <div className="relative flex-1 min-w-[240px] max-w-md">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                 <input
                   type="search"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar proveedor por nombre o código..."
-                  className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  placeholder="Buscar proveedor por nombre, código o teléfono..."
+                  className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"
                 />
               </div>
 
-              <div className="flex items-center justify-between gap-1 text-xs">
+              <div className="flex items-center gap-2">
                 <div className="flex gap-1">
                   <button
                     type="button"
                     onClick={() => setFilterMode("all")}
-                    className={`px-2 py-1 rounded text-xs font-medium ${
-                      filterMode === "all" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      filterMode === "all"
+                        ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
                     }`}
                   >
-                    Todos
+                    Todos ({suppliers.length})
                   </button>
                   <button
                     type="button"
                     onClick={() => setFilterMode("debt")}
-                    className={`px-2 py-1 rounded text-xs font-medium ${
-                      filterMode === "debt" ? "bg-rose-600 text-white" : "bg-slate-100 text-slate-600"
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      filterMode === "debt"
+                        ? "bg-rose-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
                     }`}
                   >
-                    Con deuda
+                    Con deuda ({suppliersWithDebtCount})
                   </button>
                   <button
                     type="button"
                     onClick={() => setFilterMode("zero")}
-                    className={`px-2 py-1 rounded text-xs font-medium ${
-                      filterMode === "zero" ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600"
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      filterMode === "zero"
+                        ? "bg-emerald-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
                     }`}
                   >
-                    Al día
+                    Al día ({suppliers.length - suppliersWithDebtCount})
                   </button>
                 </div>
 
                 <IconButton
                   icon={RefreshCw}
-                  label="Recargar"
+                  label="Recargar proveedores"
                   onClick={loadSuppliers}
                   loading={isLoading}
                 />
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+            {/* Tabla de proveedores */}
+            <div className="overflow-x-auto">
               {isLoading ? (
-                <div className="p-6">
+                <div className="p-12">
                   <LoadingState message="Cargando proveedores..." />
                 </div>
               ) : filteredSuppliers.length === 0 ? (
-                <div className="p-6 text-center text-slate-400 text-xs">
-                  No se encontraron proveedores.
+                <div className="p-12 text-center text-slate-400">
+                  <Truck className="h-10 w-10 text-slate-300 mx-auto mb-2 dark:text-slate-600" />
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    No se encontraron proveedores
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Prueba cambiando el término de búsqueda o el filtro.
+                  </p>
                 </div>
               ) : (
-                filteredSuppliers.map((sup) => {
-                  const active = sup.id === selectedSupplierId;
-                  const balance = sup.current_balance ?? 0;
-                  const hasDebt = balance > 0;
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-600 border-b border-slate-200 dark:bg-slate-800/60 dark:text-slate-400 dark:border-slate-800">
+                    <tr>
+                      <th className="py-3 px-4">Proveedor</th>
+                      <th className="py-3 px-4">Contacto</th>
+                      <th className="py-3 px-4">Estado</th>
+                      <th className="py-3 px-4 text-right">Saldo Adeudado</th>
+                      <th className="py-3 px-4 text-center">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {filteredSuppliers.map((sup) => {
+                      const balance = sup.current_balance ?? 0;
+                      const hasDebt = balance > 0;
 
-                  return (
-                    <button
-                      key={sup.id}
-                      type="button"
-                      onClick={() => setSelectedSupplierId(sup.id)}
-                      className={`w-full text-left p-3.5 transition-colors ${
-                        active ? "bg-slate-100 border-l-4 border-slate-900" : "hover:bg-slate-50"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-slate-900 truncate">
-                            {sup.name}
-                          </p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">
-                            Cód: {sup.code || "-"} {sup.phone ? `• Tel: ${sup.phone}` : ""}
-                          </p>
-                        </div>
-
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap ${
-                            hasDebt
-                              ? "bg-rose-100 text-rose-800"
-                              : balance < 0
-                              ? "bg-blue-100 text-blue-800"
-                              : "bg-emerald-100 text-emerald-800"
-                          }`}
+                      return (
+                        <tr
+                          key={sup.id}
+                          onClick={() => setSelectedSupplierId(sup.id)}
+                          className="hover:bg-slate-50/80 transition-colors cursor-pointer dark:hover:bg-slate-800/50"
                         >
-                          {currency.format(balance)}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })
+                          <td className="py-3 px-4">
+                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                              {sup.name}
+                            </p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              Cód: {sup.code || "-"} {sup.phone ? `• Tel: ${sup.phone}` : ""}
+                            </p>
+                          </td>
+
+                          <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
+                            <p>{sup.phone || "-"}</p>
+                            {sup.email ? (
+                              <p className="text-[11px] text-slate-400">{sup.email}</p>
+                            ) : null}
+                          </td>
+
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span
+                              className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                                hasDebt
+                                  ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
+                                  : balance < 0
+                                  ? "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
+                                  : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                              }`}
+                            >
+                              {hasDebt ? "Con deuda" : balance < 0 ? "A favor" : "Al día"}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                            <span
+                              className={`text-sm font-bold ${
+                                hasDebt
+                                  ? "text-rose-600 dark:text-rose-400"
+                                  : balance < 0
+                                  ? "text-blue-600 dark:text-blue-400"
+                                  : "text-emerald-600 dark:text-emerald-400"
+                              }`}
+                            >
+                              {currency.format(balance)}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-4 text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedSupplierId(sup.id);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                            >
+                              <span>Ingresar</span>
+                              <ArrowRight size={13} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               )}
             </div>
           </div>
-
-          {/* Right Column: Selected Supplier Details & History */}
-          <div className="lg:col-span-8 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-[650px] overflow-hidden">
-            {selectedSupplier ? (
-              <>
-                <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-base font-bold text-slate-900">
-                      {selectedSupplier.name}
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Código: {selectedSupplier.code || "-"} • Email: {selectedSupplier.email || "-"} • Tel: {selectedSupplier.phone || "-"}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <span className="text-[10px] uppercase tracking-wider text-slate-500 block font-semibold">
-                        Saldo Adeudado
-                      </span>
-                      <span
-                        className={`text-xl font-bold ${
-                          (selectedSupplier.current_balance ?? 0) > 0
-                            ? "text-rose-600"
-                            : "text-emerald-600"
-                        }`}
-                      >
-                        {currency.format(selectedSupplier.current_balance ?? 0)}
-                      </span>
-                    </div>
-
-                    {canWriteModule && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPaymentAmount(
-                              (selectedSupplier.current_balance ?? 0) > 0
-                                ? String(selectedSupplier.current_balance)
-                                : ""
-                            );
-                            setPaymentSource("general_cash");
-                            setPaymentNotes("");
-                            setIsPaymentModalOpen(true);
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition-colors"
-                        >
-                          <DollarSign className="h-3.5 w-3.5" />
-                          Registrar Pago
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAdjustmentAmount("");
-                            setAdjustmentType("credit_note");
-                            setAdjustmentNotes("");
-                            setIsAdjustmentModalOpen(true);
-                          }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg shadow-sm transition-colors"
-                        >
-                          Ajuste / Nota de Crédito
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Movements Table */}
-                <div className="flex-1 overflow-y-auto">
-                  {isMovementsLoading ? (
-                    <div className="p-8">
-                      <LoadingState message="Cargando cuenta corriente..." />
-                    </div>
-                  ) : movements.length === 0 ? (
-                    <div className="p-12 text-center text-slate-400">
-                      <FileText className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-                      <p className="text-sm font-medium text-slate-700">Sin movimientos registrados</p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        Las compras a crédito y pagos al proveedor se registrarán aquí.
-                      </p>
-                    </div>
-                  ) : (
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-600 border-b border-slate-200 sticky top-0 z-10">
-                        <tr>
-                          <th className="py-2.5 px-3">Fecha</th>
-                          <th className="py-2.5 px-3">Tipo</th>
-                          <th className="py-2.5 px-3">Detalle / Notas</th>
-                          <th className="py-2.5 px-3 text-right">Monto</th>
-                          <th className="py-2.5 px-3 text-right">Saldo Deudor</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {movements.map((mov) => {
-                          const isDebt = mov.type === "debt";
-                          const isPayment = mov.type === "payment";
-
-                          return (
-                            <tr key={mov.id} className="hover:bg-slate-50/80 transition-colors">
-                              <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">
-                                {new Date(mov.created_at).toLocaleDateString("es-AR", {
-                                  day: "2-digit",
-                                  month: "2-digit",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </td>
-                              <td className="py-2.5 px-3 whitespace-nowrap">
-                                <span
-                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                                    isDebt
-                                      ? "bg-rose-100 text-rose-800"
-                                      : isPayment
-                                      ? "bg-emerald-100 text-emerald-800"
-                                      : "bg-blue-100 text-blue-800"
-                                  }`}
-                                >
-                                  {isDebt ? (
-                                    <>
-                                      <ArrowUpRight className="h-3 w-3" /> Deuda (Compra)
-                                    </>
-                                  ) : isPayment ? (
-                                    <>
-                                      <ArrowDownLeft className="h-3 w-3" /> Pago
-                                    </>
-                                  ) : (
-                                    "Ajuste"
-                                  )}
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-3 text-slate-700 max-w-xs truncate">
-                                {mov.notes || "Sin observaciones"}
-                              </td>
-                              <td
-                                className={`py-2.5 px-3 text-right font-bold whitespace-nowrap ${
-                                  isDebt ? "text-rose-600" : "text-emerald-600"
-                                }`}
-                              >
-                                {isDebt ? "+" : "-"} {currency.format(mov.amount)}
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-medium text-slate-800 whitespace-nowrap">
-                                {currency.format(mov.balance_after)}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-400">
-                <Truck className="h-12 w-12 text-slate-300 mb-3" />
-                <p className="text-sm font-medium text-slate-600">
-                  Selecciona un proveedor de la lista
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+        )}
 
         {/* Modal: Registrar Pago a Proveedor */}
         {isPaymentModalOpen && selectedSupplier && (
@@ -703,6 +832,76 @@ export const CuentasCorrientesProveedoresPage = () => {
                     className="px-4 py-2 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg disabled:opacity-50"
                   >
                     {isSubmitting ? "Registrando..." : "Confirmar Pago"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Registrar Deuda / Compra a Crédito */}
+        {isDebtModalOpen && selectedSupplier && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+            <div className="w-full max-w-md bg-white rounded-xl shadow-xl overflow-hidden dark:bg-slate-900">
+              <header className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 dark:bg-slate-800/60 dark:border-slate-800">
+                <div>
+                  <h3 className="font-semibold text-slate-900 dark:text-slate-100">Registrar Deuda / Compra</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{selectedSupplier.name}</p>
+                </div>
+                <ModalCloseButton onClick={() => setIsDebtModalOpen(false)} />
+              </header>
+
+              <form onSubmit={handleRegisterDebt} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1 dark:text-slate-300">
+                    Monto Adeudado ($) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    required
+                    value={debtAmount}
+                    onChange={(e) => setDebtAmount(e.target.value)}
+                    onFocus={(e) => {
+                      if (e.target.value === "0") setDebtAmount("");
+                    }}
+                    placeholder="0.00"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-lg font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"
+                    autoFocus
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1 dark:text-slate-400">
+                    Este monto aumentará el saldo pendiente con el proveedor.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1 dark:text-slate-300">
+                    Concepto / Detalle de Compra
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={debtNotes}
+                    onChange={(e) => setDebtNotes(e.target.value)}
+                    placeholder="Ej: Factura A 0001-0004921 / Remito mercadería..."
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsDebtModalOpen(false)}
+                    className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="px-4 py-2 text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-lg disabled:opacity-50"
+                  >
+                    {isSubmitting ? "Registrando..." : "Confirmar Deuda"}
                   </button>
                 </div>
               </form>

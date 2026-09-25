@@ -31,12 +31,16 @@ const currency = new Intl.NumberFormat("es-AR", {
 
 const getPaymentMethodLabel = (method: string | null | undefined): string => {
   switch (method) {
+    case "cash_daily":
+      return "Caja Diaria";
+    case "cash_general":
+      return "Caja General";
     case "cash":
-      return "Efectivo (Caja)";
+      return "Efectivo Directo";
     case "transfer":
       return "Transferencia";
     case "current_account":
-      return "Cta. Cte.";
+      return "Cta. Cte. Proveedor";
     case "card_debit":
       return "Débito";
     case "card_credit":

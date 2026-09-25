@@ -159,8 +159,18 @@ export const useConfiguracionModule = (
       setSavingSection((prev) => ({ ...prev, [section]: true }));
 
       try {
+        const sectionDraft = draft[section];
         const patch = {
-          [section]: draft[section],
+          [section]:
+            section === "pos"
+              ? {
+                  ...sectionDraft,
+                  default_customer_id: null,
+                  cart_behavior: "merge_same_product",
+                  barcode_scan_quantity: 1,
+                  allow_sale_without_customer: true,
+                }
+              : sectionDraft,
         } as TenantSettingsUpdateInput;
 
         const updated = await settingsService.updateByTenant(tenantId, patch);

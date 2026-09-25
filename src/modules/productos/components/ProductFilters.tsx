@@ -10,6 +10,7 @@ import { PRODUCT_SEARCH_SCOPE_OPTIONS, getSearchPlaceholder, type ProductSearchS
 interface ProductFiltersProps {
   canWrite: boolean;
   loading: boolean;
+  isRefreshing?: boolean;
   selectedCount: number;
   filteredCount: number;
   filters: ProductFiltersState;
@@ -30,6 +31,7 @@ interface ProductFiltersProps {
 export const ProductFilters = ({
   canWrite,
   loading,
+  isRefreshing = false,
   selectedCount,
   filteredCount,
   filters,
@@ -66,6 +68,23 @@ export const ProductFilters = ({
         </div>
 
         <div className="workspace-toolbar__actions">
+          <button
+            type="button"
+            onClick={onReload}
+            disabled={loading || isRefreshing}
+            className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
+            title="Actualizar productos y catálogo desde el servidor"
+            aria-label="Actualizar catálogo de productos"
+          >
+            <RefreshCw
+              size={14}
+              className={isRefreshing || loading ? "animate-spin text-brand-600" : "text-slate-500"}
+            />
+            <span className="hidden sm:inline">
+              {isRefreshing ? "Actualizando..." : "Actualizar"}
+            </span>
+          </button>
+
           <div className="relative z-30">
             <IconButton
               icon={Ellipsis}

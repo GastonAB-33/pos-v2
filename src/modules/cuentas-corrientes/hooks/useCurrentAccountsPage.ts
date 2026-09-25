@@ -14,8 +14,11 @@ export const useCurrentAccountsPage = (
   initialCustomerId: string | null = null
 ) => {
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
+    initialCustomerId?.trim() || null
+  );
   const [search, setSearch] = useState("");
+  const [filterMode, setFilterMode] = useState<"all" | "debt" | "zero">("all");
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<CurrentAccountsPageFeedback | null>(null);
 
@@ -32,7 +35,6 @@ export const useCurrentAccountsPage = (
 
     try {
       const rows = await customersService.getAllByTenant(tenantId);
-
       const sorted = [...rows].sort((a, b) => a.full_name.localeCompare(b.full_name, "es"));
       setCustomers(sorted);
 
@@ -50,7 +52,7 @@ export const useCurrentAccountsPage = (
           return current;
         }
 
-        return sorted[0]?.id ?? null;
+        return null;
       });
     } catch {
       setFeedback({ type: "error", message: "No se pudieron cargar los clientes" });
@@ -66,9 +68,13 @@ export const useCurrentAccountsPage = (
   const filteredCustomers = useMemo(() => {
     const normalized = search.trim().toLowerCase();
 
-    if (!normalized) return customers;
-
     return customers.filter((customer) => {
+      const balance = customer.current_balance ?? 0;
+      if (filterMode === "debt" && balance <= 0) return false;
+      if (filterMode === "zero" && balance > 0) return false;
+
+      if (!normalized) return true;
+
       const haystack = [
         customer.full_name,
         customer.document_number,
@@ -80,7 +86,22 @@ export const useCurrentAccountsPage = (
 
       return haystack.includes(normalized);
     });
-  }, [customers, search]);
+  }, [customers, filterMode, search]);
+
+  const totalDebt = useMemo(() => {
+    return customers.reduce((sum, c) => {
+      const bal = c.current_balance ?? 0;
+      return bal > 0 ? sum + bal : sum;
+    }, 0);
+  }, [customers]);
+
+  const customersWithDebtCount = useMemo(() => {
+    return customers.filter((c) => (c.current_balance ?? 0) > 0).length;
+  }, [customers]);
+
+  const customersUpToDateCount = useMemo(() => {
+    return customers.filter((c) => (c.current_balance ?? 0) <= 0).length;
+  }, [customers]);
 
   const selectedCustomer = useMemo(
     () => customers.find((customer) => customer.id === selectedCustomerId) ?? null,
@@ -103,6 +124,11 @@ export const useCurrentAccountsPage = (
     setSelectedCustomerId,
     search,
     setSearch,
+    filterMode,
+    setFilterMode,
+    totalDebt,
+    customersWithDebtCount,
+    customersUpToDateCount,
     isLoading,
     feedback,
     clearFeedback,

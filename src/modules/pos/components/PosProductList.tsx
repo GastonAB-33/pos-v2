@@ -3,6 +3,7 @@ import { PaginationControls } from "@/components/ui/PaginationControls";
 import { usePagination } from "@/hooks/usePagination";
 import { Plus, ShoppingCart, X } from "lucide-react";
 import type { Product } from "@/types/entities";
+import { useUiStore } from "@/store/ui.store";
 import { cn } from "@/utils/cn";
 import {
   matchesProductSearch,
@@ -59,7 +60,8 @@ export const PosProductList = ({
   canWrite,
   onAddProduct,
 }: PosProductListProps) => {
-  const [activeTab, setActiveTab] = useState<"favorites" | "products">("favorites");
+  const posWindowMode = useUiStore((state) => state.posWindowMode);
+  const [activeTab, setActiveTab] = useState<"favorites" | "products">("products");
   const [favoritesSearch, setFavoritesSearch] = useState("");
   const [productsSearch, setProductsSearch] = useState("");
   const [searchScope, setSearchScope] = useState<ProductSearchScope>("all");
@@ -154,7 +156,8 @@ export const PosProductList = ({
           type="button"
           onClick={() => {
             if (disabled || !canWrite) return;
-            void onAddProduct(product, 0);
+            const qty = product.sale_mode === "weight" ? (weightQty > 0 ? weightQty : 1) : 1;
+            void onAddProduct(product, qty);
           }}
           disabled={disabled || !canWrite}
           className="ui-btn-primary w-full justify-center py-2 text-xs font-semibold shadow-sm"
@@ -214,7 +217,7 @@ export const PosProductList = ({
   return (
     <section className="pos-surface flex flex-col space-y-3.5">
       {/* 1. Fila de Pestañas de Ventas Múltiples */}
-      {saleTabs && saleTabs.length > 0 ? (
+      {posWindowMode !== "new_window" && saleTabs && saleTabs.length > 0 ? (
         <div className="pos-sale-tabs flex items-center gap-2 overflow-x-auto pb-0.5">
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 shrink-0">
             VENTAS:
@@ -361,18 +364,6 @@ export const PosProductList = ({
             type="button"
             className={cn(
               "rounded-lg px-3 py-1 text-xs font-semibold transition",
-              activeTab === "favorites"
-                ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white"
-                : "text-slate-500 hover:text-slate-900 dark:text-slate-400"
-            )}
-            onClick={() => setActiveTab("favorites")}
-          >
-            Favoritos
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "rounded-lg px-3 py-1 text-xs font-semibold transition",
               activeTab === "products"
                 ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white"
                 : "text-slate-500 hover:text-slate-900 dark:text-slate-400"
@@ -380,6 +371,18 @@ export const PosProductList = ({
             onClick={() => setActiveTab("products")}
           >
             Productos
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "rounded-lg px-3 py-1 text-xs font-semibold transition",
+              activeTab === "favorites"
+                ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white"
+                : "text-slate-500 hover:text-slate-900 dark:text-slate-400"
+            )}
+            onClick={() => setActiveTab("favorites")}
+          >
+            Favoritos
           </button>
         </div>
       </div>

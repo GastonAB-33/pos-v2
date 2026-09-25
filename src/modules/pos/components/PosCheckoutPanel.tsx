@@ -1,12 +1,29 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { FileText, Pencil, Plus, Search, X } from "lucide-react";
+import {
+  Banknote,
+  Check,
+  CreditCard,
+  FileText,
+  Landmark,
+  Layers,
+  Lock,
+  Pencil,
+  Plus,
+  QrCode,
+  Receipt,
+  Search,
+  Trash2,
+  UserCheck,
+  Wallet,
+  X,
+  Zap,
+} from "lucide-react";
 import type {
   MercadoPagoOperationalStatus,
   MercadoPagoPaymentIntent,
 } from "@/services/mercadopago/mercadopago-payments.service";
-import { PaymentMethodSelector } from "@/components/payments/PaymentMethodSelector";
 import type {
   BankAccount,
   Customer,
@@ -23,6 +40,7 @@ import {
 import {
   posCheckoutSchema,
   type PosCheckoutValues,
+  type PosPaymentSplitItem,
 } from "@/modules/pos/schemas/pos-checkout.schema";
 
 interface PosCheckoutPanelProps {
@@ -64,7 +82,11 @@ interface PosCheckoutPanelProps {
   onSubmit: (values: PosCheckoutValues) => Promise<void>;
 }
 
-const normalizeSearchText = (value: string) => value.trim().toLowerCase();
+const currency = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  maximumFractionDigits: 2,
+});
 
 const paymentMethodPriority = (method: PaymentMethod): number => {
   const code = normalizePaymentMethodCode(method.code);
@@ -76,6 +98,28 @@ const paymentMethodPriority = (method: PaymentMethod): number => {
   if (code === "cheque") return 5;
   if (code === "current_account") return 6;
   return 7;
+};
+
+const getMethodIcon = (code: string) => {
+  const normalized = normalizePaymentMethodCode(code);
+  switch (normalized) {
+    case "cash":
+      return Banknote;
+    case "card_debit":
+      return CreditCard;
+    case "card_credit":
+      return CreditCard;
+    case "transfer":
+      return Landmark;
+    case "mercado_pago":
+      return QrCode;
+    case "current_account":
+      return UserCheck;
+    case "cheque":
+      return Receipt;
+    default:
+      return Wallet;
+  }
 };
 
 interface CardDebitDetails {
@@ -113,9 +157,7 @@ interface ChequeDetails {
 }
 
 export const PosCheckoutPanel = ({
-  panelId,
   formId,
-  layout = "panel",
   customers,
   paymentMethods,
   bankAccounts,
@@ -147,8 +189,16 @@ export const PosCheckoutPanel = ({
 }: PosCheckoutPanelProps) => {
   const [customerQuery, setCustomerQuery] = useState("");
   const [isCustomerMenuOpen, setIsCustomerMenuOpen] = useState(false);
+  const [isEditingCustomerSearch, setIsEditingCustomerSearch] = useState(false);
   const [paymentDetailError, setPaymentDetailError] = useState<string | null>(null);
   const [isCreatingOriginBank, setIsCreatingOriginBank] = useState(false);
+
+  // Modo de pago: "single" (por defecto, 1-clic rápido) vs "split" (combinado)
+  const [paymentMode, setPaymentMode] = useState<"single" | "split">("single");
+  const [splitPayments, setSplitPayments] = useState<PosPaymentSplitItem[]>([]);
+  const [splitAmountInput, setSplitAmountInput] = useState<string>(() => checkoutTotal.toFixed(2));
+  const [splitError, setSplitError] = useState<string | null>(null);
+
   const [cardDebitDetails, setCardDebitDetails] = useState<CardDebitDetails>({
     couponNumber: "",
     authorizationNumber: "",
@@ -184,13 +234,28 @@ export const PosCheckoutPanel = ({
   });
   const customerLookupRef = useRef<HTMLDivElement | null>(null);
 
+  const splitPaidTotal = useMemo(
+    () => Number(splitPayments.reduce((acc, p) => acc + p.amount, 0).toFixed(2)),
+    [splitPayments]
+  );
+  const splitRemainingTotal = useMemo(
+    () => Number(Math.max(0, checkoutTotal - splitPaidTotal).toFixed(2)),
+    [checkoutTotal, splitPaidTotal]
+  );
+  const isSplitFullyCovered = Math.abs(splitPaidTotal - checkoutTotal) <= 0.01;
+
+  useEffect(() => {
+    if (splitPayments.length === 0) {
+      setSplitAmountInput(checkoutTotal.toFixed(2));
+    }
+  }, [checkoutTotal, splitPayments.length]);
+
   const {
     register,
     handleSubmit,
     watch,
     reset,
     setValue,
-    formState: { errors },
   } = useForm<PosCheckoutValues>({
     resolver: zodResolver(posCheckoutSchema),
     defaultValues: {
@@ -212,6 +277,7 @@ export const PosCheckoutPanel = ({
 
   const watchedCustomerId = watch("customerId");
   const watchedPaymentMethodId = watch("paymentMethodId");
+  const watchedIssueInvoice = watch("issueInvoice");
 
   useEffect(() => {
     onCustomerChange(watchedCustomerId?.trim() ?? "");
@@ -221,6 +287,18 @@ export const PosCheckoutPanel = ({
     if (!watchedPaymentMethodId) return;
     onPaymentMethodChange(watchedPaymentMethodId);
   }, [onPaymentMethodChange, watchedPaymentMethodId]);
+
+  const selectedCustomer = useMemo(
+    () => customers.find((c) => c.id === watchedCustomerId) ?? null,
+    [customers, watchedCustomerId]
+  );
+
+  const customerInitials = useMemo(() => {
+    if (!selectedCustomer) return "CF";
+    const parts = selectedCustomer.full_name.trim().split(" ");
+    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    return (parts[0]?.slice(0, 2) || "CL").toUpperCase();
+  }, [selectedCustomer]);
 
   const selectedMethod = useMemo(
     () => paymentMethods.find((method) => method.id === watchedPaymentMethodId) ?? null,
@@ -240,6 +318,7 @@ export const PosCheckoutPanel = ({
   const isMercadoPagoMethod = selectedMethodCode === "mercado_pago";
   const isMercadoPagoManual = isMercadoPagoMethod && !mercadoPagoSettings.enabled;
   const isCurrentAccountMethod = selectedMethodCode === "current_account";
+
   const requiresPaymentDetails = Boolean(
     selectedMethodConfig &&
       (isCreditCardMethod ||
@@ -250,71 +329,38 @@ export const PosCheckoutPanel = ({
       (selectedMethodConfig.ask_destination_bank ||
         selectedMethodConfig.ask_coupon_number ||
         selectedMethodConfig.ask_approval_number ||
-        selectedMethodConfig.ask_operation_number ||
-        selectedMethodConfig.ask_voucher_number ||
-        selectedMethodConfig.ask_origin_bank ||
-        selectedMethodConfig.ask_origin_account_holder ||
         selectedMethodConfig.ask_card_brand ||
         selectedMethodConfig.ask_installment_plan ||
+        selectedMethodConfig.ask_origin_bank ||
+        selectedMethodConfig.ask_voucher_number ||
+        selectedMethodConfig.ask_origin_account_holder ||
         selectedMethodConfig.ask_cheque_number ||
-        selectedMethodConfig.ask_cheque_due_date)
+        selectedMethodConfig.ask_cheque_due_date ||
+        selectedMethodConfig.ask_operation_number)
   );
-
-  const selectedCustomer = useMemo(
-    () => customers.find((customer) => customer.id === watchedCustomerId) ?? null,
-    [customers, watchedCustomerId]
-  );
-
-  useEffect(() => {
-    if (!selectedCustomer) {
-      setCustomerQuery("");
-      return;
-    }
-
-    setCustomerQuery(
-      `${selectedCustomer.full_name} - ${selectedCustomer.document_type.toUpperCase()} ${
-        selectedCustomer.document_number
-      }`
-    );
-  }, [selectedCustomer]);
 
   const filteredCustomers = useMemo(() => {
-    const term = normalizeSearchText(customerQuery);
-    const ordered = [...customers].sort((a, b) => a.full_name.localeCompare(b.full_name));
-
-    if (!term) return ordered.slice(0, 10);
-
-    return ordered
+    const query = customerQuery.trim().toLowerCase();
+    if (!query) return customers.slice(0, 8);
+    return customers
       .filter((customer) => {
-        const candidate = [
-          customer.full_name,
-          customer.document_number,
-          customer.document_type,
-          customer.email ?? "",
-          customer.phone ?? "",
-        ]
-          .join(" ")
-          .toLowerCase();
-
-        return candidate.includes(term);
+        const nameMatch = customer.full_name.toLowerCase().includes(query);
+        const docMatch = customer.document_number.toLowerCase().includes(query);
+        return nameMatch || docMatch;
       })
-      .slice(0, 10);
+      .slice(0, 8);
   }, [customerQuery, customers]);
 
   useEffect(() => {
     if (!isCustomerMenuOpen) return;
-
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
       if (target.closest("[data-customer-lookup='true']")) return;
       setIsCustomerMenuOpen(false);
     };
-
     window.addEventListener("pointerdown", onPointerDown, true);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown, true);
-    };
+    return () => window.removeEventListener("pointerdown", onPointerDown, true);
   }, [isCustomerMenuOpen]);
 
   const selectCustomer = useCallback(
@@ -323,32 +369,32 @@ export const PosCheckoutPanel = ({
         setValue("customerId", "", { shouldDirty: true, shouldValidate: true });
         setCustomerQuery("");
         setIsCustomerMenuOpen(false);
+        setIsEditingCustomerSearch(false);
         return;
       }
-
       setValue("customerId", customer.id, { shouldDirty: true, shouldValidate: true });
-      setCustomerQuery(
-        `${customer.full_name} - ${customer.document_type.toUpperCase()} ${customer.document_number}`
-      );
+      setCustomerQuery(`${customer.full_name} (${customer.document_number})`);
       setIsCustomerMenuOpen(false);
+      setIsEditingCustomerSearch(false);
     },
     [setValue]
   );
 
   const paymentMethodsOrdered = useMemo(
     () =>
-      [...paymentMethods].sort((a, b) => {
-        const priorityDiff = paymentMethodPriority(a) - paymentMethodPriority(b);
-        if (priorityDiff !== 0) return priorityDiff;
-        return a.name.localeCompare(b.name);
-      }),
+      paymentMethods
+        .filter((method) => normalizePaymentMethodCode(method.code) !== "mercado_pago")
+        .sort((a, b) => {
+          const priorityDiff = paymentMethodPriority(a) - paymentMethodPriority(b);
+          if (priorityDiff !== 0) return priorityDiff;
+          return a.name.localeCompare(b.name);
+        }),
     [paymentMethods]
   );
 
   const destinationBankAccounts = useMemo(() => {
     if (!selectedMethodConfig?.ask_destination_bank) return bankAccounts;
     if (!selectedMethodConfig.destination_bank_account_ids.length) return bankAccounts;
-
     const allowedIds = new Set(selectedMethodConfig.destination_bank_account_ids);
     const filtered = bankAccounts.filter((account) => allowedIds.has(account.id));
     return filtered.length ? filtered : bankAccounts;
@@ -356,22 +402,25 @@ export const PosCheckoutPanel = ({
 
   const selectedCreditDestination = useMemo(
     () =>
-      destinationBankAccounts.find((account) => account.id === cardCreditDetails.destinationBankAccountId) ??
-      null,
+      destinationBankAccounts.find(
+        (account) => account.id === cardCreditDetails.destinationBankAccountId
+      ) ?? null,
     [cardCreditDetails.destinationBankAccountId, destinationBankAccounts]
   );
 
   const selectedDebitDestination = useMemo(
     () =>
-      destinationBankAccounts.find((account) => account.id === cardDebitDetails.destinationBankAccountId) ??
-      null,
+      destinationBankAccounts.find(
+        (account) => account.id === cardDebitDetails.destinationBankAccountId
+      ) ?? null,
     [cardDebitDetails.destinationBankAccountId, destinationBankAccounts]
   );
 
   const selectedTransferDestination = useMemo(
     () =>
-      destinationBankAccounts.find((account) => account.id === transferDetails.destinationBankAccountId) ??
-      null,
+      destinationBankAccounts.find(
+        (account) => account.id === transferDetails.destinationBankAccountId
+      ) ?? null,
     [destinationBankAccounts, transferDetails.destinationBankAccountId]
   );
 
@@ -385,14 +434,14 @@ export const PosCheckoutPanel = ({
 
   const selectedChequeDestination = useMemo(
     () =>
-      destinationBankAccounts.find((account) => account.id === chequeDetails.destinationBankAccountId) ??
-      null,
+      destinationBankAccounts.find(
+        (account) => account.id === chequeDetails.destinationBankAccountId
+      ) ?? null,
     [chequeDetails.destinationBankAccountId, destinationBankAccounts]
   );
 
   const availableInstallmentPlans = useMemo(() => {
     const normalizedBrand = cardCreditDetails.cardBrand.trim().toLowerCase();
-
     return installmentPlans
       .filter((plan) => {
         if (!plan.is_active) return false;
@@ -413,11 +462,6 @@ export const PosCheckoutPanel = ({
     [availableInstallmentPlans, cardCreditDetails.installmentPlanId]
   );
 
-  const creditTotalWithInterest = useMemo(() => {
-    const interest = selectedInstallmentPlan?.interest_percent ?? 0;
-    return Number((checkoutTotal + checkoutTotal * (interest / 100)).toFixed(2));
-  }, [checkoutTotal, selectedInstallmentPlan?.interest_percent]);
-
   const canUseCurrentAccount = Boolean(watchedCustomerId?.trim());
   const isCurrentAccountEnabled = Boolean(currentAccountSnapshot?.enabled);
   const isCurrentAccountNoFunds = Boolean(
@@ -432,12 +476,10 @@ export const PosCheckoutPanel = ({
     if (!selectedMethod) return;
     if (normalizePaymentMethodCode(selectedMethod.code) !== "current_account") return;
     if (canUseCurrentAccountMethod) return;
-
     const fallback = paymentMethodsOrdered.find(
       (method) => normalizePaymentMethodCode(method.code) !== "current_account"
     );
     if (!fallback) return;
-
     setValue("paymentMethodId", fallback.id, { shouldDirty: true, shouldValidate: true });
   }, [canUseCurrentAccountMethod, paymentMethodsOrdered, selectedMethod, setValue]);
 
@@ -457,79 +499,94 @@ export const PosCheckoutPanel = ({
 
   const arePaymentDetailsReady = useMemo(() => {
     if (!requiresPaymentDetails || !selectedMethodConfig) return true;
-
     if (isCreditCardMethod) {
-      const hasCoupon = !selectedMethodConfig.ask_coupon_number || Boolean(cardCreditDetails.couponNumber.trim());
+      const hasCoupon =
+        !selectedMethodConfig.ask_coupon_number || Boolean(cardCreditDetails.couponNumber.trim());
       const hasApproval =
-        !selectedMethodConfig.ask_approval_number || Boolean(cardCreditDetails.authorizationNumber.trim());
-      const hasCardBrand = !selectedMethodConfig.ask_card_brand || Boolean(cardCreditDetails.cardBrand.trim());
-      const hasInstallments = !selectedMethodConfig.ask_installment_plan || Boolean(selectedInstallmentPlan);
-      const hasDestination = !selectedMethodConfig.ask_destination_bank || Boolean(selectedCreditDestination);
+        !selectedMethodConfig.ask_approval_number ||
+        Boolean(cardCreditDetails.authorizationNumber.trim());
+      const hasCardBrand =
+        !selectedMethodConfig.ask_card_brand || Boolean(cardCreditDetails.cardBrand.trim());
+      const hasInstallments =
+        !selectedMethodConfig.ask_installment_plan || Boolean(selectedInstallmentPlan);
+      const hasDestination =
+        !selectedMethodConfig.ask_destination_bank || Boolean(selectedCreditDestination);
       return hasCoupon && hasApproval && hasCardBrand && hasInstallments && hasDestination;
     }
-
     if (isDebitCardMethod) {
-      const hasCoupon = !selectedMethodConfig.ask_coupon_number || Boolean(cardDebitDetails.couponNumber.trim());
+      const hasCoupon =
+        !selectedMethodConfig.ask_coupon_number || Boolean(cardDebitDetails.couponNumber.trim());
       const hasApproval =
-        !selectedMethodConfig.ask_approval_number || Boolean(cardDebitDetails.authorizationNumber.trim());
-      const hasDestination = !selectedMethodConfig.ask_destination_bank || Boolean(selectedDebitDestination);
+        !selectedMethodConfig.ask_approval_number ||
+        Boolean(cardDebitDetails.authorizationNumber.trim());
+      const hasDestination =
+        !selectedMethodConfig.ask_destination_bank || Boolean(selectedDebitDestination);
       return hasCoupon && hasApproval && hasDestination;
     }
-
     if (isTransferMethod) {
       const hasOrigin = !selectedMethodConfig.ask_origin_bank
         ? true
         : transferDetails.originBankId === "__new__"
-          ? selectedMethodConfig.allow_new_origin_bank && Boolean(transferDetails.newOriginBankName.trim())
-          : Boolean(transferDetails.originBankId.trim());
+        ? selectedMethodConfig.allow_new_origin_bank &&
+          Boolean(transferDetails.newOriginBankName.trim())
+        : Boolean(transferDetails.originBankId.trim());
       const hasVoucher =
         !selectedMethodConfig.ask_voucher_number || Boolean(transferDetails.voucherNumber.trim());
       const hasOriginHolder =
         !selectedMethodConfig.ask_origin_account_holder ||
         Boolean(transferDetails.originAccountHolder.trim());
-      const hasDestination = !selectedMethodConfig.ask_destination_bank || Boolean(selectedTransferDestination);
+      const hasDestination =
+        !selectedMethodConfig.ask_destination_bank || Boolean(selectedTransferDestination);
       return hasOrigin && hasVoucher && hasOriginHolder && hasDestination;
     }
-
     if (isMercadoPagoManual) {
       const hasOperation =
-        !selectedMethodConfig.ask_operation_number || Boolean(mercadoPagoManualDetails.operationId.trim());
-      const hasDestination = !selectedMethodConfig.ask_destination_bank || Boolean(selectedManualMpDestination);
+        !selectedMethodConfig.ask_operation_number ||
+        Boolean(mercadoPagoManualDetails.operationId.trim());
+      const hasDestination =
+        !selectedMethodConfig.ask_destination_bank || Boolean(selectedManualMpDestination);
       return hasOperation && hasDestination;
     }
-
     if (isChequeMethod) {
       const hasOrigin = !selectedMethodConfig.ask_origin_bank
         ? true
         : chequeDetails.originBankId === "__new__"
-          ? selectedMethodConfig.allow_new_origin_bank && Boolean(chequeDetails.newOriginBankName.trim())
-          : Boolean(chequeDetails.originBankId.trim());
+        ? selectedMethodConfig.allow_new_origin_bank &&
+          Boolean(chequeDetails.newOriginBankName.trim())
+        : Boolean(chequeDetails.originBankId.trim());
       const hasOriginHolder =
         !selectedMethodConfig.ask_origin_account_holder ||
         Boolean(chequeDetails.originAccountHolder.trim());
       const hasChequeNumber =
         !selectedMethodConfig.ask_cheque_number || Boolean(chequeDetails.chequeNumber.trim());
-      const hasDueDate = !selectedMethodConfig.ask_cheque_due_date || Boolean(chequeDetails.dueDate.trim());
+      const hasDueDate =
+        !selectedMethodConfig.ask_cheque_due_date || Boolean(chequeDetails.dueDate.trim());
       const hasApproval =
         !selectedMethodConfig.ask_approval_number || Boolean(chequeDetails.approvalNumber.trim());
-      const hasDestination = !selectedMethodConfig.ask_destination_bank || Boolean(selectedChequeDestination);
-      return hasOrigin && hasOriginHolder && hasChequeNumber && hasDueDate && hasApproval && hasDestination;
+      const hasDestination =
+        !selectedMethodConfig.ask_destination_bank || Boolean(selectedChequeDestination);
+      return (
+        hasOrigin &&
+        hasOriginHolder &&
+        hasChequeNumber &&
+        hasDueDate &&
+        hasApproval &&
+        hasDestination
+      );
     }
-
     return true;
   }, [
-    chequeDetails.approvalNumber,
-    chequeDetails.chequeNumber,
-    chequeDetails.destinationBankAccountId,
-    chequeDetails.dueDate,
-    chequeDetails.newOriginBankName,
-    chequeDetails.originAccountHolder,
-    chequeDetails.originBankId,
     cardCreditDetails.authorizationNumber,
     cardCreditDetails.cardBrand,
     cardCreditDetails.couponNumber,
     cardDebitDetails.authorizationNumber,
     cardDebitDetails.couponNumber,
+    chequeDetails.approvalNumber,
+    chequeDetails.chequeNumber,
+    chequeDetails.dueDate,
+    chequeDetails.newOriginBankName,
+    chequeDetails.originAccountHolder,
+    chequeDetails.originBankId,
     isCreditCardMethod,
     isDebitCardMethod,
     isChequeMethod,
@@ -537,12 +594,12 @@ export const PosCheckoutPanel = ({
     isTransferMethod,
     mercadoPagoManualDetails.operationId,
     requiresPaymentDetails,
-    selectedMethodConfig,
     selectedChequeDestination,
     selectedCreditDestination,
     selectedDebitDestination,
     selectedInstallmentPlan,
     selectedManualMpDestination,
+    selectedMethodConfig,
     selectedTransferDestination,
     transferDetails.newOriginBankName,
     transferDetails.originAccountHolder,
@@ -554,35 +611,9 @@ export const PosCheckoutPanel = ({
     if (!requiresPaymentDetails || !selectedMethod || !selectedMethodConfig) {
       return { ok: true as const, payload: null as Record<string, unknown> | null };
     }
-
     const capturedAt = new Date().toISOString();
 
     if (isCreditCardMethod) {
-      if (selectedMethodConfig.ask_installment_plan && !selectedInstallmentPlan) {
-        return { ok: false as const, error: "Selecciona un plan de cuotas." };
-      }
-      if (selectedMethodConfig.ask_destination_bank && !selectedCreditDestination) {
-        return { ok: false as const, error: "Selecciona una cuenta bancaria destino." };
-      }
-      if (selectedMethodConfig.ask_coupon_number && !cardCreditDetails.couponNumber.trim()) {
-        return {
-          ok: false as const,
-          error: "Completa numero de cupon para tarjeta de credito.",
-        };
-      }
-      if (selectedMethodConfig.ask_approval_number && !cardCreditDetails.authorizationNumber.trim()) {
-        return {
-          ok: false as const,
-          error: "Completa numero de autorizacion para tarjeta de credito.",
-        };
-      }
-      if (selectedMethodConfig.ask_card_brand && !cardCreditDetails.cardBrand.trim()) {
-        return {
-          ok: false as const,
-          error: "Completa la marca de la tarjeta.",
-        };
-      }
-
       return {
         ok: true as const,
         payload: {
@@ -592,35 +623,13 @@ export const PosCheckoutPanel = ({
           authorization_number: cardCreditDetails.authorizationNumber.trim() || null,
           card_brand: cardCreditDetails.cardBrand.trim() || null,
           installment_plan_id: selectedInstallmentPlan?.id ?? null,
-          installment_plan_name: selectedInstallmentPlan?.name ?? null,
-          installments: selectedInstallmentPlan?.installments ?? null,
-          interest_percent: selectedInstallmentPlan?.interest_percent ?? null,
-          base_amount: checkoutTotal,
-          total_amount_with_interest: creditTotalWithInterest,
           destination_account_id: selectedCreditDestination?.id ?? null,
           destination_account_bank: selectedCreditDestination?.bank_name ?? null,
-          destination_account_alias: selectedCreditDestination?.alias ?? null,
-        } satisfies Record<string, unknown>,
+        },
       };
     }
 
     if (isDebitCardMethod) {
-      if (selectedMethodConfig.ask_destination_bank && !selectedDebitDestination) {
-        return { ok: false as const, error: "Selecciona una cuenta bancaria destino." };
-      }
-      if (selectedMethodConfig.ask_coupon_number && !cardDebitDetails.couponNumber.trim()) {
-        return {
-          ok: false as const,
-          error: "Completa numero de cupon para tarjeta de debito.",
-        };
-      }
-      if (selectedMethodConfig.ask_approval_number && !cardDebitDetails.authorizationNumber.trim()) {
-        return {
-          ok: false as const,
-          error: "Completa numero de autorizacion para tarjeta de debito.",
-        };
-      }
-
       return {
         ok: true as const,
         payload: {
@@ -630,63 +639,24 @@ export const PosCheckoutPanel = ({
           authorization_number: cardDebitDetails.authorizationNumber.trim() || null,
           destination_account_id: selectedDebitDestination?.id ?? null,
           destination_account_bank: selectedDebitDestination?.bank_name ?? null,
-          destination_account_alias: selectedDebitDestination?.alias ?? null,
-        } satisfies Record<string, unknown>,
+        },
       };
     }
 
     if (isTransferMethod) {
-      if (selectedMethodConfig.ask_destination_bank && !selectedTransferDestination) {
-        return { ok: false as const, error: "Selecciona una cuenta bancaria destino." };
-      }
-
       let selectedOriginBank =
         originBanks.find((bank) => bank.id === transferDetails.originBankId) ?? null;
-
       if (selectedMethodConfig.ask_origin_bank && transferDetails.originBankId === "__new__") {
-        if (!selectedMethodConfig.allow_new_origin_bank) {
-          return { ok: false as const, error: "No esta habilitada la creacion de banco de origen." };
-        }
-
         const newName = transferDetails.newOriginBankName.trim();
-        if (!newName) {
-          return { ok: false as const, error: "Ingresa el nombre del banco de origen nuevo." };
-        }
-
-        setIsCreatingOriginBank(true);
-        try {
-          const created = await onCreateOriginBank(newName);
-          if (!created) {
-            return { ok: false as const, error: "No se pudo crear el banco de origen." };
+        if (newName) {
+          setIsCreatingOriginBank(true);
+          try {
+            const created = await onCreateOriginBank(newName);
+            if (created) selectedOriginBank = created;
+          } finally {
+            setIsCreatingOriginBank(false);
           }
-          selectedOriginBank = created;
-          setTransferDetails((current) => ({
-            ...current,
-            originBankId: created.id,
-            newOriginBankName: "",
-          }));
-        } finally {
-          setIsCreatingOriginBank(false);
         }
-      }
-
-      if (selectedMethodConfig.ask_origin_bank && !selectedOriginBank) {
-        return { ok: false as const, error: "Selecciona banco de origen." };
-      }
-      if (selectedMethodConfig.ask_voucher_number && !transferDetails.voucherNumber.trim()) {
-        return {
-          ok: false as const,
-          error: "Completa numero de comprobante.",
-        };
-      }
-      if (
-        selectedMethodConfig.ask_origin_account_holder &&
-        !transferDetails.originAccountHolder.trim()
-      ) {
-        return {
-          ok: false as const,
-          error: "Completa titular de cuenta origen.",
-        };
       }
 
       return {
@@ -697,68 +667,13 @@ export const PosCheckoutPanel = ({
           origin_bank_id: selectedOriginBank?.id ?? null,
           origin_bank_name: selectedOriginBank?.name ?? null,
           voucher_number: transferDetails.voucherNumber.trim() || null,
-          origin_account_holder: transferDetails.originAccountHolder.trim() || null,
           destination_account_id: selectedTransferDestination?.id ?? null,
           destination_account_bank: selectedTransferDestination?.bank_name ?? null,
-          destination_account_alias: selectedTransferDestination?.alias ?? null,
-        } satisfies Record<string, unknown>,
+        },
       };
     }
 
     if (isChequeMethod) {
-      if (selectedMethodConfig.ask_destination_bank && !selectedChequeDestination) {
-        return { ok: false as const, error: "Selecciona una cuenta bancaria destino." };
-      }
-
-      let selectedOriginBank =
-        originBanks.find((bank) => bank.id === chequeDetails.originBankId) ?? null;
-
-      if (selectedMethodConfig.ask_origin_bank && chequeDetails.originBankId === "__new__") {
-        if (!selectedMethodConfig.allow_new_origin_bank) {
-          return { ok: false as const, error: "No esta habilitada la creacion de banco de origen." };
-        }
-
-        const newName = chequeDetails.newOriginBankName.trim();
-        if (!newName) {
-          return { ok: false as const, error: "Ingresa el nombre del banco de origen nuevo." };
-        }
-
-        setIsCreatingOriginBank(true);
-        try {
-          const created = await onCreateOriginBank(newName);
-          if (!created) {
-            return { ok: false as const, error: "No se pudo crear el banco de origen." };
-          }
-          selectedOriginBank = created;
-          setChequeDetails((current) => ({
-            ...current,
-            originBankId: created.id,
-            newOriginBankName: "",
-          }));
-        } finally {
-          setIsCreatingOriginBank(false);
-        }
-      }
-
-      if (selectedMethodConfig.ask_origin_bank && !selectedOriginBank) {
-        return { ok: false as const, error: "Selecciona banco de origen del cheque." };
-      }
-      if (selectedMethodConfig.ask_cheque_number && !chequeDetails.chequeNumber.trim()) {
-        return { ok: false as const, error: "Completa numero de cheque." };
-      }
-      if (selectedMethodConfig.ask_cheque_due_date && !chequeDetails.dueDate.trim()) {
-        return { ok: false as const, error: "Completa fecha de vencimiento del cheque." };
-      }
-      if (
-        selectedMethodConfig.ask_origin_account_holder &&
-        !chequeDetails.originAccountHolder.trim()
-      ) {
-        return { ok: false as const, error: "Completa titular emisor del cheque." };
-      }
-      if (selectedMethodConfig.ask_approval_number && !chequeDetails.approvalNumber.trim()) {
-        return { ok: false as const, error: "Completa numero de aprobacion del cheque." };
-      }
-
       return {
         ok: true as const,
         payload: {
@@ -767,24 +682,13 @@ export const PosCheckoutPanel = ({
           cheque_number: chequeDetails.chequeNumber.trim() || null,
           due_date: chequeDetails.dueDate.trim() || null,
           approval_number: chequeDetails.approvalNumber.trim() || null,
-          origin_bank_id: selectedOriginBank?.id ?? null,
-          origin_bank_name: selectedOriginBank?.name ?? null,
-          origin_account_holder: chequeDetails.originAccountHolder.trim() || null,
           destination_account_id: selectedChequeDestination?.id ?? null,
           destination_account_bank: selectedChequeDestination?.bank_name ?? null,
-          destination_account_alias: selectedChequeDestination?.alias ?? null,
-        } satisfies Record<string, unknown>,
+        },
       };
     }
 
     if (isMercadoPagoManual) {
-      if (selectedMethodConfig.ask_destination_bank && !selectedManualMpDestination) {
-        return { ok: false as const, error: "Selecciona una cuenta bancaria destino." };
-      }
-      if (selectedMethodConfig.ask_operation_number && !mercadoPagoManualDetails.operationId.trim()) {
-        return { ok: false as const, error: "Completa el ID de operacion de Mercado Pago." };
-      }
-
       return {
         ok: true as const,
         payload: {
@@ -793,26 +697,20 @@ export const PosCheckoutPanel = ({
           operation_id: mercadoPagoManualDetails.operationId.trim() || null,
           destination_account_id: selectedManualMpDestination?.id ?? null,
           destination_account_bank: selectedManualMpDestination?.bank_name ?? null,
-          destination_account_alias: selectedManualMpDestination?.alias ?? null,
-        } satisfies Record<string, unknown>,
+        },
       };
     }
 
     return { ok: true as const, payload: null as Record<string, unknown> | null };
   }, [
-    chequeDetails.approvalNumber,
-    chequeDetails.chequeNumber,
-    chequeDetails.dueDate,
-    chequeDetails.newOriginBankName,
-    chequeDetails.originAccountHolder,
-    chequeDetails.originBankId,
     cardCreditDetails.authorizationNumber,
     cardCreditDetails.cardBrand,
     cardCreditDetails.couponNumber,
     cardDebitDetails.authorizationNumber,
     cardDebitDetails.couponNumber,
-    checkoutTotal,
-    creditTotalWithInterest,
+    chequeDetails.approvalNumber,
+    chequeDetails.chequeNumber,
+    chequeDetails.dueDate,
     isCreditCardMethod,
     isDebitCardMethod,
     isChequeMethod,
@@ -822,35 +720,118 @@ export const PosCheckoutPanel = ({
     onCreateOriginBank,
     originBanks,
     requiresPaymentDetails,
+    selectedChequeDestination,
     selectedCreditDestination,
     selectedDebitDestination,
     selectedInstallmentPlan,
     selectedManualMpDestination,
     selectedMethod,
     selectedMethodConfig,
-    selectedChequeDestination,
     selectedTransferDestination,
     transferDetails.newOriginBankName,
-    transferDetails.originAccountHolder,
     transferDetails.originBankId,
     transferDetails.voucherNumber,
   ]);
 
-  const submit = async (values: PosCheckoutValues) => {
-    setPaymentDetailError(null);
+  const handleAddSplitPayment = async () => {
+    setSplitError(null);
+    const parsed = parseFloat(splitAmountInput.replace(",", "."));
+    if (isNaN(parsed) || parsed <= 0) {
+      setSplitError("Ingresá un monto válido mayor a 0.");
+      return;
+    }
+
+    if (parsed > splitRemainingTotal + 0.01) {
+      setSplitError(
+        `El monto ($${parsed.toFixed(2)}) supera el saldo restante ($${splitRemainingTotal.toFixed(2)}).`
+      );
+      return;
+    }
+
+    if (
+      isCurrentAccountMethod &&
+      (!canUseCurrentAccount || !isCurrentAccountEnabled || isCurrentAccountNoFunds)
+    ) {
+      setSplitError("No se puede abonar con cuenta corriente para este cliente.");
+      return;
+    }
 
     let paymentDetailsPayload: Record<string, unknown> | null = null;
     if (requiresPaymentDetails) {
       const built = await buildPaymentDetailsPayload();
-      if (!built.ok) {
-        setPaymentDetailError(built.error ?? "Faltan datos del medio de pago.");
+      paymentDetailsPayload = built.payload;
+    }
+
+    const newItem: PosPaymentSplitItem = {
+      id: `split-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      paymentMethodId: watchedPaymentMethodId,
+      amount: Number(parsed.toFixed(2)),
+      paymentDetails: paymentDetailsPayload,
+    };
+
+    const nextPayments = [...splitPayments, newItem];
+    setSplitPayments(nextPayments);
+
+    const nextPaid = Number(nextPayments.reduce((acc, p) => acc + p.amount, 0).toFixed(2));
+    const nextRemaining = Number(Math.max(0, checkoutTotal - nextPaid).toFixed(2));
+    setSplitAmountInput(nextRemaining > 0 ? nextRemaining.toFixed(2) : "");
+  };
+
+  const handleRemoveSplitPayment = (id: string) => {
+    const nextPayments = splitPayments.filter((p) => p.id !== id);
+    setSplitPayments(nextPayments);
+    const nextPaid = Number(nextPayments.reduce((acc, p) => acc + p.amount, 0).toFixed(2));
+    const nextRemaining = Number(Math.max(0, checkoutTotal - nextPaid).toFixed(2));
+    setSplitAmountInput(nextRemaining.toFixed(2));
+    setSplitError(null);
+  };
+
+  const submit = async (values: PosCheckoutValues) => {
+    setPaymentDetailError(null);
+
+    if (paymentMode === "split") {
+      if (splitPayments.length === 0) {
+        setPaymentDetailError("Debes agregar al menos un pago en el detalle de pago.");
         return;
       }
-      paymentDetailsPayload = built.payload ?? null;
+      if (!isSplitFullyCovered) {
+        setPaymentDetailError(
+          `Resta cobrar $${splitRemainingTotal.toFixed(2)} para completar el total de la venta.`
+        );
+        return;
+      }
+
+      await onSubmit({
+        ...values,
+        isSplitPayment: true,
+        payments: splitPayments,
+        paymentMethodId: splitPayments[0]?.paymentMethodId || values.paymentMethodId,
+        paymentDetails: null,
+      });
+
+      reset({
+        customerId: "",
+        paymentMethodId: values.paymentMethodId,
+        issueInvoice: false,
+        notes: "",
+        paymentDetails: null,
+      });
+      setSplitPayments([]);
+      setSplitAmountInput("");
+      setCustomerQuery("");
+      setIsCustomerMenuOpen(false);
+      return;
+    }
+
+    let paymentDetailsPayload: Record<string, unknown> | null = null;
+    if (requiresPaymentDetails) {
+      const built = await buildPaymentDetailsPayload();
+      paymentDetailsPayload = built.payload;
     }
 
     await onSubmit({
       ...values,
+      isSplitPayment: false,
       paymentDetails: paymentDetailsPayload,
     });
 
@@ -865,962 +846,869 @@ export const PosCheckoutPanel = ({
     setIsCustomerMenuOpen(false);
   };
 
-  const mercadoPagoBadgeClass = (status: MercadoPagoPaymentIntent["status"]) => {
-    if (status === "approved") return "ui-badge ui-badge--success";
-    if (status === "pending") return "ui-badge ui-badge--warn";
-    return "ui-badge ui-badge--danger";
-  };
-
-  const mercadoPagoModeBadgeClass = useMemo(() => {
-    if (mercadoPagoStatus.mode === "mock") return "ui-badge ui-badge--info";
-    if (mercadoPagoStatus.mode === "sandbox") return "ui-badge ui-badge--warn";
-    if (mercadoPagoStatus.mode === "real") return "ui-badge ui-badge--success";
-    return "ui-badge ui-badge--danger";
-  }, [mercadoPagoStatus.mode]);
-
-  const mercadoPagoModeLabel = useMemo(() => {
-    if (mercadoPagoStatus.mode === "mock") return "Mock";
-    if (mercadoPagoStatus.mode === "sandbox") return "Sandbox";
-    if (mercadoPagoStatus.mode === "real") return "Real";
-    return "No configurado";
-  }, [mercadoPagoStatus.mode]);
-
-  const customerActionLabel = selectedCustomer ? "Editar cliente" : "Nuevo cliente";
-  const isModalLayout = layout === "modal";
-
-  const paymentDetailsSummary = useMemo(() => {
-    if (!requiresPaymentDetails || !selectedMethodConfig) return null;
-
-    if (isCreditCardMethod) {
-      if (!arePaymentDetailsReady) {
-        return "Completa los datos de tarjeta de credito.";
-      }
-      const details: string[] = [];
-      if (selectedMethodConfig.ask_installment_plan && selectedInstallmentPlan) {
-        details.push(
-          `${selectedInstallmentPlan.installments} cuotas (${selectedInstallmentPlan.interest_percent.toFixed(2)}%)`
-        );
-      }
-      if (selectedMethodConfig.ask_destination_bank && selectedCreditDestination) {
-        details.push(selectedCreditDestination.bank_name);
-      }
-      return details.length ? details.join(" | ") : "Tarjeta de credito configurada";
-    }
-
-    if (isDebitCardMethod) {
-      if (!arePaymentDetailsReady) {
-        return "Completa los datos de tarjeta de debito.";
-      }
-      const details: string[] = [];
-      if (selectedMethodConfig.ask_coupon_number) {
-        details.push(`Cupon ${cardDebitDetails.couponNumber.trim()}`);
-      }
-      if (selectedMethodConfig.ask_destination_bank && selectedDebitDestination) {
-        details.push(selectedDebitDestination.bank_name);
-      }
-      return details.length ? details.join(" | ") : "Tarjeta de debito configurada";
-    }
-
-    if (isTransferMethod) {
-      if (!arePaymentDetailsReady) {
-        return "Completa los datos de transferencia.";
-      }
-      const details: string[] = [];
-      if (selectedMethodConfig.ask_voucher_number) {
-        details.push(`Comprobante ${transferDetails.voucherNumber.trim()}`);
-      }
-      if (selectedMethodConfig.ask_destination_bank && selectedTransferDestination) {
-        details.push(selectedTransferDestination.bank_name);
-      }
-      return details.length ? details.join(" | ") : "Transferencia configurada";
-    }
-
-    if (isChequeMethod) {
-      if (!arePaymentDetailsReady) {
-        return "Completa los datos del cheque.";
-      }
-      const details: string[] = [];
-      if (selectedMethodConfig.ask_cheque_number) {
-        details.push(`Cheque ${chequeDetails.chequeNumber.trim()}`);
-      }
-      if (selectedMethodConfig.ask_cheque_due_date) {
-        details.push(`Vence ${chequeDetails.dueDate.trim()}`);
-      }
-      if (selectedMethodConfig.ask_destination_bank && selectedChequeDestination) {
-        details.push(selectedChequeDestination.bank_name);
-      }
-      return details.length ? details.join(" | ") : "Cheque configurado";
-    }
-
-
-
-    if (isMercadoPagoManual) {
-      if (!arePaymentDetailsReady) {
-        return "Completa los datos manuales de Mercado Pago.";
-      }
-      const details: string[] = [];
-      if (selectedMethodConfig.ask_operation_number) {
-        details.push(`Operacion ${mercadoPagoManualDetails.operationId.trim()}`);
-      }
-      if (selectedMethodConfig.ask_destination_bank && selectedManualMpDestination) {
-        details.push(selectedManualMpDestination.bank_name);
-      }
-      return details.length ? details.join(" | ") : "Mercado Pago manual configurado";
-    }
-
-    return null;
-  }, [
-    arePaymentDetailsReady,
-    chequeDetails.chequeNumber,
-    chequeDetails.dueDate,
-    cardDebitDetails.couponNumber,
-    isCreditCardMethod,
-    isDebitCardMethod,
-    isChequeMethod,
-    isMercadoPagoManual,
-    isTransferMethod,
-    mercadoPagoManualDetails.operationId,
-    requiresPaymentDetails,
-    selectedMethodConfig,
-    selectedChequeDestination,
-    selectedCreditDestination,
-    selectedDebitDestination,
-    selectedInstallmentPlan,
-    selectedManualMpDestination,
-    selectedTransferDestination,
-    transferDetails.voucherNumber,
-  ]);
-
   return (
-    <section id={panelId} className={isModalLayout ? "space-y-4" : "pos-surface space-y-4"}>
-      <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-            {isModalLayout ? "Confirmar venta" : "Checkout"}
-          </h2>
-          {isModalLayout ? (
-            <p className="text-xs text-slate-500">Elegí cliente, medio de pago y datos contables.</p>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="font-kpi text-2xl font-black text-blue-700 dark:text-blue-400">
-            {new Intl.NumberFormat("es-AR", {
-              style: "currency",
-              currency: "ARS",
-              maximumFractionDigits: 2,
-            }).format(checkoutTotal)}
+    <section className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200">
+      {/* Línea de acento superior moderna estilo fintech */}
+      <div className="h-1.5 w-full bg-gradient-to-r from-emerald-400 via-blue-500 to-indigo-600" />
+
+      {/* Top Meta Bar */}
+      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-5 py-2.5 text-[11px]">
+        <div className="flex items-center gap-2 text-slate-600 font-semibold">
+          <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="uppercase tracking-wider">Terminal Caja</span>
+          <span className="text-slate-300">•</span>
+          <span className="rounded-md bg-slate-200/80 px-1.5 py-0.5 font-mono text-[10px] text-slate-700">
+            TICKET MOSTRADOR
           </span>
-          {onClose ? (
+        </div>
+
+        {onClose && (
+          <button
+            type="button"
+            className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+            onClick={onClose}
+            title="Cerrar ventana (Esc)"
+          >
+            <X size={18} />
+          </button>
+        )}
+      </div>
+
+      {/* Header Principal: Título + Pestañas + Hero Amount */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 p-5 bg-white">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Finalizar Venta</h2>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Elegí cliente, medio de pago y datos de cobro
+          </p>
+
+          {/* Selector de modo: Pestañas segmentadas */}
+          <div className="mt-3 inline-flex items-center rounded-xl bg-slate-100 p-1 border border-slate-200/80">
             <button
               type="button"
-              className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:text-slate-300 transition"
-              onClick={onClose}
-              title="Cerrar ventana"
+              onClick={() => setPaymentMode("single")}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                paymentMode === "single"
+                  ? "bg-white text-blue-700 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
             >
-              <X size={20} />
+              <Zap className="h-3.5 w-3.5 text-amber-500" />
+              Pago Único (Rápido)
             </button>
-          ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                setPaymentMode("split");
+                if (splitPayments.length === 0) {
+                  setSplitAmountInput(checkoutTotal.toFixed(2));
+                }
+              }}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                paymentMode === "split"
+                  ? "bg-white text-blue-700 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Layers className="h-3.5 w-3.5 text-indigo-500" />
+              Pago Combinado
+              {splitPayments.length > 0 && (
+                <span className="ml-1 rounded-full bg-blue-100 px-1.5 py-0.2 text-[10px] font-black text-blue-800">
+                  {splitPayments.length}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Hero Amount Box */}
+        <div className="flex flex-col items-start sm:items-end justify-center rounded-xl bg-slate-50 p-3 sm:p-4 border border-slate-200/80">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Importe Total
+            </span>
+            <span className="rounded bg-emerald-100 px-1.5 py-0.2 font-mono text-[9px] font-bold text-emerald-800">
+              ARS
+            </span>
+          </div>
+          <span className="mt-0.5 text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-mono">
+            {currency.format(checkoutTotal)}
+          </span>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 rounded-xl border border-slate-200/90 bg-slate-50/80 p-3 text-xs dark:border-slate-800 dark:bg-slate-900/60">
-        <div className="min-w-0">
-          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cliente</span>
-          <span className="mt-0.5 block truncate font-semibold text-slate-800 dark:text-slate-200">
-            {selectedCustomer?.full_name ?? "Consumidor final"}
-          </span>
-        </div>
-        <div className="min-w-0">
-          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Medio de pago</span>
-          <span className="mt-0.5 block truncate font-semibold text-slate-800 dark:text-slate-200">
-            {selectedMethod ? selectedMethod.name : "No seleccionado"}
-          </span>
-        </div>
-        <div className="text-right min-w-0">
-          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total</span>
-          <span className="mt-0.5 block font-bold text-blue-700 dark:text-blue-400 text-sm">
-            {new Intl.NumberFormat("es-AR", {
-              style: "currency",
-              currency: "ARS",
-              maximumFractionDigits: 2,
-            }).format(checkoutTotal)}
-          </span>
-        </div>
-      </div>
-
-      <form id={formId} className="grid gap-4" onSubmit={handleSubmit(submit)}>
+      <form id={formId} className="flex-1 overflow-y-auto p-5 space-y-6" onSubmit={handleSubmit(submit)}>
         <input type="hidden" {...register("customerId")} />
         <input type="hidden" {...register("paymentMethodId")} />
 
+        {/* PASO 1: CLIENTE ASOCIADO */}
         <div>
-          <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Cliente
-          </label>
-          <div className="relative" ref={customerLookupRef} data-customer-lookup="true">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                <input
-                  type="search"
-                  value={customerQuery}
-                  onChange={(event) => {
-                    setCustomerQuery(event.target.value);
-                    setIsCustomerMenuOpen(true);
-                  }}
-                  onFocus={() => setIsCustomerMenuOpen(true)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") {
-                      setIsCustomerMenuOpen(false);
-                      return;
-                    }
-
-                    if (event.key === "Enter") {
-                      if (!isCustomerMenuOpen) return;
-                      event.preventDefault();
-
-                      if (filteredCustomers.length) {
-                        selectCustomer(filteredCustomers[0]);
-                        return;
-                      }
-
-                      selectCustomer(null);
-                    }
-                  }}
-                  placeholder="Buscar cliente por nombre o DNI..."
-                  className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-3 text-xs text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                  disabled={disabled || !canWrite}
-                />
-              </div>
-              <button
-                type="button"
-                title={customerActionLabel}
-                aria-label={customerActionLabel}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-400 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                disabled={disabled || !canWrite || !canManageCustomers}
-                onClick={() => onOpenCustomerModal(selectedCustomer ?? null)}
-              >
-                {selectedCustomer ? (
-                  <Pencil size={15} />
-                ) : (
-                  <Plus size={16} />
-                )}
-              </button>
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white shadow-xs">
+                1
+              </span>
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                Cliente Asociado
+              </h3>
             </div>
 
-            {isCustomerMenuOpen ? (
-              <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white p-1.5 shadow-panel">
+            {selectedCustomer && isCurrentAccountEnabled && (
+              <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                <Check className="h-3 w-3" /> Cuenta al día
+              </span>
+            )}
+          </div>
+
+          {/* Tarjeta del cliente (o buscador si se quiere cambiar) */}
+          {!isEditingCustomerSearch ? (
+            <div className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 transition hover:bg-slate-100/50">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 font-black text-xs">
+                  {customerInitials}
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="font-bold text-slate-900 text-xs truncate">
+                      {selectedCustomer?.full_name ?? "Consumidor Final"}
+                    </span>
+                    {selectedCustomer ? (
+                      <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800">
+                        {selectedCustomer.document_type.toUpperCase()} {selectedCustomer.document_number}
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600">
+                        Venta mostrador
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                    {selectedCustomer
+                      ? `IVA: ${selectedCustomer.fiscal_condition || "Consumidor Final"}`
+                      : "Sin cuenta corriente asociada"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  className="ui-btn-ghost w-full justify-start px-2 py-1.5 text-xs"
-                  onClick={() => selectCustomer(null)}
+                  onClick={() => setIsEditingCustomerSearch(true)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
                 >
-                  Consumidor final (sin cliente)
+                  <Pencil className="h-3.5 w-3.5 text-slate-500" />
+                  Cambiar
                 </button>
-                {filteredCustomers.length ? (
-                  filteredCustomers.map((customer) => (
-                    <button
-                      key={customer.id}
-                      type="button"
-                      className="ui-btn-ghost w-full justify-start px-2 py-1.5 text-xs"
-                      onClick={() => selectCustomer(customer)}
-                    >
-                      <span className="truncate">{customer.full_name}</span>
-                      <span className="ml-auto text-slate-500">{customer.document_number}</span>
-                    </button>
-                  ))
-                ) : (
-                  <p className="px-2 py-1.5 text-xs text-slate-500">Sin coincidencias</p>
+                {selectedCustomer && (
+                  <button
+                    type="button"
+                    onClick={() => selectCustomer(null)}
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+                    title="Quitar cliente y volver a Consumidor Final"
+                  >
+                    <X size={15} />
+                  </button>
                 )}
               </div>
-            ) : null}
-          </div>
-          {errors.customerId ? <p className="mt-1 text-xs text-red-600">{errors.customerId.message}</p> : null}
+            </div>
+          ) : (
+            <div className="relative" ref={customerLookupRef} data-customer-lookup="true">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search
+                    size={14}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                  />
+                  <input
+                    type="search"
+                    autoFocus
+                    value={customerQuery}
+                    onChange={(event) => {
+                      setCustomerQuery(event.target.value);
+                      setIsCustomerMenuOpen(true);
+                    }}
+                    onFocus={() => setIsCustomerMenuOpen(true)}
+                    placeholder="Escribí nombre o DNI del cliente..."
+                    className="w-full rounded-xl border border-blue-500 bg-white py-2 pl-9 pr-3 text-xs text-slate-900 outline-none ring-2 ring-blue-100"
+                  />
+                </div>
+                <button
+                  type="button"
+                  title="Dar de alta nuevo cliente"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 transition"
+                  disabled={disabled || !canWrite || !canManageCustomers}
+                  onClick={() => onOpenCustomerModal(selectedCustomer ?? null)}
+                >
+                  <Plus size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingCustomerSearch(false)}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Cancelar
+                </button>
+              </div>
+
+              {isCustomerMenuOpen && (
+                <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
+                  <button
+                    type="button"
+                    className="ui-btn-ghost w-full justify-start px-2.5 py-1.5 text-xs text-slate-700"
+                    onClick={() => selectCustomer(null)}
+                  >
+                    Consumidor final (sin cliente)
+                  </button>
+                  {filteredCustomers.length ? (
+                    filteredCustomers.map((customer) => (
+                      <button
+                        key={customer.id}
+                        type="button"
+                        className="ui-btn-ghost w-full justify-start px-2.5 py-1.5 text-xs"
+                        onClick={() => selectCustomer(customer)}
+                      >
+                        <span className="truncate font-semibold text-slate-800">
+                          {customer.full_name}
+                        </span>
+                        <span className="ml-auto font-mono text-[11px] text-slate-500">
+                          {customer.document_number}
+                        </span>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="px-2.5 py-1.5 text-xs text-slate-400">Sin coincidencias</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
+        {/* PASO 2: MEDIOS DE PAGO SELECCIONADOS */}
         <div>
-          <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Medio de pago
-          </label>
-          <PaymentMethodSelector
-            paymentMethods={paymentMethodsOrdered}
-            selectedPaymentMethodId={watchedPaymentMethodId}
-            disabled={disabled || !canWrite}
-            columns={isModalLayout ? 3 : 2}
-            isMethodDisabled={(method) => {
-              const isCurrentAccount = normalizePaymentMethodCode(method.code) === "current_account";
-              return isCurrentAccount && (!canUseCurrentAccount || !isCurrentAccountEnabled || isCurrentAccountNoFunds);
-            }}
-            getMethodBadges={(method) => {
-              const isCurrentAccount = normalizePaymentMethodCode(method.code) === "current_account";
-              if (!isCurrentAccount) return [];
-              if (!canUseCurrentAccount) return ["Requiere cliente"];
-              if (!isCurrentAccountEnabled) return ["Credito deshabilitado"];
-              if (isCurrentAccountNoFunds) return ["Sin fondo"];
-              return [];
-            }}
-            onChange={(methodId) => {
-              setValue("paymentMethodId", methodId, {
-                shouldDirty: true,
-                shouldValidate: true,
-              });
-            }}
-          />
-          {errors.paymentMethodId ? (
-            <p className="mt-1 text-xs text-red-600">{errors.paymentMethodId.message}</p>
-          ) : null}
-        </div>
-
-        {isCurrentAccountMethod ? (
-          <div className="rounded-xl bg-slate-50 p-3">
-            {!canUseCurrentAccount || !currentAccountSnapshot ? (
-              <p className="text-xs text-amber-700">
-                Selecciona un cliente para operar con cuenta corriente.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-slate-700">Estado de cuenta corriente</p>
-                  <span
-                    className={
-                      !currentAccountSnapshot.enabled
-                        ? "ui-badge ui-badge--danger"
-                        : isCurrentAccountNoFunds
-                          ? "ui-badge ui-badge--warn"
-                          : "ui-badge ui-badge--success"
-                    }
-                  >
-                    {!currentAccountSnapshot.enabled
-                      ? "Deshabilitada"
-                      : isCurrentAccountNoFunds
-                        ? "Sin fondo"
-                        : "Habilitada"}
-                  </span>
-                </div>
-                <div className="grid gap-2 text-xs sm:grid-cols-3">
-                  <p className="rounded-lg bg-white px-2.5 py-2 text-slate-600">
-                    <span className="block text-[11px] text-slate-500">Limite</span>
-                    <span className="font-medium text-slate-900">
-                      {currentAccountSnapshot.limit == null
-                        ? "Sin limite"
-                        : new Intl.NumberFormat("es-AR", {
-                            style: "currency",
-                            currency: "ARS",
-                            maximumFractionDigits: 2,
-                          }).format(currentAccountSnapshot.limit)}
-                    </span>
-                  </p>
-                  <p className="rounded-lg bg-white px-2.5 py-2 text-slate-600">
-                    <span className="block text-[11px] text-slate-500">Deuda actual</span>
-                    <span className="font-medium text-slate-900">
-                      {new Intl.NumberFormat("es-AR", {
-                        style: "currency",
-                        currency: "ARS",
-                        maximumFractionDigits: 2,
-                      }).format(currentAccountSnapshot.debt)}
-                    </span>
-                  </p>
-                  <p className="rounded-lg bg-white px-2.5 py-2 text-slate-600">
-                    <span className="block text-[11px] text-slate-500">Disponible</span>
-                    <span className="font-medium text-slate-900">
-                      {currentAccountSnapshot.available == null
-                        ? "Sin tope"
-                        : new Intl.NumberFormat("es-AR", {
-                            style: "currency",
-                            currency: "ARS",
-                            maximumFractionDigits: 2,
-                          }).format(currentAccountSnapshot.available)}
-                    </span>
-                  </p>
-                </div>
-                {!currentAccountSnapshot.enabled ? (
-                  <p className="text-xs text-red-600">
-                    La cuenta corriente del cliente esta deshabilitada. Activalo desde editar cliente.
-                  </p>
-                ) : null}
-                {currentAccountSnapshot.enabled && isCurrentAccountNoFunds ? (
-                  <p className="text-xs text-amber-700">
-                    El cliente alcanzo o supero su limite disponible. No se puede cobrar por cuenta corriente.
-                  </p>
-                ) : null}
-              </div>
-            )}
-          </div>
-        ) : null}
-
-        {requiresPaymentDetails ? (
-          <div className="space-y-2 rounded-xl bg-slate-50 p-3">
-            <p className="text-xs font-medium text-slate-700">Datos contables del cobro</p>
-            <p className="text-xs text-slate-600">
-              {paymentDetailsSummary ?? "Completa los datos para registrar correctamente este medio."}
-            </p>
-
-            {isCreditCardMethod ? (
-              <div className="grid gap-2">
-                {selectedMethodConfig?.ask_card_brand ? (
-                  <input
-                    className="ui-input"
-                    value={cardCreditDetails.cardBrand}
-                    onChange={(event) =>
-                      setCardCreditDetails((current) => ({
-                        ...current,
-                        cardBrand: event.target.value,
-                        installmentPlanId: "",
-                      }))
-                    }
-                    placeholder="Tarjeta (Visa, Master, Amex...)"
-                    disabled={disabled || !canWrite}
-                  />
-                ) : null}
-                {selectedMethodConfig?.ask_installment_plan ? (
-                  <select
-                    className="ui-input"
-                    value={cardCreditDetails.installmentPlanId}
-                    onChange={(event) =>
-                      setCardCreditDetails((current) => ({
-                        ...current,
-                        installmentPlanId: event.target.value,
-                      }))
-                    }
-                    disabled={disabled || !canWrite}
-                  >
-                    <option value="">Plan de cuotas</option>
-                    {availableInstallmentPlans.map((plan) => (
-                      <option key={plan.id} value={plan.id}>
-                        {plan.name} | {plan.installments} cuotas | {plan.interest_percent.toFixed(2)}%
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
-                {selectedMethodConfig?.ask_coupon_number || selectedMethodConfig?.ask_approval_number ? (
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {selectedMethodConfig?.ask_coupon_number ? (
-                      <input
-                        className="ui-input"
-                        value={cardCreditDetails.couponNumber}
-                        onChange={(event) =>
-                          setCardCreditDetails((current) => ({
-                            ...current,
-                            couponNumber: event.target.value,
-                          }))
-                        }
-                        placeholder="Numero de cupon"
-                        disabled={disabled || !canWrite}
-                      />
-                    ) : null}
-                    {selectedMethodConfig?.ask_approval_number ? (
-                      <input
-                        className="ui-input"
-                        value={cardCreditDetails.authorizationNumber}
-                        onChange={(event) =>
-                          setCardCreditDetails((current) => ({
-                            ...current,
-                            authorizationNumber: event.target.value,
-                          }))
-                        }
-                        placeholder="Numero de autorizacion"
-                        disabled={disabled || !canWrite}
-                      />
-                    ) : null}
-                  </div>
-                ) : null}
-                {selectedMethodConfig?.ask_destination_bank ? (
-                  <select
-                    className="ui-input"
-                    value={cardCreditDetails.destinationBankAccountId}
-                    onChange={(event) =>
-                      setCardCreditDetails((current) => ({
-                        ...current,
-                        destinationBankAccountId: event.target.value,
-                      }))
-                    }
-                    disabled={disabled || !canWrite}
-                  >
-                    <option value="">Cuenta bancaria destino</option>
-                    {destinationBankAccounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.bank_name} | {account.alias || account.holder_name}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
-                {selectedMethodConfig?.ask_installment_plan && selectedInstallmentPlan ? (
-                  <p className="text-xs text-slate-500">
-                    Interes aplicado: {selectedInstallmentPlan.interest_percent.toFixed(2)}% | Importe credito:{" "}
-                    {new Intl.NumberFormat("es-AR", {
-                      style: "currency",
-                      currency: "ARS",
-                      maximumFractionDigits: 2,
-                    }).format(creditTotalWithInterest)}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-
-            {isDebitCardMethod ? (
-              <div className="grid gap-2">
-                {selectedMethodConfig?.ask_coupon_number || selectedMethodConfig?.ask_approval_number ? (
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {selectedMethodConfig?.ask_coupon_number ? (
-                      <input
-                        className="ui-input"
-                        value={cardDebitDetails.couponNumber}
-                        onChange={(event) =>
-                          setCardDebitDetails((current) => ({
-                            ...current,
-                            couponNumber: event.target.value,
-                          }))
-                        }
-                        placeholder="Numero de cupon"
-                        disabled={disabled || !canWrite}
-                      />
-                    ) : null}
-                    {selectedMethodConfig?.ask_approval_number ? (
-                      <input
-                        className="ui-input"
-                        value={cardDebitDetails.authorizationNumber}
-                        onChange={(event) =>
-                          setCardDebitDetails((current) => ({
-                            ...current,
-                            authorizationNumber: event.target.value,
-                          }))
-                        }
-                        placeholder="Numero de autorizacion"
-                        disabled={disabled || !canWrite}
-                      />
-                    ) : null}
-                  </div>
-                ) : null}
-                {selectedMethodConfig?.ask_destination_bank ? (
-                  <select
-                    className="ui-input"
-                    value={cardDebitDetails.destinationBankAccountId}
-                    onChange={(event) =>
-                      setCardDebitDetails((current) => ({
-                        ...current,
-                        destinationBankAccountId: event.target.value,
-                      }))
-                    }
-                    disabled={disabled || !canWrite}
-                  >
-                    <option value="">Cuenta bancaria destino</option>
-                    {destinationBankAccounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.bank_name} | {account.alias || account.holder_name}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
-              </div>
-            ) : null}
-
-            {isTransferMethod ? (
-              <div className="grid gap-2">
-                {selectedMethodConfig?.ask_origin_bank ? (
-                  <select
-                    className="ui-input"
-                    value={transferDetails.originBankId}
-                    onChange={(event) =>
-                      setTransferDetails((current) => ({
-                        ...current,
-                        originBankId: event.target.value,
-                      }))
-                    }
-                    disabled={disabled || !canWrite || isCreatingOriginBank}
-                  >
-                    <option value="">Banco de origen</option>
-                    {originBanks.map((bank) => (
-                      <option key={bank.id} value={bank.id}>
-                        {bank.name}
-                      </option>
-                    ))}
-                    {selectedMethodConfig?.allow_new_origin_bank ? (
-                      <option value="__new__">+ Agregar banco de origen</option>
-                    ) : null}
-                  </select>
-                ) : null}
-                {selectedMethodConfig?.ask_origin_bank &&
-                selectedMethodConfig?.allow_new_origin_bank &&
-                transferDetails.originBankId === "__new__" ? (
-                  <input
-                    className="ui-input"
-                    value={transferDetails.newOriginBankName}
-                    onChange={(event) =>
-                      setTransferDetails((current) => ({
-                        ...current,
-                        newOriginBankName: event.target.value,
-                      }))
-                    }
-                    placeholder="Nuevo banco de origen"
-                    disabled={disabled || !canWrite || isCreatingOriginBank}
-                  />
-                ) : null}
-                {selectedMethodConfig?.ask_voucher_number ||
-                selectedMethodConfig?.ask_origin_account_holder ? (
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {selectedMethodConfig?.ask_voucher_number ? (
-                      <input
-                        className="ui-input"
-                        value={transferDetails.voucherNumber}
-                        onChange={(event) =>
-                          setTransferDetails((current) => ({
-                            ...current,
-                            voucherNumber: event.target.value,
-                          }))
-                        }
-                        placeholder="Numero de comprobante"
-                        disabled={disabled || !canWrite}
-                      />
-                    ) : null}
-                    {selectedMethodConfig?.ask_origin_account_holder ? (
-                      <input
-                        className="ui-input"
-                        value={transferDetails.originAccountHolder}
-                        onChange={(event) =>
-                          setTransferDetails((current) => ({
-                            ...current,
-                            originAccountHolder: event.target.value,
-                          }))
-                        }
-                        placeholder="Titular cuenta origen"
-                        disabled={disabled || !canWrite}
-                      />
-                    ) : null}
-                  </div>
-                ) : null}
-                {selectedMethodConfig?.ask_destination_bank ? (
-                  <select
-                    className="ui-input"
-                    value={transferDetails.destinationBankAccountId}
-                    onChange={(event) =>
-                      setTransferDetails((current) => ({
-                        ...current,
-                        destinationBankAccountId: event.target.value,
-                      }))
-                    }
-                    disabled={disabled || !canWrite}
-                  >
-                    <option value="">Cuenta bancaria destino</option>
-                    {destinationBankAccounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.bank_name} | {account.alias || account.holder_name}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
-                {selectedMethodConfig?.ask_destination_bank && selectedTransferDestination ? (
-                  <p className="text-xs text-slate-500">
-                    Alias destino: {selectedTransferDestination.alias || "Sin alias"}
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-
-            {isChequeMethod ? (
-              <div className="grid gap-2">
-                {selectedMethodConfig?.ask_origin_bank ? (
-                  <select
-                    className="ui-input"
-                    value={chequeDetails.originBankId}
-                    onChange={(event) =>
-                      setChequeDetails((current) => ({
-                        ...current,
-                        originBankId: event.target.value,
-                      }))
-                    }
-                    disabled={disabled || !canWrite || isCreatingOriginBank}
-                  >
-                    <option value="">Banco emisor</option>
-                    {originBanks.map((bank) => (
-                      <option key={bank.id} value={bank.id}>
-                        {bank.name}
-                      </option>
-                    ))}
-                    {selectedMethodConfig?.allow_new_origin_bank ? (
-                      <option value="__new__">+ Agregar banco emisor</option>
-                    ) : null}
-                  </select>
-                ) : null}
-                {selectedMethodConfig?.ask_origin_bank &&
-                selectedMethodConfig?.allow_new_origin_bank &&
-                chequeDetails.originBankId === "__new__" ? (
-                  <input
-                    className="ui-input"
-                    value={chequeDetails.newOriginBankName}
-                    onChange={(event) =>
-                      setChequeDetails((current) => ({
-                        ...current,
-                        newOriginBankName: event.target.value,
-                      }))
-                    }
-                    placeholder="Nuevo banco emisor"
-                    disabled={disabled || !canWrite || isCreatingOriginBank}
-                  />
-                ) : null}
-                {selectedMethodConfig?.ask_cheque_number ||
-                selectedMethodConfig?.ask_cheque_due_date ||
-                selectedMethodConfig?.ask_approval_number ? (
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {selectedMethodConfig?.ask_cheque_number ? (
-                      <input
-                        className="ui-input"
-                        value={chequeDetails.chequeNumber}
-                        onChange={(event) =>
-                          setChequeDetails((current) => ({
-                            ...current,
-                            chequeNumber: event.target.value,
-                          }))
-                        }
-                        placeholder="Numero de cheque"
-                        disabled={disabled || !canWrite}
-                      />
-                    ) : null}
-                    {selectedMethodConfig?.ask_cheque_due_date ? (
-                      <input
-                        type="date"
-                        className="ui-input"
-                        value={chequeDetails.dueDate}
-                        onChange={(event) =>
-                          setChequeDetails((current) => ({
-                            ...current,
-                            dueDate: event.target.value,
-                          }))
-                        }
-                        disabled={disabled || !canWrite}
-                      />
-                    ) : null}
-                    {selectedMethodConfig?.ask_approval_number ? (
-                      <input
-                        className="ui-input"
-                        value={chequeDetails.approvalNumber}
-                        onChange={(event) =>
-                          setChequeDetails((current) => ({
-                            ...current,
-                            approvalNumber: event.target.value,
-                          }))
-                        }
-                        placeholder="Aprobacion / clearing"
-                        disabled={disabled || !canWrite}
-                      />
-                    ) : null}
-                  </div>
-                ) : null}
-                {selectedMethodConfig?.ask_origin_account_holder ? (
-                  <input
-                    className="ui-input"
-                    value={chequeDetails.originAccountHolder}
-                    onChange={(event) =>
-                      setChequeDetails((current) => ({
-                        ...current,
-                        originAccountHolder: event.target.value,
-                      }))
-                    }
-                    placeholder="Titular emisor"
-                    disabled={disabled || !canWrite}
-                  />
-                ) : null}
-                {selectedMethodConfig?.ask_destination_bank ? (
-                  <select
-                    className="ui-input"
-                    value={chequeDetails.destinationBankAccountId}
-                    onChange={(event) =>
-                      setChequeDetails((current) => ({
-                        ...current,
-                        destinationBankAccountId: event.target.value,
-                      }))
-                    }
-                    disabled={disabled || !canWrite}
-                  >
-                    <option value="">Cuenta bancaria destino</option>
-                    {destinationBankAccounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.bank_name} | {account.alias || account.holder_name}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
-              </div>
-            ) : null}
-
-            {isMercadoPagoManual ? (
-              <div className="grid gap-2">
-                <p className="text-xs text-slate-500">
-                  Mercado Pago integrado desactivado. Se registrara la operacion manual.
-                </p>
-                {selectedMethodConfig?.ask_operation_number ? (
-                  <input
-                    className="ui-input"
-                    value={mercadoPagoManualDetails.operationId}
-                    onChange={(event) =>
-                      setMercadoPagoManualDetails((current) => ({
-                        ...current,
-                        operationId: event.target.value,
-                      }))
-                    }
-                    placeholder="ID de operacion"
-                    disabled={disabled || !canWrite}
-                  />
-                ) : null}
-                {selectedMethodConfig?.ask_destination_bank ? (
-                  <select
-                    className="ui-input"
-                    value={mercadoPagoManualDetails.destinationBankAccountId}
-                    onChange={(event) =>
-                      setMercadoPagoManualDetails((current) => ({
-                        ...current,
-                        destinationBankAccountId: event.target.value,
-                      }))
-                    }
-                    disabled={disabled || !canWrite}
-                  >
-                    <option value="">Cuenta bancaria destino</option>
-                    {destinationBankAccounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.bank_name} | {account.alias || account.holder_name}
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
-              </div>
-            ) : null}
-
-            {paymentDetailError ? <p className="text-xs text-red-600">{paymentDetailError}</p> : null}
-          </div>
-        ) : null}
-
-        {isMercadoPagoMethod && !isMercadoPagoManual ? (
-          <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <p className="text-xs font-medium text-slate-700">Cobro Mercado Pago</p>
-            <p className="flex items-center justify-between gap-2 text-xs">
-              <span className="text-slate-500">Modo</span>
-              <span className={mercadoPagoModeBadgeClass}>{mercadoPagoModeLabel}</span>
-            </p>
-            <p className="flex items-center justify-between gap-2 text-xs">
-              <span className="text-slate-500">Disponibilidad</span>
-              <span className={mercadoPagoStatus.available ? "ui-badge ui-badge--success" : "ui-badge ui-badge--danger"}>
-                {mercadoPagoStatus.available ? "Disponible" : "No disponible"}
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white shadow-xs">
+                2
               </span>
-            </p>
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                Medios de Pago Seleccionados
+              </h3>
+            </div>
 
-            {mercadoPagoIntent ? (
-              <div className="space-y-1 rounded-lg border border-slate-200 bg-white p-2 text-xs">
-                <p className="flex items-center justify-between gap-2">
-                  <span className="text-slate-500">Estado</span>
-                  <span className={mercadoPagoBadgeClass(mercadoPagoIntent.status)}>
-                    {mercadoPagoIntent.status}
-                  </span>
-                </p>
-                <p className="text-slate-600">
-                  Referencia: <span className="font-kpi text-slate-900">{mercadoPagoIntent.reference}</span>
-                </p>
-              </div>
+            {paymentMode === "split" ? (
+              isSplitFullyCovered ? (
+                <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                  <Check className="h-3 w-3" /> MONTO ASIGNADO AL 100%
+                </span>
+              ) : (
+                <span className="text-[11px] font-bold text-amber-700">
+                  RESTA ASIGNAR {currency.format(splitRemainingTotal)}
+                </span>
+              )
             ) : (
-              <p className="text-xs text-slate-500">Todavia no se inicio el cobro digital.</p>
+              <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                <Check className="h-3 w-3" /> MONTO ASIGNADO AL 100%
+              </span>
             )}
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="ui-btn-primary"
-                onClick={onStartMercadoPago}
-                disabled={!canStartMercadoPago}
-              >
-                {isMercadoPagoLoading ? "Procesando..." : "Iniciar cobro"}
-              </button>
-              <button
-                type="button"
-                className="ui-btn-ghost"
-                onClick={onRefreshMercadoPago}
-                disabled={!mercadoPagoIntent || isMercadoPagoLoading}
-              >
-                Refrescar
-              </button>
-              {mercadoPagoStatus.mode === "mock" ? (
-                <>
-                  <button
-                    type="button"
-                    className="ui-btn-ghost"
-                    onClick={onApproveMercadoPago}
-                    disabled={!mercadoPagoIntent || mercadoPagoIntent.status !== "pending" || isMercadoPagoLoading}
-                  >
-                    Aprobar mock
-                  </button>
-                  <button
-                    type="button"
-                    className="ui-btn-ghost"
-                    onClick={onRejectMercadoPago}
-                    disabled={!mercadoPagoIntent || mercadoPagoIntent.status !== "pending" || isMercadoPagoLoading}
-                  >
-                    Rechazar mock
-                  </button>
-                </>
-              ) : null}
-              <button
-                type="button"
-                className="ui-btn-ghost"
-                onClick={onCancelMercadoPago}
-                disabled={!mercadoPagoIntent || mercadoPagoIntent.status !== "pending" || isMercadoPagoLoading}
-              >
-                Cancelar
-              </button>
-            </div>
-
-            {!isOnline ? (
-              <p className="text-xs text-amber-700">
-                Sin conexion: no se puede iniciar cobro con Mercado Pago.
-              </p>
-            ) : null}
-            {!mercadoPagoSettings.enabled ? (
-              <p className="text-xs text-amber-700">Mercado Pago no configurado.</p>
-            ) : null}
-            {mercadoPagoStatus.reason ? (
-              <p className="text-xs text-amber-700">{mercadoPagoStatus.reason}</p>
-            ) : null}
-            {mercadoPagoStatus.mode !== "mock" && mercadoPagoStatus.requires_backend ? (
-              <p className="text-xs text-slate-500">
-                Modo {mercadoPagoModeLabel.toLowerCase()} preparado para backend/edge function.
-              </p>
-            ) : null}
           </div>
-        ) : null}
 
-        <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-3.5 transition-colors hover:bg-slate-100/70">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-100/80 text-blue-600">
-              <FileText className="h-5 w-5" />
+          {/* Cuadrícula de tarjetas de Medios de Pago reales */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            {paymentMethodsOrdered.map((method) => {
+              const code = normalizePaymentMethodCode(method.code);
+              const Icon = getMethodIcon(code);
+
+              // Lógica de asignación y selección
+              let isAssigned = false;
+              let assignedDisplay = "Sin asignar";
+
+              if (paymentMode === "split") {
+                const totalInMethod = splitPayments
+                  .filter((p) => p.paymentMethodId === method.id)
+                  .reduce((acc, p) => acc + p.amount, 0);
+                if (totalInMethod > 0) {
+                  isAssigned = true;
+                  assignedDisplay = currency.format(totalInMethod);
+                } else if (watchedPaymentMethodId === method.id) {
+                  assignedDisplay = "Seleccionado";
+                }
+              } else {
+                if (watchedPaymentMethodId === method.id) {
+                  isAssigned = true;
+                  assignedDisplay = currency.format(checkoutTotal);
+                }
+              }
+
+              const isCurrentAccount = code === "current_account";
+              const isMethodDisabled =
+                disabled ||
+                !canWrite ||
+                (isCurrentAccount &&
+                  (!canUseCurrentAccount || !isCurrentAccountEnabled || isCurrentAccountNoFunds));
+
+              const isCardSelected = watchedPaymentMethodId === method.id;
+
+              return (
+                <button
+                  key={method.id}
+                  type="button"
+                  disabled={isMethodDisabled}
+                  onClick={() => {
+                    setValue("paymentMethodId", method.id, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    });
+                    if (paymentMode === "split" && splitRemainingTotal > 0) {
+                      setSplitAmountInput(splitRemainingTotal.toFixed(2));
+                    }
+                  }}
+                  className={`relative flex flex-col justify-between rounded-xl border p-3 text-left transition ${
+                    isAssigned || isCardSelected
+                      ? "border-emerald-500 bg-emerald-50/20 shadow-xs ring-1 ring-emerald-500/30"
+                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70"
+                  } ${isMethodDisabled ? "opacity-45 cursor-not-allowed" : "cursor-pointer"}`}
+                >
+                  <div className="flex items-center justify-between w-full mb-2">
+                    <div
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                        isAssigned || isCardSelected
+                          ? "bg-emerald-600 text-white"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </div>
+
+                    {isAssigned && (
+                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white">
+                        <Check className="h-2.5 w-2.5 stroke-[3]" />
+                      </span>
+                    )}
+
+                    {isCurrentAccount && currentAccountSnapshot?.available != null && (
+                      <span className="rounded bg-indigo-100 px-1 py-0.2 text-[9px] font-bold text-indigo-800">
+                        DISP ${(currentAccountSnapshot.available / 1000).toFixed(0)}K
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <span
+                      className={`block text-xs font-bold truncate ${
+                        isAssigned || isCardSelected ? "text-slate-900" : "text-slate-700"
+                      }`}
+                    >
+                      {method.name}
+                    </span>
+                    <span
+                      className={`block text-[11px] font-mono mt-0.5 truncate ${
+                        isAssigned
+                          ? "font-bold text-emerald-700"
+                          : isCardSelected
+                          ? "text-blue-700 font-semibold"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      {assignedDisplay}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Barra de métricas (KPIs de Cobro) */}
+          <div className="grid grid-cols-3 gap-2 mt-3.5 rounded-xl border border-slate-200/90 bg-slate-50/70 p-2.5 text-center text-xs">
+            <div className="rounded-lg bg-white p-2 border border-slate-100 shadow-2xs">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Monto Total
+              </span>
+              <span className="font-bold text-slate-800 text-sm font-mono">
+                {currency.format(checkoutTotal)}
+              </span>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-800">Emitir Factura Electrónica</p>
-              <p className="text-xs text-slate-500">Genera comprobante fiscal formal con AFIP</p>
+
+            <div className="rounded-lg bg-emerald-100/70 border border-emerald-200/80 p-2 shadow-2xs">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                Cobrado
+              </span>
+              <span className="font-black text-emerald-800 text-sm font-mono">
+                {currency.format(paymentMode === "split" ? splitPaidTotal : checkoutTotal)}
+              </span>
+            </div>
+
+            <div className="rounded-lg bg-white p-2 border border-slate-100 shadow-2xs">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Resta Cubrir
+              </span>
+              <span
+                className={`font-black text-sm font-mono ${
+                  paymentMode === "split" && !isSplitFullyCovered
+                    ? "text-amber-700"
+                    : "text-emerald-700"
+                }`}
+              >
+                {paymentMode === "split"
+                  ? isSplitFullyCovered
+                    ? "$0,00"
+                    : currency.format(splitRemainingTotal)
+                  : "$0,00"}
+              </span>
             </div>
           </div>
-          <label className="pos-switch relative inline-flex shrink-0 cursor-pointer items-center" aria-label="Emitir factura electrónica AFIP">
-            <input
-              type="checkbox"
-              {...register("issueInvoice")}
-              className="peer sr-only"
-              disabled={disabled || !canWrite || !isOnline}
-            />
-            <span className="pos-switch-track">
-              <span className="pos-switch-thumb" />
-            </span>
-          </label>
+
+          {/* En Modo Combinado: Detalle de pagos agregados */}
+          {paymentMode === "split" && (
+            <div className="mt-3.5 space-y-3">
+              <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+                {splitPayments.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-slate-400">
+                    Todavía no agregaste pagos parciales. Asigná el monto y medio a continuación.
+                  </div>
+                ) : (
+                  splitPayments.map((item, idx) => {
+                    const method = paymentMethods.find((m) => m.id === item.paymentMethodId);
+                    const Icon = getMethodIcon(method?.code || "");
+                    const bank =
+                      item.paymentDetails && typeof item.paymentDetails === "object"
+                        ? (item.paymentDetails.destination_account_bank as string)
+                        : null;
+                    const voucher =
+                      item.paymentDetails && typeof item.paymentDetails === "object"
+                        ? (item.paymentDetails.voucher_number as string)
+                        : null;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between p-3 text-xs hover:bg-slate-50/70 transition"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-900 truncate">
+                              {method?.name || "Medio de pago"}
+                            </div>
+                            <div className="text-[11px] text-slate-500 truncate">
+                              {bank ? `Banco: ${bank}` : ""}
+                              {voucher ? ` • Ref: ${voucher}` : ""}
+                              {!bank && !voucher ? `Pago parcial #${idx + 1}` : ""}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <span className="font-black text-slate-900 text-sm font-mono">
+                            {currency.format(item.amount)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSplitPayment(item.id)}
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
+                            title="Quitar este pago"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Subformulario para agregar el siguiente método */}
+              {!isSplitFullyCovered && (
+                <div className="rounded-xl border border-blue-200/80 bg-blue-50/30 p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-blue-900">
+                      + Asignar monto a: <strong>{selectedMethod?.name || "Medio elegido"}</strong>
+                    </span>
+                    <span className="text-[11px] text-blue-700">
+                      Resta cubrir: <strong>{currency.format(splitRemainingTotal)}</strong>
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">
+                        $
+                      </span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        max={splitRemainingTotal}
+                        value={splitAmountInput}
+                        onChange={(e) => setSplitAmountInput(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-7 pr-3 text-xs font-bold text-slate-900 outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddSplitPayment}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 transition shadow-xs"
+                    >
+                      <Plus size={14} />
+                      Agregar pago
+                    </button>
+                  </div>
+
+                  {splitError && (
+                    <p className="text-[11px] font-semibold text-rose-600">{splitError}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Datos condicionales simplificados del método elegido */}
+          {isTransferMethod && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs space-y-2">
+              <span className="font-bold text-slate-800 block">Datos de Transferencia:</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">
+                    Cuenta bancaria donde ingresa:
+                  </label>
+                  <select
+                    value={transferDetails.destinationBankAccountId}
+                    onChange={(e) =>
+                      setTransferDetails((curr) => ({
+                        ...curr,
+                        destinationBankAccountId: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  >
+                    <option value="">Seleccionar cuenta destino (opcional)</option>
+                    {destinationBankAccounts.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.bank_name} - {b.account_type}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">
+                    Nº de Comprobante / Ref:
+                  </label>
+                  <input
+                    type="text"
+                    value={transferDetails.voucherNumber}
+                    onChange={(e) =>
+                      setTransferDetails((curr) => ({ ...curr, voucherNumber: e.target.value }))
+                    }
+                    placeholder="Ej: 9842"
+                    className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isCreditCardMethod && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs space-y-2">
+              <span className="font-bold text-slate-800 block">Plan de Cuotas:</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <select
+                  value={cardCreditDetails.installmentPlanId}
+                  onChange={(e) =>
+                    setCardCreditDetails((curr) => ({ ...curr, installmentPlanId: e.target.value }))
+                  }
+                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                >
+                  <option value="">1 cuota sin interés</option>
+                  {availableInstallmentPlans.map((plan) => (
+                    <option key={plan.id} value={plan.id}>
+                      {plan.name} ({plan.installments} cuotas)
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={cardCreditDetails.couponNumber}
+                  onChange={(e) =>
+                    setCardCreditDetails((curr) => ({ ...curr, couponNumber: e.target.value }))
+                  }
+                  placeholder="Nº de cupón (opcional)"
+                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                />
+              </div>
+            </div>
+          )}
+
+          {isDebitCardMethod && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs space-y-2">
+              <span className="font-bold text-slate-800 block">Datos Tarjeta de Débito:</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={cardDebitDetails.couponNumber}
+                  onChange={(e) =>
+                    setCardDebitDetails((curr) => ({ ...curr, couponNumber: e.target.value }))
+                  }
+                  placeholder="Nº de cupón (opcional)"
+                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                />
+                <input
+                  type="text"
+                  value={cardDebitDetails.authorizationNumber}
+                  onChange={(e) =>
+                    setCardDebitDetails((curr) => ({ ...curr, authorizationNumber: e.target.value }))
+                  }
+                  placeholder="Nº de autorización (opcional)"
+                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                />
+              </div>
+            </div>
+          )}
+
+          {isMercadoPagoManual && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs space-y-2">
+              <span className="font-bold text-slate-800 block">Mercado Pago (Transferencia / Manual):</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={mercadoPagoManualDetails.operationId}
+                  onChange={(e) =>
+                    setMercadoPagoManualDetails((curr) => ({ ...curr, operationId: e.target.value }))
+                  }
+                  placeholder="ID de Operación MP (opcional)"
+                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                />
+                <select
+                  value={mercadoPagoManualDetails.destinationBankAccountId}
+                  onChange={(e) =>
+                    setMercadoPagoManualDetails((curr) => ({
+                      ...curr,
+                      destinationBankAccountId: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                >
+                  <option value="">Cuenta destino (opcional)</option>
+                  {destinationBankAccounts.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.bank_name} - {b.account_type}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {isChequeMethod && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs space-y-2">
+              <span className="font-bold text-slate-800 block">Datos del Cheque:</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <input
+                  type="text"
+                  value={chequeDetails.chequeNumber}
+                  onChange={(e) =>
+                    setChequeDetails((curr) => ({ ...curr, chequeNumber: e.target.value }))
+                  }
+                  placeholder="Nº de cheque"
+                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                />
+                <input
+                  type="date"
+                  value={chequeDetails.dueDate}
+                  onChange={(e) =>
+                    setChequeDetails((curr) => ({ ...curr, dueDate: e.target.value }))
+                  }
+                  placeholder="Fecha vencimiento"
+                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                />
+                <input
+                  type="text"
+                  value={chequeDetails.approvalNumber}
+                  onChange={(e) =>
+                    setChequeDetails((curr) => ({ ...curr, approvalNumber: e.target.value }))
+                  }
+                  placeholder="Nº aprobación (opcional)"
+                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                />
+              </div>
+            </div>
+          )}
+
+          {isCurrentAccountMethod && (
+            <div className="mt-3 rounded-xl border border-indigo-200 bg-indigo-50/40 p-3 text-xs space-y-1.5">
+              <div className="flex items-center justify-between font-bold text-indigo-900">
+                <span>Cuenta Corriente del Cliente</span>
+                <span>
+                  {currentAccountSnapshot?.available != null
+                    ? `Disponible: ${currency.format(currentAccountSnapshot.available)}`
+                    : "Sin límite"}
+                </span>
+              </div>
+              <p className="text-[11px] text-indigo-700">
+                Al confirmar, el monto se registrará como saldo deudor en la cuenta de{" "}
+                <strong>{selectedCustomer?.full_name}</strong>.
+              </p>
+            </div>
+          )}
+
+          {isMercadoPagoMethod && !isMercadoPagoManual && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-800">Terminal Mercado Pago:</span>
+                <span className="text-[11px] font-semibold text-slate-600">
+                  {mercadoPagoIntent ? `Estado: ${mercadoPagoIntent.status}` : "Listo para iniciar"}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={onStartMercadoPago}
+                  disabled={!canStartMercadoPago}
+                  className="ui-btn-primary text-xs py-1.5 px-3"
+                >
+                  {isMercadoPagoLoading ? "Procesando..." : "Iniciar cobro en terminal"}
+                </button>
+                {mercadoPagoIntent && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={onRefreshMercadoPago}
+                      className="ui-btn-ghost text-xs py-1.5 px-2.5"
+                    >
+                      Actualizar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onCancelMercadoPago}
+                      className="ui-btn-ghost text-xs py-1.5 px-2.5"
+                    >
+                      Cancelar
+                    </button>
+                  </>
+                )}
+                {mercadoPagoStatus.mode === "mock" && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={onApproveMercadoPago}
+                      className="ui-btn-ghost text-xs py-1.5 px-2.5"
+                    >
+                      Aprobar mock
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onRejectMercadoPago}
+                      className="ui-btn-ghost text-xs py-1.5 px-2.5"
+                    >
+                      Rechazar mock
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="pos-checkout-submit">
+        {/* PASO 3: CIERRE FISCAL & FACTURACIÓN */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white shadow-xs">
+              3
+            </span>
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+              Cierre Fiscal & Facturación
+            </h3>
+          </div>
+
+          <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 transition hover:bg-slate-100/70">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+                <FileText size={18} />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-slate-900">
+                    Emitir Factura Electrónica (AFIP)
+                  </span>
+                  <span className="rounded bg-emerald-100 px-1.5 py-0.2 font-mono text-[9px] font-bold text-emerald-800">
+                    CAE ONLINE
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Sincronización directa con WebServices AFIP / ARCA
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-slate-700 hidden sm:inline-block">
+                {watchedIssueInvoice
+                  ? selectedCustomer?.fiscal_condition === "responsable_inscripto"
+                    ? "Factura A"
+                    : "Factura B Consumidor Final"
+                  : "Comprobante X"}
+              </span>
+
+              <label className="pos-switch relative inline-flex shrink-0 cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  {...register("issueInvoice")}
+                  className="peer sr-only"
+                  disabled={disabled || !canWrite || !isOnline}
+                />
+                <span className="pos-switch-track">
+                  <span className="pos-switch-thumb" />
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {paymentDetailError && (
+          <p className="text-xs font-semibold text-rose-600">{paymentDetailError}</p>
+        )}
+
+        {/* FOOTER: Confirmación destacada */}
+        <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+            <Lock size={12} className="text-emerald-600" />
+            <span>Transacción Segura POS Ready</span>
+          </div>
+
           <button
             type="submit"
-            className="ui-btn-primary w-full py-3 text-base disabled:opacity-50"
+            className="w-full sm:w-auto min-w-[280px] inline-flex items-center justify-between gap-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-5 shadow-lg shadow-emerald-600/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={
               disabled ||
               !canWrite ||
               !paymentMethods.length ||
-              (isCurrentAccountMethod && !canUseCurrentAccountMethod) ||
-              (isMercadoPagoMethod && !isMercadoPagoManual && !isMercadoPagoApproved) ||
-              (requiresPaymentDetails && !arePaymentDetailsReady) ||
-              isCreatingOriginBank
+              (paymentMode === "split"
+                ? !isSplitFullyCovered || splitPayments.length === 0
+                : (isCurrentAccountMethod && !canUseCurrentAccountMethod) ||
+                  (isMercadoPagoMethod && !isMercadoPagoManual && !isMercadoPagoApproved) ||
+                  (requiresPaymentDetails && !arePaymentDetailsReady) ||
+                  isCreatingOriginBank)
             }
           >
-            Confirmar venta
+            <div className="flex items-center gap-2">
+              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20">
+                <Check size={13} className="stroke-[3]" />
+              </div>
+              <span className="text-xs font-black uppercase tracking-wider">
+                {paymentMode === "split" ? "Confirmar Venta Combinada" : "Confirmar Venta"}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-sm font-black">
+                {currency.format(checkoutTotal)}
+              </span>
+              <kbd className="hidden sm:inline-block rounded bg-black/20 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-white/80">
+                ↵
+              </kbd>
+            </div>
           </button>
         </div>
       </form>

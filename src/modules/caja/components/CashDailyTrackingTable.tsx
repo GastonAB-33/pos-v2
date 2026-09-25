@@ -4,6 +4,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { Eye, Calendar } from "lucide-react";
 import type { CashDailyTrackingRow } from "@/modules/caja/hooks/useCashModule";
 
 interface CashDailyTrackingTableProps {
@@ -24,58 +25,94 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
     columnHelper.accessor("date", {
       header: "Fecha",
       cell: (info) => (
-        <span className="whitespace-nowrap font-medium text-slate-900">
-          {new Date(`${info.getValue()}T00:00:00`).toLocaleDateString("es-AR")}
-        </span>
+        <div className="flex items-center gap-1.5 whitespace-nowrap font-medium text-slate-800">
+          <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+          <span>{new Date(`${info.getValue()}T00:00:00`).toLocaleDateString("es-AR")}</span>
+        </div>
       ),
     }),
     columnHelper.accessor("sessionsCount", {
       header: "Estado",
       cell: (info) => {
         const row = info.row.original;
+        const isOpen = Boolean(row.openSessionsCount);
         return (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="ui-badge ui-badge--info">{info.getValue()} caja(s)</span>
-            {row.openSessionsCount ? (
-              <span className="ui-badge ui-badge--success">{row.openSessionsCount} abierta(s)</span>
-            ) : (
-              <span className="ui-badge">cerrada</span>
-            )}
+          <div className="flex flex-wrap items-center gap-1">
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border ${
+                isOpen
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200/60"
+                  : "bg-slate-100 text-slate-600 border-slate-200/60"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  isOpen ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+                }`}
+              />
+              {isOpen ? `${row.openSessionsCount} abierta` : "Cerrada"}
+            </span>
+            <span className="text-[11px] text-slate-400">
+              ({info.getValue()} turno{info.getValue() > 1 ? "s" : ""})
+            </span>
           </div>
         );
       },
     }),
     columnHelper.accessor("openingAmount", {
-      header: "Apertura",
-      cell: (info) => currency.format(info.getValue()),
+      header: () => <div className="text-right">Apertura</div>,
+      cell: (info) => (
+        <div className="text-right font-medium text-slate-700 whitespace-nowrap">
+          {currency.format(info.getValue())}
+        </div>
+      ),
     }),
     columnHelper.accessor("incomes", {
-      header: "Ingresos",
-      cell: (info) => currency.format(info.getValue()),
+      header: () => <div className="text-right">Ingresos</div>,
+      cell: (info) => (
+        <div className="text-right font-semibold text-emerald-600 whitespace-nowrap">
+          +{currency.format(info.getValue())}
+        </div>
+      ),
     }),
     columnHelper.accessor("expenses", {
-      header: "Egresos",
-      cell: (info) => currency.format(info.getValue()),
+      header: () => <div className="text-right">Egresos</div>,
+      cell: (info) => (
+        <div className="text-right font-semibold text-rose-600 whitespace-nowrap">
+          -{currency.format(info.getValue())}
+        </div>
+      ),
     }),
     columnHelper.accessor("realClosingAmount", {
-      header: "Cierre",
+      header: () => <div className="text-right">Cierre Real</div>,
       cell: (info) => {
         const row = info.row.original;
-        if (row.openSessionsCount && !info.getValue()) return <span className="text-slate-500">Pendiente</span>;
-        return currency.format(info.getValue());
+        if (row.openSessionsCount && !info.getValue()) {
+          return <div className="text-right text-[11px] text-amber-600 font-medium whitespace-nowrap">En curso</div>;
+        }
+        return (
+          <div className="text-right font-bold text-slate-900 whitespace-nowrap">
+            {currency.format(info.getValue())}
+          </div>
+        );
       },
     }),
     columnHelper.accessor("differenceAmount", {
-      header: "Diferencia",
+      header: () => <div className="text-right">Diferencia</div>,
       cell: (info) => {
         const value = info.getValue();
-        const className =
-          value === 0
-            ? "font-kpi text-slate-700"
-            : value > 0
-              ? "font-kpi text-emerald-700"
-              : "font-kpi text-red-700";
-        return <span className={className}>{currency.format(value)}</span>;
+        if (value === 0) {
+          return <div className="text-right text-[11px] font-medium text-slate-500 whitespace-nowrap">$ 0,00</div>;
+        }
+        return (
+          <div
+            className={`text-right font-semibold whitespace-nowrap ${
+              value > 0 ? "text-emerald-700" : "text-rose-700"
+            }`}
+          >
+            {value > 0 ? `+${currency.format(value)}` : currency.format(value)}
+          </div>
+        );
       },
     }),
     columnHelper.display({
@@ -84,27 +121,34 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
       cell: (info) => {
         const row = info.row.original;
         return (
-          <div className="flex flex-wrap gap-1.5">
-            <span className="ui-badge ui-badge--info">Ventas {row.saleMovementsCount}</span>
-            <span className="ui-badge">Manual {row.manualMovementsCount}</span>
+          <div className="flex flex-wrap items-center gap-1 whitespace-nowrap">
+            <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-50 text-blue-700 border border-blue-200/50">
+              {row.saleMovementsCount} ventas
+            </span>
+            <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-100 text-slate-600 border border-slate-200/50">
+              {row.manualMovementsCount} manual
+            </span>
           </div>
         );
       },
     }),
     columnHelper.display({
       id: "detail",
-      header: "Detalle",
+      header: () => <div className="text-right">Acción</div>,
       cell: (info) => {
         const row = info.row.original;
         if (!onViewDetail) return "-";
         return (
-          <button
-            type="button"
-            className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-            onClick={() => onViewDetail(row.date)}
-          >
-            Ver detalle
-          </button>
+          <div className="text-right">
+            <button
+              type="button"
+              className="h-7 inline-flex items-center gap-1 px-2.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors shadow-xs"
+              onClick={() => onViewDetail(row.date)}
+            >
+              <Eye className="h-3 w-3 text-slate-400" />
+              Detalle
+            </button>
+          </div>
         );
       },
     }),
@@ -118,40 +162,57 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
 
   if (!rows.length) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-        No hay datos diarios de cajas.
+      <div className="p-8 text-center bg-white rounded-xl border border-slate-200/80 shadow-xs">
+        <Calendar className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+        <p className="text-xs font-medium text-slate-700">No hay datos de jornadas de caja</p>
+        <p className="text-[11px] text-slate-400 mt-0.5">
+          Las sesiones diarias registradas se listarán en este historial.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200">
-      <table className="min-w-full divide-y divide-slate-200 text-sm">
-        <thead className="bg-slate-50">
-          {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <th key={header.id} className="px-4 py-2 text-left font-medium text-slate-700">
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody className="divide-y divide-slate-200 bg-white">
-          {table.getRowModel().rows.map((row) => (
-            <tr key={row.id}>
-              {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} className="px-4 py-2 text-slate-700">
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
+      <header className="px-3.5 py-2.5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <div>
+          <h3 className="text-xs font-semibold text-slate-800">
+            Historial de Jornadas de Caja Diaria
+          </h3>
+          <p className="text-[11px] text-slate-400">
+            {rows.length} {rows.length === 1 ? "jornada registrada" : "jornadas registradas"}
+          </p>
+        </div>
+      </header>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs">
+          <thead className="bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100">
+            {table.getHeaderGroups().map((headerGroup) => (
+              <tr key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <th key={header.id} className="py-2.5 px-3">
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                  </th>
+                ))}
+              </tr>
+            ))}
+          </thead>
+          <tbody className="divide-y divide-slate-100/80">
+            {table.getRowModel().rows.map((row) => (
+              <tr key={row.id} className="hover:bg-slate-50/70 transition-colors">
+                {row.getVisibleCells().map((cell) => (
+                  <td key={cell.id} className="py-2.5 px-3">
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

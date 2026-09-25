@@ -235,8 +235,16 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
     );
   };
 
+  const reload = useCallback(
+    async (force = true) => {
+      await crud.reload(force);
+    },
+    [crud]
+  );
+
   return {
     ...crud,
+    reload,
     filters,
     setFilters: updateFilters,
     resetFilters,

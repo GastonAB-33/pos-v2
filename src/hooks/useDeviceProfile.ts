@@ -34,7 +34,7 @@ const getProfile = (): DeviceProfile => {
     window.matchMedia?.("(pointer: coarse)").matches ||
     navigator.maxTouchPoints > 0;
   const deviceKind: DeviceKind =
-    width < 768 ? "mobile" : width < 1180 ? "tablet" : "desktop";
+    width < 768 ? "mobile" : width < 1024 ? "tablet" : "desktop";
 
   return {
     width,

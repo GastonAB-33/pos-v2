@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { LoadingState } from "@/components/ui/UiStates";
 import { IconButton } from "@/components/ui/IconButton";
@@ -12,12 +12,22 @@ import {
   RefreshCw,
   Edit2,
   Power,
+  ArrowLeftRight,
 } from "lucide-react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { useAccountingCatalogs } from "@/modules/configuracion/hooks/useAccountingCatalogs";
+import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
+import { BankAccountMovementsModal } from "../components/BankAccountMovementsModal";
 import type { BankAccount, InstallmentPlan } from "@/types/entities";
+
+const currency = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 export const BancosPage = () => {
   const { tenantId } = useTenant();
@@ -44,6 +54,31 @@ export const BancosPage = () => {
     upsertInstallmentPlan,
     toggleInstallmentPlan,
   } = useAccountingCatalogs(tenantId, user?.id ?? null, canReadModule);
+
+  // Bank Account Movements state
+  const [accountBalances, setAccountBalances] = useState<Record<string, number>>({});
+  const [selectedMovementsAccount, setSelectedMovementsAccount] = useState<BankAccount | null>(null);
+
+  const loadBalances = useCallback(async () => {
+    if (!tenantId) return;
+    try {
+      const balances = await bankAccountMovementsService.getAllBalancesByTenant(tenantId);
+      setAccountBalances(balances);
+    } catch (err) {
+      console.error("Error loading bank account balances:", err);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    if (tenantId && canReadModule) {
+      loadBalances();
+    }
+  }, [tenantId, canReadModule, loadBalances, bankAccounts]);
+
+  const handleRefreshAll = () => {
+    reload();
+    loadBalances();
+  };
 
   useEffect(() => {
     if (feedback) {
@@ -244,8 +279,8 @@ export const BancosPage = () => {
           <div className="flex items-center gap-2 pb-2">
             <IconButton
               icon={RefreshCw}
-              label="Recargar catálogos"
-              onClick={reload}
+              label="Recargar catálogos y saldos"
+              onClick={handleRefreshAll}
               loading={isLoading}
             />
 
@@ -301,8 +336,9 @@ export const BancosPage = () => {
                       <th className="py-3 px-4">Titular</th>
                       <th className="py-3 px-4">CBU / CVU</th>
                       <th className="py-3 px-4">Alias</th>
+                      <th className="py-3 px-4 text-right">Saldo Actual</th>
                       <th className="py-3 px-4 text-center">Estado</th>
-                      {canWriteModule && <th className="py-3 px-4 text-right">Acciones</th>}
+                      <th className="py-3 px-4 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -315,6 +351,9 @@ export const BancosPage = () => {
                         <td className="py-3 px-4 text-xs text-slate-700">{acc.holder_name}</td>
                         <td className="py-3 px-4 text-xs font-mono text-slate-600">{acc.cbu || "-"}</td>
                         <td className="py-3 px-4 text-xs font-mono text-slate-600">{acc.alias || "-"}</td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
+                          {currency.format(accountBalances[acc.id] ?? 0)}
+                        </td>
                         <td className="py-3 px-4 text-center">
                           <span
                             className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${
@@ -324,28 +363,39 @@ export const BancosPage = () => {
                             {acc.is_active ? "Activa" : "Inactiva"}
                           </span>
                         </td>
-                        {canWriteModule && (
-                          <td className="py-3 px-4 text-right whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => openAccountModal(acc)}
-                              className="text-slate-600 hover:text-slate-900 p-1 rounded"
-                              title="Editar cuenta"
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => toggleBankAccount(acc.id)}
-                              className={`p-1 rounded ml-1 ${
-                                acc.is_active ? "text-amber-600 hover:text-amber-800" : "text-emerald-600 hover:text-emerald-800"
-                              }`}
-                              title={acc.is_active ? "Desactivar cuenta" : "Activar cuenta"}
-                            >
-                              <Power className="h-4 w-4" />
-                            </button>
-                          </td>
-                        )}
+                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedMovementsAccount(acc)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg transition-colors mr-2 shadow-xs"
+                            title="Ver movimientos e ingresos/egresos"
+                          >
+                            <ArrowLeftRight className="h-3.5 w-3.5 text-sky-600" />
+                            Movimientos
+                          </button>
+                          {canWriteModule && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openAccountModal(acc)}
+                                className="text-slate-600 hover:text-slate-900 p-1 rounded"
+                                title="Editar cuenta"
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => toggleBankAccount(acc.id)}
+                                className={`p-1 rounded ml-1 ${
+                                  acc.is_active ? "text-amber-600 hover:text-amber-800" : "text-emerald-600 hover:text-emerald-800"
+                                }`}
+                                title={acc.is_active ? "Desactivar cuenta" : "Activar cuenta"}
+                              >
+                                <Power className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -700,6 +750,16 @@ export const BancosPage = () => {
               </form>
             </div>
           </div>
+        )}
+
+        {/* Modal de Movimientos de Cuenta Bancaria */}
+        {selectedMovementsAccount && (
+          <BankAccountMovementsModal
+            account={selectedMovementsAccount}
+            onClose={() => setSelectedMovementsAccount(null)}
+            canWrite={canWriteModule}
+            onBalanceUpdated={loadBalances}
+          />
         )}
       </div>
     </PagePlaceholder>

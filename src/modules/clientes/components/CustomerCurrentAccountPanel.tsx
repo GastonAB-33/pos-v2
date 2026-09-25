@@ -2,8 +2,9 @@ import { useCurrentAccount } from "@/modules/clientes/hooks/useCurrentAccount";
 import { CurrentAccountAdjustmentModal } from "@/modules/clientes/components/CurrentAccountAdjustmentModal";
 import { CurrentAccountMovementsTable } from "@/modules/clientes/components/CurrentAccountMovementsTable";
 import { CurrentAccountPaymentModal } from "@/modules/clientes/components/CurrentAccountPaymentModal";
+import { CustomerManualMovementModal } from "@/modules/cuentas-corrientes/components/CustomerManualMovementModal";
 import { useState } from "react";
-import { RefreshCw, X } from "lucide-react";
+import { ArrowLeft, DollarSign, PlusCircle, RefreshCw } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import type { Customer } from "@/types/entities";
 
@@ -32,6 +33,7 @@ export const CustomerCurrentAccountPanel = ({
 }: CustomerCurrentAccountPanelProps) => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
+  const [isManualDebtModalOpen, setIsManualDebtModalOpen] = useState(false);
 
   const {
     movements,
@@ -88,11 +90,16 @@ export const CustomerCurrentAccountPanel = ({
 
   return (
     <section className="current-account-detail ui-card space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 className="text-base font-semibold text-slate-900">Cuenta corriente</h3>
-          <p className="text-sm text-slate-600">{customer.full_name}</p>
-        </div>
+      {/* Barra de navegación superior con botón Volver */}
+      <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+        >
+          <ArrowLeft size={14} />
+          <span>Volver al listado de clientes</span>
+        </button>
 
         <div className="flex items-center gap-2">
           <IconButton
@@ -105,7 +112,36 @@ export const CustomerCurrentAccountPanel = ({
             loading={isLoading}
             disabled={isSubmitting}
           />
-          <IconButton icon={X} label="Cerrar cuenta corriente" onClick={onClose} />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+            {customer.full_name}
+          </h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {customer.document_type?.toUpperCase()} {customer.document_number}
+            {customer.phone ? ` • Tel: ${customer.phone}` : ""}
+            {customer.email ? ` • Email: ${customer.email}` : ""}
+          </p>
+        </div>
+
+        <div className="text-right">
+          <span className="text-[10px] uppercase tracking-wider text-slate-500 block font-semibold">
+            Saldo Adeudado
+          </span>
+          <span
+            className={`text-2xl font-bold tracking-tight ${
+              balance > 0
+                ? "text-rose-600 dark:text-rose-400"
+                : balance < 0
+                ? "text-blue-600 dark:text-blue-400"
+                : "text-emerald-600 dark:text-emerald-400"
+            }`}
+          >
+            {currency.format(balance)}
+          </span>
         </div>
       </div>
 
@@ -130,30 +166,40 @@ export const CustomerCurrentAccountPanel = ({
         </div>
       ) : canWrite && !hasOpenCashSession ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          No hay caja abierta para el usuario actual. Puedes consultar movimientos y actualizar la regla de saldo,
-          pero para registrar pagos debes abrir caja.
+          No hay caja abierta para el usuario actual. Puedes consultar movimientos y registrar deudas manuales,
+          pero para registrar pagos en efectivo/tarjeta debes abrir caja.
         </div>
       ) : hasOpenCashSession ? (
-        <p className="text-xs text-emerald-700">Caja abierta para registrar movimientos</p>
+        <p className="text-xs text-emerald-700">Caja abierta para registrar cobros</p>
       ) : null}
 
       {canWrite ? (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 pt-1">
           <button
             type="button"
-            className="ui-btn-primary"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-sm transition dark:bg-slate-100 dark:text-slate-900"
             onClick={() => setIsPaymentModalOpen(true)}
             disabled={isSubmitting || !canRegisterPayment}
           >
-            Registrar pago
+            <DollarSign size={14} />
+            <span>Registrar cobro</span>
           </button>
           <button
             type="button"
-            className="ui-btn-ghost"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl shadow-sm transition dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300"
+            onClick={() => setIsManualDebtModalOpen(true)}
+            disabled={isSubmitting}
+          >
+            <PlusCircle size={14} />
+            <span>Adeudar / Movimiento manual</span>
+          </button>
+          <button
+            type="button"
+            className="ui-btn-ghost text-xs py-2"
             onClick={() => setIsAdjustmentModalOpen(true)}
             disabled={isSubmitting || !canUpdatePricingRule}
           >
-            Realizar ajuste
+            Actualizar regla / Ajuste
           </button>
         </div>
       ) : (
@@ -191,6 +237,18 @@ export const CustomerCurrentAccountPanel = ({
         disabled={isSubmitting}
         onClose={() => setIsAdjustmentModalOpen(false)}
         onSubmit={submitAdjustment}
+      />
+
+      <CustomerManualMovementModal
+        open={isManualDebtModalOpen}
+        tenantId={tenantId}
+        userId={userId}
+        customer={customer}
+        onClose={() => setIsManualDebtModalOpen(false)}
+        onSuccess={() => {
+          void reload();
+          onBalanceUpdated();
+        }}
       />
     </section>
   );

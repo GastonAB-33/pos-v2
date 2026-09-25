@@ -1,11 +1,11 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Calendar, Check, ChevronDown, CreditCard, FileText, Plus, Search, User, StickyNote, X } from "lucide-react";
+import { Calendar, Check, ChevronDown, FileText, Plus, Search, User, StickyNote, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Supplier } from "@/types/entities";
 import {
-  purchaseCheckoutSchema,
-  type PurchaseCheckoutValues,
+  purchaseHeaderSchema,
+  type PurchaseHeaderValues,
 } from "@/modules/compras/schemas/purchase-checkout.schema";
 
 interface PurchaseCheckoutPanelProps {
@@ -14,8 +14,9 @@ interface PurchaseCheckoutPanelProps {
   disabled?: boolean;
   preferredSupplierId?: string;
   formId?: string;
+  resetSignal?: number;
   onCreateSupplier: () => void;
-  onSubmit: (values: PurchaseCheckoutValues) => Promise<boolean>;
+  onSubmit: (values: PurchaseHeaderValues) => Promise<boolean | void> | boolean | void;
 }
 
 const getTodayDate = () => new Date().toISOString().split("T")[0];
@@ -26,6 +27,7 @@ export const PurchaseCheckoutPanel = ({
   disabled,
   preferredSupplierId,
   formId = "purchase-checkout-form",
+  resetSignal,
   onCreateSupplier,
   onSubmit,
 }: PurchaseCheckoutPanelProps) => {
@@ -36,14 +38,13 @@ export const PurchaseCheckoutPanel = ({
     setValue,
     watch,
     formState: { errors },
-  } = useForm<PurchaseCheckoutValues>({
-    resolver: zodResolver(purchaseCheckoutSchema),
+  } = useForm<PurchaseHeaderValues>({
+    resolver: zodResolver(purchaseHeaderSchema),
     defaultValues: {
       supplierId: "",
       documentType: "FACTURA_A",
       documentNumber: "",
       issueDate: getTodayDate(),
-      paymentMethod: "cash",
       notes: "",
     },
   });
@@ -112,19 +113,21 @@ export const PurchaseCheckoutPanel = ({
     setIsSupplierDropdownOpen(false);
   };
 
-  const submit = async (values: PurchaseCheckoutValues) => {
-    const saved = await onSubmit(values);
-    if (saved) {
+  useEffect(() => {
+    if (resetSignal) {
       reset({
         supplierId: "",
         documentType: "FACTURA_A",
         documentNumber: "",
         issueDate: getTodayDate(),
-        paymentMethod: "cash",
         notes: "",
       });
       setSupplierSearchText("");
     }
+  }, [resetSignal, reset]);
+
+  const submit = async (values: PurchaseHeaderValues) => {
+    await onSubmit(values);
   };
 
   return (
@@ -315,41 +318,20 @@ export const PurchaseCheckoutPanel = ({
           </div>
         </div>
 
-        {/* Fila secundaria: Medio de pago y Observaciones */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div>
-            <label className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
-              <CreditCard className="h-3 w-3 text-slate-400" />
-              Medio de Pago
-            </label>
-            <select
-              {...register("paymentMethod")}
-              className="w-full rounded-lg border border-slate-300 bg-slate-50/50 px-2.5 py-1.5 text-xs font-medium text-slate-800 transition focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
-              disabled={disabled || !canWrite}
-            >
-              <option value="cash">Efectivo (Impacta Caja Diaria)</option>
-              <option value="transfer">Transferencia Bancaria</option>
-              <option value="card_debit">Tarjeta de Débito</option>
-              <option value="card_credit">Tarjeta de Crédito</option>
-              <option value="current_account">Cuenta Corriente Proveedor</option>
-              <option value="other">Otro</option>
-            </select>
-          </div>
-
-          <div className="sm:col-span-2">
-            <label className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
-              <StickyNote className="h-3 w-3 text-slate-400" />
-              Observaciones / Notas (Opcional)
-            </label>
-            <input
-              type="text"
-              placeholder="Notas breves sobre la compra o entrega..."
-              {...register("notes")}
-              className="w-full rounded-lg border border-slate-300 bg-slate-50/50 px-2.5 py-1.5 text-xs text-slate-800 transition focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
-              disabled={disabled || !canWrite}
-            />
-            {errors.notes ? <p className="mt-0.5 text-[11px] text-red-600">{errors.notes.message}</p> : null}
-          </div>
+        {/* Fila secundaria: Observaciones */}
+        <div>
+          <label className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+            <StickyNote className="h-3 w-3 text-slate-400" />
+            Observaciones / Notas de la compra (Opcional)
+          </label>
+          <input
+            type="text"
+            placeholder="Notas breves sobre la factura, remito o entrega del proveedor..."
+            {...register("notes")}
+            className="w-full rounded-lg border border-slate-300 bg-slate-50/50 px-2.5 py-1.5 text-xs text-slate-800 transition focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+            disabled={disabled || !canWrite}
+          />
+          {errors.notes ? <p className="mt-0.5 text-[11px] text-red-600">{errors.notes.message}</p> : null}
         </div>
       </form>
     </section>

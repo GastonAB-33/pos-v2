@@ -10,11 +10,15 @@ import { PurchaseCheckoutPanel } from "@/modules/compras/components/PurchaseChec
 import { PurchaseProductSelectModal } from "@/modules/compras/components/PurchaseProductSelectModal";
 import { PurchasesHistoryTable } from "@/modules/compras/components/PurchasesHistoryTable";
 import { PurchaseReturnModal } from "@/modules/compras/components/PurchaseReturnModal";
+import { PurchasePaymentModal } from "@/modules/compras/components/PurchasePaymentModal";
 import { usePurchasesModule } from "@/modules/compras/hooks/usePurchasesModule";
 import { ProductFormModal } from "@/modules/productos/components/ProductFormModal";
 import { SupplierForm } from "@/modules/proveedores/components/SupplierForm";
 import type { ProductFormModalValues } from "@/modules/productos/types/product.types";
-import type { PurchaseCheckoutValues } from "@/modules/compras/schemas/purchase-checkout.schema";
+import type {
+  PurchaseHeaderValues,
+  PurchasePaymentValues,
+} from "@/modules/compras/schemas/purchase-checkout.schema";
 import type { SupplierFormValues } from "@/modules/proveedores/schemas/supplier-form.schema";
 import type { Product, Purchase, Supplier } from "@/types/entities";
 
@@ -102,11 +106,16 @@ export const ComprasPage = () => {
     purchase: Purchase;
     supplier: Supplier | null;
   } | null>(null);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [pendingHeaderValues, setPendingHeaderValues] = useState<PurchaseHeaderValues | null>(null);
+  const [checkoutResetSignal, setCheckoutResetSignal] = useState(0);
 
   const {
     products,
     suppliers,
     purchases,
+    bankAccounts,
+    openCashSession,
     suppliersById,
     cart,
     summary,
@@ -140,14 +149,26 @@ export const ComprasPage = () => {
     supplier: suppliersById.get(purchase.supplier_id) ?? null,
   }));
 
-  const handleConfirmPurchase = async (values: PurchaseCheckoutValues): Promise<boolean> => {
-    if (!canWritePurchases) return false;
-    const purchase = await confirmPurchase(values);
+  const handleProceedToPayment = (headerValues: PurchaseHeaderValues) => {
+    if (!canWritePurchases) return;
+    if (!cart.length) {
+      alert("Debés agregar al menos un producto al carrito de compras antes de continuar al pago.");
+      return;
+    }
+    setPendingHeaderValues(headerValues);
+    setIsPaymentModalOpen(true);
+  };
+
+  const handleFinalPaymentConfirm = async (paymentValues: PurchasePaymentValues): Promise<void> => {
+    if (!canWritePurchases || !pendingHeaderValues) return;
+    const purchase = await confirmPurchase(pendingHeaderValues, paymentValues);
     if (purchase) {
+      setIsPaymentModalOpen(false);
+      setPendingHeaderValues(null);
+      setCheckoutResetSignal((prev) => prev + 1);
       setViewMode("history");
       setPreferredSupplierId(undefined);
     }
-    return Boolean(purchase);
   };
 
   const handleCreateSupplier = async (values: SupplierFormValues) => {
@@ -317,8 +338,9 @@ export const ComprasPage = () => {
               disabled={isSubmitting}
               preferredSupplierId={preferredSupplierId}
               formId="purchase-checkout-form"
+              resetSignal={checkoutResetSignal}
               onCreateSupplier={() => setIsSupplierModalOpen(true)}
-              onSubmit={handleConfirmPurchase}
+              onSubmit={handleProceedToPayment}
             />
 
             {/* 3. Panel de Productos de Compra y Resumen / Confirmación */}
@@ -428,6 +450,22 @@ export const ComprasPage = () => {
           onConfirmReturn={createPurchaseReturn}
         />
       ) : null}
+
+      {/* Modal 6: Pago de la compra */}
+      <PurchasePaymentModal
+        open={isPaymentModalOpen && Boolean(pendingHeaderValues)}
+        total={summary.total}
+        supplier={
+          pendingHeaderValues ? suppliersById.get(pendingHeaderValues.supplierId) ?? null : null
+        }
+        documentType={pendingHeaderValues?.documentType || "FACTURA_A"}
+        documentNumber={pendingHeaderValues?.documentNumber || ""}
+        bankAccounts={bankAccounts}
+        openCashSession={openCashSession}
+        isSubmitting={isSubmitting}
+        onClose={() => setIsPaymentModalOpen(false)}
+        onConfirm={handleFinalPaymentConfirm}
+      />
     </PagePlaceholder>
   );
 };

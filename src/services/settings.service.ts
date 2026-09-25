@@ -162,6 +162,10 @@ const normalizeTenantSettings = (input: TenantSettings): TenantSettings => ({
   pos: {
     ...createDefaultPosSettings(),
     ...(input.pos ?? {}),
+    default_customer_id: null,
+    cart_behavior: "merge_same_product",
+    barcode_scan_quantity: 1,
+    allow_sale_without_customer: true,
   },
   stock: {
     ...createDefaultStockSettings(),
