@@ -46,7 +46,7 @@ export interface CashDailyTrackingRow {
   manualMovementsCount: number;
 }
 
-interface CashSessionComputedSummary {
+export interface CashSessionComputedSummary {
   openingAmount: number;
   incomes: number;
   expenses: number;
@@ -145,6 +145,10 @@ const defaultCashSettings: CashSettings = {
   default_opening_amount: 0,
   allow_manual_movements: true,
   require_notes_on_manual_movements: false,
+  blind_cash_close_enabled: true,
+  cash_close_denomination_breakdown: true,
+  cash_close_declare_other_payment_methods: false,
+  cash_close_two_step_verification: false,
 };
 
 export const useCashModule = (tenantId: string | null, userId: string | null) => {
@@ -206,7 +210,32 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         salesService.getAllByTenant(tenantId),
       ]);
 
-      setSessions(allSessions.sort((a, b) => b.opened_at.localeCompare(a.opened_at)));
+      // Sanear sesiones abiertas múltiples en el tenant: solo debe existir como máximo 1 abierta
+      const sortedSessions = allSessions.sort((a, b) => b.opened_at.localeCompare(a.opened_at));
+      const openSessions = sortedSessions.filter((s) => s.status === "open");
+
+      if (openSessions.length > 1) {
+        const [, ...olderOpenSessions] = openSessions;
+        for (const orphan of olderOpenSessions) {
+          try {
+            await cashService.update(tenantId, orphan.id, {
+              status: "closed",
+              closed_by_user_id: orphan.opened_by_user_id,
+              closed_at: orphan.opened_at,
+              closing_amount: orphan.opening_amount,
+              expected_closing_amount: orphan.opening_amount,
+              closing_difference: 0,
+              notes: "Cierre automático de turno duplicado anterior",
+            });
+            orphan.status = "closed";
+            orphan.closed_at = orphan.opened_at;
+          } catch (e) {
+            console.warn("No se pudo auto-cerrar sesión huérfana:", e);
+          }
+        }
+      }
+
+      setSessions(sortedSessions);
       setMovements(allMovements.sort((a, b) => b.created_at.localeCompare(a.created_at)));
       setCurrentAccountMovements(
         allCurrentAccountMovements.sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -261,7 +290,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     if (!userId) return null;
     return (
       sessions.find(
-        (session) => session.status === "open" && session.opened_by_user_id === userId
+        (session) => session.status === "open"
       ) ?? null
     );
   }, [sessions, userId]);
@@ -548,6 +577,19 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     [movements, sessionDateById]
   );
 
+  const getSessionMovements = useCallback(
+    (sessionId: string | null, movementType: CashMovementFilter = "all"): CashMovement[] => {
+      if (!sessionId) return [];
+
+      return movements.filter((movement) => {
+        if (movement.cash_session_id !== sessionId) return false;
+        if (movementType !== "all" && movement.movement_type !== movementType) return false;
+        return true;
+      });
+    },
+    [movements]
+  );
+
   const getSessionBreakdown = useCallback(
     (sessionId: string | null): CashSessionBreakdown | null => {
       if (!sessionId) return null;
@@ -762,9 +804,9 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
     setIsSubmitting(true);
     try {
-      const alreadyOpen = await cashService.getOpenSessionByUser(tenantId, userId);
+      const alreadyOpen = await cashService.getOpenSession(tenantId);
       if (alreadyOpen) {
-        setFeedback({ type: "error", message: "Ya tenes una caja diaria abierta" });
+        setFeedback({ type: "error", message: "Ya existe una caja diaria abierta en el comercio. Debes cerrar la caja anterior antes de abrir una nueva." });
         return;
       }
 
@@ -818,15 +860,17 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     }
   };
 
-  const closeCash = async (values: CloseCashValues) => {
+  const closeCash = async (values: CloseCashValues): Promise<CashSession | null> => {
     if (!tenantId || !userId || !currentSession) {
       setFeedback({ type: "error", message: "No hay una caja diaria abierta para cerrar" });
-      return;
+      return null;
     }
 
     setIsSubmitting(true);
     try {
       const difference = roundAmount(values.realAmount - currentSessionSummary.expectedBalance);
+      const isTwoStep = Boolean(cashSettings.cash_close_two_step_verification);
+      const verificationStatus = isTwoStep ? "pending" : "verified";
 
       const closedSession = await cashService.update(tenantId, currentSession.id, {
         status: "closed",
@@ -836,22 +880,46 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         expected_closing_amount: currentSessionSummary.expectedBalance,
         closing_difference: difference,
         notes: values.notes?.trim() || currentSession.notes,
+        is_blind_close: values.isBlindClose ?? false,
+        counted_denominations: values.countedDenominations ?? null,
+        declared_other_payments: values.declaredOtherPayments ?? null,
+        verification_status: verificationStatus,
       });
+
+      const otherOpenSessions = sessions.filter((s) => s.status === "open" && s.id !== currentSession.id);
+      for (const orphan of otherOpenSessions) {
+        try {
+          await cashService.update(tenantId, orphan.id, {
+            status: "closed",
+            closed_by_user_id: userId,
+            closed_at: new Date().toISOString(),
+            closing_amount: orphan.opening_amount,
+            expected_closing_amount: orphan.opening_amount,
+            closing_difference: 0,
+            notes: "Cierre automático de sesión huérfana",
+          });
+        } catch (e) {
+          console.warn("No se pudo cerrar sesión huérfana:", e);
+        }
+      }
+
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "caja",
         action: "close",
         entity_type: "cash_session",
         entity_id: closedSession?.id ?? currentSession.id,
-        description: "Cierre de caja",
+        description: values.isBlindClose ? "Cierre de caja ciego" : "Cierre de caja tradicional",
         metadata: {
           expected_amount: currentSessionSummary.expectedBalance,
           real_amount: values.realAmount,
           difference,
+          is_blind_close: values.isBlindClose ?? false,
+          verification_status: verificationStatus,
         },
       });
 
-      if (values.realAmount > 0) {
+      if (values.realAmount > 0 && !isTwoStep) {
         try {
           await generalCashService.createMovement(tenantId, {
             type: "income",
@@ -865,10 +933,53 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
           console.error("Error al registrar ingreso en Caja General al cerrar caja:", genCashErr);
         }
       }
-      setFeedback({ type: "success", message: "Caja diaria cerrada" });
+      setFeedback({ type: "success", message: "Caja diaria cerrada exitosamente" });
       await loadCashData();
+      return closedSession ?? { ...currentSession, closing_amount: values.realAmount, status: "closed" };
     } catch {
       setFeedback({ type: "error", message: "No se pudo cerrar la caja diaria" });
+      return null;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const verifySession = async (
+    sessionId: string,
+    verifiedAmount: number,
+    notes?: string
+  ): Promise<boolean> => {
+    if (!tenantId || !userId) return false;
+    setIsSubmitting(true);
+    try {
+      await cashService.update(tenantId, sessionId, {
+        verification_status: "verified",
+        verified_by_user_id: userId,
+        verified_at: new Date().toISOString(),
+        verified_amount: verifiedAmount,
+        verification_notes: notes?.trim() ?? null,
+      });
+
+      if (verifiedAmount > 0) {
+        try {
+          await generalCashService.createMovement(tenantId, {
+            type: "income",
+            amount: verifiedAmount,
+            origin_type: "daily_cash_close",
+            concept: `Recepción verificada en Caja General - Sesión #${sessionId.slice(-6)}`,
+            reference_id: sessionId,
+            created_by: userId,
+          });
+        } catch (genErr) {
+          console.error("Error al registrar en Caja General:", genErr);
+        }
+      }
+      setFeedback({ type: "success", message: "Turno verificado y recepcionado en Caja General" });
+      await loadCashData();
+      return true;
+    } catch {
+      setFeedback({ type: "error", message: "No se pudo verificar la sesión" });
+      return false;
     } finally {
       setIsSubmitting(false);
     }
@@ -1015,6 +1126,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     getSessionBreakdown,
     getCurrentAccountDailySummary,
     getDailyMovements,
+    getSessionMovements,
+    sessionSummariesById,
     saleNumbersById,
     movementTypeFilter,
     setMovementTypeFilter,
@@ -1029,6 +1142,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     reload: loadCashData,
     openCash,
     closeCash,
+    verifySession,
     registerIncome,
     registerExpense,
   };

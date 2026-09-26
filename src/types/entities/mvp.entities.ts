@@ -431,6 +431,10 @@ export interface CashSettings {
   default_opening_amount: number;
   allow_manual_movements: boolean;
   require_notes_on_manual_movements: boolean;
+  blind_cash_close_enabled?: boolean;
+  cash_close_denomination_breakdown?: boolean;
+  cash_close_declare_other_payment_methods?: boolean;
+  cash_close_two_step_verification?: boolean;
 }
 
 export interface FacturacionSettings {
@@ -484,7 +488,7 @@ export interface BarcodeScaleSettings {
 export type UiFontSize = "compact" | "normal" | "large" | "extra-large";
 
 export interface AppearanceSettings {
-  default_theme: "light" | "dark";
+  default_theme: "light" | "dark" | "dark-blue";
   accent_color: string;
   display_name: string;
   density: UiDensity;
@@ -618,6 +622,14 @@ export interface CashSession extends TenantScopedEntity {
   expected_closing_amount: number | null;
   closing_difference: number | null;
   notes: string | null;
+  is_blind_close?: boolean | null;
+  counted_denominations?: Record<string, number> | null;
+  declared_other_payments?: Record<string, number> | null;
+  verification_status?: "verified" | "pending" | null;
+  verified_by_user_id?: string | null;
+  verified_at?: string | null;
+  verified_amount?: number | null;
+  verification_notes?: string | null;
 }
 
 export type CashMovementType = "income" | "expense" | "sale_payment" | "adjustment";

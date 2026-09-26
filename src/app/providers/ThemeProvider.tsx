@@ -69,12 +69,17 @@ export const ThemeProvider = ({ children }: PropsWithChildren) => {
 
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.remove("light", "dark");
-    root.classList.add(theme);
+    root.classList.remove("light", "dark", "dark-blue");
+    if (theme === "dark-blue") {
+      root.classList.add("dark", "dark-blue");
+    } else {
+      root.classList.add(theme);
+    }
     root.classList.toggle("ui-density-compact", density === "compact");
     root.setAttribute("data-ui-fontsize", fontSize);
+    root.setAttribute("data-theme", theme);
     root.style.fontSize = fontSizePixels[fontSize] ?? "16px";
-    root.style.colorScheme = theme;
+    root.style.colorScheme = theme === "light" ? "light" : "dark";
     root.style.setProperty("--ui-accent", accentColor);
     root.style.setProperty("--ui-accent-soft", hexToSoftRgba(accentColor));
     root.style.setProperty(

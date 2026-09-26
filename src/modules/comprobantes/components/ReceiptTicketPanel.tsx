@@ -114,48 +114,48 @@ export const ReceiptTicketPanel = ({
   };
 
   return (
-    <article className="mx-auto w-full max-w-2xl space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
+    <article className="mx-auto w-full max-w-2xl space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel dark:border-slate-800 dark:bg-slate-900">
       {showTicket ? (
         <>
-          <header className="border-b border-dashed border-slate-300 pb-3 text-center">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-900">Ticket interno</h3>
-            <p className="mt-1 font-mono text-base text-slate-900">{receipt.receipt_number}</p>
-            <p className="text-xs text-slate-500">{new Date(receipt.issued_at).toLocaleString("es-AR")}</p>
+          <header className="border-b border-dashed border-slate-300 dark:border-slate-700 pb-3 text-center">
+            <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-900 dark:text-slate-100">Ticket interno</h3>
+            <p className="mt-1 font-mono text-base text-slate-900 dark:text-slate-100">{receipt.receipt_number}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(receipt.issued_at).toLocaleString("es-AR")}</p>
           </header>
 
-          <div className="space-y-1 border-b border-dashed border-slate-300 py-3 text-sm">
+          <div className="space-y-1 border-b border-dashed border-slate-300 dark:border-slate-700 py-3 text-sm">
             <p className="flex items-center justify-between">
-              <span className="text-slate-500">Venta</span>
-              <span className="font-medium text-slate-900">{receipt.sale_number}</span>
+              <span className="text-slate-500 dark:text-slate-400">Venta</span>
+              <span className="font-medium text-slate-900 dark:text-slate-100">{receipt.sale_number}</span>
             </p>
             <p className="flex items-center justify-between">
-              <span className="text-slate-500">Cliente</span>
-              <span className="font-medium text-slate-900">{receipt.customer_name ?? "Consumidor final"}</span>
+              <span className="text-slate-500 dark:text-slate-400">Cliente</span>
+              <span className="font-medium text-slate-900 dark:text-slate-100">{receipt.customer_name ?? "Consumidor final"}</span>
             </p>
             <p className="flex items-center justify-between">
-              <span className="text-slate-500">Pago</span>
-              <span className="font-medium text-slate-900">{getPaymentMethodLabel(receipt.payment_method)}</span>
+              <span className="text-slate-500 dark:text-slate-400">Pago</span>
+              <span className="font-medium text-slate-900 dark:text-slate-100">{getPaymentMethodLabel(receipt.payment_method)}</span>
             </p>
           </div>
 
           <div className="space-y-2 py-3 text-sm">
             {receipt.items.map((item, index) => (
-              <div key={`${item.name}-${index}`} className="rounded-lg border border-slate-200 p-2">
-                <p className="font-medium text-slate-900">{item.name}</p>
-                <p className="mt-1 flex items-center justify-between text-xs text-slate-500">
+              <div key={`${item.name}-${index}`} className="rounded-lg border border-slate-200 dark:border-slate-750 p-2 dark:bg-slate-800/60">
+                <p className="font-medium text-slate-900 dark:text-slate-100">{item.name}</p>
+                <p className="mt-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                   <span>
                     {item.quantity.toLocaleString("es-AR")} x {currency.format(item.unit_price)}
                   </span>
-                  <span className="font-mono text-sm text-slate-900">{currency.format(item.subtotal)}</span>
+                  <span className="font-mono text-sm text-slate-900 dark:text-slate-100">{currency.format(item.subtotal)}</span>
                 </p>
               </div>
             ))}
           </div>
 
-          <footer className="border-t border-dashed border-slate-300 pt-3">
-            <p className="flex items-center justify-between text-base font-semibold text-slate-900">
+          <footer className="border-t border-dashed border-slate-300 dark:border-slate-700 pt-3">
+            <p className="flex items-center justify-between text-base font-semibold text-slate-900 dark:text-slate-100">
               <span>Total</span>
-              <span className="font-kpi">{currency.format(receipt.total)}</span>
+              <span className="font-kpi text-emerald-700 dark:text-emerald-400">{currency.format(receipt.total)}</span>
             </p>
 
             <div className="mt-4 flex flex-wrap gap-2">
@@ -176,9 +176,9 @@ export const ReceiptTicketPanel = ({
       ) : null}
 
       {showInvoice && hasInvoice ? (
-        <section className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <section className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h4 className="text-sm font-semibold text-slate-900">
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               Factura {invoice!.document_type} {invoice!.document_number}
             </h4>
             <span
@@ -193,11 +193,11 @@ export const ReceiptTicketPanel = ({
               ARCA {invoice!.arca_status}
             </span>
           </div>
-          <p className="mt-1 text-xs text-slate-600">
+          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
             Referencia: {invoice!.arca_reference ?? "Sin referencia"}{" "}
             {invoice!.arca_message ? `| ${invoice!.arca_message}` : ""}
           </p>
-          <p className="mt-1 text-xs text-slate-600">Total factura: {currency.format(invoice!.total)}</p>
+          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">Total factura: {currency.format(invoice!.total)}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className="ui-btn-primary" onClick={printInvoice}>
               Imprimir factura
@@ -210,7 +210,7 @@ export const ReceiptTicketPanel = ({
       ) : null}
 
       {showInvoice && !hasInvoice ? (
-        <section className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+        <section className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3 text-sm text-slate-600 dark:text-slate-300">
           Este comprobante no tiene factura asociada.
         </section>
       ) : null}

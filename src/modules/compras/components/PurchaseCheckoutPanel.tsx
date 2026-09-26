@@ -131,13 +131,13 @@ export const PurchaseCheckoutPanel = ({
   };
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2.5">
-        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
-          <FileText className="h-4 w-4 text-brand-600" />
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2.5 dark:border-slate-800">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
+          <FileText className="h-4 w-4 text-brand-600 dark:text-brand-400" />
           Datos de la compra y factura
         </h2>
-        <span className="text-[11px] text-slate-400">Campos del comprobante y proveedor</span>
+        <span className="text-[11px] text-slate-400 dark:text-slate-400">Campos del comprobante y proveedor</span>
       </div>
 
       <form id={formId} autoComplete="off" onSubmit={handleSubmit(submit)} className="space-y-3">
@@ -149,13 +149,13 @@ export const PurchaseCheckoutPanel = ({
           {/* Proveedor con Buscador en Vivo (Combobox) */}
           <div className="relative lg:col-span-2" ref={supplierBoxRef}>
             <div className="mb-1 flex items-center justify-between">
-              <label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+              <label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                 <User className="h-3 w-3 text-slate-400" />
                 Proveedor *
               </label>
               <button
                 type="button"
-                className="inline-flex items-center gap-0.5 text-[11px] font-medium text-brand-600 hover:text-brand-700 hover:underline"
+                className="inline-flex items-center gap-0.5 text-[11px] font-medium text-brand-600 hover:text-brand-700 hover:underline dark:text-brand-400 dark:hover:text-brand-300"
                 onClick={onCreateSupplier}
                 disabled={disabled || !canWrite}
               >
@@ -182,8 +182,10 @@ export const PurchaseCheckoutPanel = ({
                 }}
                 onFocus={() => setIsSupplierDropdownOpen(true)}
                 disabled={disabled || !canWrite}
-                className={`w-full rounded-lg border bg-slate-50/50 py-1.5 pl-8 pr-14 text-xs font-medium text-slate-800 transition focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 ${
-                  errors.supplierId ? "border-red-400 bg-red-50/30" : "border-slate-300"
+                className={`w-full rounded-lg border bg-slate-50/50 py-1.5 pl-8 pr-14 text-xs font-medium text-slate-800 transition focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:bg-slate-800 ${
+                  errors.supplierId
+                    ? "border-red-400 bg-red-50/30 dark:border-red-800 dark:bg-red-950/30"
+                    : "border-slate-300 dark:border-slate-700"
                 }`}
               />
 
@@ -193,7 +195,7 @@ export const PurchaseCheckoutPanel = ({
                     type="button"
                     onClick={handleClearSupplier}
                     disabled={disabled || !canWrite}
-                    className="p-1 text-slate-400 hover:text-slate-600"
+                    className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                     title="Limpiar proveedor"
                   >
                     <X className="h-3.5 w-3.5" />
@@ -203,7 +205,7 @@ export const PurchaseCheckoutPanel = ({
                   type="button"
                   onClick={() => setIsSupplierDropdownOpen((prev) => !prev)}
                   disabled={disabled || !canWrite}
-                  className="p-1 text-slate-400 hover:text-slate-600"
+                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                 >
                   <ChevronDown className="h-3.5 w-3.5" />
                 </button>
@@ -212,10 +214,10 @@ export const PurchaseCheckoutPanel = ({
 
             {/* Menú desplegable con coincidencias en tiempo real */}
             {isSupplierDropdownOpen && (
-              <div className="absolute z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+              <div className="absolute z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
                 {filteredSuppliers.length === 0 ? (
                   <div className="p-3 text-center">
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
                       No se encontró ningún proveedor con "{supplierSearchText}"
                     </p>
                     <button
@@ -224,7 +226,7 @@ export const PurchaseCheckoutPanel = ({
                         setIsSupplierDropdownOpen(false);
                         onCreateSupplier();
                       }}
-                      className="mt-2 inline-flex items-center gap-1 rounded bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100"
+                      className="mt-2 inline-flex items-center gap-1 rounded bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100 dark:bg-brand-950/60 dark:text-brand-300 dark:hover:bg-brand-900/60"
                     >
                       <Plus className="h-3 w-3" />
                       Dar de alta este proveedor
@@ -240,19 +242,19 @@ export const PurchaseCheckoutPanel = ({
                         onClick={() => handleSelectSupplier(supplier)}
                         className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs transition ${
                           isSelected
-                            ? "bg-brand-50 font-bold text-brand-800"
-                            : "text-slate-700 hover:bg-slate-100"
+                            ? "bg-brand-50 font-bold text-brand-800 dark:bg-brand-950/70 dark:text-brand-300"
+                            : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700/60"
                         }`}
                       >
                         <div className="min-w-0 flex-1 truncate">
                           <span className="font-semibold">{supplier.name}</span>
                           {supplier.code ? (
-                            <span className="ml-1.5 text-[10px] text-slate-400">
+                            <span className="ml-1.5 text-[10px] text-slate-400 dark:text-slate-400">
                               ({supplier.code})
                             </span>
                           ) : null}
                         </div>
-                        {isSelected && <Check className="h-3.5 w-3.5 text-brand-600" />}
+                        {isSelected && <Check className="h-3.5 w-3.5 text-brand-600 dark:text-brand-400" />}
                       </button>
                     );
                   })
@@ -261,18 +263,18 @@ export const PurchaseCheckoutPanel = ({
             )}
 
             {errors.supplierId ? (
-              <p className="mt-0.5 text-[11px] text-red-600">{errors.supplierId.message}</p>
+              <p className="mt-0.5 text-[11px] text-red-600 dark:text-red-400">{errors.supplierId.message}</p>
             ) : null}
           </div>
 
           {/* Tipo de Comprobante */}
           <div>
-            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
               Comprobante
             </label>
             <select
               {...register("documentType")}
-              className="w-full rounded-lg border border-slate-300 bg-slate-50/50 px-2.5 py-1.5 text-xs font-medium text-slate-800 transition focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full rounded-lg border border-slate-300 bg-slate-50/50 px-2.5 py-1.5 text-xs font-medium text-slate-800 transition focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:bg-slate-800"
               disabled={disabled || !canWrite}
             >
               <option value="FACTURA_A">Factura A</option>
@@ -287,7 +289,7 @@ export const PurchaseCheckoutPanel = ({
 
           {/* Nº Comprobante con autocompletado y sugerencias del navegador DESACTIVADAS */}
           <div>
-            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+            <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
               Nº Comprobante
             </label>
             <input
@@ -298,21 +300,21 @@ export const PurchaseCheckoutPanel = ({
               autoCapitalize="off"
               spellCheck={false}
               {...register("documentNumber")}
-              className="w-full rounded-lg border border-slate-300 bg-slate-50/50 px-2.5 py-1.5 text-xs font-medium text-slate-800 transition focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full rounded-lg border border-slate-300 bg-slate-50/50 px-2.5 py-1.5 text-xs font-medium text-slate-800 transition focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:bg-slate-800"
               disabled={disabled || !canWrite}
             />
           </div>
 
           {/* Fecha Emisión */}
           <div>
-            <label className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+            <label className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
               <Calendar className="h-3 w-3 text-slate-400" />
               Fecha
             </label>
             <input
               type="date"
               {...register("issueDate")}
-              className="w-full rounded-lg border border-slate-300 bg-slate-50/50 px-2.5 py-1.5 text-xs font-medium text-slate-800 transition focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+              className="w-full rounded-lg border border-slate-300 bg-slate-50/50 px-2.5 py-1.5 text-xs font-medium text-slate-800 transition focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:bg-slate-800"
               disabled={disabled || !canWrite}
             />
           </div>
@@ -320,7 +322,7 @@ export const PurchaseCheckoutPanel = ({
 
         {/* Fila secundaria: Observaciones */}
         <div>
-          <label className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+          <label className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
             <StickyNote className="h-3 w-3 text-slate-400" />
             Observaciones / Notas de la compra (Opcional)
           </label>
@@ -328,10 +330,10 @@ export const PurchaseCheckoutPanel = ({
             type="text"
             placeholder="Notas breves sobre la factura, remito o entrega del proveedor..."
             {...register("notes")}
-            className="w-full rounded-lg border border-slate-300 bg-slate-50/50 px-2.5 py-1.5 text-xs text-slate-800 transition focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
+            className="w-full rounded-lg border border-slate-300 bg-slate-50/50 px-2.5 py-1.5 text-xs text-slate-800 transition focus:border-brand-500 focus:bg-white focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:bg-slate-800"
             disabled={disabled || !canWrite}
           />
-          {errors.notes ? <p className="mt-0.5 text-[11px] text-red-600">{errors.notes.message}</p> : null}
+          {errors.notes ? <p className="mt-0.5 text-[11px] text-red-600 dark:text-red-400">{errors.notes.message}</p> : null}
         </div>
       </form>
     </section>

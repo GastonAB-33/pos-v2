@@ -747,7 +747,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                     "flex flex-col rounded-lg border p-3.5 text-left transition-all",
                     posWindowMode === "same_tab"
                       ? "border-blue-600 bg-white ring-2 ring-blue-500/20 dark:border-blue-500 dark:bg-slate-900"
-                      : "border-slate-200 bg-white/70 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/50"
+                      : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800/80 dark:hover:border-slate-600"
                   )}
                 >
                   <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -761,7 +761,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                       </span>
                     ) : null}
                   </div>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-300">
                     Navega dentro de la ventana actual manteniendo el menú lateral y las demás herramientas del sistema a mano.
                   </p>
                 </button>
@@ -773,7 +773,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                     "flex flex-col rounded-lg border p-3.5 text-left transition-all",
                     posWindowMode === "new_window"
                       ? "border-blue-600 bg-white ring-2 ring-blue-500/20 dark:border-blue-500 dark:bg-slate-900"
-                      : "border-slate-200 bg-white/70 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/50"
+                      : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800/80 dark:hover:border-slate-600"
                   )}
                 >
                   <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -787,7 +787,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                       </span>
                     ) : null}
                   </div>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-300">
                     Abre el Punto de Venta en una ventana independiente. Ideal para trabajar en pantalla completa o utilizar un segundo monitor en caja.
                   </p>
                 </button>
@@ -868,8 +868,8 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                     className={[
                       "flex flex-col justify-between rounded-xl border p-4 text-left transition-all",
                       isSelected
-                        ? "border-blue-600 bg-white ring-2 ring-blue-500/30 dark:bg-slate-900 dark:border-blue-500"
-                        : "border-slate-200 bg-white/70 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900/50 dark:hover:border-slate-700",
+                        ? "border-blue-600 bg-white ring-2 ring-blue-500/30 dark:bg-slate-900 dark:border-blue-500 shadow-sm"
+                        : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800/80 dark:hover:border-slate-600",
                     ].join(" ")}
                   >
                     <div>
@@ -877,20 +877,20 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                         <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
                           {option.shortLabel}
                         </span>
-                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                        <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 dark:bg-slate-700 dark:text-slate-200 px-1.5 py-0.5 rounded">
                           {option.badge}
                         </span>
                       </div>
                       <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">
                         {option.label}
                       </p>
-                      <p className="text-xs text-slate-500 line-clamp-2">
+                      <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
                         {option.description}
                       </p>
                     </div>
 
-                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 dark:border-slate-800">
-                      <span className="text-[11px] text-slate-400">Base {option.pixelSize}</span>
+                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 dark:border-slate-700/80">
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Base {option.pixelSize}</span>
                       {isSelected ? (
                         <CheckCircle2 size={16} className="text-blue-600 dark:text-blue-400" />
                       ) : null}
@@ -939,9 +939,19 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Tema Predeterminado</label>
-              <select className="ui-input" value={draft.apariencia.default_theme} onChange={(event) => updateSection("apariencia", { default_theme: event.target.value as AppearanceSettings["default_theme"] })} disabled={!canWriteConfiguracion}>
+              <select
+                className="ui-input"
+                value={draft.apariencia.default_theme}
+                onChange={(event) => {
+                  const newTheme = event.target.value as AppearanceSettings["default_theme"];
+                  updateSection("apariencia", { default_theme: newTheme });
+                  setTheme(newTheme);
+                }}
+                disabled={!canWriteConfiguracion}
+              >
                 <option value="light">Modo Claro (Recomendado para día)</option>
-                <option value="dark">Modo Oscuro (Recomendado para noche)</option>
+                <option value="dark">Modo Oscuro Negro (Contraste absoluto)</option>
+                <option value="dark-blue">Modo Oscuro Azul (Recomendado para noche)</option>
               </select>
             </div>
 
@@ -1026,6 +1036,90 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                 <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                   <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.caja.require_notes_on_manual_movements} onChange={(event) => updateSection("caja", { require_notes_on_manual_movements: event.target.checked })} disabled={!canWriteConfiguracion} />
                   <span>Exigir motivo en movimientos manuales</span>
+                </label>
+              </div>
+
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block pt-2">Protocolo de Cierre y Arqueo</span>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 rounded text-blue-600"
+                    checked={draft.caja.blind_cash_close_enabled ?? true}
+                    onChange={(event) =>
+                      updateSection("caja", {
+                        blind_cash_close_enabled: event.target.checked,
+                      })
+                    }
+                    disabled={!canWriteConfiguracion}
+                  />
+                  <div>
+                    <span className="block font-semibold">Cierre de caja ciego obligatorio</span>
+                    <span className="text-[11px] font-normal text-slate-500 block mt-0.5">
+                      Oculta el saldo esperado y las diferencias a los cajeros al cerrar turno para evitar ajustes intencionales.
+                    </span>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 rounded text-blue-600"
+                    checked={draft.caja.cash_close_denomination_breakdown ?? true}
+                    onChange={(event) =>
+                      updateSection("caja", {
+                        cash_close_denomination_breakdown: event.target.checked,
+                      })
+                    }
+                    disabled={!canWriteConfiguracion}
+                  />
+                  <div>
+                    <span className="block font-semibold">Contador interactivo de billetes ARS</span>
+                    <span className="text-[11px] font-normal text-slate-500 block mt-0.5">
+                      Habilita la calculadora rápida de billetes ($20.000, $10.000, etc.) en el arqueo para evitar usar calculadora manual.
+                    </span>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 rounded text-blue-600"
+                    checked={draft.caja.cash_close_declare_other_payment_methods ?? false}
+                    onChange={(event) =>
+                      updateSection("caja", {
+                        cash_close_declare_other_payment_methods: event.target.checked,
+                      })
+                    }
+                    disabled={!canWriteConfiguracion}
+                  />
+                  <div>
+                    <span className="block font-semibold">Declaración de otros medios de pago</span>
+                    <span className="text-[11px] font-normal text-slate-500 block mt-0.5">
+                      Pide al cajero ingresar la cantidad o total de cupones de tarjeta / comprobantes físicos al cerrar.
+                    </span>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 h-4 w-4 rounded text-blue-600"
+                    checked={draft.caja.cash_close_two_step_verification ?? false}
+                    onChange={(event) =>
+                      updateSection("caja", {
+                        cash_close_two_step_verification: event.target.checked,
+                      })
+                    }
+                    disabled={!canWriteConfiguracion}
+                  />
+                  <div>
+                    <span className="block font-semibold">Cierre de caja en 2 pasos</span>
+                    <span className="text-[11px] font-normal text-slate-500 block mt-0.5">
+                      El efectivo cerrado requiere validación y recepción física por un supervisor en Caja General antes de ingresar a la caja fuerte.
+                    </span>
+                  </div>
                 </label>
               </div>
             </div>

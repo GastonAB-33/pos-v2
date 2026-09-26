@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Camera, Download, Ellipsis, FilterX, Plus, RefreshCw, SlidersHorizontal, Upload, X } from "lucide-react";
+import { Camera, Download, Ellipsis, FilterX, Plus, RefreshCw, Search, SlidersHorizontal, Upload, X } from "lucide-react";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { IconButton } from "@/components/ui/IconButton";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
@@ -68,22 +68,12 @@ export const ProductFilters = ({
         </div>
 
         <div className="workspace-toolbar__actions">
-          <button
-            type="button"
+          <IconButton
+            icon={RefreshCw}
+            label={isRefreshing ? "Actualizando catálogo..." : "Actualizar catálogo"}
             onClick={onReload}
-            disabled={loading || isRefreshing}
-            className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
-            title="Actualizar productos y catálogo desde el servidor"
-            aria-label="Actualizar catálogo de productos"
-          >
-            <RefreshCw
-              size={14}
-              className={isRefreshing || loading ? "animate-spin text-brand-600" : "text-slate-500"}
-            />
-            <span className="hidden sm:inline">
-              {isRefreshing ? "Actualizando..." : "Actualizar"}
-            </span>
-          </button>
+            loading={isRefreshing || loading}
+          />
 
           <div className="relative z-30">
             <IconButton
@@ -152,15 +142,17 @@ export const ProductFilters = ({
             disabled={!canWrite || loading}
           >
             <Plus aria-hidden="true" className="h-4 w-4" />
-            Nuevo producto
+            <span>Nuevo producto</span>
           </button>
         </div>
       </header>
 
       <div className="workspace-filter-strip">
-        {/* Barra principal de búsqueda compacta */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-1 min-w-[280px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden px-2 py-1">
+        {/* Barra principal de búsqueda y controles de filtro */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          {/* Campo de búsqueda principal */}
+          <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden px-2.5 py-1">
+            <Search className="h-4 w-4 text-slate-400 shrink-0 ml-0.5" aria-hidden="true" />
             <input
               className="flex-1 min-w-0 border-0 bg-transparent px-2 py-1 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100"
               value={filters.search}
@@ -172,19 +164,21 @@ export const ProductFilters = ({
               <button
                 type="button"
                 onClick={() => onFiltersChange({ search: "" })}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0"
                 aria-label="Limpiar búsqueda"
               >
-                <X size={14} />
+                <X size={15} />
               </button>
             ) : null}
-            <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700" />
+
+            {/* Ámbito en Desktop: integrado en la barra */}
+            <div className="hidden sm:block h-4 w-[1px] bg-slate-200 dark:bg-slate-700 shrink-0" />
             <select
               value={filters.searchScope ?? "all"}
               onChange={(event) =>
                 onFiltersChange({ searchScope: event.target.value as ProductSearchScope })
               }
-              className="bg-transparent text-xs font-medium text-slate-600 focus:outline-none dark:text-slate-300 cursor-pointer py-1 px-1"
+              className="hidden sm:block bg-transparent text-xs font-medium text-slate-600 focus:outline-none dark:text-slate-300 cursor-pointer py-1 px-1 shrink-0"
               aria-label="Tipo de búsqueda"
             >
               {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
@@ -193,39 +187,62 @@ export const ProductFilters = ({
                 </option>
               ))}
             </select>
+
             <IconButton
               icon={Camera}
               label="Escanear código de barras con cámara"
               onClick={() => setScannerOpen(true)}
               disabled={loading}
+              className="shrink-0"
             />
           </div>
 
-          <button
-            type="button"
-            className={`ui-btn-ghost gap-2 px-3 py-2 text-sm font-medium ${
-              activeAdvancedFiltersCount > 0
-                ? "border-blue-500 bg-blue-50 text-blue-700 font-semibold dark:bg-blue-950 dark:text-blue-300"
-                : ""
-            }`}
-            onClick={() => setFiltersModalOpen(true)}
-          >
-            <SlidersHorizontal aria-hidden="true" size={16} />
-            <span>Filtros</span>
-            {activeAdvancedFiltersCount > 0 ? (
-              <span className="rounded-full bg-blue-600 px-1.5 py-0.2 text-[11px] font-bold text-white">
-                {activeAdvancedFiltersCount}
-              </span>
-            ) : null}
-          </button>
+          {/* Fila de controles secundarios (en móvil abajo, en desktop al lado) */}
+          <div className="flex items-center gap-2">
+            {/* Ámbito en Móvil: dropdown táctil independiente */}
+            <div className="sm:hidden flex-1 min-w-0">
+              <select
+                value={filters.searchScope ?? "all"}
+                onChange={(event) =>
+                  onFiltersChange({ searchScope: event.target.value as ProductSearchScope })
+                }
+                className="w-full h-9 rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 px-2.5 text-xs font-medium text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                aria-label="Ámbito de búsqueda"
+              >
+                {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label === "Todos" ? "Buscar: Todos" : opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {(filters.search || activeAdvancedFiltersCount > 0) ? (
-            <IconButton
-              icon={FilterX}
-              label="Limpiar todos los filtros"
-              onClick={onClearFilters}
-            />
-          ) : null}
+            <button
+              type="button"
+              className={`ui-btn-ghost gap-2 px-3 py-2 text-xs sm:text-sm font-medium h-9 sm:h-auto ${
+                activeAdvancedFiltersCount > 0
+                  ? "border-blue-500 bg-blue-50 text-blue-700 font-semibold dark:bg-blue-950 dark:text-blue-300"
+                  : ""
+              } ${!filters.search && activeAdvancedFiltersCount === 0 ? "flex-1 sm:flex-initial" : ""}`}
+              onClick={() => setFiltersModalOpen(true)}
+            >
+              <SlidersHorizontal aria-hidden="true" size={15} />
+              <span>Filtros</span>
+              {activeAdvancedFiltersCount > 0 ? (
+                <span className="rounded-full bg-blue-600 px-1.5 py-0.2 text-[11px] font-bold text-white">
+                  {activeAdvancedFiltersCount}
+                </span>
+              ) : null}
+            </button>
+
+            {(filters.search || activeAdvancedFiltersCount > 0) ? (
+              <IconButton
+                icon={FilterX}
+                label="Limpiar todos los filtros"
+                onClick={onClearFilters}
+              />
+            ) : null}
+          </div>
         </div>
 
         {/* Chips de filtros activos */}

@@ -121,17 +121,17 @@ export const PurchaseReturnModal = ({
 
   return (
     <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-2 sm:p-4">
-      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-panel">
-        <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-panel dark:border-slate-800 dark:bg-slate-900">
+        <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
           <div>
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-700">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
               <ArrowLeftRight className="h-4 w-4" />
               Devolución / Nota de Crédito a Proveedor
             </div>
-            <h2 className="mt-1 text-lg font-bold text-slate-900">
+            <h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">
               Compra {purchase.purchase_number}
             </h2>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               Proveedor: {supplier?.name || "Sin proveedor"} | Total original: {currency.format(purchase.total)}
             </p>
           </div>
@@ -140,9 +140,9 @@ export const PurchaseReturnModal = ({
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5">
           <div className="space-y-4">
-            <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5 text-xs text-amber-900">
+            <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5 text-xs text-amber-900 dark:border-amber-800/70 dark:bg-amber-950/40 dark:text-amber-300">
               <p className="font-semibold">¿Cómo funciona la devolución?</p>
-              <ul className="mt-1 list-disc space-y-1 pl-4 text-amber-800">
+              <ul className="mt-1 list-disc space-y-1 pl-4 text-amber-800 dark:text-amber-300/90">
                 <li>Los productos devueltos se descontarán automáticamente del stock actual.</li>
                 <li>
                   Si seleccionas <strong>Reintegrar a caja diaria</strong>, se generará un movimiento de ingreso en la caja abierta por el monto acreditado.
@@ -151,14 +151,14 @@ export const PurchaseReturnModal = ({
             </div>
 
             {error ? (
-              <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+              <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/60 dark:text-red-300">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{error}</span>
               </div>
             ) : null}
 
             <div>
-              <h3 className="mb-2 text-sm font-semibold text-slate-800">
+              <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
                 Selecciona las cantidades a devolver
               </h3>
               <div className="space-y-2">
@@ -170,19 +170,19 @@ export const PurchaseReturnModal = ({
                   return (
                     <div
                       key={item.id}
-                      className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50/50 p-3 sm:flex-row sm:items-center sm:justify-between"
+                      className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50/50 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-800/50"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-slate-900 truncate">
+                        <p className="font-semibold text-slate-900 dark:text-slate-100 truncate">
                           {item.product_name_snapshot}
                         </p>
-                        <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-slate-500">
+                        <div className="mt-0.5 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
                           <span>Comprado: {item.quantity} u.</span>
                           {item.bonified_quantity ? (
                             <span>(+{item.bonified_quantity} bonif.)</span>
                           ) : null}
                           {item.returned_quantity ? (
-                            <span className="text-amber-700">
+                            <span className="text-amber-700 dark:text-amber-400">
                               (Ya devuelto: {item.returned_quantity})
                             </span>
                           ) : null}
@@ -193,7 +193,7 @@ export const PurchaseReturnModal = ({
 
                       <div className="flex items-center gap-3">
                         <div className="w-32">
-                          <label className="mb-0.5 block text-[10px] font-semibold uppercase text-slate-500">
+                          <label className="mb-0.5 block text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400">
                             Cant. a devolver
                           </label>
                           <input
@@ -211,12 +211,12 @@ export const PurchaseReturnModal = ({
                                 maxAvailable
                               )
                             }
-                            className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-900 focus:border-brand-500 focus:outline-none"
+                            className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-900 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                           />
                         </div>
                         <div className="w-24 text-right">
-                          <span className="block text-[10px] uppercase text-slate-400">Reintegro</span>
-                          <span className="text-xs font-bold text-slate-800">
+                          <span className="block text-[10px] uppercase text-slate-400 dark:text-slate-400">Reintegro</span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
                             {currency.format(currentReturnQty * unitWithVat)}
                           </span>
                         </div>
@@ -228,8 +228,8 @@ export const PurchaseReturnModal = ({
             </div>
 
             {/* Opciones de reintegro */}
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
-              <label className="flex items-center gap-2 text-sm font-medium text-slate-800">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-800/50">
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-200">
                 <input
                   type="checkbox"
                   checked={refundToCash}
@@ -237,17 +237,17 @@ export const PurchaseReturnModal = ({
                   disabled={isSubmitting || disabled}
                   className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
                 />
-                <DollarSign className="h-4 w-4 text-emerald-600" />
+                <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 <span>Reintegrar dinero en la caja diaria activa ({currency.format(totalRefund)})</span>
               </label>
-              <p className="mt-1 pl-6 text-xs text-slate-500">
+              <p className="mt-1 pl-6 text-xs text-slate-500 dark:text-slate-400">
                 Registra un movimiento de ingreso en la caja diaria abierta bajo el concepto "Reintegro devolución de compra".
               </p>
             </div>
 
             {/* Motivo */}
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-700">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-700 dark:text-slate-300">
                 Motivo de la devolución / Nota de Crédito *
               </label>
               <textarea
@@ -257,15 +257,15 @@ export const PurchaseReturnModal = ({
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 disabled={isSubmitting || disabled}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
               />
             </div>
           </div>
 
-          <footer className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+          <footer className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-800">
             <div className="text-sm">
-              <span className="text-slate-500">Total a acreditar: </span>
-              <span className="text-base font-bold text-brand-700">{currency.format(totalRefund)}</span>
+              <span className="text-slate-500 dark:text-slate-400">Total a acreditar: </span>
+              <span className="text-base font-bold text-brand-700 dark:text-brand-400">{currency.format(totalRefund)}</span>
             </div>
             <div className="flex gap-2">
               <button

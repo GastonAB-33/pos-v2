@@ -17,7 +17,6 @@ import {
 } from "@/services/mercadopago/mercadopago-payments.service";
 import { originBanksService } from "@/services/origin-banks.service";
 import {
-  getPaymentMethodPosConfig,
   normalizePaymentMethodCode,
   paymentMethodsService,
 } from "@/services/payment-methods.service";
@@ -1744,7 +1743,6 @@ export const usePosSale = (tenantId: string | null) => {
         ? (values.paymentDetails as Record<string, unknown>)
         : null;
     const paymentMethodCode = normalizePaymentMethodCode(paymentMethod.code);
-    const paymentMethodConfig = getPaymentMethodPosConfig(paymentMethod);
     const isMercadoPagoMethod = paymentMethodCode === "mercado_pago";
     const isCurrentAccountMethod = paymentMethodCode === "current_account";
     const hasCurrentAccount = isSplit
@@ -1764,17 +1762,7 @@ export const usePosSale = (tenantId: string | null) => {
 
     if (isMercadoPagoMethod) {
       if (isMercadoPagoManual) {
-        const operationId =
-          typeof paymentDetails?.operation_id === "string"
-            ? paymentDetails.operation_id.trim()
-            : "";
-        if (paymentMethodConfig.ask_operation_number && !operationId) {
-          setFeedback({
-            type: "error",
-            message: "Completa el ID de operacion para Mercado Pago manual",
-          });
-          return null;
-        }
+        // En POS el ID de operación de Mercado Pago manual es opcional para permitir cobro ágil
       } else {
         if (!mercadoPagoStatus.available) {
           setFeedback({

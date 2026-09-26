@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, CircleEllipsis, LifeBuoy, Menu, Newspaper, RefreshCw, Type, UserRound } from "lucide-react";
+import { Bell, CircleEllipsis, LifeBuoy, Menu, Moon, Newspaper, Palette, RefreshCw, Sun, Type, UserRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/useToast";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
@@ -644,6 +644,29 @@ export const Topbar = () => {
 
         <button
           type="button"
+          className="ui-btn-ghost gap-1 px-2 text-xs font-semibold"
+          title={`Tema visual: ${
+            theme === "dark" ? "Oscuro Negro" : theme === "dark-blue" ? "Oscuro Azul Noche" : "Claro"
+          }. Clic para cambiar.`}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleTheme();
+          }}
+        >
+          {theme === "dark" ? (
+            <Moon aria-hidden="true" size={15} className="text-amber-400" />
+          ) : theme === "dark-blue" ? (
+            <Palette aria-hidden="true" size={15} className="text-sky-400" />
+          ) : (
+            <Sun aria-hidden="true" size={15} className="text-amber-500" />
+          )}
+          <span className="hidden sm:inline">
+            {theme === "dark" ? "Oscuro" : theme === "dark-blue" ? "Azul" : "Claro"}
+          </span>
+        </button>
+
+        <button
+          type="button"
           className="ui-btn-ghost relative gap-1 px-2 text-xs"
           onClick={(e) => {
             e.stopPropagation();
@@ -1107,7 +1130,11 @@ export const Topbar = () => {
             )}
 
             <button type="button" onClick={toggleTheme} className="ui-btn-ghost text-xs">
-              {theme === "dark" ? "Modo claro" : "Modo oscuro"}
+              {theme === "dark"
+                ? "Tema: Oscuro Negro (Cambiar a Azul)"
+                : theme === "dark-blue"
+                ? "Tema: Oscuro Azul (Cambiar a Claro)"
+                : "Tema: Claro (Cambiar a Oscuro)"}
             </button>
 
             <button

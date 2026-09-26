@@ -170,6 +170,7 @@ export const ProductsPage = () => {
             if (!ok) return;
             void products.deleteOne(product);
           }}
+          onClearFilters={products.resetFilters}
         />
       )}
 

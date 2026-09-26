@@ -99,7 +99,17 @@ const getLatestOpenSession = async (tenantId: string, userId?: string): Promise<
 export const cashService = {
   getAllByTenant: (tenantId: string) => cashSessionsCrud.getAllByTenant(tenantId),
   getById: (tenantId: string, id: string) => cashSessionsCrud.getById(tenantId, id),
-  create: (tenantId: string, input: CreateCashSessionInput) => cashSessionsCrud.create(tenantId, input),
+  create: async (tenantId: string, input: CreateCashSessionInput) => {
+    if (input.status === "open") {
+      const existingOpen = await getLatestOpenSession(tenantId);
+      if (existingOpen) {
+        throw new Error(
+          "Ya existe una caja diaria abierta en el comercio. Debes cerrar la caja anterior antes de abrir una nueva."
+        );
+      }
+    }
+    return cashSessionsCrud.create(tenantId, input);
+  },
   update: (tenantId: string, id: string, input: UpdateCashSessionInput) => cashSessionsCrud.update(tenantId, id, input),
   delete: (tenantId: string, id: string) => cashSessionsCrud.delete(tenantId, id),
   createMovement: async (tenantId: string, input: CreateCashMovementInput) => {
@@ -163,7 +173,7 @@ export const cashService = {
   getOpenSession: async (tenantId: string) => getLatestOpenSession(tenantId),
 
   getOpenSessionByUser: async (tenantId: string, userId: string) =>
-    getLatestOpenSession(tenantId, userId),
+    (await getLatestOpenSession(tenantId, userId)) ?? (await getLatestOpenSession(tenantId)),
 
   getAllMovementsByTenant: async (tenantId: string) => {
     const rows = await cashMovementsCrud.getAllByTenant(tenantId);

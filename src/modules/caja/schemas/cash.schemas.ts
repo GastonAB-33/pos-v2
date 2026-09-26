@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 
 export const openCashSchema = z.object({
   openingAmount: z.coerce.number().min(0, "El monto inicial no puede ser negativo"),
@@ -8,6 +8,9 @@ export const openCashSchema = z.object({
 export const closeCashSchema = z.object({
   realAmount: z.coerce.number().min(0, "El monto real no puede ser negativo"),
   notes: z.string().max(240, "Maximo 240 caracteres").optional().or(z.literal("")),
+  isBlindClose: z.boolean().optional(),
+  countedDenominations: z.record(z.string(), z.number()).optional(),
+  declaredOtherPayments: z.record(z.string(), z.number()).optional(),
 });
 
 export const cashMovementSchema = z.object({
@@ -19,4 +22,3 @@ export const cashMovementSchema = z.object({
 export type OpenCashValues = z.infer<typeof openCashSchema>;
 export type CloseCashValues = z.infer<typeof closeCashSchema>;
 export type CashMovementValues = z.infer<typeof cashMovementSchema>;
-
