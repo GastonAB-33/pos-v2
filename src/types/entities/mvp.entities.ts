@@ -99,6 +99,25 @@ export interface Supplier extends TenantScopedEntity {
   is_active: boolean;
 }
 
+export interface Employee extends TenantScopedEntity {
+  code: string;
+  full_name: string;
+  document_type: string;
+  document_number: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  position: string;
+  base_salary: number;
+  hourly_rate?: number | null;
+  hire_date?: string | null;
+  current_balance: number;
+  current_account_enabled: boolean;
+  current_account_limit?: number | null;
+  observations: string | null;
+  is_active: boolean;
+}
+
 export type PaymentMethodType =
   | "cash"
   | "card_debit"
@@ -285,6 +304,53 @@ export interface SupplierCurrentAccountMovement extends TenantScopedEntity {
   balance_after: number;
   payment_method_code: string | null;
   payment_method_id?: string | null;
+  notes: string | null;
+  created_by: string | null;
+}
+
+export type EmployeeAttendanceStatus = "present" | "late" | "absent" | "justified" | "early_leave";
+
+export interface EmployeeAttendance extends TenantScopedEntity {
+  employee_id: string;
+  date: string;
+  check_in: string;
+  check_out: string | null;
+  total_hours: number | null;
+  status: EmployeeAttendanceStatus;
+  notes: string | null;
+  created_by: string | null;
+}
+
+export type EmployeeCurrentAccountMovementType = "debt" | "payment" | "adjustment";
+export type EmployeeCurrentAccountCategory =
+  | "product_purchase"
+  | "salary_deduction"
+  | "advance"
+  | "cash_payment"
+  | "adjustment"
+  | "other";
+
+export interface EmployeeCurrentAccountMovement extends TenantScopedEntity {
+  employee_id: string;
+  sale_id: string | null;
+  type: EmployeeCurrentAccountMovementType;
+  amount: number;
+  balance_after: number;
+  category: EmployeeCurrentAccountCategory;
+  notes: string | null;
+  created_by: string | null;
+}
+
+export interface EmployeeSalaryPayment extends TenantScopedEntity {
+  employee_id: string;
+  period: string;
+  gross_amount: number;
+  deductions_amount: number;
+  current_account_discount_applied: number;
+  bonuses_amount: number;
+  net_amount_paid: number;
+  payment_method_code: string;
+  payment_date: string;
   notes: string | null;
   created_by: string | null;
 }

@@ -9,8 +9,8 @@ import {
   type ProductFormValues,
 } from "@/modules/productos/schemas/product-form.schema";
 import {
-  computePricingBackward,
   computePricingForward,
+  computePricingReverse,
   DEFAULT_IVA_PERCENT,
   derivePricingFromStoredProduct,
 } from "@/modules/productos/utils/product-pricing";
@@ -26,7 +26,7 @@ interface ProductFormProps {
   onSubmit: (values: ProductFormValues) => Promise<void>;
 }
 
-type CalcMode = "forward" | "backward";
+type CalcMode = "forward" | "reverse";
 
 const defaultValues: ProductFormValues = {
   nombre: "",
@@ -112,7 +112,7 @@ export const ProductForm = ({
 
   useEffect(() => {
     const setIfChangedNumber = (
-      field: "precioSinIva" | "porcentajeGanancia" | "precioFinal",
+      field: "precioSinIva" | "porcentajeGanancia" | "precioFinal" | "precioCosto",
       nextValue: number
     ) => {
       const current = getValues(field);
@@ -123,15 +123,15 @@ export const ProductForm = ({
       });
     };
 
-    if (calcMode === "backward") {
-      const computed = computePricingBackward({
-        precioCosto,
+    if (calcMode === "reverse") {
+      const computed = computePricingReverse({
         precioFinal,
+        porcentajeGanancia,
         porcentajeIva,
       });
 
       setIfChangedNumber("precioSinIva", computed.precioSinIva);
-      setIfChangedNumber("porcentajeGanancia", computed.porcentajeGanancia);
+      setIfChangedNumber("precioCosto", computed.precioCosto);
       return;
     }
 
@@ -152,6 +152,12 @@ export const ProductForm = ({
         <div className="flex items-center gap-2">
           <input
             {...register("nombre")}
+            type="text"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            data-lpignore="true"
+            data-form-type="other"
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
@@ -324,7 +330,6 @@ export const ProductForm = ({
             placeholder="0.00"
             {...register("porcentajeGanancia", {
               setValueAs: parseNumericField,
-              onChange: () => setCalcMode("forward"),
             })}
             onFocus={(e) =>
               handleNumericInputFocus(e, {
@@ -370,7 +375,6 @@ export const ProductForm = ({
             placeholder="21"
             {...register("porcentajeIva", {
               setValueAs: parseNumericField,
-              onChange: () => setCalcMode("forward"),
             })}
             onFocus={(e) =>
               handleNumericInputFocus(e, {
@@ -395,7 +399,7 @@ export const ProductForm = ({
             placeholder="0.00"
             {...register("precioFinal", {
               setValueAs: parseNumericField,
-              onChange: () => setCalcMode("backward"),
+              onChange: () => setCalcMode("reverse"),
             })}
             onFocus={(e) =>
               handleNumericInputFocus(e, {

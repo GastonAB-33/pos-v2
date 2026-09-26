@@ -32,6 +32,10 @@ import type {
   GeneralCashMovement,
   SupplierCurrentAccountMovement,
   BankAccountMovement,
+  Employee,
+  EmployeeAttendance,
+  EmployeeCurrentAccountMovement,
+  EmployeeSalaryPayment,
 } from "@/types/entities";
 import type { DbTableName } from "@/lib/database/tables";
 
@@ -70,6 +74,10 @@ export interface MockDatabase {
   general_cash_movements: GeneralCashMovement[];
   supplier_current_account_movements: SupplierCurrentAccountMovement[];
   bank_account_movements: BankAccountMovement[];
+  employees: Employee[];
+  employee_attendance: EmployeeAttendance[];
+  employee_current_account_movements: EmployeeCurrentAccountMovement[];
+  employee_salary_payments: EmployeeSalaryPayment[];
   sale_payments: SalePayment[];
 }
 
@@ -106,6 +114,10 @@ const createEmptyMockDatabase = (): MockDatabase => ({
   general_cash_movements: [],
   supplier_current_account_movements: [],
   bank_account_movements: [],
+  employees: [],
+  employee_attendance: [],
+  employee_current_account_movements: [],
+  employee_salary_payments: [],
   sale_payments: [],
 });
 

@@ -65,6 +65,39 @@ export const computePricingBackward = (input: PricingBackwardInput): PricingComp
   };
 };
 
+export interface PricingReverseInput {
+  precioFinal: number;
+  porcentajeGanancia: number;
+  porcentajeIva: number;
+}
+
+export interface PricingReverseComputed {
+  precioSinIva: number;
+  precioCosto: number;
+  precioFinal: number;
+  porcentajeGanancia: number;
+}
+
+export const computePricingReverse = (input: PricingReverseInput): PricingReverseComputed => {
+  const precioFinalInput = sanitizeNonNegative(input.precioFinal);
+  const porcentajeGanancia = sanitizeNonNegative(input.porcentajeGanancia);
+  const porcentajeIva = sanitizeNonNegative(input.porcentajeIva);
+
+  const ivaFactor = 1 + porcentajeIva / 100;
+  const precioSinIva = roundMoney(ivaFactor > 0 ? precioFinalInput / ivaFactor : precioFinalInput);
+
+  const gananciaFactor = 1 + porcentajeGanancia / 100;
+  const precioCosto = roundMoney(gananciaFactor > 0 ? precioSinIva / gananciaFactor : precioSinIva);
+
+  return {
+    precioSinIva,
+    precioCosto,
+    precioFinal: roundMoney(precioFinalInput),
+    porcentajeGanancia: roundPercent(porcentajeGanancia),
+  };
+};
+
+
 export const derivePricingFromStoredProduct = (params: {
   precioCosto: number;
   precioFinal: number;

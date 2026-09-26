@@ -8,8 +8,8 @@ import { VoiceDictationButton } from "@/components/form/VoiceDictationButton";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { ProductImageEditorModal } from "@/modules/productos/components/ProductImageEditorModal";
 import {
-  computePricingBackward,
   computePricingForward,
+  computePricingReverse,
   DEFAULT_IVA_PERCENT,
 } from "@/modules/productos/utils/product-pricing";
 import {
@@ -19,7 +19,7 @@ import {
 import type { ProductFormModalValues, ProductViewModel } from "@/modules/productos/types/product.types";
 import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
 
-type CalcMode = "forward" | "backward";
+type CalcMode = "forward" | "reverse";
 
 interface ProductFormModalProps {
   open: boolean;
@@ -286,11 +286,27 @@ export const ProductFormModal = ({
     return imagenUrl?.trim() ?? "";
   }, [imagenUrl, localPreviewUrl]);
 
+  const trimmedCategory = (categoria ?? "").trim();
+  const isCategoryCreated = useMemo(() => {
+    if (!trimmedCategory) return null;
+    return categoryOptions.some(
+      (opt) => opt.trim().toLowerCase() === trimmedCategory.toLowerCase()
+    );
+  }, [categoryOptions, trimmedCategory]);
+
+  const trimmedSubcategory = (subcategoria ?? "").trim();
+  const isSubcategoryCreated = useMemo(() => {
+    if (!trimmedSubcategory) return null;
+    return subcategoryOptions.some(
+      (opt) => opt.trim().toLowerCase() === trimmedSubcategory.toLowerCase()
+    );
+  }, [subcategoryOptions, trimmedSubcategory]);
+
   useEffect(() => {
     if (!open) return;
 
     const setIfChanged = (
-      field: "precioSinIva" | "precioFinal" | "porcentajeGanancia",
+      field: "precioSinIva" | "precioFinal" | "porcentajeGanancia" | "precioCosto",
       nextValue: number
     ) => {
       const current = Number(getValues(field));
@@ -302,15 +318,15 @@ export const ProductFormModal = ({
       });
     };
 
-    if (calcMode === "backward") {
-      const backward = computePricingBackward({
-        precioCosto,
+    if (calcMode === "reverse") {
+      const reverse = computePricingReverse({
         precioFinal,
+        porcentajeGanancia,
         porcentajeIva,
       });
 
-      setIfChanged("precioSinIva", backward.precioSinIva);
-      setIfChanged("porcentajeGanancia", backward.porcentajeGanancia);
+      setIfChanged("precioSinIva", reverse.precioSinIva);
+      setIfChanged("precioCosto", reverse.precioCosto);
       return;
     }
 
@@ -346,17 +362,17 @@ export const ProductFormModal = ({
     setValue("precioFinal", next.precioFinal, { shouldDirty: true, shouldValidate: true });
   };
 
-  const applyBackwardPricing = () => {
-    setCalcMode("backward");
+  const applyReversePricing = () => {
+    setCalcMode("reverse");
     const values = getValues();
-    const next = computePricingBackward({
-      precioCosto: values.precioCosto,
+    const next = computePricingReverse({
       precioFinal: values.precioFinal,
+      porcentajeGanancia: values.porcentajeGanancia,
       porcentajeIva: values.porcentajeIva,
     });
 
     setValue("precioSinIva", next.precioSinIva, { shouldDirty: true, shouldValidate: true });
-    setValue("porcentajeGanancia", next.porcentajeGanancia, { shouldDirty: true, shouldValidate: true });
+    setValue("precioCosto", next.precioCosto, { shouldDirty: true, shouldValidate: true });
   };
 
   const ensureCategory = (value: string) => {
@@ -422,18 +438,31 @@ export const ProductFormModal = ({
   );
 
   const handleFormSubmit = async (values: ProductFormModalValues) => {
-    const pricing =
-      calcMode === "backward"
-        ? computePricingBackward({
-            precioCosto: values.precioCosto,
-            precioFinal: values.precioFinal,
-            porcentajeIva: values.porcentajeIva,
-          })
-        : computePricingForward({
-            precioCosto: values.precioCosto,
-            porcentajeGanancia: values.porcentajeGanancia,
-            porcentajeIva: values.porcentajeIva,
-          });
+    let precioCosto = values.precioCosto;
+    let precioSinIva = 0;
+    let precioFinal = values.precioFinal;
+    let porcentajeGanancia = values.porcentajeGanancia;
+
+    if (calcMode === "reverse") {
+      const reverse = computePricingReverse({
+        precioFinal: values.precioFinal,
+        porcentajeGanancia: values.porcentajeGanancia,
+        porcentajeIva: values.porcentajeIva,
+      });
+      precioCosto = reverse.precioCosto;
+      precioSinIva = reverse.precioSinIva;
+      precioFinal = reverse.precioFinal;
+      porcentajeGanancia = reverse.porcentajeGanancia;
+    } else {
+      const forward = computePricingForward({
+        precioCosto: values.precioCosto,
+        porcentajeGanancia: values.porcentajeGanancia,
+        porcentajeIva: values.porcentajeIva,
+      });
+      precioSinIva = forward.precioSinIva;
+      precioFinal = forward.precioFinal;
+      porcentajeGanancia = forward.porcentajeGanancia;
+    }
 
     await onSubmit({
       ...values,
@@ -443,9 +472,10 @@ export const ProductFormModal = ({
       categoria: values.categoria?.trim() ?? "",
       subcategoria: values.subcategoria?.trim() ?? "",
       imagenUrl: values.imagenUrl?.trim() ?? "",
-      precioSinIva: pricing.precioSinIva,
-      precioFinal: pricing.precioFinal,
-      porcentajeGanancia: pricing.porcentajeGanancia,
+      precioCosto,
+      precioSinIva,
+      precioFinal,
+      porcentajeGanancia,
       imagenFile: imageDraftFile,
       imagenEliminada: imageRemoved,
     });
@@ -467,7 +497,7 @@ export const ProductFormModal = ({
           <ModalCloseButton label="Cerrar producto" onClick={onClose} disabled={disabled} />
         </div>
 
-        <form className="space-y-6" onSubmit={handleSubmit(handleFormSubmit)} onKeyDown={handlePreventEnterSubmit}>
+        <form className="space-y-6" onSubmit={handleSubmit(handleFormSubmit)} onKeyDown={handlePreventEnterSubmit} autoComplete="off">
           <div className="grid gap-5 xl:grid-cols-[1fr_280px]">
             <div className="space-y-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5">
               <div>
@@ -493,7 +523,18 @@ export const ProductFormModal = ({
                       label="Dictar nombre"
                     />
                   </div>
-                  <input {...register("nombre")} className="ui-input" disabled={disabled} />
+                  <input
+                    {...register("nombre")}
+                    type="text"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-lpignore="true"
+                    data-form-type="other"
+                    className="ui-input"
+                    disabled={disabled}
+                  />
                   {errors.nombre ? <p className="mt-1 text-xs text-red-600">{errors.nombre.message}</p> : null}
                 </div>
 
@@ -673,59 +714,67 @@ export const ProductFormModal = ({
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
                     <label className="mb-1 block text-sm font-medium text-slate-700">Categoría</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        list="categorias-productos"
-                        {...register("categoria", {
-                          onBlur: (event) => ensureCategory(event.target.value),
-                        })}
-                        className="ui-input"
-                        disabled={disabled}
-                        placeholder="Buscar o crear categoría"
-                      />
-                      <button
-                        type="button"
-                        className="ui-btn-ghost px-2 py-1 text-xs"
-                        onClick={() => ensureCategory(categoria ?? "")}
-                        disabled={disabled || !categoria?.trim()}
-                      >
-                        Crear
-                      </button>
-                    </div>
+                    <input
+                      list="categorias-productos"
+                      {...register("categoria", {
+                        onBlur: (event) => ensureCategory(event.target.value),
+                      })}
+                      className="ui-input w-full"
+                      disabled={disabled}
+                      placeholder="Buscar o escribir categoría"
+                      autoComplete="off"
+                    />
                     <datalist id="categorias-productos">
                       {localCategories.map((item) => (
                         <option key={item} value={item} />
                       ))}
                     </datalist>
+                    {trimmedCategory ? (
+                      isCategoryCreated ? (
+                        <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          Categoría existente
+                        </p>
+                      ) : (
+                        <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+                          Esta categoría no está creada (se creará al guardar)
+                        </p>
+                      )
+                    ) : null}
                     {errors.categoria ? <p className="mt-1 text-xs text-red-600">{errors.categoria.message}</p> : null}
                   </div>
 
                   <div>
                     <label className="mb-1 block text-sm font-medium text-slate-700">Subcategoría</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        list="subcategorias-productos"
-                        {...register("subcategoria", {
-                          onBlur: (event) => ensureSubcategory(event.target.value),
-                        })}
-                        className="ui-input"
-                        disabled={disabled}
-                        placeholder="Buscar o crear subcategoría"
-                      />
-                      <button
-                        type="button"
-                        className="ui-btn-ghost px-2 py-1 text-xs"
-                        onClick={() => ensureSubcategory(subcategoria ?? "")}
-                        disabled={disabled || !subcategoria?.trim()}
-                      >
-                        Crear
-                      </button>
-                    </div>
+                    <input
+                      list="subcategorias-productos"
+                      {...register("subcategoria", {
+                        onBlur: (event) => ensureSubcategory(event.target.value),
+                      })}
+                      className="ui-input w-full"
+                      disabled={disabled}
+                      placeholder="Buscar o escribir subcategoría"
+                      autoComplete="off"
+                    />
                     <datalist id="subcategorias-productos">
                       {localSubcategories.map((item) => (
                         <option key={item} value={item} />
                       ))}
                     </datalist>
+                    {trimmedSubcategory ? (
+                      isSubcategoryCreated ? (
+                        <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          Subcategoría existente
+                        </p>
+                      ) : (
+                        <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+                          Esta subcategoría no está creada (se creará al guardar)
+                        </p>
+                      )
+                    ) : null}
                     {errors.subcategoria ? (
                       <p className="mt-1 text-xs text-red-600">{errors.subcategoria.message}</p>
                     ) : null}
@@ -834,7 +883,6 @@ export const ProductFormModal = ({
                   placeholder="0.00"
                   {...register("porcentajeGanancia", {
                     setValueAs: parseNumericField,
-                    onChange: () => setCalcMode("forward"),
                   })}
                   onFocus={(e) =>
                     handleNumericInputFocus(e, {
@@ -846,7 +894,11 @@ export const ProductFormModal = ({
                     handleNumericInputBlur(e, "0", () => {
                       setValue("porcentajeGanancia", 0);
                     });
-                    applyForwardPricing();
+                    if (calcMode === "reverse") {
+                      applyReversePricing();
+                    } else {
+                      applyForwardPricing();
+                    }
                   }}
                   className="ui-input"
                   disabled={disabled}
@@ -884,8 +936,13 @@ export const ProductFormModal = ({
                   placeholder="21"
                   {...register("porcentajeIva", {
                     setValueAs: parseNumericField,
-                    onChange: () => setCalcMode("forward"),
-                    onBlur: applyForwardPricing,
+                    onBlur: () => {
+                      if (calcMode === "reverse") {
+                        applyReversePricing();
+                      } else {
+                        applyForwardPricing();
+                      }
+                    },
                   })}
                   onFocus={(e) =>
                     handleNumericInputFocus(e, {
@@ -915,7 +972,7 @@ export const ProductFormModal = ({
                   placeholder="0.00"
                   {...register("precioFinal", {
                     setValueAs: parseNumericField,
-                    onChange: () => setCalcMode("backward"),
+                    onChange: () => setCalcMode("reverse"),
                   })}
                   onFocus={(e) =>
                     handleNumericInputFocus(e, {
@@ -927,7 +984,7 @@ export const ProductFormModal = ({
                     handleNumericInputBlur(e, "0", () => {
                       setValue("precioFinal", 0);
                     });
-                    applyBackwardPricing();
+                    applyReversePricing();
                   }}
                   className="ui-input border-emerald-200 bg-emerald-50 text-base font-semibold"
                   disabled={disabled}

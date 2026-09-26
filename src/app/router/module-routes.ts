@@ -32,6 +32,7 @@ import { UsuariosPage } from "@/modules/usuarios/pages/UsuariosPage";
 import { MisConsultasPage } from "@/modules/sistema/pages/MisConsultasPage";
 import { CentroSoportePage } from "@/modules/sistema/pages/CentroSoportePage";
 import { AltaComercioPage } from "@/modules/sistema/pages/AltaComercioPage";
+import { EmpleadosPage } from "@/modules/empleados/pages/EmpleadosPage";
 
 export const moduleRoutes: ModuleRouteItem[] = [
   { path: routePaths.menuPrincipal, Component: MainMenuPage },
@@ -55,6 +56,8 @@ export const moduleRoutes: ModuleRouteItem[] = [
   { path: routePaths.reportes, Component: ReportesPage, requiredPermission: { module: "reportes", level: "read" } },
   { path: routePaths.auditoria, Component: AuditoriaPage, requiredPermission: { module: "auditoria", level: "read" } },
   { path: routePaths.configuracion, Component: ConfiguracionPage, requiredPermission: { module: "configuracion", level: "read" } },
+  { path: routePaths.empleados, Component: EmpleadosPage, requiredPermission: { module: "empleados", level: "read" } },
+  { path: "/empleados", Component: EmpleadosPage, requiredPermission: { module: "empleados", level: "read" } },
   { path: routePaths.configuracionAgenda, Component: ConfiguracionAgendaPage, requiredPermission: { module: "configuracion_agenda", level: "read" } },
   { path: routePaths.configuracionCatalogo, Component: ConfiguracionCatalogoPage, requiredPermission: { module: "configuracion_catalogo", level: "read" } },
   { path: routePaths.configuracionAnalisis, Component: ConfiguracionAnalisisPage, requiredPermission: { module: "configuracion_analisis", level: "read" } },

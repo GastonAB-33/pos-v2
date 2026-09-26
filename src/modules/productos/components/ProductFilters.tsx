@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Camera, Download, Ellipsis, FilterX, Plus, RefreshCw, SlidersHorizontal, Upload, X } from "lucide-react";
+import { Camera, Download, Ellipsis, FilterX, Plus, RefreshCw, Search, SlidersHorizontal, Upload, X } from "lucide-react";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { IconButton } from "@/components/ui/IconButton";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
@@ -157,12 +157,14 @@ export const ProductFilters = ({
         </div>
       </header>
 
-      <div className="workspace-filter-strip">
-        {/* Barra principal de búsqueda compacta */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex flex-1 min-w-[280px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden px-2 py-1">
+      <div className="workspace-filter-strip space-y-2">
+        {/* Barra principal de búsqueda y filtros adaptable a móviles */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          {/* Campo de búsqueda completo y cómodo para pantallas táctiles */}
+          <div className="flex flex-1 min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 dark:border-slate-800 dark:bg-slate-900">
+            <Search className="h-4 w-4 text-slate-400 shrink-0" aria-hidden="true" />
             <input
-              className="flex-1 min-w-0 border-0 bg-transparent px-2 py-1 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100"
+              className="flex-1 min-w-0 border-0 bg-transparent px-1 py-1 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100"
               value={filters.search}
               onChange={(event) => onFiltersChange({ search: event.target.value })}
               placeholder={getSearchPlaceholder(filters.searchScope)}
@@ -172,27 +174,13 @@ export const ProductFilters = ({
               <button
                 type="button"
                 onClick={() => onFiltersChange({ search: "" })}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0"
                 aria-label="Limpiar búsqueda"
               >
-                <X size={14} />
+                <X size={15} />
               </button>
             ) : null}
-            <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700" />
-            <select
-              value={filters.searchScope ?? "all"}
-              onChange={(event) =>
-                onFiltersChange({ searchScope: event.target.value as ProductSearchScope })
-              }
-              className="bg-transparent text-xs font-medium text-slate-600 focus:outline-none dark:text-slate-300 cursor-pointer py-1 px-1"
-              aria-label="Tipo de búsqueda"
-            >
-              {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+            <div className="h-5 w-[1px] bg-slate-200 dark:bg-slate-700 shrink-0" />
             <IconButton
               icon={Camera}
               label="Escanear código de barras con cámara"
@@ -201,31 +189,51 @@ export const ProductFilters = ({
             />
           </div>
 
-          <button
-            type="button"
-            className={`ui-btn-ghost gap-2 px-3 py-2 text-sm font-medium ${
-              activeAdvancedFiltersCount > 0
-                ? "border-blue-500 bg-blue-50 text-blue-700 font-semibold dark:bg-blue-950 dark:text-blue-300"
-                : ""
-            }`}
-            onClick={() => setFiltersModalOpen(true)}
-          >
-            <SlidersHorizontal aria-hidden="true" size={16} />
-            <span>Filtros</span>
-            {activeAdvancedFiltersCount > 0 ? (
-              <span className="rounded-full bg-blue-600 px-1.5 py-0.2 text-[11px] font-bold text-white">
-                {activeAdvancedFiltersCount}
-              </span>
-            ) : null}
-          </button>
+          {/* Fila de controles: ámbito de búsqueda y filtros avanzados */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex-1 sm:flex-initial">
+              <select
+                value={filters.searchScope ?? "all"}
+                onChange={(event) =>
+                  onFiltersChange({ searchScope: event.target.value as ProductSearchScope })
+                }
+                className="ui-input w-full sm:w-auto text-xs sm:text-sm font-medium py-2 px-3 rounded-xl cursor-pointer"
+                aria-label="Tipo de búsqueda"
+              >
+                {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          {(filters.search || activeAdvancedFiltersCount > 0) ? (
-            <IconButton
-              icon={FilterX}
-              label="Limpiar todos los filtros"
-              onClick={onClearFilters}
-            />
-          ) : null}
+            <button
+              type="button"
+              className={`ui-btn-ghost flex-1 sm:flex-initial justify-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-medium rounded-xl border border-slate-200 dark:border-slate-800 ${
+                activeAdvancedFiltersCount > 0
+                  ? "border-blue-500 bg-blue-50 text-blue-700 font-semibold dark:bg-blue-950 dark:text-blue-300"
+                  : ""
+              }`}
+              onClick={() => setFiltersModalOpen(true)}
+            >
+              <SlidersHorizontal aria-hidden="true" size={16} />
+              <span>Filtros</span>
+              {activeAdvancedFiltersCount > 0 ? (
+                <span className="rounded-full bg-blue-600 px-1.5 py-0.2 text-[11px] font-bold text-white">
+                  {activeAdvancedFiltersCount}
+                </span>
+              ) : null}
+            </button>
+
+            {(filters.search || activeAdvancedFiltersCount > 0) ? (
+              <IconButton
+                icon={FilterX}
+                label="Limpiar todos los filtros"
+                onClick={onClearFilters}
+              />
+            ) : null}
+          </div>
         </div>
 
         {/* Chips de filtros activos */}
@@ -332,38 +340,44 @@ export const ProductFilters = ({
                 <label className="mb-1 block text-sm font-semibold text-slate-800 dark:text-slate-200">
                   Categoría
                 </label>
-                <input
-                  list="filtro-categorias-productos"
-                  className="ui-input w-full"
+                <select
+                  className="ui-input w-full text-base sm:text-sm cursor-pointer"
                   value={filters.category}
                   onChange={(event) => onFiltersChange({ category: event.target.value })}
-                  placeholder="Buscar o seleccionar categoría..."
                   aria-label="Filtrar por categoría"
-                />
-                <datalist id="filtro-categorias-productos">
+                >
+                  <option value="">Todas las categorías</option>
                   {categories.map((category) => (
-                    <option key={category} value={category} />
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
                   ))}
-                </datalist>
+                  {filters.category && !categories.includes(filters.category) && (
+                    <option value={filters.category}>{filters.category}</option>
+                  )}
+                </select>
               </div>
 
               <div>
                 <label className="mb-1 block text-sm font-semibold text-slate-800 dark:text-slate-200">
                   Subcategoría
                 </label>
-                <input
-                  list="filtro-subcategorias-productos"
-                  className="ui-input w-full"
+                <select
+                  className="ui-input w-full text-base sm:text-sm cursor-pointer"
                   value={filters.subcategory}
                   onChange={(event) => onFiltersChange({ subcategory: event.target.value })}
-                  placeholder="Buscar o seleccionar subcategoría..."
                   aria-label="Filtrar por subcategoría"
-                />
-                <datalist id="filtro-subcategorias-productos">
+                >
+                  <option value="">Todas las subcategorías</option>
                   {subcategories.map((subcategory) => (
-                    <option key={subcategory} value={subcategory} />
+                    <option key={subcategory} value={subcategory}>
+                      {subcategory}
+                    </option>
                   ))}
-                </datalist>
+                  {filters.subcategory && !subcategories.includes(filters.subcategory) && (
+                    <option value={filters.subcategory}>{filters.subcategory}</option>
+                  )}
+                </select>
               </div>
 
               <div>
@@ -371,7 +385,7 @@ export const ProductFilters = ({
                   Proveedor
                 </label>
                 <select
-                  className="ui-input w-full"
+                  className="ui-input w-full text-base sm:text-sm cursor-pointer"
                   value={filters.supplier}
                   onChange={(event) => onFiltersChange({ supplier: event.target.value })}
                   aria-label="Filtrar por proveedor"
@@ -382,6 +396,9 @@ export const ProductFilters = ({
                       {supplier}
                     </option>
                   ))}
+                  {filters.supplier && !suppliers.includes(filters.supplier) && (
+                    <option value={filters.supplier}>{filters.supplier}</option>
+                  )}
                 </select>
               </div>
             </div>

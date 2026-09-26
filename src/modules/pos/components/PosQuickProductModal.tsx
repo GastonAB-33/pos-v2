@@ -144,7 +144,16 @@ export const PosQuickProductModal = ({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label className="mb-1 block text-sm font-medium text-slate-700">Nombre</label>
-              <input value={name} onChange={(event) => setName(event.target.value)} className="ui-input" autoFocus />
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                className="ui-input"
+                autoFocus
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                data-lpignore="true"
+              />
             </div>
 
             <div>
@@ -154,12 +163,26 @@ export const PosQuickProductModal = ({
                 value={category}
                 onChange={(event) => setCategory(event.target.value)}
                 className="ui-input"
+                autoComplete="off"
               />
               <datalist id="pos-quick-product-categories">
                 {categories.map((item) => (
                   <option key={item} value={item} />
                 ))}
               </datalist>
+              {category.trim() ? (
+                categories.some((c) => c.toLowerCase() === category.trim().toLowerCase()) ? (
+                  <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    Categoría existente
+                  </p>
+                ) : (
+                  <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    Esta categoría no está creada (se creará al guardar)
+                  </p>
+                )
+              ) : null}
             </div>
 
             <div>

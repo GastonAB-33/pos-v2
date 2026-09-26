@@ -337,7 +337,7 @@ export const PosProductList = ({
         <select
           value={searchScope}
           onChange={(e) => setSearchScope(e.target.value as ProductSearchScope)}
-          className="bg-transparent text-xs font-medium text-slate-600 focus:outline-none dark:text-slate-300 cursor-pointer py-1 px-1 shrink-0"
+          className="bg-transparent text-xs font-medium text-slate-600 focus:outline-none dark:text-slate-300 cursor-pointer py-1 px-1 shrink-0 max-w-[85px] sm:max-w-none truncate"
           aria-label="Tipo de búsqueda"
         >
           {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
