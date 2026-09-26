@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { storageKeys } from "@/utils/local-storage";
 
-export type UiTheme = "light" | "dark";
+export type UiTheme = "light" | "dark" | "dark-blue";
 export type UiDensity = "standard" | "compact";
 export type UiFontSize = "compact" | "normal" | "large" | "extra-large";
 export type PosWindowMode = "same_tab" | "new_window";
@@ -46,7 +46,7 @@ const getInitialTheme = (): UiTheme => {
       const parsed = JSON.parse(raw) as { state?: { theme?: UiTheme } };
       const persistedTheme = parsed?.state?.theme;
 
-      if (persistedTheme === "light" || persistedTheme === "dark") {
+      if (persistedTheme === "light" || persistedTheme === "dark" || persistedTheme === "dark-blue") {
         return persistedTheme;
       }
     }
@@ -95,7 +95,12 @@ export const useUiStore = create<UiStore>()(
         }),
       toggleTheme: () =>
         set((state) => ({
-          theme: state.theme === "dark" ? "light" : "dark",
+          theme:
+            state.theme === "light"
+              ? "dark"
+              : state.theme === "dark"
+              ? "dark-blue"
+              : "light",
         })),
 
       pushToast: (toast) => {

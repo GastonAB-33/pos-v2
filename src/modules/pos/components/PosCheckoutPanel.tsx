@@ -320,23 +320,11 @@ export const PosCheckoutPanel = ({
   const isCurrentAccountMethod = selectedMethodCode === "current_account";
 
   const requiresPaymentDetails = Boolean(
-    selectedMethodConfig &&
-      (isCreditCardMethod ||
-        isDebitCardMethod ||
-        isTransferMethod ||
-        isMercadoPagoManual ||
-        isChequeMethod) &&
-      (selectedMethodConfig.ask_destination_bank ||
-        selectedMethodConfig.ask_coupon_number ||
-        selectedMethodConfig.ask_approval_number ||
-        selectedMethodConfig.ask_card_brand ||
-        selectedMethodConfig.ask_installment_plan ||
-        selectedMethodConfig.ask_origin_bank ||
-        selectedMethodConfig.ask_voucher_number ||
-        selectedMethodConfig.ask_origin_account_holder ||
-        selectedMethodConfig.ask_cheque_number ||
-        selectedMethodConfig.ask_cheque_due_date ||
-        selectedMethodConfig.ask_operation_number)
+    isCreditCardMethod ||
+      isDebitCardMethod ||
+      isTransferMethod ||
+      isMercadoPagoManual ||
+      isChequeMethod
   );
 
   const filteredCustomers = useMemo(() => {
@@ -498,114 +486,10 @@ export const PosCheckoutPanel = ({
       mercadoPagoIntent.status === "expired");
 
   const arePaymentDetailsReady = useMemo(() => {
-    if (!requiresPaymentDetails || !selectedMethodConfig) return true;
-    if (isCreditCardMethod) {
-      const hasCoupon =
-        !selectedMethodConfig.ask_coupon_number || Boolean(cardCreditDetails.couponNumber.trim());
-      const hasApproval =
-        !selectedMethodConfig.ask_approval_number ||
-        Boolean(cardCreditDetails.authorizationNumber.trim());
-      const hasCardBrand =
-        !selectedMethodConfig.ask_card_brand || Boolean(cardCreditDetails.cardBrand.trim());
-      const hasInstallments =
-        !selectedMethodConfig.ask_installment_plan || Boolean(selectedInstallmentPlan);
-      const hasDestination =
-        !selectedMethodConfig.ask_destination_bank || Boolean(selectedCreditDestination);
-      return hasCoupon && hasApproval && hasCardBrand && hasInstallments && hasDestination;
-    }
-    if (isDebitCardMethod) {
-      const hasCoupon =
-        !selectedMethodConfig.ask_coupon_number || Boolean(cardDebitDetails.couponNumber.trim());
-      const hasApproval =
-        !selectedMethodConfig.ask_approval_number ||
-        Boolean(cardDebitDetails.authorizationNumber.trim());
-      const hasDestination =
-        !selectedMethodConfig.ask_destination_bank || Boolean(selectedDebitDestination);
-      return hasCoupon && hasApproval && hasDestination;
-    }
-    if (isTransferMethod) {
-      const hasOrigin = !selectedMethodConfig.ask_origin_bank
-        ? true
-        : transferDetails.originBankId === "__new__"
-        ? selectedMethodConfig.allow_new_origin_bank &&
-          Boolean(transferDetails.newOriginBankName.trim())
-        : Boolean(transferDetails.originBankId.trim());
-      const hasVoucher =
-        !selectedMethodConfig.ask_voucher_number || Boolean(transferDetails.voucherNumber.trim());
-      const hasOriginHolder =
-        !selectedMethodConfig.ask_origin_account_holder ||
-        Boolean(transferDetails.originAccountHolder.trim());
-      const hasDestination =
-        !selectedMethodConfig.ask_destination_bank || Boolean(selectedTransferDestination);
-      return hasOrigin && hasVoucher && hasOriginHolder && hasDestination;
-    }
-    if (isMercadoPagoManual) {
-      const hasOperation =
-        !selectedMethodConfig.ask_operation_number ||
-        Boolean(mercadoPagoManualDetails.operationId.trim());
-      const hasDestination =
-        !selectedMethodConfig.ask_destination_bank || Boolean(selectedManualMpDestination);
-      return hasOperation && hasDestination;
-    }
-    if (isChequeMethod) {
-      const hasOrigin = !selectedMethodConfig.ask_origin_bank
-        ? true
-        : chequeDetails.originBankId === "__new__"
-        ? selectedMethodConfig.allow_new_origin_bank &&
-          Boolean(chequeDetails.newOriginBankName.trim())
-        : Boolean(chequeDetails.originBankId.trim());
-      const hasOriginHolder =
-        !selectedMethodConfig.ask_origin_account_holder ||
-        Boolean(chequeDetails.originAccountHolder.trim());
-      const hasChequeNumber =
-        !selectedMethodConfig.ask_cheque_number || Boolean(chequeDetails.chequeNumber.trim());
-      const hasDueDate =
-        !selectedMethodConfig.ask_cheque_due_date || Boolean(chequeDetails.dueDate.trim());
-      const hasApproval =
-        !selectedMethodConfig.ask_approval_number || Boolean(chequeDetails.approvalNumber.trim());
-      const hasDestination =
-        !selectedMethodConfig.ask_destination_bank || Boolean(selectedChequeDestination);
-      return (
-        hasOrigin &&
-        hasOriginHolder &&
-        hasChequeNumber &&
-        hasDueDate &&
-        hasApproval &&
-        hasDestination
-      );
-    }
+    // En el POS todos los datos adicionales (cupones, autorizaciones, cuentas bancarias)
+    // son opcionales y nunca deben bloquear la finalización inmediata de la venta.
     return true;
-  }, [
-    cardCreditDetails.authorizationNumber,
-    cardCreditDetails.cardBrand,
-    cardCreditDetails.couponNumber,
-    cardDebitDetails.authorizationNumber,
-    cardDebitDetails.couponNumber,
-    chequeDetails.approvalNumber,
-    chequeDetails.chequeNumber,
-    chequeDetails.dueDate,
-    chequeDetails.newOriginBankName,
-    chequeDetails.originAccountHolder,
-    chequeDetails.originBankId,
-    isCreditCardMethod,
-    isDebitCardMethod,
-    isChequeMethod,
-    isMercadoPagoManual,
-    isTransferMethod,
-    mercadoPagoManualDetails.operationId,
-    requiresPaymentDetails,
-    selectedChequeDestination,
-    selectedCreditDestination,
-    selectedDebitDestination,
-    selectedInstallmentPlan,
-    selectedManualMpDestination,
-    selectedMethodConfig,
-    selectedTransferDestination,
-    transferDetails.newOriginBankName,
-    transferDetails.originAccountHolder,
-    transferDetails.originBankId,
-    transferDetails.voucherNumber,
-  ]);
+  }, []);
 
   const buildPaymentDetailsPayload = useCallback(async () => {
     if (!requiresPaymentDetails || !selectedMethod || !selectedMethodConfig) {
@@ -847,17 +731,17 @@ export const PosCheckoutPanel = ({
   };
 
   return (
-    <section className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200">
+    <section className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200 dark:bg-slate-900 dark:border-slate-800">
       {/* Línea de acento superior moderna estilo fintech */}
       <div className="h-1.5 w-full bg-gradient-to-r from-emerald-400 via-blue-500 to-indigo-600" />
 
       {/* Top Meta Bar */}
-      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-5 py-2.5 text-[11px]">
-        <div className="flex items-center gap-2 text-slate-600 font-semibold">
+      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-5 py-2.5 text-[11px] dark:bg-slate-800/80 dark:border-slate-800">
+        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-semibold">
           <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
           <span className="uppercase tracking-wider">Terminal Caja</span>
-          <span className="text-slate-300">•</span>
-          <span className="rounded-md bg-slate-200/80 px-1.5 py-0.5 font-mono text-[10px] text-slate-700">
+          <span className="text-slate-300 dark:text-slate-600">•</span>
+          <span className="rounded-md bg-slate-200/80 px-1.5 py-0.5 font-mono text-[10px] text-slate-700 dark:bg-slate-700 dark:text-slate-200">
             TICKET MOSTRADOR
           </span>
         </div>
@@ -865,7 +749,7 @@ export const PosCheckoutPanel = ({
         {onClose && (
           <button
             type="button"
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+            className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition dark:hover:bg-slate-800 dark:hover:text-slate-200"
             onClick={onClose}
             title="Cerrar ventana (Esc)"
           >
@@ -875,22 +759,22 @@ export const PosCheckoutPanel = ({
       </div>
 
       {/* Header Principal: Título + Pestañas + Hero Amount */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 p-5 bg-white">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 p-5 bg-white dark:bg-slate-900 dark:border-slate-800">
         <div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Finalizar Venta</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Finalizar Venta</h2>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
             Elegí cliente, medio de pago y datos de cobro
           </p>
 
           {/* Selector de modo: Pestañas segmentadas */}
-          <div className="mt-3 inline-flex items-center rounded-xl bg-slate-100 p-1 border border-slate-200/80">
+          <div className="mt-3 inline-flex items-center rounded-xl bg-slate-100 p-1 border border-slate-200/80 dark:bg-slate-800 dark:border-slate-700">
             <button
               type="button"
               onClick={() => setPaymentMode("single")}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                 paymentMode === "single"
-                  ? "bg-white text-blue-700 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-white text-blue-700 shadow-xs dark:bg-slate-700 dark:text-blue-300"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
               }`}
             >
               <Zap className="h-3.5 w-3.5 text-amber-500" />
@@ -906,14 +790,14 @@ export const PosCheckoutPanel = ({
               }}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                 paymentMode === "split"
-                  ? "bg-white text-blue-700 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-white text-blue-700 shadow-xs dark:bg-slate-700 dark:text-blue-300"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
               }`}
             >
               <Layers className="h-3.5 w-3.5 text-indigo-500" />
               Pago Combinado
               {splitPayments.length > 0 && (
-                <span className="ml-1 rounded-full bg-blue-100 px-1.5 py-0.2 text-[10px] font-black text-blue-800">
+                <span className="ml-1 rounded-full bg-blue-100 px-1.5 py-0.2 text-[10px] font-black text-blue-800 dark:bg-blue-900 dark:text-blue-200">
                   {splitPayments.length}
                 </span>
               )}
@@ -922,16 +806,16 @@ export const PosCheckoutPanel = ({
         </div>
 
         {/* Hero Amount Box */}
-        <div className="flex flex-col items-start sm:items-end justify-center rounded-xl bg-slate-50 p-3 sm:p-4 border border-slate-200/80">
+        <div className="flex flex-col items-start sm:items-end justify-center rounded-xl bg-slate-50 p-3 sm:p-4 border border-slate-200/80 dark:bg-slate-800/70 dark:border-slate-700">
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-300">
               Importe Total
             </span>
-            <span className="rounded bg-emerald-100 px-1.5 py-0.2 font-mono text-[9px] font-bold text-emerald-800">
+            <span className="rounded bg-emerald-100 px-1.5 py-0.2 font-mono text-[9px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
               ARS
             </span>
           </div>
-          <span className="mt-0.5 text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-mono">
+          <span className="mt-0.5 text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight font-mono">
             {currency.format(checkoutTotal)}
           </span>
         </div>
@@ -948,13 +832,13 @@ export const PosCheckoutPanel = ({
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white shadow-xs">
                 1
               </span>
-              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-100">
                 Cliente Asociado
               </h3>
             </div>
 
             {selectedCustomer && isCurrentAccountEnabled && (
-              <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                 <Check className="h-3 w-3" /> Cuenta al día
               </span>
             )}
@@ -962,27 +846,27 @@ export const PosCheckoutPanel = ({
 
           {/* Tarjeta del cliente (o buscador si se quiere cambiar) */}
           {!isEditingCustomerSearch ? (
-            <div className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 transition hover:bg-slate-100/50">
+            <div className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 transition hover:bg-slate-100/50 dark:border-slate-700 dark:bg-slate-800/80 dark:hover:bg-slate-800">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 font-black text-xs">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 font-black text-xs">
                   {customerInitials}
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 truncate">
-                    <span className="font-bold text-slate-900 text-xs truncate">
+                    <span className="font-bold text-slate-900 text-xs truncate dark:text-white">
                       {selectedCustomer?.full_name ?? "Consumidor Final"}
                     </span>
                     {selectedCustomer ? (
-                      <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800">
+                      <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                         {selectedCustomer.document_type.toUpperCase()} {selectedCustomer.document_number}
                       </span>
                     ) : (
-                      <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600">
+                      <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
                         Venta mostrador
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-300 truncate mt-0.5">
                     {selectedCustomer
                       ? `IVA: ${selectedCustomer.fiscal_condition || "Consumidor Final"}`
                       : "Sin cuenta corriente asociada"}
@@ -994,16 +878,16 @@ export const PosCheckoutPanel = ({
                 <button
                   type="button"
                   onClick={() => setIsEditingCustomerSearch(true)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
-                  <Pencil className="h-3.5 w-3.5 text-slate-500" />
+                  <Pencil className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
                   Cambiar
                 </button>
                 {selectedCustomer && (
                   <button
                     type="button"
                     onClick={() => selectCustomer(null)}
-                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition dark:hover:bg-slate-700 dark:hover:text-slate-200"
                     title="Quitar cliente y volver a Consumidor Final"
                   >
                     <X size={15} />
@@ -1091,23 +975,23 @@ export const PosCheckoutPanel = ({
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white shadow-xs">
                 2
               </span>
-              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-100">
                 Medios de Pago Seleccionados
               </h3>
             </div>
 
             {paymentMode === "split" ? (
               isSplitFullyCovered ? (
-                <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                   <Check className="h-3 w-3" /> MONTO ASIGNADO AL 100%
                 </span>
               ) : (
-                <span className="text-[11px] font-bold text-amber-700">
+                <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400">
                   RESTA ASIGNAR {currency.format(splitRemainingTotal)}
                 </span>
               )
             ) : (
-              <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                 <Check className="h-3 w-3" /> MONTO ASIGNADO AL 100%
               </span>
             )}
@@ -1165,8 +1049,8 @@ export const PosCheckoutPanel = ({
                   }}
                   className={`relative flex flex-col justify-between rounded-xl border p-3 text-left transition ${
                     isAssigned || isCardSelected
-                      ? "border-emerald-500 bg-emerald-50/20 shadow-xs ring-1 ring-emerald-500/30"
-                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70"
+                      ? "border-emerald-500 bg-emerald-50/20 shadow-xs ring-1 ring-emerald-500/30 dark:bg-emerald-950/50 dark:border-emerald-500"
+                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70 dark:border-slate-700 dark:bg-slate-800/80 dark:hover:border-slate-600"
                   } ${isMethodDisabled ? "opacity-45 cursor-not-allowed" : "cursor-pointer"}`}
                 >
                   <div className="flex items-center justify-between w-full mb-2">
@@ -1174,7 +1058,7 @@ export const PosCheckoutPanel = ({
                       className={`flex h-8 w-8 items-center justify-center rounded-lg ${
                         isAssigned || isCardSelected
                           ? "bg-emerald-600 text-white"
-                          : "bg-slate-100 text-slate-600"
+                          : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
                       }`}
                     >
                       <Icon className="h-4 w-4" />
@@ -1187,7 +1071,7 @@ export const PosCheckoutPanel = ({
                     )}
 
                     {isCurrentAccount && currentAccountSnapshot?.available != null && (
-                      <span className="rounded bg-indigo-100 px-1 py-0.2 text-[9px] font-bold text-indigo-800">
+                      <span className="rounded bg-indigo-100 px-1 py-0.2 text-[9px] font-bold text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
                         DISP ${(currentAccountSnapshot.available / 1000).toFixed(0)}K
                       </span>
                     )}
@@ -1196,7 +1080,7 @@ export const PosCheckoutPanel = ({
                   <div>
                     <span
                       className={`block text-xs font-bold truncate ${
-                        isAssigned || isCardSelected ? "text-slate-900" : "text-slate-700"
+                        isAssigned || isCardSelected ? "text-slate-900 dark:text-white" : "text-slate-700 dark:text-slate-200"
                       }`}
                     >
                       {method.name}
@@ -1204,10 +1088,10 @@ export const PosCheckoutPanel = ({
                     <span
                       className={`block text-[11px] font-mono mt-0.5 truncate ${
                         isAssigned
-                          ? "font-bold text-emerald-700"
+                          ? "font-bold text-emerald-700 dark:text-emerald-400"
                           : isCardSelected
-                          ? "text-blue-700 font-semibold"
-                          : "text-slate-400"
+                          ? "text-blue-700 dark:text-blue-400 font-semibold"
+                          : "text-slate-400 dark:text-slate-300"
                       }`}
                     >
                       {assignedDisplay}
@@ -1219,34 +1103,34 @@ export const PosCheckoutPanel = ({
           </div>
 
           {/* Barra de métricas (KPIs de Cobro) */}
-          <div className="grid grid-cols-3 gap-2 mt-3.5 rounded-xl border border-slate-200/90 bg-slate-50/70 p-2.5 text-center text-xs">
-            <div className="rounded-lg bg-white p-2 border border-slate-100 shadow-2xs">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+          <div className="grid grid-cols-3 gap-2 mt-3.5 rounded-xl border border-slate-200/90 bg-slate-50/70 p-2.5 text-center text-xs dark:border-slate-700 dark:bg-slate-800/60">
+            <div className="rounded-lg bg-white p-2 border border-slate-100 shadow-2xs dark:bg-slate-800 dark:border-slate-700">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-300">
                 Monto Total
               </span>
-              <span className="font-bold text-slate-800 text-sm font-mono">
+              <span className="font-bold text-slate-800 text-sm font-mono dark:text-slate-100">
                 {currency.format(checkoutTotal)}
               </span>
             </div>
 
-            <div className="rounded-lg bg-emerald-100/70 border border-emerald-200/80 p-2 shadow-2xs">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+            <div className="rounded-lg bg-emerald-100/70 border border-emerald-200/80 p-2 shadow-2xs dark:bg-emerald-950/60 dark:border-emerald-800">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
                 Cobrado
               </span>
-              <span className="font-black text-emerald-800 text-sm font-mono">
+              <span className="font-black text-emerald-800 text-sm font-mono dark:text-emerald-300">
                 {currency.format(paymentMode === "split" ? splitPaidTotal : checkoutTotal)}
               </span>
             </div>
 
-            <div className="rounded-lg bg-white p-2 border border-slate-100 shadow-2xs">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            <div className="rounded-lg bg-white p-2 border border-slate-100 shadow-2xs dark:bg-slate-800 dark:border-slate-700">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-300">
                 Resta Cubrir
               </span>
               <span
                 className={`font-black text-sm font-mono ${
                   paymentMode === "split" && !isSplitFullyCovered
-                    ? "text-amber-700"
-                    : "text-emerald-700"
+                    ? "text-amber-700 dark:text-amber-400"
+                    : "text-emerald-700 dark:text-emerald-400"
                 }`}
               >
                 {paymentMode === "split"
@@ -1412,31 +1296,63 @@ export const PosCheckoutPanel = ({
 
           {isCreditCardMethod && (
             <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs space-y-2">
-              <span className="font-bold text-slate-800 block">Plan de Cuotas:</span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <select
-                  value={cardCreditDetails.installmentPlanId}
-                  onChange={(e) =>
-                    setCardCreditDetails((curr) => ({ ...curr, installmentPlanId: e.target.value }))
-                  }
-                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
-                >
-                  <option value="">1 cuota sin interés</option>
-                  {availableInstallmentPlans.map((plan) => (
-                    <option key={plan.id} value={plan.id}>
-                      {plan.name} ({plan.installments} cuotas)
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  value={cardCreditDetails.couponNumber}
-                  onChange={(e) =>
-                    setCardCreditDetails((curr) => ({ ...curr, couponNumber: e.target.value }))
-                  }
-                  placeholder="Nº de cupón (opcional)"
-                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
-                />
+              <span className="font-bold text-slate-800 block">Datos Tarjeta de Crédito:</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">
+                    Plan de cuotas:
+                  </label>
+                  <select
+                    value={cardCreditDetails.installmentPlanId}
+                    onChange={(e) =>
+                      setCardCreditDetails((curr) => ({ ...curr, installmentPlanId: e.target.value }))
+                    }
+                    className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  >
+                    <option value="">1 cuota sin interés</option>
+                    {availableInstallmentPlans.map((plan) => (
+                      <option key={plan.id} value={plan.id}>
+                        {plan.name} ({plan.installments} cuotas)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">
+                    Nº de cupón:
+                  </label>
+                  <input
+                    type="text"
+                    value={cardCreditDetails.couponNumber}
+                    onChange={(e) =>
+                      setCardCreditDetails((curr) => ({ ...curr, couponNumber: e.target.value }))
+                    }
+                    placeholder="Nº cupón (opcional)"
+                    className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">
+                    Cuenta destino:
+                  </label>
+                  <select
+                    value={cardCreditDetails.destinationBankAccountId}
+                    onChange={(e) =>
+                      setCardCreditDetails((curr) => ({
+                        ...curr,
+                        destinationBankAccountId: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  >
+                    <option value="">Cuenta destino (opcional)</option>
+                    {destinationBankAccounts.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.bank_name} - {b.account_type}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
           )}
@@ -1444,25 +1360,57 @@ export const PosCheckoutPanel = ({
           {isDebitCardMethod && (
             <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs space-y-2">
               <span className="font-bold text-slate-800 block">Datos Tarjeta de Débito:</span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  value={cardDebitDetails.couponNumber}
-                  onChange={(e) =>
-                    setCardDebitDetails((curr) => ({ ...curr, couponNumber: e.target.value }))
-                  }
-                  placeholder="Nº de cupón (opcional)"
-                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
-                />
-                <input
-                  type="text"
-                  value={cardDebitDetails.authorizationNumber}
-                  onChange={(e) =>
-                    setCardDebitDetails((curr) => ({ ...curr, authorizationNumber: e.target.value }))
-                  }
-                  placeholder="Nº de autorización (opcional)"
-                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">
+                    Nº de cupón:
+                  </label>
+                  <input
+                    type="text"
+                    value={cardDebitDetails.couponNumber}
+                    onChange={(e) =>
+                      setCardDebitDetails((curr) => ({ ...curr, couponNumber: e.target.value }))
+                    }
+                    placeholder="Nº cupón (opcional)"
+                    className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">
+                    Nº de autorización:
+                  </label>
+                  <input
+                    type="text"
+                    value={cardDebitDetails.authorizationNumber}
+                    onChange={(e) =>
+                      setCardDebitDetails((curr) => ({ ...curr, authorizationNumber: e.target.value }))
+                    }
+                    placeholder="Nº autorización (opcional)"
+                    className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">
+                    Cuenta destino:
+                  </label>
+                  <select
+                    value={cardDebitDetails.destinationBankAccountId}
+                    onChange={(e) =>
+                      setCardDebitDetails((curr) => ({
+                        ...curr,
+                        destinationBankAccountId: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  >
+                    <option value="">Cuenta destino (opcional)</option>
+                    {destinationBankAccounts.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.bank_name} - {b.account_type}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
           )}

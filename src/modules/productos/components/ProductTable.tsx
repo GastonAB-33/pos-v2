@@ -1,6 +1,6 @@
 import { ProductActions } from "@/modules/productos/components/ProductActions";
 import type { ProductViewModel } from "@/modules/productos/types/product.types";
-import { CheckCircle2, CircleX, Star } from "lucide-react";
+import { CheckCircle2, CircleX, FilterX, Star } from "lucide-react";
 
 interface ProductTableProps {
   products: ProductViewModel[];
@@ -13,6 +13,7 @@ interface ProductTableProps {
   onOpenBarcode: (product: ProductViewModel) => void;
   onEdit: (product: ProductViewModel) => void;
   onDelete: (product: ProductViewModel) => void;
+  onClearFilters?: () => void;
 }
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -32,13 +33,30 @@ export const ProductTable = ({
   onOpenBarcode,
   onEdit,
   onDelete,
+  onClearFilters,
 }: ProductTableProps) => {
   const selectedSet = new Set(selectedIds);
   const allSelected =
     products.length > 0 && products.every((product) => selectedSet.has(product.entity.id));
 
   if (!products.length) {
-    return <div className="ui-empty-state">No hay productos para los filtros seleccionados.</div>;
+    return (
+      <div className="ui-empty-state flex flex-col items-center justify-center gap-3 p-6 text-center">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          No hay productos para los filtros seleccionados.
+        </p>
+        {onClearFilters ? (
+          <button
+            type="button"
+            onClick={onClearFilters}
+            className="ui-btn-ghost text-xs px-3 py-1.5 font-medium inline-flex items-center gap-1.5"
+          >
+            <FilterX size={14} />
+            <span>Restablecer búsqueda y filtros</span>
+          </button>
+        ) : null}
+      </div>
+    );
   }
 
   return (

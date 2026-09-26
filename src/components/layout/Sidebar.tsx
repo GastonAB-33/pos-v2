@@ -189,7 +189,7 @@ export const Sidebar = () => {
     <aside className="app-sidebar">
       <button
         type="button"
-        className="app-sidebar-brand w-full border-b border-slate-200 px-4 py-3.5 text-left transition hover:bg-slate-50"
+        className="app-sidebar-brand w-full border-b border-slate-200 px-4 py-3.5 text-left transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/60"
         onClick={() => {
           closeDrawerAfterNavigation();
           navigate(routePaths.menuPrincipal);
@@ -201,7 +201,7 @@ export const Sidebar = () => {
       <nav className="app-sidebar-nav space-y-5 p-3">
         {canReadPos ? (
           <section className="space-y-2">
-            <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
               Acceso rapido
             </p>
             <button
@@ -210,8 +210,8 @@ export const Sidebar = () => {
               className={cn(
                 "app-sidebar-pos flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm font-semibold transition",
                 isItemActive(quickAccessItem.to)
-                  ? "border-brand-500/40 bg-brand-500/15 text-slate-900"
-                  : "border-brand-500/30 bg-brand-500/10 text-slate-700 hover:bg-brand-500/20 hover:text-slate-900"
+                  ? "border-brand-500/40 bg-brand-500/15 text-slate-900 dark:text-white"
+                  : "border-brand-500/30 bg-brand-500/10 text-slate-700 hover:bg-brand-500/20 hover:text-slate-900 dark:text-slate-200 dark:hover:text-white"
               )}
               title={
                 posWindowMode === "new_window"
@@ -302,8 +302,8 @@ export const Sidebar = () => {
                         cn(
                           "block rounded-r-lg border-l-2 px-3 py-2 text-sm transition",
                           isItemActive(item.to)
-                            ? "border-brand-500 bg-brand-500/15 text-slate-900"
-                            : "border-transparent text-slate-600 hover:border-brand-500 hover:bg-slate-50"
+                            ? "border-brand-500 bg-brand-500/15 text-slate-900 dark:text-white font-semibold"
+                            : "border-transparent text-slate-600 hover:border-brand-500 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/70 dark:hover:text-white"
                         )
                       }
                     >

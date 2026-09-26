@@ -24,19 +24,19 @@ export const CashSummaryCards = ({
         <p className="ui-kpi">{currency.format(openingAmount)}</p>
       </article>
 
-      <article className="ui-summary-card border-emerald-300/50 bg-emerald-500/10">
-        <p className="ui-summary-label text-emerald-300">Ingresos</p>
-        <p className="ui-kpi text-emerald-200">{currency.format(incomes)}</p>
+      <article className="ui-summary-card border-emerald-300/50 bg-emerald-500/10 dark:border-emerald-800/60 dark:bg-emerald-950/40">
+        <p className="ui-summary-label text-emerald-700 dark:text-emerald-300">Ingresos</p>
+        <p className="ui-kpi text-emerald-700 dark:text-emerald-200">{currency.format(incomes)}</p>
       </article>
 
-      <article className="ui-summary-card border-rose-300/50 bg-rose-500/10">
-        <p className="ui-summary-label text-rose-300">Egresos</p>
-        <p className="ui-kpi text-rose-200">{currency.format(expenses)}</p>
+      <article className="ui-summary-card border-rose-300/50 bg-rose-500/10 dark:border-rose-800/60 dark:bg-rose-950/40">
+        <p className="ui-summary-label text-rose-700 dark:text-rose-300">Egresos</p>
+        <p className="ui-kpi text-rose-700 dark:text-rose-200">{currency.format(expenses)}</p>
       </article>
 
-      <article className="ui-summary-card border-sky-300/50 bg-sky-500/10">
-        <p className="ui-summary-label text-sky-300">Saldo esperado</p>
-        <p className="ui-kpi text-sky-200">{currency.format(expectedBalance)}</p>
+      <article className="ui-summary-card border-sky-300/50 bg-sky-500/10 dark:border-sky-800/60 dark:bg-sky-950/40">
+        <p className="ui-summary-label text-sky-700 dark:text-sky-300">Saldo esperado</p>
+        <p className="ui-kpi text-sky-700 dark:text-sky-200">{currency.format(expectedBalance)}</p>
       </article>
     </div>
   );

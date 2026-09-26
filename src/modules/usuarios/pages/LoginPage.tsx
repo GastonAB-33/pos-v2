@@ -106,25 +106,25 @@ export const LoginPage = () => {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
-      <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-panel">
-        <div className="mb-5 flex items-center justify-between border-b border-slate-100 pb-4">
+    <main className="flex min-h-screen items-center justify-center bg-slate-100 dark:bg-slate-950 p-4 transition-colors">
+      <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-panel dark:border-slate-800 dark:bg-slate-900 transition-colors">
+        <div className="mb-5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
           <Link to="/" title="Ir a la página principal">
             <JirehLogo size="md" />
           </Link>
           <Link
             to="/landing"
-            className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition"
+            className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition dark:bg-emerald-950/60 dark:border-emerald-800 dark:text-emerald-300"
           >
             <Sparkles className="h-3.5 w-3.5 text-amber-500" />
             <span>Prueba 15 Días</span>
           </Link>
         </div>
 
-        <h1 className="text-2xl font-semibold text-slate-900">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
           {publicTenantName ? `Ingresar a ${publicTenantName}` : "Ingresar a Jireh POS"}
         </h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
           {normalizedTenantSlug
             ? "Acceso privado del comercio"
             : dataProvider === "supabase"
@@ -133,7 +133,7 @@ export const LoginPage = () => {
         </p>
 
         {dataProvider === "mock" ? (
-          <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
+          <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800 dark:border-sky-800 dark:bg-sky-950/50 dark:text-sky-200">
           <p className="font-semibold">Acceso de desarrollo</p>
           <p className="mt-1">Comercio: <span className="font-kpi">{demoCredentials.tenant}</span></p>
           <p>Usuario: <span className="font-kpi">{demoCredentials.username}</span></p>
@@ -153,19 +153,19 @@ export const LoginPage = () => {
         ) : null}
 
         {isDevAuthBypassEnabled ? (
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
             Bypass de auth en desarrollo activo (VITE_DEV_AUTH_BYPASS=true).
           </div>
         ) : null}
 
         {error ? (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300">
             {error}
           </div>
         ) : null}
 
         {tenantSlugError ? (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300">
             {tenantSlugError}
           </div>
         ) : null}
@@ -177,11 +177,11 @@ export const LoginPage = () => {
             await login();
           }}
         >
-          <section className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <h2 className="text-sm font-semibold text-slate-900">
+          <section className="space-y-3.5 rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700/80 dark:bg-slate-800/60 shadow-xs">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">
               {dataProvider === "supabase" ? "Ingreso con email" : "Ingreso manual"}
             </h2>
-            <label className="grid gap-1 text-xs font-medium text-slate-600" htmlFor="tenantInput">
+            <label className="grid gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200" htmlFor="tenantInput">
               Comercio
               <input
                 id="tenantInput"
@@ -190,12 +190,12 @@ export const LoginPage = () => {
                   clearError();
                   setTenantInput(event.target.value);
                 }}
-                className="ui-input"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500"
                 disabled={isLoading || isSubmitting}
                 placeholder="Comercio"
               />
             </label>
-            <label className="grid gap-1 text-xs font-medium text-slate-600" htmlFor="usernameInput">
+            <label className="grid gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200" htmlFor="usernameInput">
               {dataProvider === "supabase" ? "Usuario (email)" : "Usuario"}
               <input
                 id="usernameInput"
@@ -204,12 +204,12 @@ export const LoginPage = () => {
                   clearError();
                   setUsernameInput(event.target.value);
                 }}
-                className="ui-input"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500"
                 disabled={isLoading || isSubmitting}
                 placeholder={dataProvider === "supabase" ? "Email" : "Usuario"}
               />
             </label>
-            <label className="grid gap-1 text-xs font-medium text-slate-600" htmlFor="passwordInput">
+            <label className="grid gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200" htmlFor="passwordInput">
               Contrasena
               <input
                 id="passwordInput"
@@ -219,14 +219,14 @@ export const LoginPage = () => {
                   clearError();
                   setPasswordInput(event.target.value);
                 }}
-                className="ui-input"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500"
                 disabled={isLoading || isSubmitting}
                 placeholder="Contrasena"
               />
             </label>
             <button
               type="submit"
-              className="ui-btn-primary w-full"
+              className="ui-btn-primary w-full mt-2"
               disabled={!canSubmit || isLoading || isSubmitting || isTenantSlugLoading || Boolean(tenantSlugError)}
             >
               {isTenantSlugLoading ? "Validando comercio..." : isSubmitting ? "Ingresando..." : "Ingresar"}
@@ -284,7 +284,7 @@ export const LoginPage = () => {
                   </option>
                 ))}
               </select>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
                 <p>Comercio: {selectedTenant ? selectedTenant.trade_name : "-"}</p>
                 <p>Usuario: {selectedUser ? selectedUser.full_name : "-"}</p>
               </div>
@@ -299,7 +299,7 @@ export const LoginPage = () => {
                 clearError();
                 void reload();
               }}
-              className="ui-btn-ghost"
+              className="ui-btn-ghost text-xs text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800"
               disabled={isLoading || isSubmitting}
             >
               Recargar datos
@@ -308,20 +308,20 @@ export const LoginPage = () => {
         </form>
 
         {dataProvider === "mock" && !hasTenants ? (
-          <p className="mt-4 text-xs text-slate-500">
+          <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
             No hay comercios cargados. En mock se bootstrappea automaticamente el comercio demo.
           </p>
         ) : null}
 
         {dataProvider === "mock" && !hasUsers && tenantId ? (
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
             No hay usuarios para el comercio seleccionado.
           </p>
         ) : null}
 
-        <p className="mt-4 text-xs text-slate-500">
+        <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
           Ruta protegida de ejemplo:{" "}
-          <Link to={routePaths.dashboard} className="text-brand-700">
+          <Link to={routePaths.dashboard} className="text-brand-600 dark:text-brand-400 font-semibold hover:underline">
             Estadisticas
           </Link>
         </p>

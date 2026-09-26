@@ -123,8 +123,8 @@ export const PaymentMethodSelector = ({
               "flex flex-col justify-between rounded-lg border text-left transition relative select-none",
               compact ? "p-2" : "p-3",
               selected
-                ? "border-blue-600 bg-blue-50/70 shadow-xs ring-1 ring-blue-500/30 dark:border-blue-500 dark:bg-blue-950/40"
-                : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900",
+                ? "border-blue-600 bg-blue-50/70 shadow-xs ring-1 ring-blue-500/30 dark:border-blue-500 dark:bg-blue-950/60"
+                : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60 dark:border-slate-700 dark:bg-slate-800/80 dark:hover:border-slate-600",
               methodDisabled ? "cursor-not-allowed opacity-50 bg-slate-50/40 dark:bg-slate-900/40" : ""
             )}
           >
@@ -135,7 +135,7 @@ export const PaymentMethodSelector = ({
                     "flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition",
                     selected
                       ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                      : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300"
                   )}
                 >
                   <IconComponent size={13} />
@@ -145,7 +145,7 @@ export const PaymentMethodSelector = ({
                     "truncate text-xs font-semibold leading-tight",
                     selected
                       ? "text-blue-950 dark:text-blue-100"
-                      : "text-slate-800 dark:text-slate-200"
+                      : "text-slate-800 dark:text-slate-100"
                   )}
                 >
                   {method.name}
@@ -160,7 +160,7 @@ export const PaymentMethodSelector = ({
             {(secondaryLabel || method.surcharge_percent > 0 || method.discount_percent > 0 || badges.length > 0) && (
               <div className="mt-1 flex flex-wrap items-center gap-1">
                 {secondaryLabel ? (
-                  <span className="text-[10px] text-slate-500 truncate">{secondaryLabel}</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-300 font-medium truncate">{secondaryLabel}</span>
                 ) : null}
                 {method.surcharge_percent > 0 ? (
                   <span className="rounded bg-amber-100 px-1 py-0.2 text-[9px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-200">
@@ -175,7 +175,7 @@ export const PaymentMethodSelector = ({
                 {badges.map((badge) => (
                   <span
                     key={badge}
-                    className="rounded bg-slate-100 px-1 py-0.2 text-[9px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                    className="rounded bg-slate-100 px-1 py-0.2 text-[9px] font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-300"
                   >
                     {badge}
                   </span>
