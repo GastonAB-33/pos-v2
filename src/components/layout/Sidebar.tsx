@@ -53,6 +53,7 @@ const sidebarGroups: SidebarGroup[] = [
     items: [
       { label: "Clientes", to: routePaths.clientes, module: "clientes" },
       { label: "Proveedores", to: routePaths.proveedores, module: "proveedores" },
+      { label: "Empleados", to: routePaths.empleados, module: "empleados" },
       { label: "Configuracion", to: routePaths.configuracionAgenda, module: "configuracion_agenda" },
     ],
   },

@@ -499,112 +499,22 @@ export const PosCheckoutPanel = ({
 
   const arePaymentDetailsReady = useMemo(() => {
     if (!requiresPaymentDetails || !selectedMethodConfig) return true;
-    if (isCreditCardMethod) {
-      const hasCoupon =
-        !selectedMethodConfig.ask_coupon_number || Boolean(cardCreditDetails.couponNumber.trim());
-      const hasApproval =
-        !selectedMethodConfig.ask_approval_number ||
-        Boolean(cardCreditDetails.authorizationNumber.trim());
-      const hasCardBrand =
-        !selectedMethodConfig.ask_card_brand || Boolean(cardCreditDetails.cardBrand.trim());
-      const hasInstallments =
-        !selectedMethodConfig.ask_installment_plan || Boolean(selectedInstallmentPlan);
-      const hasDestination =
-        !selectedMethodConfig.ask_destination_bank || Boolean(selectedCreditDestination);
-      return hasCoupon && hasApproval && hasCardBrand && hasInstallments && hasDestination;
+    if (isTransferMethod && transferDetails.originBankId === "__new__") {
+      return Boolean(transferDetails.newOriginBankName.trim());
     }
-    if (isDebitCardMethod) {
-      const hasCoupon =
-        !selectedMethodConfig.ask_coupon_number || Boolean(cardDebitDetails.couponNumber.trim());
-      const hasApproval =
-        !selectedMethodConfig.ask_approval_number ||
-        Boolean(cardDebitDetails.authorizationNumber.trim());
-      const hasDestination =
-        !selectedMethodConfig.ask_destination_bank || Boolean(selectedDebitDestination);
-      return hasCoupon && hasApproval && hasDestination;
-    }
-    if (isTransferMethod) {
-      const hasOrigin = !selectedMethodConfig.ask_origin_bank
-        ? true
-        : transferDetails.originBankId === "__new__"
-        ? selectedMethodConfig.allow_new_origin_bank &&
-          Boolean(transferDetails.newOriginBankName.trim())
-        : Boolean(transferDetails.originBankId.trim());
-      const hasVoucher =
-        !selectedMethodConfig.ask_voucher_number || Boolean(transferDetails.voucherNumber.trim());
-      const hasOriginHolder =
-        !selectedMethodConfig.ask_origin_account_holder ||
-        Boolean(transferDetails.originAccountHolder.trim());
-      const hasDestination =
-        !selectedMethodConfig.ask_destination_bank || Boolean(selectedTransferDestination);
-      return hasOrigin && hasVoucher && hasOriginHolder && hasDestination;
-    }
-    if (isMercadoPagoManual) {
-      const hasOperation =
-        !selectedMethodConfig.ask_operation_number ||
-        Boolean(mercadoPagoManualDetails.operationId.trim());
-      const hasDestination =
-        !selectedMethodConfig.ask_destination_bank || Boolean(selectedManualMpDestination);
-      return hasOperation && hasDestination;
-    }
-    if (isChequeMethod) {
-      const hasOrigin = !selectedMethodConfig.ask_origin_bank
-        ? true
-        : chequeDetails.originBankId === "__new__"
-        ? selectedMethodConfig.allow_new_origin_bank &&
-          Boolean(chequeDetails.newOriginBankName.trim())
-        : Boolean(chequeDetails.originBankId.trim());
-      const hasOriginHolder =
-        !selectedMethodConfig.ask_origin_account_holder ||
-        Boolean(chequeDetails.originAccountHolder.trim());
-      const hasChequeNumber =
-        !selectedMethodConfig.ask_cheque_number || Boolean(chequeDetails.chequeNumber.trim());
-      const hasDueDate =
-        !selectedMethodConfig.ask_cheque_due_date || Boolean(chequeDetails.dueDate.trim());
-      const hasApproval =
-        !selectedMethodConfig.ask_approval_number || Boolean(chequeDetails.approvalNumber.trim());
-      const hasDestination =
-        !selectedMethodConfig.ask_destination_bank || Boolean(selectedChequeDestination);
-      return (
-        hasOrigin &&
-        hasOriginHolder &&
-        hasChequeNumber &&
-        hasDueDate &&
-        hasApproval &&
-        hasDestination
-      );
+    if (isChequeMethod && chequeDetails.originBankId === "__new__") {
+      return Boolean(chequeDetails.newOriginBankName.trim());
     }
     return true;
   }, [
-    cardCreditDetails.authorizationNumber,
-    cardCreditDetails.cardBrand,
-    cardCreditDetails.couponNumber,
-    cardDebitDetails.authorizationNumber,
-    cardDebitDetails.couponNumber,
-    chequeDetails.approvalNumber,
-    chequeDetails.chequeNumber,
-    chequeDetails.dueDate,
-    chequeDetails.newOriginBankName,
-    chequeDetails.originAccountHolder,
-    chequeDetails.originBankId,
-    isCreditCardMethod,
-    isDebitCardMethod,
     isChequeMethod,
-    isMercadoPagoManual,
     isTransferMethod,
-    mercadoPagoManualDetails.operationId,
+    chequeDetails.newOriginBankName,
+    chequeDetails.originBankId,
     requiresPaymentDetails,
-    selectedChequeDestination,
-    selectedCreditDestination,
-    selectedDebitDestination,
-    selectedInstallmentPlan,
-    selectedManualMpDestination,
     selectedMethodConfig,
-    selectedTransferDestination,
     transferDetails.newOriginBankName,
-    transferDetails.originAccountHolder,
     transferDetails.originBankId,
-    transferDetails.voucherNumber,
   ]);
 
   const buildPaymentDetailsPayload = useCallback(async () => {
@@ -1402,7 +1312,7 @@ export const PosCheckoutPanel = ({
                     onChange={(e) =>
                       setTransferDetails((curr) => ({ ...curr, voucherNumber: e.target.value }))
                     }
-                    placeholder="Ej: 9842"
+                    placeholder="Ej: 9842 (opcional)"
                     className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
                   />
                 </div>
@@ -1511,7 +1421,7 @@ export const PosCheckoutPanel = ({
                   onChange={(e) =>
                     setChequeDetails((curr) => ({ ...curr, chequeNumber: e.target.value }))
                   }
-                  placeholder="Nº de cheque"
+                  placeholder="Nº de cheque (opcional)"
                   className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
                 />
                 <input
@@ -1520,7 +1430,7 @@ export const PosCheckoutPanel = ({
                   onChange={(e) =>
                     setChequeDetails((curr) => ({ ...curr, dueDate: e.target.value }))
                   }
-                  placeholder="Fecha vencimiento"
+                  placeholder="Fecha vencimiento (opcional)"
                   className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
                 />
                 <input

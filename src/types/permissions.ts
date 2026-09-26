@@ -70,6 +70,15 @@ export const normalizePermissionProfile = (profile: PermissionProfile): Permissi
       ...(profile.configuracion_contable || profile.configuracion || profile.caja),
     };
   }
+  if (
+    (profile.clientes || profile.configuracion_agenda || profile.usuarios) &&
+    !profile.empleados
+  ) {
+    base.empleados = {
+      ...base.empleados,
+      ...(profile.clientes || profile.configuracion_agenda || profile.usuarios),
+    };
+  }
 
   return base;
 };
@@ -98,6 +107,13 @@ export const hasModulePermission = (
       profile.configuracion_contable?.[level] ||
         profile.configuracion?.[level] ||
         profile.caja?.[level]
+    );
+  }
+  if (requirement.module === "empleados") {
+    return Boolean(
+      profile.clientes?.[level] ||
+        profile.configuracion_agenda?.[level] ||
+        profile.usuarios?.[level]
     );
   }
 

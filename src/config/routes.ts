@@ -23,6 +23,7 @@ export const routePaths = {
   reportes: "/reportes",
   auditoria: "/auditoria",
   configuracion: "/configuracion",
+  empleados: "/agenda/empleados",
   configuracionAgenda: "/agenda/configuracion",
   configuracionCatalogo: "/catalogo/configuracion",
   configuracionAnalisis: "/analisis/configuracion",

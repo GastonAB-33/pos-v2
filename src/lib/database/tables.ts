@@ -32,6 +32,12 @@ export const dbTables = {
   supplier_current_account_movements: "supplier_current_account_movements",
   bank_account_movements: "bank_account_movements",
 
+  // Empleados, Asistencia, Cuenta Corriente y Pagos de Sueldo
+  employees: "employees",
+  employee_attendance: "employee_attendance",
+  employee_current_account_movements: "employee_current_account_movements",
+  employee_salary_payments: "employee_salary_payments",
+
   // Preparado para evolucion futura de ventas/pagos.
   sale_payments: "sale_payments",
 } as const;
@@ -69,6 +75,10 @@ export const tenantScopedTables = [
   dbTables.general_cash_movements,
   dbTables.supplier_current_account_movements,
   dbTables.bank_account_movements,
+  dbTables.employees,
+  dbTables.employee_attendance,
+  dbTables.employee_current_account_movements,
+  dbTables.employee_salary_payments,
   dbTables.sale_payments,
 ] as const;
 
@@ -107,5 +117,9 @@ export const tableDefinitions: Record<DbTableName, readonly string[]> = {
   general_cash_movements: ["id", "tenant_id", "type", "amount", "origin_type", "concept", "balance_after", "reference_id", "notes", "created_by", "created_at", "updated_at"],
   supplier_current_account_movements: ["id", "tenant_id", "supplier_id", "purchase_id", "type", "amount", "balance_after", "payment_method_code", "notes", "created_by", "created_at", "updated_at"],
   bank_account_movements: ["id", "tenant_id", "bank_account_id", "type", "origin_type", "concept", "amount", "balance_after", "reference_id", "voucher_number", "notes", "created_by", "created_at", "updated_at"],
+  employees: ["id", "tenant_id", "code", "full_name", "document_type", "document_number", "phone", "email", "address", "position", "base_salary", "hourly_rate", "hire_date", "current_balance", "current_account_enabled", "current_account_limit", "observations", "is_active", "created_at", "updated_at"],
+  employee_attendance: ["id", "tenant_id", "employee_id", "date", "check_in", "check_out", "total_hours", "status", "notes", "created_by", "created_at", "updated_at"],
+  employee_current_account_movements: ["id", "tenant_id", "employee_id", "sale_id", "type", "amount", "balance_after", "category", "notes", "created_by", "created_at", "updated_at"],
+  employee_salary_payments: ["id", "tenant_id", "employee_id", "period", "gross_amount", "deductions_amount", "current_account_discount_applied", "bonuses_amount", "net_amount_paid", "payment_method_code", "payment_date", "notes", "created_by", "created_at", "updated_at"],
   sale_payments: ["id", "tenant_id", "sale_id", "payment_method_code", "provider", "provider_code", "amount", "currency_code", "status", "provider_status", "provider_reference", "provider_metadata", "external_reference", "metadata", "created_at", "updated_at"],
 };
