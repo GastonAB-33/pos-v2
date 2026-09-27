@@ -759,10 +759,10 @@ export const ProductQuickPriceModal = ({
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pr-1">
           {selectedProduct && searchQuery.trim().length === 0 ? (
             <div className="space-y-4">
-              {/* Tarjeta de Información del Producto Seleccionado */}
+              {/* Tarjeta de Información del Producto Seleccionado (Panel de Vista Previa) */}
               <div
                 ref={productInfoCardRef}
-                className={`rounded-xl border p-4 transition-all duration-300 ${
+                className={`rounded-2xl border p-4 transition-all duration-300 ${
                   flashStatus === "success"
                     ? "border-emerald-500 ring-4 ring-emerald-500/30 bg-emerald-50/80 dark:border-emerald-400 dark:bg-emerald-950/40 shadow-lg shadow-emerald-500/20"
                     : flashStatus === "error"
@@ -770,64 +770,48 @@ export const ProductQuickPriceModal = ({
                     : "border-slate-200 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-800/40"
                 }`}
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="rounded bg-slate-200/80 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
-                        {selectedProduct.categoria || "Sin categoría"}
-                      </span>
-                      {selectedProduct.codigoProducto && (
-                        <span className="font-mono text-xs text-slate-500">
-                          Cód: {selectedProduct.codigoProducto}
-                        </span>
-                      )}
-                      {selectedProduct.codigoBarras && (
-                        <span className="font-mono text-xs text-slate-500 bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-                          {selectedProduct.codigoBarras}
-                        </span>
-                      )}
-                    </div>
+                {/* Etiquetas superiores */}
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <span className="rounded bg-slate-200/80 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                    {selectedProduct.categoria || "Sin categoría"}
+                  </span>
+                  {selectedProduct.codigoProducto && (
+                    <span className="font-mono text-xs text-slate-500 bg-white/80 dark:bg-slate-850 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-slate-700">
+                      Cód: {selectedProduct.codigoProducto}
+                    </span>
+                  )}
+                  {selectedProduct.codigoBarras && (
+                    <span className="font-mono text-xs text-slate-600 bg-white dark:bg-slate-850 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                      {selectedProduct.codigoBarras}
+                    </span>
+                  )}
+                </div>
 
-                    <h4 className="mt-1 text-base font-bold text-slate-900 dark:text-slate-100 truncate">
-                      {selectedProduct.nombre}
-                    </h4>
+                {/* Título completo del producto: sin corte, con ancho total y salto de línea */}
+                <h4 className="mt-2 text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 break-words leading-snug">
+                  {selectedProduct.nombre}
+                </h4>
 
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      Stock actual:{" "}
-                      <span
-                        className={
-                          selectedProduct.stock <= 0
-                            ? "font-bold text-amber-600 dark:text-amber-400"
-                            : "font-semibold text-slate-700 dark:text-slate-300"
-                        }
-                      >
-                        {selectedProduct.stock} {selectedProduct.saleMode === "weight" ? "kg" : "unid."}
-                      </span>
-                    </p>
-                  </div>
+                {/* Stock y Precio actual integrados directamente sin cartel superpuesto */}
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-slate-200/70 dark:border-slate-700/60">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                    <span>Stock actual:</span>
+                    <span
+                      className={
+                        selectedProduct.stock <= 0
+                          ? "font-bold text-amber-600 dark:text-amber-400"
+                          : "font-semibold text-slate-700 dark:text-slate-200"
+                      }
+                    >
+                      {selectedProduct.stock} {selectedProduct.saleMode === "weight" ? "kg" : "unid."}
+                    </span>
+                  </p>
 
-                  {/* Badge de Precio Actual */}
-                  <div
-                    className={`flex flex-col items-end rounded-xl p-3 shadow-xs border transition-all duration-300 ${
-                      flashStatus === "success"
-                        ? "border-emerald-500 ring-2 ring-emerald-500 bg-emerald-100/90 dark:bg-emerald-900/60 shadow-md shadow-emerald-500/30 scale-105"
-                        : flashStatus === "error"
-                        ? "border-red-400 ring-2 ring-red-400/30 bg-red-50 dark:bg-red-950/40"
-                        : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-850"
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                        Precio Actual en Sistema
-                      </span>
-                      {flashStatus === "success" && (
-                        <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-200 dark:bg-emerald-800 dark:text-emerald-100 px-1.5 py-0.5 rounded-full animate-in zoom-in-75 duration-150">
-                          <CheckCircle2 size={12} className="text-emerald-600 dark:text-emerald-300" />
-                          Guardado
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Precio actual:
+                    </span>
+                    <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
                       {currencyFormatter.format(selectedProduct.precioFinal)}
                     </span>
                   </div>
