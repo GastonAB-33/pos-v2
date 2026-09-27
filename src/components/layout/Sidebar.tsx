@@ -127,6 +127,12 @@ export const Sidebar = () => {
   const supportOperator = isSupportOperator(user);
   const { isDesktop } = useDeviceProfile();
   const setSidebarOpen = useUiStore((state) => state.setSidebarOpen);
+  const theme = useUiStore((state) => state.theme);
+  const sidebarTheme = useUiStore((state) => state.sidebarTheme);
+
+  const isSidebarDark =
+    sidebarTheme === "dark" ||
+    (sidebarTheme === "auto" && (theme === "dark" || theme === "midnight"));
 
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(() => {
     const activeGroup = sidebarGroups.find((group) =>
@@ -186,23 +192,43 @@ export const Sidebar = () => {
 
   const canReadPos = canRead(quickAccessItem.module);
 
+  const effectiveSidebarDataTheme =
+    sidebarTheme === "auto"
+      ? theme === "midnight"
+        ? "midnight"
+        : theme === "dark"
+        ? "dark"
+        : "light"
+      : sidebarTheme;
+
   return (
-    <aside className="app-sidebar">
+    <aside className="app-sidebar" data-sidebar-theme={effectiveSidebarDataTheme}>
       <button
         type="button"
-        className="app-sidebar-brand w-full border-b border-slate-200 px-4 py-3.5 text-left transition hover:bg-slate-50"
+        className={cn(
+          "app-sidebar-brand w-full border-b px-4 py-3.5 text-left transition",
+          isSidebarDark
+            ? "border-slate-800/80 hover:bg-white/5"
+            : "border-slate-200 hover:bg-slate-50"
+        )}
+        data-sidebar-theme={effectiveSidebarDataTheme}
         onClick={() => {
           closeDrawerAfterNavigation();
           navigate(routePaths.menuPrincipal);
         }}
       >
-        <JirehLogo size="sm" showTagline={true} />
+        <JirehLogo size="sm" showTagline={true} variant={isSidebarDark ? "light" : "default"} />
       </button>
 
       <nav className="app-sidebar-nav space-y-5 p-3">
         {canReadPos ? (
           <section className="space-y-2">
-            <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            <p
+              className={cn(
+                "px-2 text-[11px] font-semibold uppercase tracking-[0.14em]",
+                isSidebarDark ? "text-slate-400" : "text-slate-500"
+              )}
+            >
               Acceso rapido
             </p>
             <button
@@ -210,7 +236,11 @@ export const Sidebar = () => {
               onClick={handleOpenPos}
               className={cn(
                 "app-sidebar-pos flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm font-semibold transition",
-                isItemActive(quickAccessItem.to)
+                isSidebarDark
+                  ? isItemActive(quickAccessItem.to)
+                    ? "border-brand-500/60 bg-brand-500/25 text-white shadow-xs"
+                    : "border-brand-500/30 bg-brand-500/15 text-slate-200 hover:bg-brand-500/25 hover:text-white"
+                  : isItemActive(quickAccessItem.to)
                   ? "border-brand-500/40 bg-brand-500/15 text-slate-900"
                   : "border-brand-500/30 bg-brand-500/10 text-slate-700 hover:bg-brand-500/20 hover:text-slate-900"
               )}
@@ -241,7 +271,11 @@ export const Sidebar = () => {
                 type="button"
                 className={cn(
                   "app-sidebar-group-btn flex w-full items-center gap-2 rounded-lg px-2.5 py-1 text-left transition-all duration-150",
-                  isGroupActive
+                  isSidebarDark
+                    ? isGroupActive
+                      ? "app-sidebar-group-btn--active border border-slate-700/80 bg-slate-800/80 text-white shadow-xs"
+                      : "border border-transparent text-slate-400 hover:bg-white/5 hover:text-slate-200"
+                    : isGroupActive
                     ? "app-sidebar-group-btn--active border border-slate-200/90 bg-slate-100/75 text-slate-900 shadow-xs"
                     : "border border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700"
                 )}
@@ -255,15 +289,17 @@ export const Sidebar = () => {
                   size={14}
                   className={cn(
                     "app-sidebar-group-icon shrink-0 transition-colors",
-                    isGroupActive ? "text-brand-600" : "text-slate-400"
+                    isGroupActive
+                      ? isSidebarDark ? "text-brand-400" : "text-brand-600"
+                      : isSidebarDark ? "text-slate-400" : "text-slate-400"
                   )}
                 />
                 <span
                   className={cn(
                     "app-sidebar-group-label text-[11px] uppercase tracking-[0.1em] transition-colors",
                     isGroupActive
-                      ? "font-bold text-slate-900"
-                      : "font-semibold text-slate-500"
+                      ? isSidebarDark ? "font-bold text-white" : "font-bold text-slate-900"
+                      : isSidebarDark ? "font-semibold text-slate-400" : "font-semibold text-slate-500"
                   )}
                 >
                   {group.label}
@@ -279,7 +315,9 @@ export const Sidebar = () => {
                   size={15}
                   className={cn(
                     "app-sidebar-group-chevron ml-auto shrink-0 text-xs transition-transform",
-                    isGroupActive ? "text-slate-700" : "text-slate-400",
+                    isGroupActive
+                      ? isSidebarDark ? "text-slate-200" : "text-slate-700"
+                      : isSidebarDark ? "text-slate-500" : "text-slate-400",
                     isExpanded ? "rotate-180" : "rotate-0"
                   )}
                 />
@@ -302,9 +340,13 @@ export const Sidebar = () => {
                       className={() =>
                         cn(
                           "block rounded-r-lg border-l-2 px-3 py-2 text-sm transition",
-                          isItemActive(item.to)
-                            ? "border-brand-500 bg-brand-500/15 text-slate-900"
-                            : "border-transparent text-slate-600 hover:border-brand-500 hover:bg-slate-50"
+                          isSidebarDark
+                            ? isItemActive(item.to)
+                              ? "border-brand-500 bg-brand-500/20 font-medium text-white"
+                              : "border-transparent text-slate-300 hover:border-brand-500/60 hover:bg-white/5 hover:text-white"
+                            : isItemActive(item.to)
+                            ? "border-brand-500 bg-brand-500/15 font-medium text-slate-900"
+                            : "border-transparent text-slate-600 hover:border-brand-500 hover:bg-slate-50 hover:text-slate-900"
                         )
                       }
                     >

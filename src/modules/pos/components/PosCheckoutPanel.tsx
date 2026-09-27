@@ -757,17 +757,17 @@ export const PosCheckoutPanel = ({
   };
 
   return (
-    <section className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200">
+    <section className="flex flex-col overflow-hidden rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800">
       {/* Línea de acento superior moderna estilo fintech */}
       <div className="h-1.5 w-full bg-gradient-to-r from-emerald-400 via-blue-500 to-indigo-600" />
 
       {/* Top Meta Bar */}
-      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-5 py-2.5 text-[11px]">
-        <div className="flex items-center gap-2 text-slate-600 font-semibold">
+      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850 px-5 py-2.5 text-[11px]">
+        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-semibold">
           <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
           <span className="uppercase tracking-wider">Terminal Caja</span>
-          <span className="text-slate-300">•</span>
-          <span className="rounded-md bg-slate-200/80 px-1.5 py-0.5 font-mono text-[10px] text-slate-700">
+          <span className="text-slate-300 dark:text-slate-600">•</span>
+          <span className="rounded-md bg-slate-200/80 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] text-slate-700 dark:text-slate-300">
             TICKET MOSTRADOR
           </span>
         </div>
@@ -775,7 +775,7 @@ export const PosCheckoutPanel = ({
         {onClose && (
           <button
             type="button"
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+            className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition"
             onClick={onClose}
             title="Cerrar ventana (Esc)"
           >
@@ -785,22 +785,22 @@ export const PosCheckoutPanel = ({
       </div>
 
       {/* Header Principal: Título + Pestañas + Hero Amount */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 p-5 bg-white">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 p-5 bg-white dark:bg-slate-900">
         <div>
-          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Finalizar Venta</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Finalizar Venta</h2>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
             Elegí cliente, medio de pago y datos de cobro
           </p>
 
           {/* Selector de modo: Pestañas segmentadas */}
-          <div className="mt-3 inline-flex items-center rounded-xl bg-slate-100 p-1 border border-slate-200/80">
+          <div className="mt-3 inline-flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/80 dark:border-slate-700">
             <button
               type="button"
               onClick={() => setPaymentMode("single")}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                 paymentMode === "single"
-                  ? "bg-white text-blue-700 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
               <Zap className="h-3.5 w-3.5 text-amber-500" />
@@ -816,14 +816,14 @@ export const PosCheckoutPanel = ({
               }}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
                 paymentMode === "split"
-                  ? "bg-white text-blue-700 shadow-xs"
-                  : "text-slate-600 hover:text-slate-900"
+                  ? "bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
               <Layers className="h-3.5 w-3.5 text-indigo-500" />
               Pago Combinado
               {splitPayments.length > 0 && (
-                <span className="ml-1 rounded-full bg-blue-100 px-1.5 py-0.2 text-[10px] font-black text-blue-800">
+                <span className="ml-1 rounded-full bg-blue-100 dark:bg-blue-900/60 px-1.5 py-0.2 text-[10px] font-black text-blue-800 dark:text-blue-300">
                   {splitPayments.length}
                 </span>
               )}
@@ -832,16 +832,16 @@ export const PosCheckoutPanel = ({
         </div>
 
         {/* Hero Amount Box */}
-        <div className="flex flex-col items-start sm:items-end justify-center rounded-xl bg-slate-50 p-3 sm:p-4 border border-slate-200/80">
+        <div className="flex flex-col items-start sm:items-end justify-center rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3 sm:p-4 border border-slate-200/80 dark:border-slate-700">
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Importe Total
             </span>
-            <span className="rounded bg-emerald-100 px-1.5 py-0.2 font-mono text-[9px] font-bold text-emerald-800">
+            <span className="rounded bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.2 font-mono text-[9px] font-bold text-emerald-800 dark:text-emerald-300">
               ARS
             </span>
           </div>
-          <span className="mt-0.5 text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-mono">
+          <span className="mt-0.5 text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight font-mono">
             {currency.format(checkoutTotal)}
           </span>
         </div>
@@ -858,13 +858,13 @@ export const PosCheckoutPanel = ({
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white shadow-xs">
                 1
               </span>
-              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
                 Cliente Asociado
               </h3>
             </div>
 
             {selectedCustomer && isCurrentAccountEnabled && (
-              <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                 <Check className="h-3 w-3" /> Cuenta al día
               </span>
             )}
@@ -872,27 +872,27 @@ export const PosCheckoutPanel = ({
 
           {/* Tarjeta del cliente (o buscador si se quiere cambiar) */}
           {!isEditingCustomerSearch ? (
-            <div className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 transition hover:bg-slate-100/50">
+            <div className="flex items-center justify-between rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/60 p-3 transition hover:bg-slate-100/50 dark:hover:bg-slate-800/90">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700 font-black text-xs">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-black text-xs">
                   {customerInitials}
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 truncate">
-                    <span className="font-bold text-slate-900 text-xs truncate">
+                    <span className="font-bold text-slate-900 dark:text-white text-xs truncate">
                       {selectedCustomer?.full_name ?? "Consumidor Final"}
                     </span>
                     {selectedCustomer ? (
-                      <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800">
+                      <span className="rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800 dark:text-emerald-300">
                         {selectedCustomer.document_type.toUpperCase()} {selectedCustomer.document_number}
                       </span>
                     ) : (
-                      <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600">
+                      <span className="rounded-full bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600 dark:text-slate-300">
                         Venta mostrador
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
                     {selectedCustomer
                       ? `IVA: ${selectedCustomer.fiscal_condition || "Consumidor Final"}`
                       : "Sin cuenta corriente asociada"}
@@ -904,16 +904,16 @@ export const PosCheckoutPanel = ({
                 <button
                   type="button"
                   onClick={() => setIsEditingCustomerSearch(true)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition shadow-2xs"
                 >
-                  <Pencil className="h-3.5 w-3.5 text-slate-500" />
+                  <Pencil className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
                   Cambiar
                 </button>
                 {selectedCustomer && (
                   <button
                     type="button"
                     onClick={() => selectCustomer(null)}
-                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-200 transition"
                     title="Quitar cliente y volver a Consumidor Final"
                   >
                     <X size={15} />
@@ -939,13 +939,13 @@ export const PosCheckoutPanel = ({
                     }}
                     onFocus={() => setIsCustomerMenuOpen(true)}
                     placeholder="Escribí nombre o DNI del cliente..."
-                    className="w-full rounded-xl border border-blue-500 bg-white py-2 pl-9 pr-3 text-xs text-slate-900 outline-none ring-2 ring-blue-100"
+                    className="w-full rounded-xl border border-blue-500 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-xs text-slate-900 dark:text-white outline-none ring-2 ring-blue-100 dark:ring-blue-900/40"
                   />
                 </div>
                 <button
                   type="button"
                   title="Dar de alta nuevo cliente"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 transition"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
                   disabled={disabled || !canWrite || !canManageCustomers}
                   onClick={() => onOpenCustomerModal(selectedCustomer ?? null)}
                 >
@@ -954,17 +954,17 @@ export const PosCheckoutPanel = ({
                 <button
                   type="button"
                   onClick={() => setIsEditingCustomerSearch(false)}
-                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                  className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
                 >
                   Cancelar
                 </button>
               </div>
 
               {isCustomerMenuOpen && (
-                <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
+                <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 shadow-xl">
                   <button
                     type="button"
-                    className="ui-btn-ghost w-full justify-start px-2.5 py-1.5 text-xs text-slate-700"
+                    className="ui-btn-ghost w-full justify-start px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300"
                     onClick={() => selectCustomer(null)}
                   >
                     Consumidor final (sin cliente)
@@ -977,10 +977,10 @@ export const PosCheckoutPanel = ({
                         className="ui-btn-ghost w-full justify-start px-2.5 py-1.5 text-xs"
                         onClick={() => selectCustomer(customer)}
                       >
-                        <span className="truncate font-semibold text-slate-800">
+                        <span className="truncate font-semibold text-slate-800 dark:text-slate-200">
                           {customer.full_name}
                         </span>
-                        <span className="ml-auto font-mono text-[11px] text-slate-500">
+                        <span className="ml-auto font-mono text-[11px] text-slate-500 dark:text-slate-400">
                           {customer.document_number}
                         </span>
                       </button>
@@ -1001,23 +1001,23 @@ export const PosCheckoutPanel = ({
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white shadow-xs">
                 2
               </span>
-              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
                 Medios de Pago Seleccionados
               </h3>
             </div>
 
             {paymentMode === "split" ? (
               isSplitFullyCovered ? (
-                <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                   <Check className="h-3 w-3" /> MONTO ASIGNADO AL 100%
                 </span>
               ) : (
-                <span className="text-[11px] font-bold text-amber-700">
+                <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400">
                   RESTA ASIGNAR {currency.format(splitRemainingTotal)}
                 </span>
               )
             ) : (
-              <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                 <Check className="h-3 w-3" /> MONTO ASIGNADO AL 100%
               </span>
             )}
@@ -1075,8 +1075,8 @@ export const PosCheckoutPanel = ({
                   }}
                   className={`relative flex flex-col justify-between rounded-xl border p-3 text-left transition ${
                     isAssigned || isCardSelected
-                      ? "border-emerald-500 bg-emerald-50/20 shadow-xs ring-1 ring-emerald-500/30"
-                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70"
+                      ? "border-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/40 shadow-xs ring-1 ring-emerald-500/30"
+                      : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50/70 dark:hover:bg-slate-800"
                   } ${isMethodDisabled ? "opacity-45 cursor-not-allowed" : "cursor-pointer"}`}
                 >
                   <div className="flex items-center justify-between w-full mb-2">
@@ -1084,7 +1084,7 @@ export const PosCheckoutPanel = ({
                       className={`flex h-8 w-8 items-center justify-center rounded-lg ${
                         isAssigned || isCardSelected
                           ? "bg-emerald-600 text-white"
-                          : "bg-slate-100 text-slate-600"
+                          : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
                       }`}
                     >
                       <Icon className="h-4 w-4" />
@@ -1097,7 +1097,7 @@ export const PosCheckoutPanel = ({
                     )}
 
                     {isCurrentAccount && currentAccountSnapshot?.available != null && (
-                      <span className="rounded bg-indigo-100 px-1 py-0.2 text-[9px] font-bold text-indigo-800">
+                      <span className="rounded bg-indigo-100 dark:bg-indigo-950/80 px-1 py-0.2 text-[9px] font-bold text-indigo-800 dark:text-indigo-300">
                         DISP ${(currentAccountSnapshot.available / 1000).toFixed(0)}K
                       </span>
                     )}
@@ -1106,7 +1106,9 @@ export const PosCheckoutPanel = ({
                   <div>
                     <span
                       className={`block text-xs font-bold truncate ${
-                        isAssigned || isCardSelected ? "text-slate-900" : "text-slate-700"
+                        isAssigned || isCardSelected
+                          ? "text-slate-900 dark:text-white"
+                          : "text-slate-700 dark:text-slate-300"
                       }`}
                     >
                       {method.name}
@@ -1114,10 +1116,10 @@ export const PosCheckoutPanel = ({
                     <span
                       className={`block text-[11px] font-mono mt-0.5 truncate ${
                         isAssigned
-                          ? "font-bold text-emerald-700"
+                          ? "font-bold text-emerald-700 dark:text-emerald-400"
                           : isCardSelected
-                          ? "text-blue-700 font-semibold"
-                          : "text-slate-400"
+                          ? "text-blue-700 dark:text-blue-400 font-semibold"
+                          : "text-slate-400 dark:text-slate-500"
                       }`}
                     >
                       {assignedDisplay}
@@ -1129,34 +1131,34 @@ export const PosCheckoutPanel = ({
           </div>
 
           {/* Barra de métricas (KPIs de Cobro) */}
-          <div className="grid grid-cols-3 gap-2 mt-3.5 rounded-xl border border-slate-200/90 bg-slate-50/70 p-2.5 text-center text-xs">
-            <div className="rounded-lg bg-white p-2 border border-slate-100 shadow-2xs">
+          <div className="grid grid-cols-3 gap-2 mt-3.5 rounded-xl border border-slate-200/90 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/60 p-2.5 text-center text-xs">
+            <div className="rounded-lg bg-white dark:bg-slate-800 p-2 border border-slate-100 dark:border-slate-700 shadow-2xs">
               <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Monto Total
               </span>
-              <span className="font-bold text-slate-800 text-sm font-mono">
+              <span className="font-bold text-slate-800 dark:text-white text-sm font-mono">
                 {currency.format(checkoutTotal)}
               </span>
             </div>
 
-            <div className="rounded-lg bg-emerald-100/70 border border-emerald-200/80 p-2 shadow-2xs">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+            <div className="rounded-lg bg-emerald-100/70 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/80 p-2 shadow-2xs">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
                 Cobrado
               </span>
-              <span className="font-black text-emerald-800 text-sm font-mono">
+              <span className="font-black text-emerald-800 dark:text-emerald-300 text-sm font-mono">
                 {currency.format(paymentMode === "split" ? splitPaidTotal : checkoutTotal)}
               </span>
             </div>
 
-            <div className="rounded-lg bg-white p-2 border border-slate-100 shadow-2xs">
+            <div className="rounded-lg bg-white dark:bg-slate-800 p-2 border border-slate-100 dark:border-slate-700 shadow-2xs">
               <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Resta Cubrir
               </span>
               <span
                 className={`font-black text-sm font-mono ${
                   paymentMode === "split" && !isSplitFullyCovered
-                    ? "text-amber-700"
-                    : "text-emerald-700"
+                    ? "text-amber-700 dark:text-amber-400"
+                    : "text-emerald-700 dark:text-emerald-400"
                 }`}
               >
                 {paymentMode === "split"
@@ -1171,7 +1173,7 @@ export const PosCheckoutPanel = ({
           {/* En Modo Combinado: Detalle de pagos agregados */}
           {paymentMode === "split" && (
             <div className="mt-3.5 space-y-3">
-              <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80">
                 {splitPayments.length === 0 ? (
                   <div className="p-4 text-center text-xs text-slate-400">
                     Todavía no agregaste pagos parciales. Asigná el monto y medio a continuación.
@@ -1192,17 +1194,17 @@ export const PosCheckoutPanel = ({
                     return (
                       <div
                         key={item.id}
-                        className="flex items-center justify-between p-3 text-xs hover:bg-slate-50/70 transition"
+                        className="flex items-center justify-between p-3 text-xs hover:bg-slate-50/70 dark:hover:bg-slate-700/50 transition"
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
                             <Icon className="h-4 w-4" />
                           </div>
                           <div className="min-w-0">
-                            <div className="font-bold text-slate-900 truncate">
+                            <div className="font-bold text-slate-900 dark:text-white truncate">
                               {method?.name || "Medio de pago"}
                             </div>
-                            <div className="text-[11px] text-slate-500 truncate">
+                            <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                               {bank ? `Banco: ${bank}` : ""}
                               {voucher ? ` • Ref: ${voucher}` : ""}
                               {!bank && !voucher ? `Pago parcial #${idx + 1}` : ""}
@@ -1211,13 +1213,13 @@ export const PosCheckoutPanel = ({
                         </div>
 
                         <div className="flex items-center gap-3">
-                          <span className="font-black text-slate-900 text-sm font-mono">
+                          <span className="font-black text-slate-900 dark:text-white text-sm font-mono">
                             {currency.format(item.amount)}
                           </span>
                           <button
                             type="button"
                             onClick={() => handleRemoveSplitPayment(item.id)}
-                            className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 hover:text-rose-600 dark:hover:text-rose-400 transition"
                             title="Quitar este pago"
                           >
                             <Trash2 size={15} />
@@ -1231,12 +1233,12 @@ export const PosCheckoutPanel = ({
 
               {/* Subformulario para agregar el siguiente método */}
               {!isSplitFullyCovered && (
-                <div className="rounded-xl border border-blue-200/80 bg-blue-50/30 p-3.5 space-y-3">
+                <div className="rounded-xl border border-blue-200/80 dark:border-blue-900/60 bg-blue-50/30 dark:bg-blue-950/20 p-3.5 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-blue-900">
+                    <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
                       + Asignar monto a: <strong>{selectedMethod?.name || "Medio elegido"}</strong>
                     </span>
-                    <span className="text-[11px] text-blue-700">
+                    <span className="text-[11px] text-blue-700 dark:text-blue-300">
                       Resta cubrir: <strong>{currency.format(splitRemainingTotal)}</strong>
                     </span>
                   </div>
@@ -1254,7 +1256,7 @@ export const PosCheckoutPanel = ({
                         value={splitAmountInput}
                         onChange={(e) => setSplitAmountInput(e.target.value)}
                         placeholder="0.00"
-                        className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-7 pr-3 text-xs font-bold text-slate-900 outline-none focus:border-blue-500"
+                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-7 pr-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500"
                       />
                     </div>
                     <button
@@ -1277,11 +1279,11 @@ export const PosCheckoutPanel = ({
 
           {/* Datos condicionales simplificados del método elegido */}
           {isTransferMethod && (
-            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs space-y-2">
-              <span className="font-bold text-slate-800 block">Datos de Transferencia:</span>
+            <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 p-3 text-xs space-y-2">
+              <span className="font-bold text-slate-800 dark:text-slate-200 block">Datos de Transferencia:</span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">
+                  <label className="block text-[10px] text-slate-500 dark:text-slate-400 font-semibold mb-0.5">
                     Cuenta bancaria donde ingresa:
                   </label>
                   <select
@@ -1292,7 +1294,7 @@ export const PosCheckoutPanel = ({
                         destinationBankAccountId: e.target.value,
                       }))
                     }
-                    className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
                   >
                     <option value="">Seleccionar cuenta destino (opcional)</option>
                     {destinationBankAccounts.map((b) => (
@@ -1303,7 +1305,7 @@ export const PosCheckoutPanel = ({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">
+                  <label className="block text-[10px] text-slate-500 dark:text-slate-400 font-semibold mb-0.5">
                     Nº de Comprobante / Ref:
                   </label>
                   <input
@@ -1313,7 +1315,7 @@ export const PosCheckoutPanel = ({
                       setTransferDetails((curr) => ({ ...curr, voucherNumber: e.target.value }))
                     }
                     placeholder="Ej: 9842 (opcional)"
-                    className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
                   />
                 </div>
               </div>
@@ -1321,15 +1323,15 @@ export const PosCheckoutPanel = ({
           )}
 
           {isCreditCardMethod && (
-            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs space-y-2">
-              <span className="font-bold text-slate-800 block">Plan de Cuotas:</span>
+            <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 p-3 text-xs space-y-2">
+              <span className="font-bold text-slate-800 dark:text-slate-200 block">Plan de Cuotas:</span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <select
                   value={cardCreditDetails.installmentPlanId}
                   onChange={(e) =>
                     setCardCreditDetails((curr) => ({ ...curr, installmentPlanId: e.target.value }))
                   }
-                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
                 >
                   <option value="">1 cuota sin interés</option>
                   {availableInstallmentPlans.map((plan) => (
@@ -1345,15 +1347,15 @@ export const PosCheckoutPanel = ({
                     setCardCreditDetails((curr) => ({ ...curr, couponNumber: e.target.value }))
                   }
                   placeholder="Nº de cupón (opcional)"
-                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
                 />
               </div>
             </div>
           )}
 
           {isDebitCardMethod && (
-            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs space-y-2">
-              <span className="font-bold text-slate-800 block">Datos Tarjeta de Débito:</span>
+            <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 p-3 text-xs space-y-2">
+              <span className="font-bold text-slate-800 dark:text-slate-200 block">Datos Tarjeta de Débito:</span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input
                   type="text"
@@ -1362,7 +1364,7 @@ export const PosCheckoutPanel = ({
                     setCardDebitDetails((curr) => ({ ...curr, couponNumber: e.target.value }))
                   }
                   placeholder="Nº de cupón (opcional)"
-                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
                 />
                 <input
                   type="text"
@@ -1371,15 +1373,15 @@ export const PosCheckoutPanel = ({
                     setCardDebitDetails((curr) => ({ ...curr, authorizationNumber: e.target.value }))
                   }
                   placeholder="Nº de autorización (opcional)"
-                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
                 />
               </div>
             </div>
           )}
 
           {isMercadoPagoManual && (
-            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs space-y-2">
-              <span className="font-bold text-slate-800 block">Mercado Pago (Transferencia / Manual):</span>
+            <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 p-3 text-xs space-y-2">
+              <span className="font-bold text-slate-800 dark:text-slate-200 block">Mercado Pago (Transferencia / Manual):</span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input
                   type="text"
@@ -1388,7 +1390,7 @@ export const PosCheckoutPanel = ({
                     setMercadoPagoManualDetails((curr) => ({ ...curr, operationId: e.target.value }))
                   }
                   placeholder="ID de Operación MP (opcional)"
-                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
                 />
                 <select
                   value={mercadoPagoManualDetails.destinationBankAccountId}
@@ -1398,7 +1400,7 @@ export const PosCheckoutPanel = ({
                       destinationBankAccountId: e.target.value,
                     }))
                   }
-                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
                 >
                   <option value="">Cuenta destino (opcional)</option>
                   {destinationBankAccounts.map((b) => (
@@ -1412,8 +1414,8 @@ export const PosCheckoutPanel = ({
           )}
 
           {isChequeMethod && (
-            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs space-y-2">
-              <span className="font-bold text-slate-800 block">Datos del Cheque:</span>
+            <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 p-3 text-xs space-y-2">
+              <span className="font-bold text-slate-800 dark:text-slate-200 block">Datos del Cheque:</span>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <input
                   type="text"
@@ -1422,7 +1424,7 @@ export const PosCheckoutPanel = ({
                     setChequeDetails((curr) => ({ ...curr, chequeNumber: e.target.value }))
                   }
                   placeholder="Nº de cheque (opcional)"
-                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
                 />
                 <input
                   type="date"
@@ -1431,7 +1433,7 @@ export const PosCheckoutPanel = ({
                     setChequeDetails((curr) => ({ ...curr, dueDate: e.target.value }))
                   }
                   placeholder="Fecha vencimiento (opcional)"
-                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
                 />
                 <input
                   type="text"
@@ -1440,15 +1442,15 @@ export const PosCheckoutPanel = ({
                     setChequeDetails((curr) => ({ ...curr, approvalNumber: e.target.value }))
                   }
                   placeholder="Nº aprobación (opcional)"
-                  className="w-full rounded-lg border border-slate-300 bg-white p-1.5 text-xs text-slate-800"
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
                 />
               </div>
             </div>
           )}
 
           {isCurrentAccountMethod && (
-            <div className="mt-3 rounded-xl border border-indigo-200 bg-indigo-50/40 p-3 text-xs space-y-1.5">
-              <div className="flex items-center justify-between font-bold text-indigo-900">
+            <div className="mt-3 rounded-xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/40 dark:bg-indigo-950/30 p-3 text-xs space-y-1.5">
+              <div className="flex items-center justify-between font-bold text-indigo-900 dark:text-indigo-200">
                 <span>Cuenta Corriente del Cliente</span>
                 <span>
                   {currentAccountSnapshot?.available != null
@@ -1456,7 +1458,7 @@ export const PosCheckoutPanel = ({
                     : "Sin límite"}
                 </span>
               </div>
-              <p className="text-[11px] text-indigo-700">
+              <p className="text-[11px] text-indigo-700 dark:text-indigo-300">
                 Al confirmar, el monto se registrará como saldo deudor en la cuenta de{" "}
                 <strong>{selectedCustomer?.full_name}</strong>.
               </p>
@@ -1464,10 +1466,10 @@ export const PosCheckoutPanel = ({
           )}
 
           {isMercadoPagoMethod && !isMercadoPagoManual && (
-            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs space-y-2">
+            <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3 text-xs space-y-2">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-800">Terminal Mercado Pago:</span>
-                <span className="text-[11px] font-semibold text-slate-600">
+                <span className="font-bold text-slate-800 dark:text-slate-200">Terminal Mercado Pago:</span>
+                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
                   {mercadoPagoIntent ? `Estado: ${mercadoPagoIntent.status}` : "Listo para iniciar"}
                 </span>
               </div>
@@ -1527,33 +1529,33 @@ export const PosCheckoutPanel = ({
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white shadow-xs">
               3
             </span>
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
               Cierre Fiscal & Facturación
             </h3>
           </div>
 
-          <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 transition hover:bg-slate-100/70">
+          <div className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/60 p-3.5 transition hover:bg-slate-100/70 dark:hover:bg-slate-800/80">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300">
                 <FileText size={18} />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-slate-900">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">
                     Emitir Factura Electrónica (AFIP)
                   </span>
-                  <span className="rounded bg-emerald-100 px-1.5 py-0.2 font-mono text-[9px] font-bold text-emerald-800">
+                  <span className="rounded bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.2 font-mono text-[9px] font-bold text-emerald-800 dark:text-emerald-300">
                     CAE ONLINE
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
                   Sincronización directa con WebServices AFIP / ARCA
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-slate-700 hidden sm:inline-block">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 hidden sm:inline-block">
                 {watchedIssueInvoice
                   ? selectedCustomer?.fiscal_condition === "responsable_inscripto"
                     ? "Factura A"
@@ -1581,7 +1583,7 @@ export const PosCheckoutPanel = ({
         )}
 
         {/* FOOTER: Confirmación destacada */}
-        <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
             <Lock size={12} className="text-emerald-600" />
             <span>Transacción Segura POS Ready</span>

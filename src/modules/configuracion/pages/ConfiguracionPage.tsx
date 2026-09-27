@@ -265,6 +265,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
   const canWriteConfiguracion = canWrite(scopePreset.permissionModule);
 
   const setTheme = useUiStore((state) => state.setTheme);
+  const setSidebarTheme = useUiStore((state) => state.setSidebarTheme);
   const setAccentColor = useUiStore((state) => state.setAccentColor);
   const setDensity = useUiStore((state) => state.setDensity);
   const fontSize = useUiStore((state) => state.fontSize);
@@ -405,6 +406,9 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
 
   const applyAppearance = (appearance: AppearanceSettings) => {
     setTheme(appearance.default_theme);
+    if (appearance.sidebar_theme) {
+      setSidebarTheme(appearance.sidebar_theme);
+    }
     setAccentColor(appearance.accent_color);
     setDensity(appearance.density);
     if (appearance.font_size) {
@@ -941,7 +945,17 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Tema Predeterminado</label>
               <select className="ui-input" value={draft.apariencia.default_theme} onChange={(event) => updateSection("apariencia", { default_theme: event.target.value as AppearanceSettings["default_theme"] })} disabled={!canWriteConfiguracion}>
                 <option value="light">Modo Claro (Recomendado para día)</option>
-                <option value="dark">Modo Oscuro (Recomendado para noche)</option>
+                <option value="midnight">Modo Azul Oscuro (Intermedio, descansado)</option>
+                <option value="dark">Modo Oscuro Profundo (Negro)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Estilo del Menú Lateral</label>
+              <select className="ui-input" value={draft.apariencia.sidebar_theme ?? "auto"} onChange={(event) => updateSection("apariencia", { sidebar_theme: event.target.value as AppearanceSettings["sidebar_theme"] })} disabled={!canWriteConfiguracion}>
+                <option value="auto">Automático (Sigue el modo del sistema)</option>
+                <option value="dark">Siempre Oscuro</option>
+                <option value="light">Siempre Claro</option>
               </select>
             </div>
 

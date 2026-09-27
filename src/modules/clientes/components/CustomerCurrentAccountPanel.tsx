@@ -161,16 +161,16 @@ export const CustomerCurrentAccountPanel = ({
 
       {feedback ? <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>{feedback.message}</div> : null}
       {canWrite && !userId ? (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <div className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
           No hay usuario activo en sesion. Inicia sesion nuevamente para registrar pagos o ajustes.
         </div>
       ) : canWrite && !hasOpenCashSession ? (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        <div className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
           No hay caja abierta para el usuario actual. Puedes consultar movimientos y registrar deudas manuales,
           pero para registrar pagos en efectivo/tarjeta debes abrir caja.
         </div>
       ) : hasOpenCashSession ? (
-        <p className="text-xs text-emerald-700">Caja abierta para registrar cobros</p>
+        <p className="text-xs text-emerald-700 dark:text-emerald-400">Caja abierta para registrar cobros</p>
       ) : null}
 
       {canWrite ? (

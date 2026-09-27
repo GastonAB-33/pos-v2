@@ -81,12 +81,16 @@ const generateNextDocumentNumber = async (
   tenantId: string,
   documentType: InvoiceDocumentType
 ): Promise<string> => {
-  const allInvoices = await invoicesCrud.getAllByTenant(tenantId);
-  const sameType = allInvoices.filter((invoice) => invoice.document_type === documentType);
-  const maxSequence = sameType.reduce((max, invoice) => {
-    const current = extractSequenceFromDocumentNumber(invoice.document_number);
-    return current > max ? current : max;
-  }, 0);
+  const latestInvoices = await invoicesCrud.query(tenantId, {
+    eq: { document_type: documentType },
+    order: { column: "document_number", ascending: false },
+    limit: 1,
+  });
+
+  const maxSequence =
+    latestInvoices.length > 0
+      ? extractSequenceFromDocumentNumber(latestInvoices[0].document_number)
+      : 0;
 
   const nextSequence = maxSequence + 1;
   return `${documentPrefixByType[documentType]}-${String(nextSequence).padStart(8, "0")}`;
@@ -143,10 +147,8 @@ export const invoicesService = {
   },
   delete: (tenantId: string, id: string) => invoicesCrud.delete(tenantId, id),
 
-  getBySaleId: async (tenantId: string, saleId: string) => {
-    const all = await invoicesCrud.getAllByTenant(tenantId);
-    return all.filter((invoice) => invoice.sale_id === saleId);
-  },
+  getBySaleId: (tenantId: string, saleId: string) =>
+    invoicesCrud.query(tenantId, { eq: { sale_id: saleId } }),
 
   generateDocumentNumber: generateNextDocumentNumber,
 

@@ -25,17 +25,11 @@ export const JirehLogo: React.FC<JirehLogoProps> = ({
   return (
     <div className={`flex items-center gap-2.5 select-none ${className}`}>
       {/* Isotipo oficial Jireh con los 3 colores: Turquesa (#00B5C8), Verde Lima (#7CE01E) y Naranja (#FF7800) */}
-      <div
-        className={`relative flex items-center justify-center shrink-0 ${
-          isLight ? "bg-white rounded-xl p-1 shadow-sm" : ""
-        }`}
-      >
+      <div className="relative flex items-center justify-center shrink-0">
         <img
-          src="/jireh-logo.jpg"
+          src="/jireh-logo.png"
           alt="Jireh Logo"
-          className={`${sizeConfig.imgH} w-auto object-contain transition-transform duration-300 hover:scale-105 ${
-            !isLight ? "mix-blend-multiply" : ""
-          }`}
+          className={`${sizeConfig.imgH} w-auto object-contain transition-transform duration-300 hover:scale-105`}
           loading="eager"
         />
       </div>

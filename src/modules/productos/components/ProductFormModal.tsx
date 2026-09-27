@@ -28,6 +28,8 @@ interface ProductFormModalProps {
   disabled?: boolean;
   categoryOptions: string[];
   subcategoryOptions: string[];
+  initialBarcode?: string | null;
+  initialName?: string | null;
   onClose: () => void;
   onSubmit: (values: ProductFormModalValues) => Promise<void>;
 }
@@ -171,6 +173,8 @@ export const ProductFormModal = ({
   disabled,
   categoryOptions,
   subcategoryOptions,
+  initialBarcode,
+  initialName,
   onClose,
   onSubmit,
 }: ProductFormModalProps) => {
@@ -231,7 +235,11 @@ export const ProductFormModal = ({
     if (!open) return;
 
     if (!product) {
-      reset(createDefaults());
+      reset({
+        ...createDefaults(),
+        codigoBarras: initialBarcode ? initialBarcode.trim() : "",
+        nombre: initialName ? initialName.trim() : "",
+      });
       setCalcMode("forward");
       setPhotoError(null);
       setImageEditorSource(null);

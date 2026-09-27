@@ -86,12 +86,19 @@ export const useProductsStore = create<ProductsCatalogState>()(
         set({ isLoading: true, error: null });
 
     try {
-      const [list, barcodeMap, barcodes, lists] = await Promise.all([
+      const [list, barcodes, lists] = await Promise.all([
         productsService.getAllByTenant(tenantId),
-        productsService.getPrimaryBarcodesMapByTenant(tenantId),
         productsService.getBarcodesByTenant(tenantId),
         priceListsService.getAllByTenant(tenantId),
       ]);
+
+      const barcodeMap: Record<string, string> = {};
+      for (const barcode of barcodes) {
+        if (!barcode.barcode) continue;
+        if (!barcodeMap[barcode.product_id] || barcode.is_primary) {
+          barcodeMap[barcode.product_id] = barcode.barcode;
+        }
+      }
 
       set({
         products: sortByName(list),

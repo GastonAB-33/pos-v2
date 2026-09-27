@@ -549,8 +549,12 @@ export interface BarcodeScaleSettings {
 
 export type UiFontSize = "compact" | "normal" | "large" | "extra-large";
 
+export type UiTheme = "light" | "midnight" | "dark";
+export type SidebarTheme = "auto" | "dark" | "light";
+
 export interface AppearanceSettings {
-  default_theme: "light" | "dark";
+  default_theme: UiTheme;
+  sidebar_theme?: SidebarTheme;
   accent_color: string;
   display_name: string;
   density: UiDensity;

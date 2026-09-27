@@ -502,7 +502,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       await productsService.setPrimaryBarcode(tenantId, created.id, values.codigoBarras ?? "");
       upsertProductInState(created);
       patchPrimaryBarcodeState(created.id, values.codigoBarras ?? "");
-      await auditService.createSafe(tenantId, {
+      void auditService.createSafe(tenantId, {
         user_id: userId,
         module: "productos",
         action: "create",
@@ -528,7 +528,6 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           ? `Producto creado sin imagen. ${imageUploadWarning}`
           : "Producto creado",
       });
-      await loadProducts();
     } catch (error) {
       const message = error instanceof Error && error.message ? error.message : "Error al crear producto";
       setFeedback({ type: "error", message });
@@ -610,7 +609,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       patchPrimaryBarcodeState(productId, values.codigoBarras ?? "");
       const previousBarcode = normalizeBarcode(primaryBarcodes[productId] ?? null) ?? null;
       const nextBarcode = normalizeBarcode(values.codigoBarras ?? null) ?? null;
-      await auditService.createSafe(tenantId, {
+      void auditService.createSafe(tenantId, {
         user_id: userId,
         module: "productos",
         action: "update",
@@ -650,12 +649,69 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
         },
       });
       setFeedback({ type: "success", message: "Producto actualizado" });
-      await loadProducts();
     } catch (error) {
       const message = error instanceof Error && error.message ? error.message : "Error al actualizar producto";
       setFeedback({ type: "error", message });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const updateProductPricing = async (
+    productId: string,
+    pricing: {
+      costPrice: number;
+      profitPercent: number;
+      vatPercent: number;
+      priceWithoutVat: number;
+      finalPrice: number;
+    }
+  ): Promise<Product | null> => {
+    if (!tenantId) return null;
+    const existing = products.find((product) => product.id === productId);
+    if (!existing) return null;
+
+    try {
+      const payload = {
+        cost_price: roundMoney(pricing.costPrice),
+        profit_percent: roundPercent(pricing.profitPercent),
+        vat_percent: roundPercent(pricing.vatPercent),
+        price_without_vat: roundMoney(pricing.priceWithoutVat),
+        price: roundMoney(pricing.finalPrice),
+      };
+
+      const updated = await productsService.update(tenantId, productId, payload);
+      const optimistic: Product = {
+        ...existing,
+        ...payload,
+        updated_at: new Date().toISOString(),
+      };
+      const finalProduct = updated ?? optimistic;
+      upsertProductInState(finalProduct);
+
+      void auditService.createSafe(tenantId, {
+        user_id: userId,
+        module: "productos",
+        action: "update_pricing_quick",
+        entity_type: "product",
+        entity_id: productId,
+        description: `Consulta rápida: precio actualizado para ${existing.name} ($${pricing.finalPrice})`,
+        metadata: {
+          previous_price: existing.price,
+          next_price: pricing.finalPrice,
+          previous_cost_price: existing.cost_price,
+          next_cost_price: pricing.costPrice,
+          profit_percent: pricing.profitPercent,
+          vat_percent: pricing.vatPercent,
+        },
+      });
+
+      return finalProduct;
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message ? error.message : "Error al actualizar precio";
+      setFeedback({ type: "error", message });
+      throw error;
     }
   };
 
@@ -667,7 +723,6 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       await productsService.delete(tenantId, productId);
       removeProductFromState(productId);
       setFeedback({ type: "success", message: "Producto eliminado" });
-      await loadProducts();
     } catch (error) {
       if (isProductDeleteConflictError(error)) {
         const updated = await productsService.update(tenantId, productId, {
@@ -683,7 +738,6 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           type: "success",
           message: "Producto con movimientos previos: se desactivo en lugar de eliminarse",
         });
-        await loadProducts();
         return;
       }
 
@@ -1289,6 +1343,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
     reload: loadProducts,
     createProduct,
     updateProduct,
+    updateProductPricing,
     deleteProduct,
     deleteProductsBulk,
     toggleProductActive,

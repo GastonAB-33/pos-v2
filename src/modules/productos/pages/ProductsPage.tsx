@@ -12,6 +12,7 @@ import { ProductAuditLog } from "@/modules/productos/components/ProductAuditLog"
 import { ProductFilters } from "@/modules/productos/components/ProductFilters";
 import { ProductFormModal } from "@/modules/productos/components/ProductFormModal";
 import { ProductImportModal } from "@/modules/productos/components/ProductImportModal";
+import { ProductQuickPriceModal } from "@/modules/productos/components/ProductQuickPriceModal";
 import { ProductTable } from "@/modules/productos/components/ProductTable";
 import { useProducts } from "@/modules/productos/hooks/useProducts";
 import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
@@ -20,6 +21,9 @@ import type { ProductFormModalValues, ProductViewModel } from "@/modules/product
 type ProductModalState = {
   mode: "create" | "edit";
   product: ProductViewModel | null;
+  initialBarcode?: string | null;
+  initialName?: string | null;
+  fromQuickPrice?: boolean;
 };
 
 export const ProductsPage = () => {
@@ -35,6 +39,8 @@ export const ProductsPage = () => {
 
   const [formModal, setFormModal] = useState<ProductModalState | null>(null);
   const [barcodeProduct, setBarcodeProduct] = useState<ProductViewModel | null>(null);
+  const [quickPriceOpen, setQuickPriceOpen] = useState(false);
+  const [quickPriceInitialQuery, setQuickPriceInitialQuery] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -65,7 +71,7 @@ export const ProductsPage = () => {
   };
 
   useBarcodeScanner({
-    enabled: !formModal && !barcodeProduct && !importOpen,
+    enabled: !formModal && !barcodeProduct && !importOpen && !quickPriceOpen,
     onScan: (scannedBarcode) => {
       const clean = scannedBarcode.trim();
       if (clean) {
@@ -98,8 +104,34 @@ export const ProductsPage = () => {
   }
 
   const handleSaveProduct = async (values: ProductFormModalValues) => {
+    const wasFromQuickPrice = formModal?.fromQuickPrice;
     await products.saveProduct(formModal?.mode ?? "create", values, formModal?.product?.entity ?? null);
     setFormModal(null);
+    if (wasFromQuickPrice) {
+      setQuickPriceInitialQuery(values.codigoBarras || values.codigoProducto || values.nombre || null);
+      setQuickPriceOpen(true);
+    }
+  };
+
+  const handleCloseFormModal = () => {
+    const wasFromQuickPrice = formModal?.fromQuickPrice;
+    setFormModal(null);
+    if (wasFromQuickPrice) {
+      setQuickPriceOpen(true);
+    }
+  };
+
+  const handleOpenCreateFromQuickPrice = (query?: string) => {
+    setQuickPriceOpen(false);
+    const trimmed = query?.trim() ?? "";
+    const isBarcodeLike = trimmed.length >= 6 && /^\d+$/.test(trimmed);
+    setFormModal({
+      mode: "create",
+      product: null,
+      initialBarcode: isBarcodeLike ? trimmed : null,
+      initialName: !isBarcodeLike && trimmed ? trimmed : null,
+      fromQuickPrice: true,
+    });
   };
 
   return (
@@ -137,6 +169,7 @@ export const ProductsPage = () => {
             if (!ok) return;
             void products.deleteSelected();
           }}
+          onOpenQuickPriceCheck={() => setQuickPriceOpen(true)}
           onSelectAllFiltered={() => products.toggleSelectAllVisible(true)}
           onClearSelection={() => products.setSelectedIds([])}
       />
@@ -194,14 +227,16 @@ export const ProductsPage = () => {
       />
 
       <ProductFormModal
-        key={`${formModal?.mode ?? "create"}-${formModal?.product?.entity.id ?? "new"}`}
+        key={`${formModal?.mode ?? "create"}-${formModal?.product?.entity.id ?? "new"}-${formModal?.initialBarcode ?? ""}`}
         open={Boolean(formModal)}
         mode={formModal?.mode ?? "create"}
         product={formModal?.product ?? null}
+        initialBarcode={formModal?.initialBarcode}
+        initialName={formModal?.initialName}
         categoryOptions={products.categoryOptions}
         subcategoryOptions={products.subcategoryOptions}
         disabled={products.isSubmitting || !canWriteProductos}
-        onClose={() => setFormModal(null)}
+        onClose={handleCloseFormModal}
         onSubmit={handleSaveProduct}
       />
 
@@ -209,6 +244,20 @@ export const ProductsPage = () => {
         open={Boolean(barcodeProduct)}
         product={barcodeProduct}
         onClose={() => setBarcodeProduct(null)}
+      />
+
+      <ProductQuickPriceModal
+        open={quickPriceOpen}
+        onClose={() => {
+          setQuickPriceOpen(false);
+          setQuickPriceInitialQuery(null);
+        }}
+        initialQuery={quickPriceInitialQuery}
+        products={products.productsView}
+        barcodesByProductId={products.barcodesByProductId}
+        canWrite={canWriteProductos}
+        onSavePrice={products.updateProductPricing}
+        onCreateNewProduct={handleOpenCreateFromQuickPrice}
       />
 
       {importOpen ? (

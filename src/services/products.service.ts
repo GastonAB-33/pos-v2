@@ -109,14 +109,10 @@ export const productsService = {
     const barcode = normalizeBarcode(rawBarcode);
     if (!barcode) return null;
 
-    const allBarcodes = await barcodeCrud.getAllByTenant(tenantId);
-    const matches = allBarcodes.filter((item) => normalizeBarcode(item.barcode) === barcode);
+    const matches = await barcodeCrud.query(tenantId, { eq: { barcode } });
     if (!matches.length) {
-      const allProducts = await crud.getAllByTenant(tenantId);
-      const matchedProduct = allProducts.find(
-        (item) => Boolean(item.code) && normalizeBarcode(item.code as string) === barcode
-      );
-      return matchedProduct ?? null;
+      const matchedProducts = await crud.query(tenantId, { eq: { code: barcode }, limit: 1 });
+      return matchedProducts[0] ?? null;
     }
 
     const preferred = matches.find((item) => item.is_primary) ?? matches[0];
@@ -144,22 +140,26 @@ export const productsService = {
     rawBarcode: string
   ): Promise<ProductBarcode | null> => {
     const barcode = normalizeBarcode(rawBarcode);
-    const allBarcodes = await barcodeCrud.getAllByTenant(tenantId);
-    const currentProductBarcodes = allBarcodes.filter((item) => item.product_id === productId);
 
     if (!barcode) {
+      const currentProductBarcodes = await barcodeCrud.query(tenantId, {
+        eq: { product_id: productId },
+      });
       const primaryRows = currentProductBarcodes.filter((item) => item.is_primary);
       await Promise.all(primaryRows.map((row) => barcodeCrud.delete(tenantId, row.id)));
       return null;
     }
 
-    const duplicated = allBarcodes.find(
-      (item) => item.product_id !== productId && normalizeBarcode(item.barcode) === barcode
-    );
+    const matchesWithBarcode = await barcodeCrud.query(tenantId, { eq: { barcode } });
+    const duplicated = matchesWithBarcode.find((item) => item.product_id !== productId);
 
     if (duplicated) {
       throw new Error("El codigo de barras ya esta asignado a otro producto");
     }
+
+    const currentProductBarcodes = await barcodeCrud.query(tenantId, {
+      eq: { product_id: productId },
+    });
 
     const existing = currentProductBarcodes.find(
       (item) => normalizeBarcode(item.barcode) === barcode

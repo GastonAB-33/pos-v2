@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, CircleEllipsis, LifeBuoy, Menu, Newspaper, RefreshCw, Type, UserRound } from "lucide-react";
+import { Bell, CircleEllipsis, LifeBuoy, Menu, Moon, MoonStar, Newspaper, RefreshCw, Sun, Type, UserRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/useToast";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
@@ -19,6 +19,7 @@ import { usersService } from "@/services/users.service";
 import { useUiStore } from "@/store/ui.store";
 import type { Product, UserRecord } from "@/types/entities";
 import { storageKeys } from "@/utils/local-storage";
+import { cn } from "@/utils/cn";
 
 type TopbarPanel = "support" | "tasks" | "chat" | "notifications" | "user" | "more" | "changelog" | null;
 type TaskStatus = "pendiente" | "completada";
@@ -161,9 +162,12 @@ export const Topbar = () => {
   } = useOffline();
   const { canInstall, isInstalling, isInstalled, installApp, isInstallSupported } = usePwa();
   const theme = useUiStore((state) => state.theme);
+  const setTheme = useUiStore((state) => state.setTheme);
+  const cycleTheme = useUiStore((state) => state.cycleTheme);
+  const sidebarTheme = useUiStore((state) => state.sidebarTheme);
+  const setSidebarTheme = useUiStore((state) => state.setSidebarTheme);
   const fontSize = useUiStore((state) => state.fontSize);
   const cycleFontSize = useUiStore((state) => state.cycleFontSize);
-  const toggleTheme = useUiStore((state) => state.toggleTheme);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
 
   const [now, setNow] = useState(() => new Date());
@@ -644,6 +648,27 @@ export const Topbar = () => {
 
         <button
           type="button"
+          className="ui-btn-ghost gap-1.5 px-2 text-xs font-semibold"
+          title={`Tema: ${theme === "midnight" ? "Azul Oscuro (Intermedio)" : theme === "dark" ? "Oscuro" : "Claro"}. Clic para cambiar.`}
+          onClick={(e) => {
+            e.stopPropagation();
+            cycleTheme();
+          }}
+        >
+          {theme === "midnight" ? (
+            <MoonStar aria-hidden="true" size={15} className="text-indigo-400" />
+          ) : theme === "dark" ? (
+            <Moon aria-hidden="true" size={15} className="text-amber-300" />
+          ) : (
+            <Sun aria-hidden="true" size={15} className="text-amber-500" />
+          )}
+          <span className="hidden sm:inline">
+            {theme === "midnight" ? "Azul" : theme === "dark" ? "Oscuro" : "Claro"}
+          </span>
+        </button>
+
+        <button
+          type="button"
           className="ui-btn-ghost relative gap-1 px-2 text-xs"
           onClick={(e) => {
             e.stopPropagation();
@@ -1106,10 +1131,103 @@ export const Topbar = () => {
               </div>
             )}
 
-            <button type="button" onClick={toggleTheme} className="ui-btn-ghost text-xs">
-              {theme === "dark" ? "Modo claro" : "Modo oscuro"}
-            </button>
+          </div>
 
+          <div className="space-y-1.5 border-t border-slate-200/80 pt-2.5 dark:border-slate-800">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Tema del sistema
+            </p>
+            <div className="grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setTheme("light")}
+                className={cn(
+                  "flex items-center justify-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition",
+                  theme === "light"
+                    ? "bg-white text-slate-900 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                )}
+              >
+                <Sun size={13} className="text-amber-500" />
+                Claro
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme("midnight")}
+                className={cn(
+                  "flex items-center justify-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition",
+                  theme === "midnight"
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                )}
+              >
+                <MoonStar size={13} className="text-indigo-400" />
+                Azul
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme("dark")}
+                className={cn(
+                  "flex items-center justify-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition",
+                  theme === "dark"
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                )}
+              >
+                <Moon size={13} className="text-amber-300" />
+                Oscuro
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5 border-t border-slate-200/80 pt-2 dark:border-slate-800">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Menú lateral
+            </p>
+            <div className="grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setSidebarTheme("auto")}
+                className={cn(
+                  "rounded-md px-2 py-1 text-xs font-medium transition text-center",
+                  sidebarTheme === "auto"
+                    ? "bg-white text-slate-900 shadow-xs dark:bg-slate-900 dark:text-white"
+                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                )}
+                title="Sigue el modo claro/oscuro del sistema automáticamente"
+              >
+                Auto
+              </button>
+              <button
+                type="button"
+                onClick={() => setSidebarTheme("dark")}
+                className={cn(
+                  "rounded-md px-2 py-1 text-xs font-medium transition text-center",
+                  sidebarTheme === "dark"
+                    ? "bg-white text-slate-900 shadow-xs dark:bg-slate-900 dark:text-white"
+                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                )}
+                title="Menú lateral siempre oscuro"
+              >
+                Oscuro
+              </button>
+              <button
+                type="button"
+                onClick={() => setSidebarTheme("light")}
+                className={cn(
+                  "rounded-md px-2 py-1 text-xs font-medium transition text-center",
+                  sidebarTheme === "light"
+                    ? "bg-white text-slate-900 shadow-xs dark:bg-slate-900 dark:text-white"
+                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                )}
+                title="Menú lateral siempre claro"
+              >
+                Claro
+              </button>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200/80 pt-2 dark:border-slate-800">
             <button
               type="button"
               onClick={() => {
@@ -1117,9 +1235,9 @@ export const Topbar = () => {
                 clearSession();
                 navigate(routePaths.login, { replace: true });
               }}
-              className="ui-btn-ghost text-xs"
+              className="ui-btn-ghost w-full justify-center text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/40"
             >
-              Salir
+              Cerrar sesión
             </button>
           </div>
         </div>

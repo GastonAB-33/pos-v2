@@ -331,47 +331,47 @@ export const CuentasCorrientesProveedoresPage = () => {
       <div className="cuentas-corrientes-proveedores-workspace space-y-4">
         {/* KPI Metrics */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <article className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 shadow-sm">
+          <article className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 shadow-sm dark:border-rose-900/60 dark:bg-rose-950/30">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-rose-800">
+              <span className="text-xs font-semibold uppercase tracking-wider text-rose-800 dark:text-rose-300">
                 Deuda Total con Proveedores
               </span>
-              <Building2 className="h-5 w-5 text-rose-600" />
+              <Building2 className="h-5 w-5 text-rose-600 dark:text-rose-400" />
             </div>
-            <p className="mt-2 text-2xl font-bold tracking-tight text-rose-900">
+            <p className="mt-2 text-2xl font-bold tracking-tight text-rose-900 dark:text-rose-100">
               {currency.format(totalDebt)}
             </p>
-            <p className="mt-1 text-xs text-rose-700">
+            <p className="mt-1 text-xs text-rose-700 dark:text-rose-400">
               Saldo acumulado a pagar
             </p>
           </article>
 
-          <article className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm">
+          <article className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/30">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-amber-800">
+              <span className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">
                 Proveedores con Saldo Pendiente
               </span>
-              <Truck className="h-5 w-5 text-amber-600" />
+              <Truck className="h-5 w-5 text-amber-600 dark:text-amber-400" />
             </div>
-            <p className="mt-2 text-2xl font-bold tracking-tight text-amber-900">
+            <p className="mt-2 text-2xl font-bold tracking-tight text-amber-900 dark:text-amber-100">
               {suppliersWithDebtCount}
             </p>
-            <p className="mt-1 text-xs text-amber-700">
+            <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
               De {suppliers.length} proveedores activos
             </p>
           </article>
 
-          <article className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-sm">
+          <article className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/30">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
+              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
                 Proveedores al Día
               </span>
-              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-900">
+            <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-900 dark:text-emerald-100">
               {suppliers.length - suppliersWithDebtCount}
             </p>
-            <p className="mt-1 text-xs text-emerald-700">
+            <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
               Sin saldo deudor pendiente
             </p>
           </article>
