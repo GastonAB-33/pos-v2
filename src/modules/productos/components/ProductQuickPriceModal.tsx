@@ -14,7 +14,6 @@ import {
   X,
 } from "lucide-react";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
-import { IconButton } from "@/components/ui/IconButton";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
@@ -30,6 +29,14 @@ import { handleNumericInputFocus } from "@/utils/input-helpers";
 import { matchesProductSearch, normalizeSearchQuery } from "@/utils/search";
 
 type CalcMode = "forward" | "reverse";
+
+interface FieldErrors {
+  costPrice?: string;
+  profitPercent?: string;
+  vatPercent?: string;
+  finalPrice?: string;
+  general?: string;
+}
 
 interface ProductQuickPriceModalProps {
   open: boolean;
@@ -90,8 +97,25 @@ export const ProductQuickPriceModal = ({
 
   const [isSaving, setIsSaving] = useState(false);
   const [calcMode, setCalcMode] = useState<CalcMode>("forward");
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [flashStatus, setFlashStatus] = useState<"success" | "error" | null>(null);
+  const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+    };
+  }, []);
+
+  const clearFieldError = (field: keyof FieldErrors) => {
+    setFieldErrors((prev) => {
+      if (!prev[field] && !prev.general) return prev;
+      const next = { ...prev };
+      delete next[field];
+      delete next.general;
+      return next;
+    });
+  };
 
   // Estado para confirmación de cambios no guardados
   const [pendingProduct, setPendingProduct] = useState<ProductViewModel | null>(null);
@@ -147,8 +171,8 @@ export const ProductQuickPriceModal = ({
       setSelectedProduct(null);
       setNotFoundCode(null);
       setCalcMode("forward");
-      setSuccessMessage(null);
-      setErrorMessage(null);
+      setFieldErrors({});
+      setFlashStatus(null);
       setPendingProduct(null);
       setPendingCreateQuery(null);
       setPendingSearchQuery(null);
@@ -166,8 +190,8 @@ export const ProductQuickPriceModal = ({
     setPriceWithoutVat(product.precioSinIva || 0);
     setFinalPrice(product.precioFinal || 0);
     setCalcMode("forward");
-    setSuccessMessage(null);
-    setErrorMessage(null);
+    setFieldErrors({});
+    setFlashStatus(null);
     setSearchQuery("");
     setShowUnsavedPrompt(false);
     setPendingProduct(null);
@@ -249,9 +273,14 @@ export const ProductQuickPriceModal = ({
         setSearchQuery("");
       }
     } catch (err) {
-      setErrorMessage(
-        err instanceof Error ? err.message : "Error al guardar el precio del producto"
-      );
+      setFlashStatus("error");
+      setFieldErrors({
+        general: err instanceof Error ? err.message : "Error al guardar el precio del producto",
+      });
+      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+      flashTimeoutRef.current = setTimeout(() => {
+        setFlashStatus(null);
+      }, 1500);
     } finally {
       setIsSaving(false);
       setPendingProduct(null);
@@ -343,7 +372,6 @@ export const ProductQuickPriceModal = ({
       return;
     }
     setSearchQuery(val);
-    setSuccessMessage(null);
     if (selectedProduct && val.trim() !== "") {
       setSelectedProduct(null);
     }
@@ -360,8 +388,8 @@ export const ProductQuickPriceModal = ({
     setSearchQuery("");
     setSelectedProduct(null);
     setNotFoundCode(null);
-    setSuccessMessage(null);
-    setErrorMessage(null);
+    setFieldErrors({});
+    setFlashStatus(null);
     setTimeout(() => {
       searchInputRef.current?.focus();
     }, 50);
@@ -453,6 +481,7 @@ export const ProductQuickPriceModal = ({
   // Recálculos de precios reactivos (idénticos a la lógica del módulo de productos)
   const handleCostChange = (newCost: number) => {
     setCostPrice(newCost);
+    clearFieldError("costPrice");
     setCalcMode("forward");
     const forward = computePricingForward({
       precioCosto: newCost,
@@ -461,11 +490,11 @@ export const ProductQuickPriceModal = ({
     });
     setPriceWithoutVat(forward.precioSinIva);
     setFinalPrice(forward.precioFinal);
-    setSuccessMessage(null);
   };
 
   const handleProfitChange = (newProfit: number) => {
     setProfitPercent(newProfit);
+    clearFieldError("profitPercent");
     if (calcMode === "reverse") {
       const reverse = computePricingReverse({
         precioFinal: finalPrice,
@@ -483,11 +512,11 @@ export const ProductQuickPriceModal = ({
       setPriceWithoutVat(forward.precioSinIva);
       setFinalPrice(forward.precioFinal);
     }
-    setSuccessMessage(null);
   };
 
   const handleVatChange = (newVat: number) => {
     setVatPercent(newVat);
+    clearFieldError("vatPercent");
     if (calcMode === "reverse") {
       const reverse = computePricingReverse({
         precioFinal: finalPrice,
@@ -505,11 +534,11 @@ export const ProductQuickPriceModal = ({
       setPriceWithoutVat(forward.precioSinIva);
       setFinalPrice(forward.precioFinal);
     }
-    setSuccessMessage(null);
   };
 
   const handleFinalPriceChange = (newFinalPrice: number) => {
     setFinalPrice(newFinalPrice);
+    clearFieldError("finalPrice");
     setCalcMode("reverse");
     const reverse = computePricingReverse({
       precioFinal: newFinalPrice,
@@ -518,16 +547,39 @@ export const ProductQuickPriceModal = ({
     });
     setPriceWithoutVat(reverse.precioSinIva);
     setCostPrice(reverse.precioCosto);
-    setSuccessMessage(null);
   };
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!selectedProduct) return;
 
+    // Validación de datos
+    const errors: FieldErrors = {};
+    if (isNaN(costPrice) || costPrice < 0) {
+      errors.costPrice = "El precio de costo no puede ser menor a 0.";
+    }
+    if (isNaN(profitPercent) || profitPercent < -100) {
+      errors.profitPercent = "El margen de ganancia no puede ser menor a -100%.";
+    }
+    if (isNaN(vatPercent) || vatPercent < 0) {
+      errors.vatPercent = "La alícuota de IVA no puede ser menor a 0%.";
+    }
+    if (isNaN(finalPrice) || finalPrice <= 0) {
+      errors.finalPrice = "El precio final de venta debe ser mayor a 0.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setFlashStatus("error");
+      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+      flashTimeoutRef.current = setTimeout(() => {
+        setFlashStatus(null);
+      }, 1500);
+      return;
+    }
+
     setIsSaving(true);
-    setSuccessMessage(null);
-    setErrorMessage(null);
+    setFieldErrors({});
 
     try {
       await onSavePrice(selectedProduct.entity.id, {
@@ -551,9 +603,12 @@ export const ProductQuickPriceModal = ({
           : null
       );
 
-      setSuccessMessage(
-        `Precio guardado correctamente para "${selectedProduct.nombre}". Podés escanear el siguiente producto.`
-      );
+      // Destello verde de confirmación
+      setFlashStatus("success");
+      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+      flashTimeoutRef.current = setTimeout(() => {
+        setFlashStatus(null);
+      }, 1500);
 
       const isMobile =
         typeof window !== "undefined" &&
@@ -583,9 +638,17 @@ export const ProductQuickPriceModal = ({
         setTimeout(scrollToTop, 280);
       }
     } catch (err) {
-      setErrorMessage(
-        err instanceof Error ? err.message : "Error al guardar el nuevo precio del producto"
-      );
+      setFlashStatus("error");
+      setFieldErrors({
+        general:
+          err instanceof Error
+            ? err.message
+            : "Error al guardar el nuevo precio del producto",
+      });
+      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+      flashTimeoutRef.current = setTimeout(() => {
+        setFlashStatus(null);
+      }, 1500);
     } finally {
       setIsSaving(false);
     }
@@ -601,8 +664,8 @@ export const ProductQuickPriceModal = ({
 
     setSelectedProduct(null);
     setSearchQuery("");
-    setSuccessMessage(null);
-    setErrorMessage(null);
+    setFieldErrors({});
+    setFlashStatus(null);
     setTimeout(() => {
       searchInputRef.current?.focus();
     }, 50);
@@ -618,33 +681,39 @@ export const ProductQuickPriceModal = ({
     >
       <div className="relative w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900 md:p-6 max-h-[92vh] flex flex-col overflow-hidden">
         {/* Encabezado */}
-        <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800 flex-shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
-              <Tag className="h-5 w-5" />
+        <div className="mb-4 flex items-center justify-between gap-2.5 sm:gap-3 border-b border-slate-200 pb-3 dark:border-slate-800 flex-shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            {/* Ícono de etiqueta (con shrink-0 para que nunca se deforme ni corte en pantallas móviles) */}
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 shadow-xs">
+              <Tag className="h-5 w-5 shrink-0" />
             </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                Consulta Rápida de Precios
-                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 leading-tight">
+                  Consulta Rápida
+                </h3>
+                {/* Badge En vivo: en una sola línea (whitespace-nowrap) y con punto indicador animado */}
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300/40 dark:border-emerald-700/60 shrink-0">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                   En vivo
                 </span>
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Escaneá productos continuamente con el lector o buscá por nombre para consultar y actualizar precios en segundos.
+              </div>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 truncate hidden sm:block">
+                Escaneá con lector de barra o buscá para actualizar precios al instante.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             {onCreateNewProduct && (
               <button
                 type="button"
                 onClick={() => attemptCreateNew()}
-                className="ui-btn-ghost text-xs inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 py-1.5 px-2.5 text-slate-700 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400"
+                className="ui-btn-ghost text-xs inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 py-1.5 px-2.5 text-slate-700 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-xl"
                 title="Crear un nuevo producto en el catálogo"
               >
-                <Plus size={14} />
+                <Plus size={16} />
                 <span className="hidden sm:inline">Nuevo producto</span>
               </button>
             )}
@@ -681,88 +750,76 @@ export const ProductQuickPriceModal = ({
               ) : null}
             </div>
 
-            <IconButton
-              icon={Camera}
-              label="Escanear con cámara"
-              onClick={() => setScannerOpen(true)}
-              className="ui-btn-ghost border border-slate-200 dark:border-slate-700 h-10 w-10 flex-shrink-0"
-              title="Abrir lector de cámara"
-            />
-          </div>
-        </div>
-
-        {/* Mensaje de éxito o error */}
-        {successMessage && (
-          <div className="mb-3 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300 animate-in fade-in flex-shrink-0">
-            <CheckCircle2 size={18} className="text-emerald-600 flex-shrink-0" />
-            <span className="flex-1 font-medium">{successMessage}</span>
+            {/* Botón de cámara destacado con icono nítido y fácil de pulsar en móvil */}
             <button
               type="button"
-              onClick={handleResetForNextProduct}
-              className="ui-btn-secondary text-xs py-1 px-2.5 font-semibold"
+              onClick={() => setScannerOpen(true)}
+              title="Abrir lector de cámara"
+              aria-label="Escanear con cámara"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 transition hover:border-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-emerald-500/60 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400 shadow-xs"
             >
-              Consultar otro
+              <Camera className="h-6 w-6 text-slate-600 transition-colors dark:text-slate-200" />
             </button>
           </div>
-        )}
-
-        {errorMessage && (
-          <div className="mb-3 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300 flex-shrink-0">
-            <span>{errorMessage}</span>
-          </div>
-        )}
+        </div>
 
         {/* Contenido Principal */}
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pr-1">
           {selectedProduct && searchQuery.trim().length === 0 ? (
             <div className="space-y-4">
-              {/* Tarjeta de Información del Producto Seleccionado */}
+              {/* Tarjeta de Información del Producto Seleccionado (Panel de Vista Previa) */}
               <div
                 ref={productInfoCardRef}
-                className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-800/40"
+                className={`rounded-2xl border p-4 transition-all duration-300 ${
+                  flashStatus === "success"
+                    ? "border-emerald-500 ring-4 ring-emerald-500/30 bg-emerald-50/80 dark:border-emerald-400 dark:bg-emerald-950/40 shadow-lg shadow-emerald-500/20"
+                    : flashStatus === "error"
+                    ? "border-red-500 ring-4 ring-red-500/30 bg-red-50/60 dark:border-red-400 dark:bg-red-950/40 shadow-lg shadow-red-500/20"
+                    : "border-slate-200 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-800/40"
+                }`}
               >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="rounded bg-slate-200/80 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
-                        {selectedProduct.categoria || "Sin categoría"}
-                      </span>
-                      {selectedProduct.codigoProducto && (
-                        <span className="font-mono text-xs text-slate-500">
-                          Cód: {selectedProduct.codigoProducto}
-                        </span>
-                      )}
-                      {selectedProduct.codigoBarras && (
-                        <span className="font-mono text-xs text-slate-500 bg-white dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-                          {selectedProduct.codigoBarras}
-                        </span>
-                      )}
-                    </div>
-
-                    <h4 className="mt-1 text-base font-bold text-slate-900 dark:text-slate-100 truncate">
-                      {selectedProduct.nombre}
-                    </h4>
-
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      Stock actual:{" "}
-                      <span
-                        className={
-                          selectedProduct.stock <= 0
-                            ? "font-bold text-amber-600 dark:text-amber-400"
-                            : "font-semibold text-slate-700 dark:text-slate-300"
-                        }
-                      >
-                        {selectedProduct.stock} {selectedProduct.saleMode === "weight" ? "kg" : "unid."}
-                      </span>
-                    </p>
-                  </div>
-
-                  {/* Badge de Precio Actual */}
-                  <div className="flex flex-col items-end rounded-xl bg-white p-3 shadow-xs border border-slate-200 dark:border-slate-700 dark:bg-slate-850">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                      Precio Actual en Sistema
+                {/* Etiquetas superiores */}
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <span className="rounded bg-slate-200/80 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                    {selectedProduct.categoria || "Sin categoría"}
+                  </span>
+                  {selectedProduct.codigoProducto && (
+                    <span className="font-mono text-xs text-slate-500 bg-white/80 dark:bg-slate-850 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-slate-700">
+                      Cód: {selectedProduct.codigoProducto}
                     </span>
-                    <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                  )}
+                  {selectedProduct.codigoBarras && (
+                    <span className="font-mono text-xs text-slate-600 bg-white dark:bg-slate-850 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                      {selectedProduct.codigoBarras}
+                    </span>
+                  )}
+                </div>
+
+                {/* Título completo del producto: sin corte, con ancho total y salto de línea */}
+                <h4 className="mt-2 text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 break-words leading-snug">
+                  {selectedProduct.nombre}
+                </h4>
+
+                {/* Stock y Precio actual integrados directamente sin cartel superpuesto */}
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-slate-200/70 dark:border-slate-700/60">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                    <span>Stock actual:</span>
+                    <span
+                      className={
+                        selectedProduct.stock <= 0
+                          ? "font-bold text-amber-600 dark:text-amber-400"
+                          : "font-semibold text-slate-700 dark:text-slate-200"
+                      }
+                    >
+                      {selectedProduct.stock} {selectedProduct.saleMode === "weight" ? "kg" : "unid."}
+                    </span>
+                  </p>
+
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Precio actual:
+                    </span>
+                    <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
                       {currencyFormatter.format(selectedProduct.precioFinal)}
                     </span>
                   </div>
@@ -771,7 +828,13 @@ export const ProductQuickPriceModal = ({
 
               {/* Editor de Precios Rápido */}
               <form onSubmit={handleSave} className="space-y-4">
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-4">
+                <div
+                  className={`rounded-xl border p-4 shadow-sm space-y-4 transition-all duration-300 ${
+                    flashStatus === "error"
+                      ? "border-red-300 ring-2 ring-red-500/10 bg-red-50/10 dark:border-red-800 dark:bg-red-950/10"
+                      : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+                  }`}
+                >
                   <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 dark:border-slate-800">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
                       <DollarSign size={14} className="text-emerald-600" />
@@ -790,7 +853,13 @@ export const ProductQuickPriceModal = ({
                   <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
                     {/* Precio de Costo */}
                     <div>
-                      <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      <label
+                        className={`mb-1 block text-xs font-semibold transition-colors ${
+                          fieldErrors.costPrice
+                            ? "text-red-600 dark:text-red-400 font-bold"
+                            : "text-slate-700 dark:text-slate-300"
+                        }`}
+                      >
                         Precio de Costo ($)
                       </label>
                       <input
@@ -801,13 +870,29 @@ export const ProductQuickPriceModal = ({
                         onChange={(e) => handleCostChange(parseFloat(e.target.value) || 0)}
                         onFocus={(e) => handleNumericInputFocus(e, { isNew: false })}
                         disabled={!canWrite || isSaving}
-                        className="ui-input w-full text-sm font-medium"
+                        className={`ui-input w-full text-sm font-medium transition-colors ${
+                          fieldErrors.costPrice
+                            ? "border-red-500 ring-2 ring-red-500/20 bg-red-50/40 text-red-700 focus:border-red-500 focus:ring-red-500/30 dark:border-red-500 dark:bg-red-950/30 dark:text-red-200"
+                            : ""
+                        }`}
                       />
+                      {fieldErrors.costPrice && (
+                        <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium animate-in fade-in">
+                          <AlertCircle size={13} className="flex-shrink-0" />
+                          {fieldErrors.costPrice}
+                        </p>
+                      )}
                     </div>
 
                     {/* Margen de Ganancia */}
                     <div>
-                      <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      <label
+                        className={`mb-1 block text-xs font-semibold transition-colors ${
+                          fieldErrors.profitPercent
+                            ? "text-red-600 dark:text-red-400 font-bold"
+                            : "text-slate-700 dark:text-slate-300"
+                        }`}
+                      >
                         Margen de Ganancia (%)
                       </label>
                       <input
@@ -817,13 +902,29 @@ export const ProductQuickPriceModal = ({
                         onChange={(e) => handleProfitChange(parseFloat(e.target.value) || 0)}
                         onFocus={(e) => handleNumericInputFocus(e, { isNew: false })}
                         disabled={!canWrite || isSaving}
-                        className="ui-input w-full text-sm font-medium"
+                        className={`ui-input w-full text-sm font-medium transition-colors ${
+                          fieldErrors.profitPercent
+                            ? "border-red-500 ring-2 ring-red-500/20 bg-red-50/40 text-red-700 focus:border-red-500 focus:ring-red-500/30 dark:border-red-500 dark:bg-red-950/30 dark:text-red-200"
+                            : ""
+                        }`}
                       />
+                      {fieldErrors.profitPercent && (
+                        <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium animate-in fade-in">
+                          <AlertCircle size={13} className="flex-shrink-0" />
+                          {fieldErrors.profitPercent}
+                        </p>
+                      )}
                     </div>
 
                     {/* IVA */}
                     <div>
-                      <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      <label
+                        className={`mb-1 block text-xs font-semibold transition-colors ${
+                          fieldErrors.vatPercent
+                            ? "text-red-600 dark:text-red-400 font-bold"
+                            : "text-slate-700 dark:text-slate-300"
+                        }`}
+                      >
                         Alícuota IVA (%)
                       </label>
                       <input
@@ -836,7 +937,11 @@ export const ProductQuickPriceModal = ({
                         onChange={(e) => handleVatChange(parseFloat(e.target.value) || 0)}
                         onFocus={(e) => handleNumericInputFocus(e, { isNew: false })}
                         disabled={!canWrite || isSaving}
-                        className="ui-input w-full text-sm font-medium"
+                        className={`ui-input w-full text-sm font-medium transition-colors ${
+                          fieldErrors.vatPercent
+                            ? "border-red-500 ring-2 ring-red-500/20 bg-red-50/40 text-red-700 focus:border-red-500 focus:ring-red-500/30 dark:border-red-500 dark:bg-red-950/30 dark:text-red-200"
+                            : ""
+                        }`}
                       />
                       <datalist id="quick-iva-options">
                         <option value="0" label="0% (Exento)" />
@@ -844,6 +949,12 @@ export const ProductQuickPriceModal = ({
                         <option value="21" label="21% (General)" />
                         <option value="27" label="27% (Diferencial)" />
                       </datalist>
+                      {fieldErrors.vatPercent && (
+                        <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium animate-in fade-in">
+                          <AlertCircle size={13} className="flex-shrink-0" />
+                          {fieldErrors.vatPercent}
+                        </p>
+                      )}
                     </div>
 
                     {/* Precio Sin IVA */}
@@ -868,9 +979,19 @@ export const ProductQuickPriceModal = ({
 
                     {/* Precio Final (Destacado) */}
                     <div className="sm:col-span-2">
-                      <label className="mb-1 block text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center justify-between">
+                      <label
+                        className={`mb-1 block text-xs font-bold flex items-center justify-between transition-colors ${
+                          fieldErrors.finalPrice
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-slate-900 dark:text-slate-100"
+                        }`}
+                      >
                         <span>Precio Final de Venta ($)</span>
-                        <span className="text-[11px] text-emerald-600 font-normal">
+                        <span
+                          className={`text-[11px] font-normal ${
+                            fieldErrors.finalPrice ? "text-red-500" : "text-emerald-600"
+                          }`}
+                        >
                           (IVA incluido)
                         </span>
                       </label>
@@ -883,11 +1004,29 @@ export const ProductQuickPriceModal = ({
                         onChange={(e) => handleFinalPriceChange(parseFloat(e.target.value) || 0)}
                         onFocus={(e) => handleNumericInputFocus(e, { isNew: false })}
                         disabled={!canWrite || isSaving}
-                        className="ui-input w-full text-lg font-bold text-emerald-600 border-emerald-300 focus:border-emerald-600 focus:ring-emerald-500/20 dark:text-emerald-400 dark:border-emerald-800"
+                        className={`ui-input w-full text-lg font-bold transition-colors ${
+                          fieldErrors.finalPrice
+                            ? "border-red-500 ring-2 ring-red-500/30 bg-red-50/40 text-red-700 focus:border-red-500 focus:ring-red-500/40 dark:border-red-500 dark:bg-red-950/30 dark:text-red-200"
+                            : "text-emerald-600 border-emerald-300 focus:border-emerald-600 focus:ring-emerald-500/20 dark:text-emerald-400 dark:border-emerald-800"
+                        }`}
                       />
+                      {fieldErrors.finalPrice && (
+                        <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium animate-in fade-in">
+                          <AlertCircle size={13} className="flex-shrink-0" />
+                          {fieldErrors.finalPrice}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
+
+                {/* Error general si existiera */}
+                {fieldErrors.general && (
+                  <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-300 animate-in fade-in">
+                    <AlertCircle size={16} className="text-red-600 flex-shrink-0" />
+                    <span className="font-semibold">{fieldErrors.general}</span>
+                  </div>
+                )}
 
                 {/* Botones de acción */}
                 <div className="flex items-center justify-between gap-3 pt-2">
@@ -905,10 +1044,27 @@ export const ProductQuickPriceModal = ({
                     <button
                       type="submit"
                       disabled={!canWrite || isSaving}
-                      className="ui-btn-primary bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm inline-flex items-center gap-2 shadow-sm"
+                      className={`font-semibold text-sm inline-flex items-center gap-2 shadow-sm transition-all duration-200 ${
+                        flashStatus === "success"
+                          ? "ui-btn-primary bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-400 ring-offset-1"
+                          : flashStatus === "error"
+                          ? "ui-btn-primary bg-red-600 hover:bg-red-700 text-white"
+                          : "ui-btn-primary bg-emerald-600 hover:bg-emerald-700 text-white"
+                      }`}
                     >
-                      <Save size={16} />
-                      {isSaving ? "Guardando..." : "Guardar nuevo precio"}
+                      {isSaving ? (
+                        "Guardando..."
+                      ) : flashStatus === "success" ? (
+                        <>
+                          <CheckCircle2 size={16} />
+                          ¡Precio guardado!
+                        </>
+                      ) : (
+                        <>
+                          <Save size={16} />
+                          Guardar nuevo precio
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
