@@ -14,7 +14,6 @@ import {
   X,
 } from "lucide-react";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
-import { IconButton } from "@/components/ui/IconButton";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
@@ -682,33 +681,39 @@ export const ProductQuickPriceModal = ({
     >
       <div className="relative w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900 md:p-6 max-h-[92vh] flex flex-col overflow-hidden">
         {/* Encabezado */}
-        <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800 flex-shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
-              <Tag className="h-5 w-5" />
+        <div className="mb-4 flex items-center justify-between gap-2.5 sm:gap-3 border-b border-slate-200 pb-3 dark:border-slate-800 flex-shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            {/* Ícono de etiqueta (con shrink-0 para que nunca se deforme ni corte en pantallas móviles) */}
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 shadow-xs">
+              <Tag className="h-5 w-5 shrink-0" />
             </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                Consulta Rápida de Precios
-                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 leading-tight">
+                  Consulta Rápida
+                </h3>
+                {/* Badge En vivo: en una sola línea (whitespace-nowrap) y con punto indicador animado */}
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300/40 dark:border-emerald-700/60 shrink-0">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                   En vivo
                 </span>
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Escaneá productos continuamente con el lector o buscá por nombre para consultar y actualizar precios en segundos.
+              </div>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 truncate hidden sm:block">
+                Escaneá con lector de barra o buscá para actualizar precios al instante.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             {onCreateNewProduct && (
               <button
                 type="button"
                 onClick={() => attemptCreateNew()}
-                className="ui-btn-ghost text-xs inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 py-1.5 px-2.5 text-slate-700 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400"
+                className="ui-btn-ghost text-xs inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 py-1.5 px-2.5 text-slate-700 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-xl"
                 title="Crear un nuevo producto en el catálogo"
               >
-                <Plus size={14} />
+                <Plus size={16} />
                 <span className="hidden sm:inline">Nuevo producto</span>
               </button>
             )}
@@ -745,13 +750,16 @@ export const ProductQuickPriceModal = ({
               ) : null}
             </div>
 
-            <IconButton
-              icon={Camera}
-              label="Escanear con cámara"
+            {/* Botón de cámara destacado con icono nítido y fácil de pulsar en móvil */}
+            <button
+              type="button"
               onClick={() => setScannerOpen(true)}
-              className="ui-btn-ghost border border-slate-200 dark:border-slate-700 h-10 w-10 flex-shrink-0"
               title="Abrir lector de cámara"
-            />
+              aria-label="Escanear con cámara"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 transition hover:border-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-emerald-500/60 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400 shadow-xs"
+            >
+              <Camera className="h-6 w-6 text-slate-600 transition-colors dark:text-slate-200" />
+            </button>
           </div>
         </div>
 
