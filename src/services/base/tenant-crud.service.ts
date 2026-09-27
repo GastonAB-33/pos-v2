@@ -118,6 +118,101 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
     }
   }
 
+  async query(
+    tenantId: string,
+    options: {
+      eq?: Record<string, unknown>;
+      order?: { column: string; ascending?: boolean };
+      limit?: number;
+    } = {}
+  ): Promise<TEntity[]> {
+    if (dataProvider === "mock") {
+      let rows = this.getMockRows().filter((row) => {
+        if (row.tenant_id !== tenantId) return false;
+        if (options.eq) {
+          for (const [key, val] of Object.entries(options.eq)) {
+            if ((row as unknown as Record<string, unknown>)[key] !== val) return false;
+          }
+        }
+        return true;
+      });
+      if (options.order) {
+        const col = options.order.column;
+        const asc = options.order.ascending ?? true;
+        rows = [...rows].sort((a, b) => {
+          const valA = (a as unknown as Record<string, unknown>)[col];
+          const valB = (b as unknown as Record<string, unknown>)[col];
+          if (valA == null && valB == null) return 0;
+          if (valA == null) return asc ? -1 : 1;
+          if (valB == null) return asc ? 1 : -1;
+          if (valA < valB) return asc ? -1 : 1;
+          if (valA > valB) return asc ? 1 : -1;
+          return 0;
+        });
+      }
+      if (options.limit != null) {
+        rows = rows.slice(0, options.limit);
+      }
+      return rows;
+    }
+
+    try {
+      const data = await this.execWithAuthRetry(async () => {
+        let builder = supabase.from(this.tableName).select("*").eq("tenant_id", tenantId);
+        if (options.eq) {
+          for (const [key, val] of Object.entries(options.eq)) {
+            builder = builder.eq(key, val);
+          }
+        }
+        if (options.order) {
+          builder = builder.order(options.order.column, {
+            ascending: options.order.ascending ?? true,
+          });
+        }
+        if (options.limit != null) {
+          builder = builder.limit(options.limit);
+        }
+        return builder;
+      });
+
+      return (data as TEntity[] | null) ?? [];
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        console.warn(
+          `[TenantCrudService] Tabla "${this.tableName}" no encontrada en Supabase al consultar. Utilizando almacenamiento local de respaldo.`
+        );
+        let rows = this.getMockRows().filter((row) => {
+          if (row.tenant_id !== tenantId) return false;
+          if (options.eq) {
+            for (const [key, val] of Object.entries(options.eq)) {
+              if ((row as unknown as Record<string, unknown>)[key] !== val) return false;
+            }
+          }
+          return true;
+        });
+        if (options.order) {
+          const col = options.order.column;
+          const asc = options.order.ascending ?? true;
+          rows = [...rows].sort((a, b) => {
+            const valA = (a as unknown as Record<string, unknown>)[col];
+            const valB = (b as unknown as Record<string, unknown>)[col];
+            if (valA == null && valB == null) return 0;
+            if (valA == null) return asc ? -1 : 1;
+            if (valB == null) return asc ? 1 : -1;
+            if (valA < valB) return asc ? -1 : 1;
+            if (valA > valB) return asc ? 1 : -1;
+            return 0;
+          });
+        }
+        if (options.limit != null) {
+          rows = rows.slice(0, options.limit);
+        }
+        return rows;
+      }
+      throw error;
+    }
+  }
+
   async getById(tenantId: string, id: string): Promise<TEntity | null> {
     if (dataProvider === "mock") {
       const table = this.getMockRows();

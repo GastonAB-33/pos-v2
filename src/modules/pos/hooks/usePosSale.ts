@@ -550,7 +550,13 @@ export const usePosSale = (tenantId: string | null) => {
           tenantSettingsResult.status === "rejected";
 
         const activeCustomers = allCustomers.filter((customer) => customer.is_active);
-        const resolvedPosSettings = tenantSettings?.pos ?? defaultPosSettings;
+        const allowNegativeStock = Boolean(
+          tenantSettings?.stock?.allow_negative_stock ?? tenantSettings?.pos?.allow_negative_stock
+        );
+        const resolvedPosSettings: PosSettings = {
+          ...(tenantSettings?.pos ?? defaultPosSettings),
+          allow_negative_stock: allowNegativeStock,
+        };
         const resolvedMercadoPagoSettings = {
           ...defaultMercadoPagoSettings,
           ...(tenantSettings?.sistema?.mercado_pago ?? {}),
@@ -2056,51 +2062,57 @@ export const usePosSale = (tenantId: string | null) => {
       });
       const updatedStockByProductId = new Map<string, number>();
 
-      for (const item of cart) {
-        await salesService.createItem(tenantId, {
-          sale_id: sale.id,
-          product_id: item.product_id,
-          product_name_snapshot: item.name,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          discount_total: item.promotion_discount_total,
-          tax_total: 0,
-          line_total: item.line_total,
-          metadata: {
-            pricing_snapshot: {
-              base_unit_price: item.base_unit_price,
-              applied_price_list_id: item.price_list_id,
-              applied_price_list_name: item.price_list_name,
+      await Promise.all(
+        cart.map(async (item) => {
+          const itemPromise = salesService.createItem(tenantId, {
+            sale_id: sale.id,
+            product_id: item.product_id,
+            product_name_snapshot: item.name,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            discount_total: item.promotion_discount_total,
+            tax_total: 0,
+            line_total: item.line_total,
+            metadata: {
+              pricing_snapshot: {
+                base_unit_price: item.base_unit_price,
+                applied_price_list_id: item.price_list_id,
+                applied_price_list_name: item.price_list_name,
+              },
+              promotion_snapshot: item.applied_promotion_snapshot,
+              cart_promotion_snapshot: promotionsResolution.applied_cart_promotion
+                ? ({ ...promotionsResolution.applied_cart_promotion } as Record<string, unknown>)
+                : null,
+              cart_promotion_discount_allocated: item.cart_promotion_discount_total,
+              is_manual_sale_item: item.is_manual_item,
             },
-            promotion_snapshot: item.applied_promotion_snapshot,
-            cart_promotion_snapshot: promotionsResolution.applied_cart_promotion
-              ? ({ ...promotionsResolution.applied_cart_promotion } as Record<string, unknown>)
-              : null,
-            cart_promotion_discount_allocated: item.cart_promotion_discount_total,
-            is_manual_sale_item: item.is_manual_item,
-          },
-        });
+          });
 
-        if (item.is_manual_item) {
-          continue;
-        }
+          if (item.is_manual_item) {
+            await itemPromise;
+            return;
+          }
 
-        await stockService.create(tenantId, {
-          product_id: item.product_id,
-          movement_type: "sale",
-          quantity: item.quantity,
-          reference_type: "sale",
-          reference_id: sale.id,
-          notes: `Venta ${sale.sale_number}`,
-          created_by: resolvedCreatedBy,
-        });
+          const stockPromise = stockService.create(tenantId, {
+            product_id: item.product_id,
+            movement_type: "sale",
+            quantity: item.quantity,
+            reference_type: "sale",
+            reference_id: sale.id,
+            notes: `Venta ${sale.sale_number}`,
+            created_by: resolvedCreatedBy,
+          });
 
-        const nextStock = posSettings.allow_negative_stock
-          ? roundQty(item.stock_available - item.quantity)
-          : roundQty(Math.max(0, item.stock_available - item.quantity));
-        await productsService.updateStock(tenantId, item.product_id, nextStock);
-        updatedStockByProductId.set(item.product_id, nextStock);
-      }
+          const nextStock = posSettings.allow_negative_stock
+            ? roundQty(item.stock_available - item.quantity)
+            : roundQty(Math.max(0, item.stock_available - item.quantity));
+          updatedStockByProductId.set(item.product_id, nextStock);
+
+          const updateStockPromise = productsService.updateStock(tenantId, item.product_id, nextStock);
+
+          await Promise.all([itemPromise, stockPromise, updateStockPromise]);
+        })
+      );
 
       const paymentCapturedAt = new Date().toISOString();
       const manualMercadoPagoOperationId =

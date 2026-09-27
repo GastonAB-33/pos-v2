@@ -263,6 +263,8 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
     deleteOne,
     toggleFavorite,
     toggleActive,
+    productsView,
+    barcodesByProductId,
     reloadAudit,
     exportAuditXlsx,
   };

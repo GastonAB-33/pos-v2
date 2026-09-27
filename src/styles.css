@@ -55,23 +55,22 @@ html.light {
 html.dark {
   color-scheme: dark;
 
-  --ui-bg: #0f0f11;
-  /* La navegacion mantiene una referencia visual clara en ambos temas. */
-  --ui-sidebar: #ffffff;
-  --ui-topbar: #18181c;
-  --ui-nav-text: #1f2937;
-  --ui-nav-muted: #667085;
-  --ui-surface: #18181c;
-  --ui-surface-2: #222228;
-  --ui-border: #2a2a33;
+  --ui-bg: #09090b;
+  --ui-sidebar: #121215;
+  --ui-topbar: #121215;
+  --ui-nav-text: #f4f4f5;
+  --ui-nav-muted: #a1a1aa;
+  --ui-surface: #121215;
+  --ui-surface-2: #1c1c21;
+  --ui-border: #27272a;
 
-  --ui-text: #e8e8f0;
-  --ui-text-soft: #d3d3df;
-  --ui-muted: #8a8a9b;
+  --ui-text: #fafafa;
+  --ui-text-soft: #d4d4d8;
+  --ui-muted: #a1a1aa;
 
-  --ui-accent: #2587e8;
-  --ui-accent-strong: #1471cc;
-  --ui-accent-soft: rgba(37, 135, 232, 0.16);
+  --ui-accent: #3b82f6;
+  --ui-accent-strong: #2563eb;
+  --ui-accent-soft: rgba(59, 130, 246, 0.16);
 
   --ui-success: #34d399;
   --ui-success-soft: rgba(52, 211, 153, 0.14);
@@ -80,9 +79,75 @@ html.dark {
   --ui-danger: #f87171;
   --ui-danger-soft: rgba(248, 113, 113, 0.16);
 
-  --ui-overlay: rgba(3, 3, 7, 0.5);
+  --ui-overlay: rgba(0, 0, 0, 0.65);
 
-  --shadow-panel: 0 22px 48px rgba(8, 8, 12, 0.42);
+  --shadow-panel: 0 22px 48px rgba(0, 0, 0, 0.6);
+}
+
+html.midnight {
+  color-scheme: dark;
+
+  --ui-bg: #0b132b;
+  --ui-sidebar: #0f172a;
+  --ui-topbar: #111c38;
+  --ui-nav-text: #f8fafc;
+  --ui-nav-muted: #94a3b8;
+  --ui-surface: #111c38;
+  --ui-surface-2: #1b284f;
+  --ui-border: #23335e;
+
+  --ui-text: #f8fafc;
+  --ui-text-soft: #cbd5e1;
+  --ui-muted: #94a3b8;
+
+  --ui-accent: #38bdf8;
+  --ui-accent-strong: #0284c7;
+  --ui-accent-soft: rgba(56, 189, 248, 0.16);
+
+  --ui-success: #34d399;
+  --ui-success-soft: rgba(52, 211, 153, 0.14);
+  --ui-warn: #fbbf24;
+  --ui-warn-soft: rgba(251, 191, 36, 0.14);
+  --ui-danger: #f87171;
+  --ui-danger-soft: rgba(248, 113, 113, 0.16);
+
+  --ui-overlay: rgba(5, 10, 25, 0.65);
+
+  --shadow-panel: 0 22px 48px rgba(2, 6, 23, 0.6);
+}
+
+/* Sidebar Theme Overrides */
+html[data-sidebar-theme="dark"] .app-sidebar,
+html[data-sidebar-theme="dark"] .app-sidebar-brand,
+.app-sidebar[data-sidebar-theme="dark"],
+.app-sidebar-brand[data-sidebar-theme="dark"] {
+  --ui-sidebar: #121215;
+  --ui-nav-text: #f4f4f5;
+  --ui-nav-muted: #a1a1aa;
+  background-color: #121215 !important;
+  border-color: #27272a !important;
+}
+
+html[data-sidebar-theme="midnight"] .app-sidebar,
+html[data-sidebar-theme="midnight"] .app-sidebar-brand,
+.app-sidebar[data-sidebar-theme="midnight"],
+.app-sidebar-brand[data-sidebar-theme="midnight"] {
+  --ui-sidebar: #0f172a;
+  --ui-nav-text: #f8fafc;
+  --ui-nav-muted: #94a3b8;
+  background-color: #0f172a !important;
+  border-color: #23335e !important;
+}
+
+html[data-sidebar-theme="light"] .app-sidebar,
+html[data-sidebar-theme="light"] .app-sidebar-brand,
+.app-sidebar[data-sidebar-theme="light"],
+.app-sidebar-brand[data-sidebar-theme="light"] {
+  --ui-sidebar: #ffffff;
+  --ui-nav-text: #1f2937;
+  --ui-nav-muted: #667085;
+  background-color: #ffffff !important;
+  border-color: #e5e7eb !important;
 }
 
 @layer base {
@@ -1957,8 +2022,8 @@ body {
 
 .app-sidebar {
   width: 12.25rem;
-  border-color: #d9dee8;
-  background: #ffffff !important;
+  border-color: var(--ui-border);
+  background: var(--ui-sidebar, #ffffff) !important;
 }
 
 .app-sidebar-brand {
@@ -1966,7 +2031,7 @@ body {
   top: 0;
   z-index: 10;
   min-height: 4.25rem;
-  background: #ffffff;
+  background: var(--ui-sidebar, #ffffff) !important;
 }
 
 .app-sidebar-nav {

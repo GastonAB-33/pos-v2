@@ -31,10 +31,12 @@ const fontSizePixels: Record<UiFontSize, string> = {
 export const ThemeProvider = ({ children }: PropsWithChildren) => {
   const tenantId = useAuthStore((state) => state.tenantId);
   const theme = useUiStore((state) => state.theme);
+  const sidebarTheme = useUiStore((state) => state.sidebarTheme);
   const density = useUiStore((state) => state.density);
   const fontSize = useUiStore((state) => state.fontSize);
   const accentColor = useUiStore((state) => state.accentColor);
   const setTheme = useUiStore((state) => state.setTheme);
+  const setSidebarTheme = useUiStore((state) => state.setSidebarTheme);
   const setDensity = useUiStore((state) => state.setDensity);
   const setFontSize = useUiStore((state) => state.setFontSize);
   const setAccentColor = useUiStore((state) => state.setAccentColor);
@@ -50,6 +52,9 @@ export const ThemeProvider = ({ children }: PropsWithChildren) => {
         if (!active) return;
 
         setTheme(tenantSettings.apariencia.default_theme);
+        if (tenantSettings.apariencia.sidebar_theme) {
+          setSidebarTheme(tenantSettings.apariencia.sidebar_theme);
+        }
         setDensity(tenantSettings.apariencia.density);
         if (tenantSettings.apariencia.font_size) {
           setFontSize(tenantSettings.apariencia.font_size);
@@ -65,23 +70,45 @@ export const ThemeProvider = ({ children }: PropsWithChildren) => {
     return () => {
       active = false;
     };
-  }, [setAccentColor, setDensity, setFontSize, setTheme, tenantId]);
+  }, [setAccentColor, setDensity, setFontSize, setSidebarTheme, setTheme, tenantId]);
 
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.remove("light", "dark");
-    root.classList.add(theme);
+    root.classList.remove("light", "dark", "midnight");
+
+    if (theme === "midnight") {
+      root.classList.add("dark", "midnight");
+      root.style.colorScheme = "dark";
+    } else if (theme === "dark") {
+      root.classList.add("dark");
+      root.style.colorScheme = "dark";
+    } else {
+      root.classList.add("light");
+      root.style.colorScheme = "light";
+    }
+
+    // Resolucion del tema del menu lateral (Sidebar)
+    const effectiveSidebar =
+      sidebarTheme === "auto"
+        ? theme === "light"
+          ? "light"
+          : theme === "midnight"
+          ? "midnight"
+          : "dark"
+        : sidebarTheme;
+    root.setAttribute("data-sidebar-theme", effectiveSidebar);
+
     root.classList.toggle("ui-density-compact", density === "compact");
     root.setAttribute("data-ui-fontsize", fontSize);
+    root.setAttribute("data-theme", theme);
     root.style.fontSize = fontSizePixels[fontSize] ?? "16px";
-    root.style.colorScheme = theme;
     root.style.setProperty("--ui-accent", accentColor);
     root.style.setProperty("--ui-accent-soft", hexToSoftRgba(accentColor));
     root.style.setProperty(
       "--ui-accent-strong",
       `color-mix(in srgb, ${accentColor} 82%, #000000)`,
     );
-  }, [theme, density, fontSize, accentColor]);
+  }, [theme, sidebarTheme, density, fontSize, accentColor]);
 
   return <>{children}</>;
 };

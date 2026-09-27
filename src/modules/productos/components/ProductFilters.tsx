@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Camera, Download, Ellipsis, FilterX, Plus, RefreshCw, Search, SlidersHorizontal, Upload, X } from "lucide-react";
+import { Camera, Download, Ellipsis, FilterX, Plus, RefreshCw, Search, SlidersHorizontal, Tag, Upload, X } from "lucide-react";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { IconButton } from "@/components/ui/IconButton";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
@@ -23,6 +23,7 @@ interface ProductFiltersProps {
   onOpenCreate: () => void;
   onOpenImport: () => void;
   onExportXlsx: () => void;
+  onOpenQuickPriceCheck?: () => void;
   onDeleteSelected: () => void;
   onSelectAllFiltered: () => void;
   onClearSelection: () => void;
@@ -44,6 +45,7 @@ export const ProductFilters = ({
   onOpenCreate,
   onOpenImport,
   onExportXlsx,
+  onOpenQuickPriceCheck,
   onDeleteSelected,
   onSelectAllFiltered,
   onClearSelection,
@@ -128,6 +130,18 @@ export const ProductFilters = ({
                   >
                     <Upload aria-hidden="true" className="h-4 w-4" />
                     Importar XLSX
+                  </button>
+                  <button
+                    type="button"
+                    className="ui-popover-action"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActionsOpen(false);
+                      onOpenQuickPriceCheck?.();
+                    }}
+                  >
+                    <Tag aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    Consulta rápida
                   </button>
                   <button
                     type="button"
