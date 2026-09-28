@@ -11,6 +11,14 @@ interface PosQuickProductModalProps {
   onClose: () => void;
   onAddManual: (values: PosQuickProductInput) => boolean;
   onCreateAndAdd: (values: PosQuickProductInput) => Promise<boolean>;
+  title?: string;
+  subtitle?: string;
+  saleOnlyLabel?: string;
+  saleOnlyDescription?: string;
+  catalogLabel?: string;
+  catalogDescription?: string;
+  submitButtonText?: string;
+  initialName?: string;
 }
 
 type SaveMode = "sale_only" | "catalog";
@@ -29,11 +37,19 @@ export const PosQuickProductModal = ({
   onClose,
   onAddManual,
   onCreateAndAdd,
+  title,
+  subtitle,
+  saleOnlyLabel,
+  saleOnlyDescription,
+  catalogLabel,
+  catalogDescription,
+  submitButtonText,
+  initialName,
 }: PosQuickProductModalProps) => {
   useBodyScrollLock(open);
   const [saveMode, setSaveMode] = useState<SaveMode>("catalog");
   const [saleMode, setSaleMode] = useState<"unit" | "weight">("unit");
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName ?? "");
   const [category, setCategory] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [unitPrice, setUnitPrice] = useState("");
@@ -48,7 +64,7 @@ export const PosQuickProductModal = ({
     if (!open) return;
     setSaveMode("catalog");
     setSaleMode("unit");
-    setName("");
+    setName(initialName ?? "");
     setCategory(categories[0] ?? "General");
     setQuantity("1");
     setUnitPrice("");
@@ -58,7 +74,7 @@ export const PosQuickProductModal = ({
     setBarcode("");
     setFavorite(true);
     setIsSubmitting(false);
-  }, [categories, open]);
+  }, [categories, initialName, open]);
 
   const quantityLabel = saleMode === "weight" ? "Cantidad a vender (gramos)" : "Cantidad a vender";
   const priceLabel = saleMode === "weight" ? "Precio por kg" : "Precio unitario";
@@ -111,8 +127,12 @@ export const PosQuickProductModal = ({
       <div className="relative z-10 w-full max-w-2xl rounded-2xl bg-white p-4 shadow-panel">
         <div className="mb-4 flex items-center justify-between gap-2 border-b border-slate-200 pb-3">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">Agregar producto rapido</h2>
-            <p className="text-xs text-slate-500">Carga lo minimo para resolver la venta sin salir del POS.</p>
+            <h2 className="text-base font-semibold text-slate-900">
+              {title ?? "Agregar producto rapido"}
+            </h2>
+            <p className="text-xs text-slate-500">
+              {subtitle ?? "Carga lo minimo para resolver la venta sin salir del POS."}
+            </p>
           </div>
           <ModalCloseButton label="Cerrar producto rápido" onClick={onClose} disabled={isSubmitting} />
         </div>
@@ -126,8 +146,10 @@ export const PosQuickProductModal = ({
                 checked={saveMode === "sale_only"}
                 onChange={() => setSaveMode("sale_only")}
               />
-              Solo para esta venta
-              <span className="mt-1 block text-xs text-slate-500">No se guarda en productos ni descuenta stock.</span>
+              {saleOnlyLabel ?? "Solo para esta venta"}
+              <span className="mt-1 block text-xs text-slate-500">
+                {saleOnlyDescription ?? "No se guarda en productos ni descuenta stock."}
+              </span>
             </label>
             <label className="rounded-xl border border-slate-200 p-3 text-sm">
               <input
@@ -136,8 +158,10 @@ export const PosQuickProductModal = ({
                 checked={saveMode === "catalog"}
                 onChange={() => setSaveMode("catalog")}
               />
-              Guardar en el sistema
-              <span className="mt-1 block text-xs text-slate-500">Crea el producto y queda disponible para futuras ventas.</span>
+              {catalogLabel ?? "Guardar en el sistema"}
+              <span className="mt-1 block text-xs text-slate-500">
+                {catalogDescription ?? "Crea el producto y queda disponible para futuras ventas."}
+              </span>
             </label>
           </div>
 
@@ -313,7 +337,7 @@ export const PosQuickProductModal = ({
             Cancelar
           </button>
           <button type="button" className="ui-btn-primary" onClick={() => void submit()} disabled={disabled || isSubmitting}>
-            {isSubmitting ? "Agregando..." : "Agregar al carrito"}
+            {isSubmitting ? "Agregando..." : submitButtonText ?? "Agregar al carrito"}
           </button>
         </div>
       </div>

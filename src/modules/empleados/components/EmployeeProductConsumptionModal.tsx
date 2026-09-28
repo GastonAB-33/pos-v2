@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo } from "react";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useToast } from "@/components/ui/useToast";
 import { productsService } from "@/services/products.service";
+import { useProductsStore } from "@/features/products/store/products.store";
+import { PosQuickProductModal } from "@/modules/pos/components/PosQuickProductModal";
+import type { PosQuickProductInput } from "@/modules/pos/hooks/usePosSale";
 import type { Employee, Product } from "@/types/entities";
 import { Search, ShoppingBag, Plus, Minus, Trash2 } from "lucide-react";
 
@@ -28,6 +31,17 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
+const buildQuickProductCode = (name: string): string => {
+  const base = name
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24);
+  return `${base || "EMP"}-${Date.now().toString().slice(-6)}`;
+};
+
 export const EmployeeProductConsumptionModal = ({
   open,
   tenantId,
@@ -42,6 +56,8 @@ export const EmployeeProductConsumptionModal = ({
   const [customNotes, setCustomNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isQuickProductModalOpen, setIsQuickProductModalOpen] = useState(false);
+  const [quickProductInitialName, setQuickProductInitialName] = useState("");
 
   useEffect(() => {
     if (!open || !tenantId) return;
@@ -66,6 +82,15 @@ export const EmployeeProductConsumptionModal = ({
       isMounted = false;
     };
   }, [open, tenantId, toast]);
+
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of products) {
+      if (p.category) set.add(p.category);
+    }
+    const list = Array.from(set).sort((a, b) => a.localeCompare(b));
+    return list.length > 0 ? list : ["General"];
+  }, [products]);
 
   const filteredProducts = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -95,12 +120,149 @@ export const EmployeeProductConsumptionModal = ({
     });
   };
 
+  const handleAddManualProduct = (input: PosQuickProductInput): boolean => {
+    const name = input.name.trim();
+    if (!name) {
+      toast.error("Ingresá el nombre del producto");
+      return false;
+    }
+    if (!input.quantity || input.quantity <= 0) {
+      toast.error("La cantidad debe ser mayor a 0");
+      return false;
+    }
+    if (!input.unitPrice || input.unitPrice <= 0) {
+      toast.error("El precio debe ser mayor a 0");
+      return false;
+    }
+
+    const manualId = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const manualProduct: Product = {
+      id: manualId,
+      tenant_id: tenantId,
+      name,
+      category: input.category.trim() || "Varios",
+      subcategory: null,
+      brand: null,
+      supplier: null,
+      code: input.code.trim() || "MANUAL",
+      description: "Producto no registrado (temporal)",
+      price: input.unitPrice,
+      cost_price: input.costPrice || 0,
+      currency_code: "ARS",
+      stock_current: 9999,
+      stock_min: null,
+      stock_max: null,
+      sale_mode: input.saleMode,
+      is_favorite: false,
+      is_active: true,
+      image_url: null,
+      vat_percent: 21,
+      profit_percent: 0,
+      price_without_vat: Number((input.unitPrice / 1.21).toFixed(2)),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    setCart((prev) => {
+      const existing = prev.find((item) => item.product.id === manualProduct.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.product.id === manualProduct.id
+            ? { ...item, quantity: Number((item.quantity + input.quantity).toFixed(3)) }
+            : item
+        );
+      }
+      return [...prev, { product: manualProduct, quantity: input.quantity }];
+    });
+
+    toast.success(
+      `"${name}" agregado al retiro (${input.quantity} ${
+        input.saleMode === "weight" ? "kg" : "unid."
+      })`
+    );
+    return true;
+  };
+
+  const handleCreateAndAddProduct = async (
+    input: PosQuickProductInput
+  ): Promise<boolean> => {
+    const name = input.name.trim();
+    if (!name) {
+      toast.error("Ingresá el nombre del producto");
+      return false;
+    }
+    if (!input.quantity || input.quantity <= 0) {
+      toast.error("La cantidad debe ser mayor a 0");
+      return false;
+    }
+    if (!input.unitPrice || input.unitPrice <= 0) {
+      toast.error("El precio debe ser mayor a 0");
+      return false;
+    }
+
+    try {
+      const priceWithoutVat = Number((input.unitPrice / 1.21).toFixed(2));
+      const code = input.code.trim() || buildQuickProductCode(name);
+      const created = await productsService.create(tenantId, {
+        code,
+        name,
+        image_url: null,
+        brand: null,
+        supplier: null,
+        is_favorite: input.favorite,
+        description: null,
+        price: input.unitPrice,
+        cost_price: input.costPrice || 0,
+        stock_current: Math.max(input.stock, input.quantity),
+        stock_min: null,
+        stock_max: null,
+        category: input.category.trim() || "General",
+        subcategory: null,
+        sale_mode: input.saleMode,
+        currency_code: "ARS",
+        price_without_vat: priceWithoutVat,
+        vat_percent: 21,
+        profit_percent:
+          input.costPrice > 0
+            ? Number(
+                (((priceWithoutVat - input.costPrice) / input.costPrice) * 100).toFixed(2)
+              )
+            : 0,
+        is_active: true,
+      });
+
+      if (input.barcode.trim()) {
+        try {
+          await productsService.setPrimaryBarcode(tenantId, created.id, input.barcode.trim());
+        } catch {
+          // Si ya existe el código de barras, no bloquear
+        }
+      }
+
+      setProducts((prev) =>
+        [...prev.filter((p) => p.id !== created.id), created].sort((a, b) =>
+          a.name.localeCompare(b.name)
+        )
+      );
+      useProductsStore.getState().upsertProduct(created);
+
+      setCart((prev) => [...prev, { product: created, quantity: input.quantity }]);
+
+      toast.success(`"${name}" registrado en el catálogo y agregado al retiro`);
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al registrar el nuevo producto");
+      return false;
+    }
+  };
+
   const updateQuantity = (productId: string, delta: number) => {
     setCart((prev) => {
       return prev
         .map((item) => {
           if (item.product.id === productId) {
-            const nextQty = item.quantity + delta;
+            const step = item.product.sale_mode === "weight" ? 0.1 : 1;
+            const nextQty = Number((item.quantity + delta * step).toFixed(3));
             return nextQty > 0 ? { ...item, quantity: nextQty } : null;
           }
           return item;
@@ -142,7 +304,7 @@ export const EmployeeProductConsumptionModal = ({
     const itemsSummary = cart
       .map(
         (item) =>
-          `${item.quantity}x ${item.product.name} (${currency.format(
+          `${item.quantity}${item.product.sale_mode === "weight" ? "kg" : "x"} ${item.product.name} (${currency.format(
             item.product.price * item.quantity
           )})`
       )
@@ -195,9 +357,23 @@ export const EmployeeProductConsumptionModal = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-h-[60vh] overflow-y-auto">
             {/* Columna Izquierda: Buscador y Catálogo de Productos */}
             <div className="space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Buscar Productos del Catálogo
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Buscar Productos del Catálogo
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuickProductInitialName(search.trim());
+                    setIsQuickProductModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 transition"
+                  title="Cargar producto no registrado o nuevo en el catálogo"
+                >
+                  <Plus size={12} />
+                  <span>Producto no registrado</span>
+                </button>
+              </div>
 
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -215,8 +391,21 @@ export const EmployeeProductConsumptionModal = ({
                   Cargando productos...
                 </div>
               ) : filteredProducts.length === 0 ? (
-                <div className="py-8 text-center text-xs text-slate-500">
-                  No se encontraron productos coincidentes.
+                <div className="py-8 text-center text-xs text-slate-500 space-y-2.5">
+                  <p>
+                    No se encontraron productos{search.trim() ? ` para "${search.trim()}"` : ""}.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuickProductInitialName(search.trim());
+                      setIsQuickProductModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 shadow-xs transition"
+                  >
+                    <Plus size={13} />
+                    <span>Cargar como producto no registrado</span>
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
@@ -284,7 +473,8 @@ export const EmployeeProductConsumptionModal = ({
                             {item.product.name}
                           </p>
                           <p className="text-[10px] text-slate-400">
-                            {currency.format(item.product.price)} c/u
+                            {currency.format(item.product.price)}{" "}
+                            {item.product.sale_mode === "weight" ? "/kg" : "c/u"}
                           </p>
                         </div>
 
@@ -297,8 +487,9 @@ export const EmployeeProductConsumptionModal = ({
                             >
                               <Minus size={11} />
                             </button>
-                            <span className="w-5 text-center font-bold text-xs">
+                            <span className="min-w-6 text-center font-bold text-xs">
                               {item.quantity}
+                              {item.product.sale_mode === "weight" ? "k" : ""}
                             </span>
                             <button
                               type="button"
@@ -370,6 +561,24 @@ export const EmployeeProductConsumptionModal = ({
           </div>
         </form>
       </div>
+
+      {isQuickProductModalOpen && (
+        <PosQuickProductModal
+          open={isQuickProductModalOpen}
+          categories={categories}
+          onClose={() => setIsQuickProductModalOpen(false)}
+          initialName={quickProductInitialName}
+          title="Registrar producto no registrado"
+          subtitle="Cargá los datos del producto para agregarlo al retiro del empleado."
+          saleOnlyLabel="Solo para este momento"
+          saleOnlyDescription="No se guarda en el catálogo de productos ni descuenta stock."
+          catalogLabel="Registrar en el sistema y guardar producto nuevo"
+          catalogDescription="Crea el producto en el catálogo y queda disponible para futuras ventas o retiros."
+          submitButtonText="Agregar al retiro"
+          onAddManual={handleAddManualProduct}
+          onCreateAndAdd={handleCreateAndAddProduct}
+        />
+      )}
     </div>
   );
 };
