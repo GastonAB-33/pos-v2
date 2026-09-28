@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { LoadingState } from "@/components/ui/UiStates";
@@ -9,6 +9,10 @@ import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { CustomerCurrentAccountPanel } from "@/modules/clientes/components/CustomerCurrentAccountPanel";
 import { useCurrentAccountsPage } from "@/modules/cuentas-corrientes/hooks/useCurrentAccountsPage";
+import { PosCustomerModal, type PosCustomerModalValues } from "@/modules/pos/components/PosCustomerModal";
+import { customersService } from "@/services/customers.service";
+import { auditService } from "@/services/audit.service";
+import { posCustomerProfilesService } from "@/services/pos-customer-profiles.service";
 import {
   Users,
   CheckCircle2,
@@ -17,6 +21,7 @@ import {
   Search,
   ArrowRight,
   UserCheck,
+  UserPlus,
 } from "lucide-react";
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -24,6 +29,35 @@ const currency = new Intl.NumberFormat("es-AR", {
   currency: "ARS",
   maximumFractionDigits: 2,
 });
+
+const defaultPosModalValues: PosCustomerModalValues = {
+  firstName: "",
+  lastName: "",
+  documentType: "dni",
+  documentNumber: "",
+  phone: "",
+  email: "",
+  address: "",
+  fiscalBusinessName: "",
+  fiscalAddress: "",
+  fiscalCondition: "",
+  fiscalCuit: "",
+  currentAccountEnabled: true,
+  currentAccountLimit: "",
+};
+
+const buildCustomerCode = (name: string): string => {
+  const normalized = name
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, "")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 3)
+    .map((part) => part.slice(0, 3))
+    .join("");
+
+  return `${normalized || "CLI"}-${Date.now().toString().slice(-6)}`;
+};
 
 export const CuentasCorrientesPage = () => {
   const [searchParams] = useSearchParams();
@@ -33,6 +67,11 @@ export const CuentasCorrientesPage = () => {
   const toast = useToast();
   const canReadCurrentAccounts = canRead("cuentas_corrientes");
   const canWriteCurrentAccounts = canWrite("cuentas_corrientes");
+  const canWriteClientes = canWrite("clientes");
+  const canCreateCustomer = canWriteClientes || canWriteCurrentAccounts;
+
+  const [isCreateCustomerModalOpen, setIsCreateCustomerModalOpen] = useState(false);
+  const [isSubmittingCustomer, setIsSubmittingCustomer] = useState(false);
 
   const initialCustomerId = searchParams.get("customerId") ?? searchParams.get("clienteId");
 
@@ -60,6 +99,70 @@ export const CuentasCorrientesPage = () => {
     clearFeedback();
   }, [clearFeedback, feedback, toast]);
 
+  const handleCreateCustomerSubmit = async (values: PosCustomerModalValues) => {
+    if (!tenantId) return;
+    setIsSubmittingCustomer(true);
+    try {
+      const normalizeNamePart = (part: string) => part.trim();
+      const firstName = normalizeNamePart(values.firstName);
+      const lastName = normalizeNamePart(values.lastName);
+      const fullName = `${firstName} ${lastName}`.replace(/\s+/g, " ").trim();
+      const fiscalCuit = (values.fiscalCuit ?? "").trim();
+      const parsedLimit = Number(values.currentAccountLimit ?? "");
+      const currentAccountLimit =
+        (values.currentAccountLimit ?? "").trim() &&
+        Number.isFinite(parsedLimit) &&
+        parsedLimit >= 0
+          ? Number(parsedLimit.toFixed(2))
+          : null;
+
+      const created = await customersService.create(tenantId, {
+        code: buildCustomerCode(fullName),
+        full_name: fullName,
+        document_type: fiscalCuit ? "cuit" : values.documentType,
+        document_number: fiscalCuit || values.documentNumber.trim(),
+        fiscal_business_name: values.fiscalBusinessName?.trim() || null,
+        fiscal_address: values.fiscalAddress?.trim() || null,
+        fiscal_condition: values.fiscalCondition?.trim() || null,
+        price_list_id: null,
+        phone: values.phone?.trim() || null,
+        email: values.email?.trim() || null,
+        address: values.address?.trim() || null,
+        observations: null,
+        current_account_enabled: values.currentAccountEnabled,
+        current_account_limit: currentAccountLimit,
+        current_balance: 0,
+        is_active: true,
+      });
+
+      if (created) {
+        await auditService.createSafe(tenantId, {
+          user_id: user?.id ?? null,
+          module: "clientes",
+          action: "create",
+          entity_type: "customer",
+          entity_id: created.id,
+          description: `Cliente creado desde Cuentas Corrientes: ${created.full_name}`,
+          metadata: { full_name: created.full_name },
+        });
+
+        posCustomerProfilesService.saveProfile(tenantId, created.id, {
+          enabled: values.currentAccountEnabled,
+          limit: currentAccountLimit,
+        });
+
+        toast.success(`Cliente "${created.full_name}" creado con éxito`);
+        setIsCreateCustomerModalOpen(false);
+        await reload();
+        setSelectedCustomerId(created.id);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo crear el cliente");
+    } finally {
+      setIsSubmittingCustomer(false);
+    }
+  };
+
   if (!tenantId) {
     return (
       <PagePlaceholder
@@ -84,53 +187,55 @@ export const CuentasCorrientesPage = () => {
       description="Control de saldos, deudas y cobranzas de clientes"
     >
       <div className="cuentas-corrientes-clientes-workspace space-y-4">
-        {/* 3 Paneles KPI Superiores (mismo estilo que Proveedores) */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <article className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 shadow-sm dark:border-rose-900/60 dark:bg-rose-950/20">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-rose-800 dark:text-rose-300">
-                Deuda Total de Clientes
-              </span>
-              <Users className="h-5 w-5 text-rose-600 dark:text-rose-400" />
-            </div>
-            <p className="mt-2 text-2xl font-bold tracking-tight text-rose-900 dark:text-rose-100">
-              {currency.format(totalDebt)}
-            </p>
-            <p className="mt-1 text-xs text-rose-700 dark:text-rose-400">
-              Saldo acumulado a cobrar
-            </p>
-          </article>
+        {/* 3 Paneles KPI Superiores: solo visibles en el listado general de clientes */}
+        {!selectedCustomer && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <article className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 shadow-sm dark:border-rose-900/60 dark:bg-rose-950/20">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-rose-800 dark:text-rose-300">
+                  Deuda Total de Clientes
+                </span>
+                <Users className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+              </div>
+              <p className="mt-2 text-2xl font-bold tracking-tight text-rose-900 dark:text-rose-100">
+                {currency.format(totalDebt)}
+              </p>
+              <p className="mt-1 text-xs text-rose-700 dark:text-rose-400">
+                Saldo acumulado a cobrar
+              </p>
+            </article>
 
-          <article className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/20">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                Clientes con Saldo Pendiente
-              </span>
-              <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-            </div>
-            <p className="mt-2 text-2xl font-bold tracking-tight text-amber-900 dark:text-amber-100">
-              {customersWithDebtCount}
-            </p>
-            <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-              De {customers.length} clientes activos
-            </p>
-          </article>
+            <article className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/20">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                  Clientes con Saldo Pendiente
+                </span>
+                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <p className="mt-2 text-2xl font-bold tracking-tight text-amber-900 dark:text-amber-100">
+                {customersWithDebtCount}
+              </p>
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                De {customers.length} clientes activos
+              </p>
+            </article>
 
-          <article className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/20">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
-                Clientes al Día
-              </span>
-              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-900 dark:text-emerald-100">
-              {customersUpToDateCount}
-            </p>
-            <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
-              Sin saldo deudor pendiente
-            </p>
-          </article>
-        </div>
+            <article className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/20">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                  Clientes al Día
+                </span>
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-900 dark:text-emerald-100">
+                {customersUpToDateCount}
+              </p>
+              <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+                Sin saldo deudor pendiente
+              </p>
+            </article>
+          </div>
+        )}
 
         {/* Flujo: Si hay un cliente seleccionado, se muestra el detalle con sus movimientos y acciones */}
         {selectedCustomer ? (
@@ -197,6 +302,17 @@ export const CuentasCorrientesPage = () => {
                   </button>
                 </div>
 
+                {canCreateCustomer && (
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateCustomerModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+                  >
+                    <UserPlus size={14} />
+                    <span>Nuevo cliente</span>
+                  </button>
+                )}
+
                 <IconButton
                   icon={RefreshCw}
                   label="Recargar clientes"
@@ -224,6 +340,16 @@ export const CuentasCorrientesPage = () => {
                   <p className="text-xs text-slate-500 mt-1">
                     Prueba cambiando el término de búsqueda o el filtro seleccionado.
                   </p>
+                  {canCreateCustomer && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCreateCustomerModalOpen(true)}
+                      className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+                    >
+                      <UserPlus size={14} />
+                      <span>Crear nuevo cliente</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <table className="w-full text-left text-xs">
@@ -312,6 +438,20 @@ export const CuentasCorrientesPage = () => {
               )}
             </div>
           </div>
+        )}
+
+        {isCreateCustomerModalOpen && (
+          <PosCustomerModal
+            mode="create"
+            initialValues={{
+              ...defaultPosModalValues,
+              currentAccountEnabled: true,
+            }}
+            currentBalance={0}
+            disabled={isSubmittingCustomer}
+            onCancel={() => setIsCreateCustomerModalOpen(false)}
+            onSubmit={handleCreateCustomerSubmit}
+          />
         )}
       </div>
     </PagePlaceholder>

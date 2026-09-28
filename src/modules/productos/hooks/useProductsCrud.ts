@@ -665,6 +665,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       vatPercent: number;
       priceWithoutVat: number;
       finalPrice: number;
+      addedStock?: number;
     }
   ): Promise<Product | null> => {
     if (!tenantId) return null;
@@ -672,12 +673,19 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
     if (!existing) return null;
 
     try {
-      const payload = {
+      const hasAddedStock =
+        pricing.addedStock != null && !isNaN(pricing.addedStock) && pricing.addedStock !== 0;
+      const nextStock = hasAddedStock
+        ? Math.max(0, (existing.stock_current ?? 0) + pricing.addedStock!)
+        : existing.stock_current;
+
+      const payload: Partial<Product> = {
         cost_price: roundMoney(pricing.costPrice),
         profit_percent: roundPercent(pricing.profitPercent),
         vat_percent: roundPercent(pricing.vatPercent),
         price_without_vat: roundMoney(pricing.priceWithoutVat),
         price: roundMoney(pricing.finalPrice),
+        ...(hasAddedStock ? { stock_current: nextStock } : {}),
       };
 
       const updated = await productsService.update(tenantId, productId, payload);
@@ -695,7 +703,9 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
         action: "update_pricing_quick",
         entity_type: "product",
         entity_id: productId,
-        description: `Consulta rápida: precio actualizado para ${existing.name} ($${pricing.finalPrice})`,
+        description: `Consulta rápida: precio ${
+          hasAddedStock ? `y stock (+${pricing.addedStock})` : ""
+        } actualizado para ${existing.name} ($${pricing.finalPrice})`,
         metadata: {
           previous_price: existing.price,
           next_price: pricing.finalPrice,
@@ -703,6 +713,9 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           next_cost_price: pricing.costPrice,
           profit_percent: pricing.profitPercent,
           vat_percent: pricing.vatPercent,
+          previous_stock: existing.stock_current,
+          added_stock: pricing.addedStock ?? 0,
+          next_stock: nextStock,
         },
       });
 

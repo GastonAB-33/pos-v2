@@ -64,26 +64,26 @@ export const PosCartItemEditModal = ({
   return (
     <section className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-3 sm:p-4">
       <button type="button" aria-label="Cerrar edicion de item" className="absolute inset-0" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-xl rounded-2xl bg-white p-4 shadow-panel">
-        <div className="mb-4 flex items-center justify-between gap-2 border-b border-slate-200 pb-3">
+      <div className="relative z-10 w-full max-w-xl rounded-2xl bg-white p-4 shadow-panel dark:bg-slate-900 dark:border dark:border-slate-800">
+        <div className="mb-4 flex items-center justify-between gap-2 border-b border-slate-200 pb-3 dark:border-slate-800">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">Editar producto del carrito</h2>
-            <p className="text-xs text-slate-500">Estos cambios afectan solo esta venta.</p>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Editar producto del carrito</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Estos cambios afectan solo esta venta.</p>
           </div>
           <ModalCloseButton label="Cerrar edición" onClick={onClose} />
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-slate-700">Nombre</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Nombre</label>
             <input value={name} onChange={(event) => setName(event.target.value)} className="ui-input" autoFocus />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Categoria</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Categoria</label>
             <input value={category} onChange={(event) => setCategory(event.target.value)} className="ui-input" />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
               {item.sale_mode === "weight" ? "Cantidad (gramos)" : "Cantidad"}
             </label>
             <input
@@ -105,7 +105,7 @@ export const PosCartItemEditModal = ({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
+            <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
               {item.sale_mode === "weight" ? "Precio por kg" : "Precio unitario"}
             </label>
             <input
@@ -128,7 +128,7 @@ export const PosCartItemEditModal = ({
           </div>
         </div>
 
-        <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
+        <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
           <button type="button" className="ui-btn-ghost" onClick={onClose}>
             Cancelar
           </button>

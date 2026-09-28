@@ -18,6 +18,8 @@ import {
   ArrowLeft,
   ArrowRight,
   PlusCircle,
+  Plus,
+  X,
 } from "lucide-react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -27,6 +29,10 @@ import { supplierCurrentAccountsService } from "@/services/supplier-current-acco
 import { generalCashService } from "@/services/general-cash.service";
 import { cashService } from "@/services/cash.service";
 import { bankAccountsService } from "@/services/bank-accounts.service";
+import { auditService } from "@/services/audit.service";
+import { SupplierForm } from "@/modules/proveedores/components/SupplierForm";
+import type { SupplierFormValues } from "@/modules/proveedores/schemas/supplier-form.schema";
+import { toSupplierServiceInput } from "@/modules/proveedores/utils/supplier-input";
 import type {
   Supplier,
   SupplierCurrentAccountMovement,
@@ -48,6 +54,8 @@ export const CuentasCorrientesProveedoresPage = () => {
 
   const canReadModule = canRead("cuentas_corrientes_proveedores");
   const canWriteModule = canWrite("cuentas_corrientes_proveedores");
+  const canWriteProveedores = canWrite("proveedores");
+  const canCreateSupplier = canWriteProveedores || canWriteModule;
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(
@@ -66,7 +74,41 @@ export const CuentasCorrientesProveedoresPage = () => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
   const [isDebtModalOpen, setIsDebtModalOpen] = useState(false);
+  const [isCreateSupplierModalOpen, setIsCreateSupplierModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingSupplier, setIsSubmittingSupplier] = useState(false);
+
+  const handleCreateSupplierSubmit = async (values: SupplierFormValues) => {
+    if (!tenantId) return;
+    setIsSubmittingSupplier(true);
+    try {
+      const created = await suppliersService.create(
+        tenantId,
+        toSupplierServiceInput(values)
+      );
+
+      if (created) {
+        await auditService.createSafe(tenantId, {
+          user_id: user?.id ?? null,
+          module: "proveedores",
+          action: "create",
+          entity_type: "supplier",
+          entity_id: created.id,
+          description: `Proveedor creado desde Cuentas Corrientes: ${created.name}`,
+          metadata: { name: created.name },
+        });
+
+        toast.success(`Proveedor "${created.name}" creado con éxito`);
+        setIsCreateSupplierModalOpen(false);
+        await loadSuppliers();
+        setSelectedSupplierId(created.id);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo crear el proveedor");
+    } finally {
+      setIsSubmittingSupplier(false);
+    }
+  };
 
   // Payment form state
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -329,53 +371,55 @@ export const CuentasCorrientesProveedoresPage = () => {
       description="Control de deuda por compras a crédito, historial de comprobantes y pagos a proveedores"
     >
       <div className="cuentas-corrientes-proveedores-workspace space-y-4">
-        {/* KPI Metrics */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <article className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 shadow-sm dark:border-rose-900/60 dark:bg-rose-950/30">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-rose-800 dark:text-rose-300">
-                Deuda Total con Proveedores
-              </span>
-              <Building2 className="h-5 w-5 text-rose-600 dark:text-rose-400" />
-            </div>
-            <p className="mt-2 text-2xl font-bold tracking-tight text-rose-900 dark:text-rose-100">
-              {currency.format(totalDebt)}
-            </p>
-            <p className="mt-1 text-xs text-rose-700 dark:text-rose-400">
-              Saldo acumulado a pagar
-            </p>
-          </article>
+        {/* KPI Metrics: solo visibles en el listado general de proveedores */}
+        {!selectedSupplier && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <article className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 shadow-sm dark:border-rose-900/60 dark:bg-rose-950/30">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-rose-800 dark:text-rose-300">
+                  Deuda Total con Proveedores
+                </span>
+                <Building2 className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+              </div>
+              <p className="mt-2 text-2xl font-bold tracking-tight text-rose-900 dark:text-rose-100">
+                {currency.format(totalDebt)}
+              </p>
+              <p className="mt-1 text-xs text-rose-700 dark:text-rose-400">
+                Saldo acumulado a pagar
+              </p>
+            </article>
 
-          <article className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/30">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                Proveedores con Saldo Pendiente
-              </span>
-              <Truck className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-            </div>
-            <p className="mt-2 text-2xl font-bold tracking-tight text-amber-900 dark:text-amber-100">
-              {suppliersWithDebtCount}
-            </p>
-            <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-              De {suppliers.length} proveedores activos
-            </p>
-          </article>
+            <article className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/30">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                  Proveedores con Saldo Pendiente
+                </span>
+                <Truck className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <p className="mt-2 text-2xl font-bold tracking-tight text-amber-900 dark:text-amber-100">
+                {suppliersWithDebtCount}
+              </p>
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                De {suppliers.length} proveedores activos
+              </p>
+            </article>
 
-          <article className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/30">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
-                Proveedores al Día
-              </span>
-              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-900 dark:text-emerald-100">
-              {suppliers.length - suppliersWithDebtCount}
-            </p>
-            <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
-              Sin saldo deudor pendiente
-            </p>
-          </article>
-        </div>
+            <article className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/30">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                  Proveedores al Día
+                </span>
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-900 dark:text-emerald-100">
+                {suppliers.length - suppliersWithDebtCount}
+              </p>
+              <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+                Sin saldo deudor pendiente
+              </p>
+            </article>
+          </div>
+        )}
 
         {/* Flujo: Si hay un proveedor seleccionado, se muestra su pantalla de detalle a ancho completo */}
         {selectedSupplier ? (
@@ -619,6 +663,17 @@ export const CuentasCorrientesProveedoresPage = () => {
                   </button>
                 </div>
 
+                {canCreateSupplier && (
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateSupplierModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+                  >
+                    <Plus size={14} />
+                    <span>Nuevo proveedor</span>
+                  </button>
+                )}
+
                 <IconButton
                   icon={RefreshCw}
                   label="Recargar proveedores"
@@ -643,6 +698,16 @@ export const CuentasCorrientesProveedoresPage = () => {
                   <p className="text-xs text-slate-500 mt-1">
                     Prueba cambiando el término de búsqueda o el filtro.
                   </p>
+                  {canCreateSupplier && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCreateSupplierModalOpen(true)}
+                      className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+                    >
+                      <Plus size={14} />
+                      <span>Crear nuevo proveedor</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <table className="w-full text-left text-xs">
@@ -990,6 +1055,29 @@ export const CuentasCorrientesProveedoresPage = () => {
             </div>
           </div>
         )}
+
+        {/* Modal: Crear Proveedor */}
+        {isCreateSupplierModalOpen ? (
+          <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-4">
+            <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-panel dark:bg-slate-900 dark:border-slate-800">
+              <div className="mb-4 flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
+                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Nuevo proveedor</h3>
+                <IconButton
+                  icon={X}
+                  label="Cerrar"
+                  onClick={() => setIsCreateSupplierModalOpen(false)}
+                  disabled={isSubmittingSupplier}
+                />
+              </div>
+              <SupplierForm
+                mode="create"
+                disabled={isSubmittingSupplier}
+                onCancel={() => setIsCreateSupplierModalOpen(false)}
+                onSubmit={handleCreateSupplierSubmit}
+              />
+            </div>
+          </section>
+        ) : null}
       </div>
     </PagePlaceholder>
   );

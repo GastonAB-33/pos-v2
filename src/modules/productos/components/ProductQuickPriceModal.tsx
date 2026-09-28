@@ -35,6 +35,7 @@ interface FieldErrors {
   profitPercent?: string;
   vatPercent?: string;
   finalPrice?: string;
+  addedStock?: string;
   general?: string;
 }
 
@@ -52,6 +53,7 @@ interface ProductQuickPriceModalProps {
       vatPercent: number;
       priceWithoutVat: number;
       finalPrice: number;
+      addedStock?: number;
     }
   ) => Promise<unknown>;
   onCreateNewProduct?: (initialQuery?: string) => void;
@@ -94,6 +96,7 @@ export const ProductQuickPriceModal = ({
   const [vatPercent, setVatPercent] = useState<number>(DEFAULT_IVA_PERCENT);
   const [priceWithoutVat, setPriceWithoutVat] = useState<number>(0);
   const [finalPrice, setFinalPrice] = useState<number>(0);
+  const [addedStock, setAddedStock] = useState<string>("");
 
   const [isSaving, setIsSaving] = useState(false);
   const [calcMode, setCalcMode] = useState<CalcMode>("forward");
@@ -123,7 +126,7 @@ export const ProductQuickPriceModal = ({
   const [pendingSearchQuery, setPendingSearchQuery] = useState<string | null>(null);
   const [showUnsavedPrompt, setShowUnsavedPrompt] = useState(false);
 
-  // Detectar si el precio actual fue modificado (dirty)
+  // Detectar si el precio o stock actual fue modificado (dirty)
   const isPriceDirty = useMemo(() => {
     if (!selectedProduct) return false;
     const initialCost = roundMoney(selectedProduct.precioCosto || 0);
@@ -131,13 +134,17 @@ export const ProductQuickPriceModal = ({
     const initialVat = roundPercent(selectedProduct.porcentajeIva ?? DEFAULT_IVA_PERCENT);
     const initialFinal = roundMoney(selectedProduct.precioFinal || 0);
 
+    const hasAddedStock =
+      addedStock.trim() !== "" && !isNaN(Number(addedStock)) && Number(addedStock) !== 0;
+
     return (
       roundMoney(costPrice) !== initialCost ||
       roundPercent(profitPercent) !== initialProfit ||
       roundPercent(vatPercent) !== initialVat ||
-      roundMoney(finalPrice) !== initialFinal
+      roundMoney(finalPrice) !== initialFinal ||
+      hasAddedStock
     );
-  }, [selectedProduct, costPrice, profitPercent, vatPercent, finalPrice]);
+  }, [selectedProduct, costPrice, profitPercent, vatPercent, finalPrice, addedStock]);
 
   // Autofocus en el input de búsqueda al abrir o seleccionar producto inicial
   useEffect(() => {
@@ -170,6 +177,7 @@ export const ProductQuickPriceModal = ({
       setSearchQuery("");
       setSelectedProduct(null);
       setNotFoundCode(null);
+      setAddedStock("");
       setCalcMode("forward");
       setFieldErrors({});
       setFlashStatus(null);
@@ -189,6 +197,7 @@ export const ProductQuickPriceModal = ({
     setVatPercent(product.porcentajeIva ?? DEFAULT_IVA_PERCENT);
     setPriceWithoutVat(product.precioSinIva || 0);
     setFinalPrice(product.precioFinal || 0);
+    setAddedStock("");
     setCalcMode("forward");
     setFieldErrors({});
     setFlashStatus(null);
@@ -249,14 +258,17 @@ export const ProductQuickPriceModal = ({
     if (!selectedProduct) return;
     setIsSaving(true);
     try {
+      const parsedAdded = addedStock.trim() !== "" ? parseFloat(addedStock) : 0;
       await onSavePrice(selectedProduct.entity.id, {
         costPrice: roundMoney(costPrice),
         profitPercent: roundPercent(profitPercent),
         vatPercent: roundPercent(vatPercent),
         priceWithoutVat: roundMoney(priceWithoutVat),
         finalPrice: roundMoney(finalPrice),
+        addedStock: parsedAdded > 0 ? parsedAdded : undefined,
       });
 
+      setAddedStock("");
       setShowUnsavedPrompt(false);
       if (pendingProduct) {
         applySelectProduct(pendingProduct);
@@ -292,6 +304,7 @@ export const ProductQuickPriceModal = ({
   // Acciones ante cambios no guardados: Descartar y avanzar
   const handleDiscardAndProceed = () => {
     setShowUnsavedPrompt(false);
+    setAddedStock("");
     if (pendingProduct) {
       applySelectProduct(pendingProduct);
     } else if (pendingCreateQuery !== null) {
@@ -449,13 +462,16 @@ export const ProductQuickPriceModal = ({
         return extraBarcodes.some((bar) => normalizeSearchQuery(bar) === compact);
       });
 
+      const isBarcodeLike = /^\d{6,}$/.test(compact);
+
       if (exactMatch) {
         setNotFoundCode(null);
         attemptSelectProduct(exactMatch);
         return;
       }
 
-      if (searchResults.length > 0) {
+      // Si no es un código de barras numérico y hay sugerencias por nombre/texto, seleccionar la primera
+      if (!isBarcodeLike && searchResults.length > 0) {
         setNotFoundCode(null);
         attemptSelectProduct(searchResults[0]);
         return;
@@ -567,6 +583,10 @@ export const ProductQuickPriceModal = ({
     if (isNaN(finalPrice) || finalPrice <= 0) {
       errors.finalPrice = "El precio final de venta debe ser mayor a 0.";
     }
+    const parsedAddedStock = addedStock.trim() !== "" ? parseFloat(addedStock) : 0;
+    if (isNaN(parsedAddedStock) || parsedAddedStock < 0) {
+      errors.addedStock = "El stock a agregar no puede ser menor a 0.";
+    }
 
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
@@ -588,6 +608,7 @@ export const ProductQuickPriceModal = ({
         vatPercent: roundPercent(vatPercent),
         priceWithoutVat: roundMoney(priceWithoutVat),
         finalPrice: roundMoney(finalPrice),
+        addedStock: parsedAddedStock > 0 ? parsedAddedStock : undefined,
       });
 
       setSelectedProduct((prev) =>
@@ -599,9 +620,11 @@ export const ProductQuickPriceModal = ({
               porcentajeIva: roundPercent(vatPercent),
               precioSinIva: roundMoney(priceWithoutVat),
               precioFinal: roundMoney(finalPrice),
+              stock: roundMoney((prev.stock ?? 0) + (parsedAddedStock > 0 ? parsedAddedStock : 0)),
             }
           : null
       );
+      setAddedStock("");
 
       // Destello verde de confirmación
       setFlashStatus("success");
@@ -664,6 +687,7 @@ export const ProductQuickPriceModal = ({
 
     setSelectedProduct(null);
     setSearchQuery("");
+    setAddedStock("");
     setFieldErrors({});
     setFlashStatus(null);
     setTimeout(() => {
@@ -978,7 +1002,7 @@ export const ProductQuickPriceModal = ({
                     </div>
 
                     {/* Precio Final (Destacado) */}
-                    <div className="sm:col-span-2">
+                    <div>
                       <label
                         className={`mb-1 block text-xs font-bold flex items-center justify-between transition-colors ${
                           fieldErrors.finalPrice
@@ -986,13 +1010,13 @@ export const ProductQuickPriceModal = ({
                             : "text-slate-900 dark:text-slate-100"
                         }`}
                       >
-                        <span>Precio Final de Venta ($)</span>
+                        <span>Precio Final ($)</span>
                         <span
                           className={`text-[11px] font-normal ${
                             fieldErrors.finalPrice ? "text-red-500" : "text-emerald-600"
                           }`}
                         >
-                          (IVA incluido)
+                          (IVA inc.)
                         </span>
                       </label>
                       <input
@@ -1004,7 +1028,7 @@ export const ProductQuickPriceModal = ({
                         onChange={(e) => handleFinalPriceChange(parseFloat(e.target.value) || 0)}
                         onFocus={(e) => handleNumericInputFocus(e, { isNew: false })}
                         disabled={!canWrite || isSaving}
-                        className={`ui-input w-full text-lg font-bold transition-colors ${
+                        className={`ui-input w-full text-base sm:text-lg font-bold transition-colors ${
                           fieldErrors.finalPrice
                             ? "border-red-500 ring-2 ring-red-500/30 bg-red-50/40 text-red-700 focus:border-red-500 focus:ring-red-500/40 dark:border-red-500 dark:bg-red-950/30 dark:text-red-200"
                             : "text-emerald-600 border-emerald-300 focus:border-emerald-600 focus:ring-emerald-500/20 dark:text-emerald-400 dark:border-emerald-800"
@@ -1014,6 +1038,50 @@ export const ProductQuickPriceModal = ({
                         <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium animate-in fade-in">
                           <AlertCircle size={13} className="flex-shrink-0" />
                           {fieldErrors.finalPrice}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Agregar Stock (+) */}
+                    <div>
+                      <div className="mb-1 flex items-center justify-between">
+                        <label
+                          className={`text-xs font-semibold transition-colors ${
+                            fieldErrors.addedStock
+                              ? "text-red-600 dark:text-red-400 font-bold"
+                              : "text-slate-700 dark:text-slate-300"
+                          }`}
+                        >
+                          Agregar Stock (+)
+                        </label>
+                        {addedStock && Number(addedStock) > 0 ? (
+                          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 animate-in fade-in">
+                            Total: {roundMoney((selectedProduct.stock ?? 0) + Number(addedStock))}
+                          </span>
+                        ) : null}
+                      </div>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        placeholder="0"
+                        value={addedStock}
+                        onChange={(e) => {
+                          setAddedStock(e.target.value);
+                          clearFieldError("addedStock");
+                        }}
+                        onFocus={(e) => handleNumericInputFocus(e, { isNew: false })}
+                        disabled={!canWrite || isSaving}
+                        className={`ui-input w-full text-sm font-medium transition-colors ${
+                          fieldErrors.addedStock
+                            ? "border-red-500 ring-2 ring-red-500/20 bg-red-50/40 text-red-700 focus:border-red-500 focus:ring-red-500/30 dark:border-red-500 dark:bg-red-950/30 dark:text-red-200"
+                            : ""
+                        }`}
+                      />
+                      {fieldErrors.addedStock && (
+                        <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium animate-in fade-in">
+                          <AlertCircle size={13} className="flex-shrink-0" />
+                          {fieldErrors.addedStock}
                         </p>
                       )}
                     </div>
@@ -1057,12 +1125,14 @@ export const ProductQuickPriceModal = ({
                       ) : flashStatus === "success" ? (
                         <>
                           <CheckCircle2 size={16} />
-                          ¡Precio guardado!
+                          ¡Guardado con éxito!
                         </>
                       ) : (
                         <>
                           <Save size={16} />
-                          Guardar nuevo precio
+                          {addedStock && Number(addedStock) > 0
+                            ? "Guardar precio y stock"
+                            : "Guardar nuevo precio"}
                         </>
                       )}
                     </button>
