@@ -1008,6 +1008,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
 
     const barcodeToProductId = new Map<string, string>();
     for (const barcodeRow of allBarcodes) {
+      if (!barcodeRow.is_primary) continue;
       const normalizedBarcode = normalizeBarcode(barcodeRow.barcode);
       if (!normalizedBarcode) continue;
       barcodeToProductId.set(normalizedBarcode, barcodeRow.product_id);

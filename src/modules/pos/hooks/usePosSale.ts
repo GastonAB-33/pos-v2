@@ -567,21 +567,21 @@ export const usePosSale = (tenantId: string | null) => {
         };
 
         const activeProducts = allProducts.filter((product) => product.is_active !== false);
-        const primaryBarcodeMap = allProductBarcodes.reduce<Record<string, string>>((acc, row) => {
-          if (!row.is_primary) return acc;
+        const activeProductBarcodes = allProductBarcodes.filter((row) => row.is_primary);
+        const primaryBarcodeMap = activeProductBarcodes.reduce<Record<string, string>>((acc, row) => {
           acc[row.product_id] = row.barcode;
           return acc;
         }, {});
 
         setProducts(activeProducts);
-        setProductBarcodes(allProductBarcodes);
+        setProductBarcodes(activeProductBarcodes);
         setPrimaryBarcodes(primaryBarcodeMap);
         setPriceLists(allPriceLists);
 
         if (allProducts.length > 0 && shouldFetchCatalog) {
           useProductsStore.setState({
             products: allProducts,
-            allBarcodes: allProductBarcodes,
+            allBarcodes: activeProductBarcodes,
             primaryBarcodes: primaryBarcodeMap,
             priceLists: allPriceLists,
             loadedTenantId: tenantId,
@@ -1064,7 +1064,7 @@ export const usePosSale = (tenantId: string | null) => {
           const barcodeClean = input.barcode.trim();
           setPrimaryBarcodes((current) => ({ ...current, [created.id]: barcodeClean }));
           setProductBarcodes((current) => [
-            ...current.filter((barcode) => barcode.product_id !== created.id || !barcode.is_primary),
+            ...current.filter((barcode) => barcode.product_id !== created.id),
             {
               id: `local-barcode-${created.id}`,
               tenant_id: tenantId,
@@ -1191,9 +1191,7 @@ export const usePosSale = (tenantId: string | null) => {
       const barcodeRow =
         productBarcodes.find(
           (row) => normalizeBarcodeValue(row.barcode) === normalizedBarcode && row.is_primary
-        ) ??
-        productBarcodes.find((row) => normalizeBarcodeValue(row.barcode) === normalizedBarcode) ??
-        null;
+        ) ?? null;
 
       if (barcodeRow) {
         const candidate = products.find((product) => product.id === barcodeRow.product_id);
