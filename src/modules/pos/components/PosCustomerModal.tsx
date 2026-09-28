@@ -139,22 +139,22 @@ export const PosCustomerModal = ({
   const getTabButtonClass = (tabKey: PosCustomerModalTab, hasErrors: boolean) => {
     if (tab === tabKey) {
       if (highlightedTab === tabKey || hasErrors) {
-        return "rounded-lg bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 shadow-sm ring-1 ring-red-300";
+        return "rounded-lg bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 shadow-sm ring-1 ring-red-300 dark:bg-red-950/60 dark:text-red-300 dark:ring-red-800";
       }
-      return "rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-slate-900 shadow-sm";
+      return "rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100 dark:shadow-none";
     }
 
     if (highlightedTab === tabKey || hasErrors) {
-      return "rounded-lg px-3 py-1.5 text-sm font-medium text-red-600";
+      return "rounded-lg px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400";
     }
 
-    return "rounded-lg px-3 py-1.5 text-sm font-medium text-slate-500";
+    return "rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white";
   };
 
   const sectionClass =
     highlightedTab === tab || (tab === "personal" && hasPersonalErrors) || (tab === "fiscal" && hasFiscalErrors) || (tab === "account" && hasAccountErrors)
-      ? "rounded-xl border border-red-200 bg-red-50/40 p-3"
-      : "rounded-xl bg-slate-50/40 p-3";
+      ? "rounded-xl border border-red-300 bg-red-50/60 p-3.5 dark:border-red-900/70 dark:bg-red-950/30"
+      : "rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 dark:border-slate-700/80 dark:bg-slate-800/50";
 
   return (
     <section className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4">
@@ -166,15 +166,16 @@ export const PosCustomerModal = ({
       />
 
       <form
-        className="relative z-10 w-full max-w-3xl space-y-4 rounded-2xl bg-white p-4 shadow-panel"
+        autoComplete="off"
+        className="relative z-10 w-full max-w-3xl space-y-4 rounded-2xl bg-white p-4 shadow-panel dark:bg-slate-900 dark:border dark:border-slate-800"
         onSubmit={handleSubmit(onSubmit, onInvalid)}
       >
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
           <ModalCloseButton label="Cerrar cliente" onClick={onCancel} disabled={disabled} />
         </div>
 
-        <div className="inline-flex rounded-xl bg-slate-50 p-1">
+        <div className="inline-flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800/80 dark:border dark:border-slate-700/60">
           <button
             type="button"
             onClick={() => setTab("personal")}
@@ -202,22 +203,40 @@ export const PosCustomerModal = ({
           <div className={sectionClass}>
             <div className="grid gap-3 md:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Nombre <span className="text-red-500">*</span>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Nombre <span className="text-red-500 dark:text-red-400">*</span>
                 </label>
-                <input {...register("firstName")} className="ui-input" disabled={disabled} />
-                {errors.firstName ? <p className="mt-1 text-xs text-red-600">{errors.firstName.message}</p> : null}
+                <input
+                  {...register("firstName")}
+                  className="ui-input"
+                  disabled={disabled}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                />
+                {errors.firstName ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.firstName.message}</p> : null}
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Apellido <span className="text-red-500">*</span>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Apellido <span className="text-red-500 dark:text-red-400">*</span>
                 </label>
-                <input {...register("lastName")} className="ui-input" disabled={disabled} />
-                {errors.lastName ? <p className="mt-1 text-xs text-red-600">{errors.lastName.message}</p> : null}
+                <input
+                  {...register("lastName")}
+                  className="ui-input"
+                  disabled={disabled}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                />
+                {errors.lastName ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.lastName.message}</p> : null}
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Tipo documento <span className="text-[11px] font-normal text-slate-500">{optionalLabel}</span>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Tipo documento <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
                 </label>
                 <select {...register("documentType")} className="ui-input" disabled={disabled}>
                   <option value="dni">DNI</option>
@@ -225,32 +244,69 @@ export const PosCustomerModal = ({
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Numero documento <span className="text-red-500">*</span>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Numero documento <span className="text-red-500 dark:text-red-400">*</span>
                 </label>
-                <input {...register("documentNumber")} className="ui-input" disabled={disabled} />
+                <input
+                  {...register("documentNumber")}
+                  className="ui-input"
+                  disabled={disabled}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                />
                 {errors.documentNumber ? (
-                  <p className="mt-1 text-xs text-red-600">{errors.documentNumber.message}</p>
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.documentNumber.message}</p>
                 ) : null}
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Telefono <span className="text-[11px] font-normal text-slate-500">{optionalLabel}</span>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Telefono <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
                 </label>
-                <input {...register("phone")} className="ui-input" disabled={disabled} />
+                <input
+                  {...register("phone")}
+                  className="ui-input"
+                  disabled={disabled}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Email <span className="text-[11px] font-normal text-slate-500">{optionalLabel}</span>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Email <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
                 </label>
-                <input type="email" {...register("email")} className="ui-input" disabled={disabled} />
-                {errors.email ? <p className="mt-1 text-xs text-red-600">{errors.email.message}</p> : null}
+                <input
+                  type="email"
+                  {...register("email")}
+                  className="ui-input"
+                  disabled={disabled}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                />
+                {errors.email ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.email.message}</p> : null}
               </div>
               <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Direccion <span className="text-[11px] font-normal text-slate-500">{optionalLabel}</span>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Direccion <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
                 </label>
-                <input {...register("address")} className="ui-input" disabled={disabled} />
+                <input
+                  {...register("address")}
+                  className="ui-input"
+                  disabled={disabled}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                />
               </div>
             </div>
           </div>
@@ -260,37 +316,65 @@ export const PosCustomerModal = ({
           <div className={sectionClass}>
             <div className="grid gap-3 md:grid-cols-2">
               <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Razon social <span className="text-[11px] font-normal text-slate-500">{optionalLabel}</span>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Razon social <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
                 </label>
-                <input {...register("fiscalBusinessName")} className="ui-input" disabled={disabled} />
+                <input
+                  {...register("fiscalBusinessName")}
+                  className="ui-input"
+                  disabled={disabled}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                />
               </div>
               <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Domicilio fiscal <span className="text-[11px] font-normal text-slate-500">{optionalLabel}</span>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Domicilio fiscal <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
                 </label>
-                <input {...register("fiscalAddress")} className="ui-input" disabled={disabled} />
+                <input
+                  {...register("fiscalAddress")}
+                  className="ui-input"
+                  disabled={disabled}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Condicion fiscal <span className="text-[11px] font-normal text-slate-500">{optionalLabel}</span>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Condicion fiscal <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
                 </label>
                 <input
                   {...register("fiscalCondition")}
                   placeholder="Consumidor final, RI, Monotributo..."
                   className="ui-input"
                   disabled={disabled}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  CUIT fiscal (ARCA) <span className="text-[11px] font-normal text-slate-500">{optionalLabel}</span>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  CUIT fiscal (ARCA) <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
                 </label>
                 <input
                   {...register("fiscalCuit")}
                   placeholder="Si se completa, se usa como doc fiscal"
                   className="ui-input"
                   disabled={disabled}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
                 />
               </div>
             </div>
@@ -300,7 +384,7 @@ export const PosCustomerModal = ({
         {tab === "account" ? (
           <div className={sectionClass}>
             <div className="space-y-3">
-              <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
                 <input
                   type="checkbox"
                   {...register("currentAccountEnabled")}
@@ -311,8 +395,8 @@ export const PosCustomerModal = ({
               </label>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Limite autorizado <span className="text-[11px] font-normal text-slate-500">{optionalLabel}</span>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Limite autorizado <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
                 </label>
                 <input
                   type="number"
@@ -322,29 +406,34 @@ export const PosCustomerModal = ({
                   className="ui-input"
                   disabled={disabled || !currentAccountEnabled}
                   placeholder="Sin limite si se deja vacio"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
                 />
               </div>
 
               <div className="grid gap-2 text-xs sm:grid-cols-4">
-                <p className="rounded-lg bg-white px-2.5 py-2 text-slate-600">
-                  <span className="block text-[11px] text-slate-500">Estado</span>
-                  <span className="font-medium text-slate-900">
+                <p className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">Estado</span>
+                  <span className="font-medium text-slate-900 dark:text-slate-100">
                     {currentAccountEnabled ? "Habilitada" : "Deshabilitada"}
                   </span>
                 </p>
-                <p className="rounded-lg bg-white px-2.5 py-2 text-slate-600">
-                  <span className="block text-[11px] text-slate-500">Limite autorizado</span>
-                  <span className="font-medium text-slate-900">
+                <p className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">Limite autorizado</span>
+                  <span className="font-medium text-slate-900 dark:text-slate-100">
                     {accountLimit == null ? "Sin limite" : currency.format(accountLimit)}
                   </span>
                 </p>
-                <p className="rounded-lg bg-white px-2.5 py-2 text-slate-600">
-                  <span className="block text-[11px] text-slate-500">Deuda actual</span>
-                  <span className="font-medium text-slate-900">{currency.format(currentBalance)}</span>
+                <p className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">Deuda actual</span>
+                  <span className="font-medium text-slate-900 dark:text-slate-100">{currency.format(currentBalance)}</span>
                 </p>
-                <p className="rounded-lg bg-white px-2.5 py-2 text-slate-600">
-                  <span className="block text-[11px] text-slate-500">Disponible</span>
-                  <span className="font-medium text-slate-900">
+                <p className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">Disponible</span>
+                  <span className="font-medium text-slate-900 dark:text-slate-100">
                     {currentAccountEnabled
                       ? accountAvailable == null
                         ? "Sin tope"
@@ -354,25 +443,27 @@ export const PosCustomerModal = ({
                 </p>
               </div>
 
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Este limite se aplica en POS cuando se cobra con cuenta corriente.
               </p>
 
-              <div className="flex items-center justify-end">
-                <button
-                  type="button"
-                  className="ui-btn-ghost px-3 py-1.5 text-xs"
-                  onClick={onOpenCurrentAccount}
-                  disabled={disabled || !onOpenCurrentAccount}
-                >
-                  Ver cuenta corriente
-                </button>
-              </div>
+              {onOpenCurrentAccount ? (
+                <div className="flex items-center justify-end">
+                  <button
+                    type="button"
+                    className="ui-btn-ghost px-3 py-1.5 text-xs"
+                    onClick={onOpenCurrentAccount}
+                    disabled={disabled}
+                  >
+                    Ver cuenta corriente
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}
 
-        <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
           <button type="button" className="ui-btn-ghost" onClick={onCancel} disabled={disabled}>
             Cancelar
           </button>

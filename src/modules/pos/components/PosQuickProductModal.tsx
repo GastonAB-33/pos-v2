@@ -139,7 +139,7 @@ export const PosQuickProductModal = ({
 
         <div className="space-y-4">
           <div className="grid gap-2 sm:grid-cols-2">
-            <label className="rounded-xl border border-slate-200 p-3 text-sm">
+            <label className="rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-200">
               <input
                 type="radio"
                 className="mr-2"
@@ -147,11 +147,11 @@ export const PosQuickProductModal = ({
                 onChange={() => setSaveMode("sale_only")}
               />
               {saleOnlyLabel ?? "Solo para esta venta"}
-              <span className="mt-1 block text-xs text-slate-500">
+              <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
                 {saleOnlyDescription ?? "No se guarda en productos ni descuenta stock."}
               </span>
             </label>
-            <label className="rounded-xl border border-slate-200 p-3 text-sm">
+            <label className="rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-200">
               <input
                 type="radio"
                 className="mr-2"
@@ -159,7 +159,7 @@ export const PosQuickProductModal = ({
                 onChange={() => setSaveMode("catalog")}
               />
               {catalogLabel ?? "Guardar en el sistema"}
-              <span className="mt-1 block text-xs text-slate-500">
+              <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
                 {catalogDescription ?? "Crea el producto y queda disponible para futuras ventas."}
               </span>
             </label>
@@ -167,7 +167,7 @@ export const PosQuickProductModal = ({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-slate-700">Nombre</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Nombre</label>
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
@@ -181,7 +181,7 @@ export const PosQuickProductModal = ({
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Categoria</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Categoria</label>
               <input
                 list="pos-quick-product-categories"
                 value={category}
@@ -235,7 +235,7 @@ export const PosQuickProductModal = ({
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">{priceLabel}</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">{priceLabel}</label>
               <input
                 type="number"
                 min="0.01"
@@ -255,7 +255,7 @@ export const PosQuickProductModal = ({
             {saveMode === "catalog" ? (
               <>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Costo</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Costo</label>
                   <input
                     type="number"
                     min="0"
@@ -273,7 +273,7 @@ export const PosQuickProductModal = ({
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">{stockLabel}</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">{stockLabel}</label>
                   <input
                     type="number"
                     min="0.001"
@@ -292,7 +292,7 @@ export const PosQuickProductModal = ({
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Codigo interno</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Codigo interno</label>
                   <input
                     type="text"
                     autoComplete="off"
@@ -308,7 +308,7 @@ export const PosQuickProductModal = ({
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Codigo de barras</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Codigo de barras</label>
                   <input
                     type="text"
                     autoComplete="off"
@@ -323,7 +323,7 @@ export const PosQuickProductModal = ({
                   />
                 </div>
 
-                <label className="flex items-center gap-2 text-sm text-slate-700">
+                <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
                   <input type="checkbox" checked={favorite} onChange={(event) => setFavorite(event.target.checked)} />
                   Mostrar en favoritos del POS
                 </label>
@@ -332,7 +332,7 @@ export const PosQuickProductModal = ({
           </div>
         </div>
 
-        <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
+        <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
           <button type="button" className="ui-btn-ghost" onClick={onClose} disabled={isSubmitting}>
             Cancelar
           </button>

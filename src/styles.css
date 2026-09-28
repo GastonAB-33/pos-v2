@@ -62,7 +62,7 @@ html.dark {
   --ui-nav-muted: #a1a1aa;
   --ui-surface: #121215;
   --ui-surface-2: #1c1c21;
-  --ui-border: #27272a;
+  --ui-border: #3f3f46;
 
   --ui-text: #fafafa;
   --ui-text-soft: #d4d4d8;
@@ -94,7 +94,7 @@ html.midnight {
   --ui-nav-muted: #94a3b8;
   --ui-surface: #111c38;
   --ui-surface-2: #1b284f;
-  --ui-border: #23335e;
+  --ui-border: #33477d;
 
   --ui-text: #f8fafc;
   --ui-text-soft: #cbd5e1;
@@ -567,6 +567,62 @@ html[data-sidebar-theme="light"] .app-sidebar-brand,
     border-color: var(--ui-border);
     background-color: var(--ui-surface-2);
     color: var(--ui-text);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  }
+
+  .ui-input:focus {
+    outline: none;
+    border-color: var(--ui-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-accent) 30%, transparent);
+  }
+
+  .ui-input::placeholder {
+    color: var(--ui-muted);
+  }
+
+  html.dark .ui-input {
+    border-color: #3f3f46;
+    background-color: #18181b;
+    color: #f4f4f5;
+  }
+
+  html.dark .ui-input:hover:not(:disabled) {
+    border-color: #52525b;
+  }
+
+  html.dark .ui-input:focus {
+    border-color: var(--ui-accent);
+    background-color: #121215;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-accent) 35%, transparent);
+  }
+
+  html.dark .ui-input::placeholder {
+    color: #71717a;
+  }
+
+  html.midnight .ui-input {
+    border-color: #33477d;
+    background-color: #16213e;
+    color: #f8fafc;
+  }
+
+  html.midnight .ui-input:hover:not(:disabled) {
+    border-color: #435b9c;
+  }
+
+  html.midnight .ui-input:focus {
+    border-color: var(--ui-accent);
+    background-color: #0f172a;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ui-accent) 35%, transparent);
+  }
+
+  html.midnight .ui-input::placeholder {
+    color: #94a3b8;
+  }
+
+  select.ui-input option {
+    background-color: var(--ui-surface);
+    color: var(--ui-text);
   }
 
   .ui-input--date {
@@ -1008,12 +1064,36 @@ html[data-sidebar-theme="light"] .app-sidebar-brand,
   border: 1px solid var(--ui-border);
   border-radius: 6px;
   background: var(--ui-surface);
-  color: var(--ui-text-muted);
+  color: var(--ui-muted);
   transition:
     border-color 150ms ease,
     background-color 150ms ease,
     color 150ms ease,
     box-shadow 150ms ease;
+}
+
+html.dark .ui-icon-button {
+  background-color: #1c1c21;
+  border-color: #3f3f46;
+  color: #d4d4d8;
+}
+
+html.dark .ui-icon-button:hover:not(:disabled) {
+  background-color: #27272a;
+  border-color: var(--ui-accent);
+  color: #ffffff;
+}
+
+html.midnight .ui-icon-button {
+  background-color: #182444;
+  border-color: #33477d;
+  color: #cbd5e1;
+}
+
+html.midnight .ui-icon-button:hover:not(:disabled) {
+  background-color: #23335e;
+  border-color: var(--ui-accent);
+  color: #ffffff;
 }
 
 .ui-icon-button--sm {
@@ -1170,7 +1250,7 @@ html[data-sidebar-theme="light"] .app-sidebar-brand,
 .app-main:not(.app-main--pos) .ui-input {
   min-height: 2.25rem;
   border-radius: 0.5rem;
-  background: var(--ui-surface);
+  background: var(--ui-surface-2);
 }
 
 .ui-table-wrap,
@@ -1625,7 +1705,15 @@ section.fixed.inset-0 > .relative.z-10 {
 }
 
 html.dark section.fixed.inset-0 > .relative.z-10 {
-  box-shadow: 0 22px 52px rgba(0, 0, 0, 0.42) !important;
+  background-color: #121215;
+  border-color: #3f3f46;
+  box-shadow: 0 22px 52px rgba(0, 0, 0, 0.6) !important;
+}
+
+html.midnight section.fixed.inset-0 > .relative.z-10 {
+  background-color: #111c38;
+  border-color: #33477d;
+  box-shadow: 0 22px 52px rgba(2, 6, 23, 0.6) !important;
 }
 
 @media (max-width: 1024px) {
@@ -2267,6 +2355,32 @@ html.dark .app-sidebar-group-btn--active .app-sidebar-group-chevron {
 .ui-btn-ghost {
   border: 1px solid var(--ui-border);
   background: var(--ui-surface);
+  color: var(--ui-text-soft, var(--ui-muted));
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+html.dark .ui-btn-ghost {
+  border-color: #3f3f46;
+  background-color: #1c1c21;
+  color: #e4e4e7;
+}
+
+html.dark .ui-btn-ghost:hover:not(:disabled) {
+  background-color: #27272a;
+  border-color: #52525b;
+  color: #ffffff;
+}
+
+html.midnight .ui-btn-ghost {
+  border-color: #33477d;
+  background-color: #182444;
+  color: #f1f5f9;
+}
+
+html.midnight .ui-btn-ghost:hover:not(:disabled) {
+  background-color: #23335e;
+  border-color: #475f9e;
+  color: #ffffff;
 }
 
 .ui-table-wrap {
