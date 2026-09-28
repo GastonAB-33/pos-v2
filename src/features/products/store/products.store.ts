@@ -93,16 +93,28 @@ export const useProductsStore = create<ProductsCatalogState>()(
       ]);
 
       const barcodeMap: Record<string, string> = {};
+      const barcodesByProduct: Record<string, ProductBarcode[]> = {};
+
       for (const barcode of barcodes) {
-        if (!barcode.barcode) continue;
-        if (!barcodeMap[barcode.product_id] || barcode.is_primary) {
-          barcodeMap[barcode.product_id] = barcode.barcode;
+        if (!barcode.barcode || !barcode.product_id) continue;
+        if (!barcodesByProduct[barcode.product_id]) {
+          barcodesByProduct[barcode.product_id] = [];
+        }
+        barcodesByProduct[barcode.product_id].push(barcode);
+      }
+
+      const activeBarcodes: ProductBarcode[] = [];
+      for (const [prodId, items] of Object.entries(barcodesByProduct)) {
+        const active = items.find((i) => i.is_primary) ?? items[items.length - 1];
+        if (active && active.barcode) {
+          barcodeMap[prodId] = active.barcode;
+          activeBarcodes.push(active);
         }
       }
 
       set({
         products: sortByName(list),
-        allBarcodes: barcodes,
+        allBarcodes: activeBarcodes,
         primaryBarcodes: barcodeMap,
         priceLists: lists.sort((a, b) => a.name.localeCompare(b.name)),
         loadedTenantId: tenantId,
@@ -154,10 +166,8 @@ export const useProductsStore = create<ProductsCatalogState>()(
         nextPrimary[productId] = normalized;
       }
 
-      // Actualizar o crear fila en allBarcodes
-      const filtered = state.allBarcodes.filter(
-        (row) => !(row.product_id === productId && row.is_primary)
-      );
+      // Cada producto tiene un único código de barra: eliminar cualquier código previo de este producto
+      const filtered = state.allBarcodes.filter((row) => row.product_id !== productId);
 
       const nextAll = normalized
         ? [

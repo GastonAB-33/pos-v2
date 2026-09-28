@@ -102,7 +102,15 @@ export const productsService = {
       stock_current: stockCurrent,
       stock: stockCurrent,
     } as UpdateProductInput & { stock: number }),
-  delete: (tenantId: string, id: string) => crud.delete(tenantId, id),
+  delete: async (tenantId: string, id: string) => {
+    try {
+      const productBarcodes = await barcodeCrud.query(tenantId, { eq: { product_id: id } });
+      await Promise.all(productBarcodes.map((row) => barcodeCrud.delete(tenantId, row.id)));
+    } catch {
+      // Silenciar errores de limpieza de códigos al borrar producto
+    }
+    return crud.delete(tenantId, id);
+  },
   getBarcodesByTenant: (tenantId: string) => barcodeCrud.getAllByTenant(tenantId),
 
   getByBarcode: async (tenantId: string, rawBarcode: string): Promise<Product | null> => {
@@ -110,24 +118,61 @@ export const productsService = {
     if (!barcode) return null;
 
     const matches = await barcodeCrud.query(tenantId, { eq: { barcode } });
-    if (!matches.length) {
-      const matchedProducts = await crud.query(tenantId, { eq: { code: barcode }, limit: 1 });
-      return matchedProducts[0] ?? null;
+    for (const match of matches) {
+      // Verificar si este código es el primario activo del producto
+      const productBarcodes = await barcodeCrud.query(tenantId, {
+        eq: { product_id: match.product_id },
+      });
+      const activePrimary = productBarcodes.find((b) => b.is_primary) ?? productBarcodes[0];
+
+      // Si el código no es el activo del producto, es un remanente obsoleto: purgarlo
+      if (!match.is_primary || (activePrimary && activePrimary.id !== match.id)) {
+        void barcodeCrud.delete(tenantId, match.id);
+        continue;
+      }
+
+      // Si es el primario activo, verificar que el producto exista
+      const product = await crud.getById(tenantId, match.product_id);
+      if (product) {
+        return product;
+      }
+
+      // Si el producto no existe, purgar código huérfano
+      void barcodeCrud.delete(tenantId, match.id);
     }
 
-    const preferred = matches.find((item) => item.is_primary) ?? matches[0];
-    return crud.getById(tenantId, preferred.product_id);
+    // Búsqueda por código de producto único
+    const matchedProducts = await crud.query(tenantId, { eq: { code: barcode }, limit: 1 });
+    return matchedProducts[0] ?? null;
   },
 
   getPrimaryBarcodesMapByTenant: async (tenantId: string): Promise<Record<string, string>> => {
     const allBarcodes = await barcodeCrud.getAllByTenant(tenantId);
     const barcodeMap: Record<string, string> = {};
+    const barcodesByProduct: Record<string, ProductBarcode[]> = {};
 
     for (const barcode of allBarcodes) {
-      if (!barcode.barcode) continue;
-      // Asignar el código si no existe aún, o si este tiene is_primary = true
-      if (!barcodeMap[barcode.product_id] || barcode.is_primary) {
-        barcodeMap[barcode.product_id] = barcode.barcode;
+      if (!barcode.barcode || !barcode.product_id) continue;
+      if (!barcodesByProduct[barcode.product_id]) {
+        barcodesByProduct[barcode.product_id] = [];
+      }
+      barcodesByProduct[barcode.product_id].push(barcode);
+    }
+
+    // Regla: cada producto tiene un único código de barra y un único código de producto.
+    // Si un producto acumuló múltiples registros de códigos en la base de datos por ediciones previas,
+    // conservar solo el primario activo y purgar automáticamente los obsoletos.
+    for (const [prodId, items] of Object.entries(barcodesByProduct)) {
+      if (items.length > 1) {
+        const activeBarcode = items.find((b) => b.is_primary) ?? items[items.length - 1];
+        const staleItems = items.filter((b) => b.id !== activeBarcode.id);
+        void Promise.all(staleItems.map((stale) => barcodeCrud.delete(tenantId, stale.id)));
+
+        if (activeBarcode.barcode) {
+          barcodeMap[prodId] = activeBarcode.barcode;
+        }
+      } else if (items.length === 1 && items[0].barcode) {
+        barcodeMap[prodId] = items[0].barcode;
       }
     }
 
@@ -141,44 +186,72 @@ export const productsService = {
   ): Promise<ProductBarcode | null> => {
     const barcode = normalizeBarcode(rawBarcode);
 
+    // Si viene vacío, eliminar cualquier código de este producto
     if (!barcode) {
       const currentProductBarcodes = await barcodeCrud.query(tenantId, {
         eq: { product_id: productId },
       });
-      const primaryRows = currentProductBarcodes.filter((item) => item.is_primary);
-      await Promise.all(primaryRows.map((row) => barcodeCrud.delete(tenantId, row.id)));
+      await Promise.all(currentProductBarcodes.map((row) => barcodeCrud.delete(tenantId, row.id)));
       return null;
     }
 
+    // 1. Validar que el código no pertenezca activamente a OTRO producto.
+    // Regla: los productos tienen un único código de barra y un único código de producto.
     const matchesWithBarcode = await barcodeCrud.query(tenantId, { eq: { barcode } });
-    const duplicated = matchesWithBarcode.find((item) => item.product_id !== productId);
+    for (const match of matchesWithBarcode) {
+      if (match.product_id === productId) continue;
 
-    if (duplicated) {
-      throw new Error("El codigo de barras ya esta asignado a otro producto");
+      const otherProductBarcodes = await barcodeCrud.query(tenantId, {
+        eq: { product_id: match.product_id },
+      });
+      const otherPrimary = otherProductBarcodes.find((item) => item.is_primary) ?? otherProductBarcodes[0];
+
+      // Si el otro producto tiene asignado OTRO código como activo (o este match no es primario),
+      // este registro es un remanente obsoleto/fantasma: se elimina para liberar el código.
+      if (!match.is_primary || (otherPrimary && otherPrimary.id !== match.id)) {
+        await barcodeCrud.delete(tenantId, match.id);
+        continue;
+      }
+
+      // Si es el código activo del otro producto, verificar si el otro producto existe
+      const otherProduct = await crud.getById(tenantId, match.product_id);
+      if (!otherProduct) {
+        // Producto ya inexistente: purgar registro huérfano
+        await barcodeCrud.delete(tenantId, match.id);
+        continue;
+      }
+
+      // El código verdaderamente está asignado a otro producto existente
+      throw new Error(`El código de barras ya está asignado al producto "${otherProduct.name}"`);
     }
 
+    // 2. Gestionar los códigos del producto actual.
+    // Un único código de barra por producto: purgar cualquier código anterior que difiera del nuevo.
     const currentProductBarcodes = await barcodeCrud.query(tenantId, {
       eq: { product_id: productId },
     });
 
+    const obsoleteRows = currentProductBarcodes.filter(
+      (item) => normalizeBarcode(item.barcode) !== barcode
+    );
+    await Promise.all(obsoleteRows.map((item) => barcodeCrud.delete(tenantId, item.id)));
+
+    // Si ya existía este código para el producto actual, garantizar que esté como primario
     const existing = currentProductBarcodes.find(
       (item) => normalizeBarcode(item.barcode) === barcode
     );
 
-    await Promise.all(
-      currentProductBarcodes
-        .filter((item) => item.id !== existing?.id && item.is_primary)
-        .map((item) => barcodeCrud.update(tenantId, item.id, { is_primary: false }))
-    );
-
     if (existing) {
-      const updated = await barcodeCrud.update(tenantId, existing.id, {
-        barcode,
-        is_primary: true,
-      });
-      return updated;
+      if (!existing.is_primary) {
+        return barcodeCrud.update(tenantId, existing.id, {
+          barcode,
+          is_primary: true,
+        });
+      }
+      return existing;
     }
 
+    // Crear el nuevo registro único
     return barcodeCrud.create(tenantId, {
       product_id: productId,
       barcode,
