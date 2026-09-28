@@ -462,13 +462,16 @@ export const ProductQuickPriceModal = ({
         return extraBarcodes.some((bar) => normalizeSearchQuery(bar) === compact);
       });
 
+      const isBarcodeLike = /^\d{6,}$/.test(compact);
+
       if (exactMatch) {
         setNotFoundCode(null);
         attemptSelectProduct(exactMatch);
         return;
       }
 
-      if (searchResults.length > 0) {
+      // Si no es un código de barras numérico y hay sugerencias por nombre/texto, seleccionar la primera
+      if (!isBarcodeLike && searchResults.length > 0) {
         setNotFoundCode(null);
         attemptSelectProduct(searchResults[0]);
         return;
@@ -998,6 +1001,47 @@ export const ProductQuickPriceModal = ({
                       />
                     </div>
 
+                    {/* Precio Final (Destacado) */}
+                    <div>
+                      <label
+                        className={`mb-1 block text-xs font-bold flex items-center justify-between transition-colors ${
+                          fieldErrors.finalPrice
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-slate-900 dark:text-slate-100"
+                        }`}
+                      >
+                        <span>Precio Final ($)</span>
+                        <span
+                          className={`text-[11px] font-normal ${
+                            fieldErrors.finalPrice ? "text-red-500" : "text-emerald-600"
+                          }`}
+                        >
+                          (IVA inc.)
+                        </span>
+                      </label>
+                      <input
+                        ref={finalPriceInputRef}
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={finalPrice}
+                        onChange={(e) => handleFinalPriceChange(parseFloat(e.target.value) || 0)}
+                        onFocus={(e) => handleNumericInputFocus(e, { isNew: false })}
+                        disabled={!canWrite || isSaving}
+                        className={`ui-input w-full text-base sm:text-lg font-bold transition-colors ${
+                          fieldErrors.finalPrice
+                            ? "border-red-500 ring-2 ring-red-500/30 bg-red-50/40 text-red-700 focus:border-red-500 focus:ring-red-500/40 dark:border-red-500 dark:bg-red-950/30 dark:text-red-200"
+                            : "text-emerald-600 border-emerald-300 focus:border-emerald-600 focus:ring-emerald-500/20 dark:text-emerald-400 dark:border-emerald-800"
+                        }`}
+                      />
+                      {fieldErrors.finalPrice && (
+                        <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium animate-in fade-in">
+                          <AlertCircle size={13} className="flex-shrink-0" />
+                          {fieldErrors.finalPrice}
+                        </p>
+                      )}
+                    </div>
+
                     {/* Agregar Stock (+) */}
                     <div>
                       <div className="mb-1 flex items-center justify-between">
@@ -1038,47 +1082,6 @@ export const ProductQuickPriceModal = ({
                         <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium animate-in fade-in">
                           <AlertCircle size={13} className="flex-shrink-0" />
                           {fieldErrors.addedStock}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Precio Final (Destacado) */}
-                    <div>
-                      <label
-                        className={`mb-1 block text-xs font-bold flex items-center justify-between transition-colors ${
-                          fieldErrors.finalPrice
-                            ? "text-red-600 dark:text-red-400"
-                            : "text-slate-900 dark:text-slate-100"
-                        }`}
-                      >
-                        <span>Precio Final ($)</span>
-                        <span
-                          className={`text-[11px] font-normal ${
-                            fieldErrors.finalPrice ? "text-red-500" : "text-emerald-600"
-                          }`}
-                        >
-                          (IVA inc.)
-                        </span>
-                      </label>
-                      <input
-                        ref={finalPriceInputRef}
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={finalPrice}
-                        onChange={(e) => handleFinalPriceChange(parseFloat(e.target.value) || 0)}
-                        onFocus={(e) => handleNumericInputFocus(e, { isNew: false })}
-                        disabled={!canWrite || isSaving}
-                        className={`ui-input w-full text-base sm:text-lg font-bold transition-colors ${
-                          fieldErrors.finalPrice
-                            ? "border-red-500 ring-2 ring-red-500/30 bg-red-50/40 text-red-700 focus:border-red-500 focus:ring-red-500/40 dark:border-red-500 dark:bg-red-950/30 dark:text-red-200"
-                            : "text-emerald-600 border-emerald-300 focus:border-emerald-600 focus:ring-emerald-500/20 dark:text-emerald-400 dark:border-emerald-800"
-                        }`}
-                      />
-                      {fieldErrors.finalPrice && (
-                        <p className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center gap-1 font-medium animate-in fade-in">
-                          <AlertCircle size={13} className="flex-shrink-0" />
-                          {fieldErrors.finalPrice}
                         </p>
                       )}
                     </div>
