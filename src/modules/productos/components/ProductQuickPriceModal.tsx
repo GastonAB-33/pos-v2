@@ -154,11 +154,10 @@ export const ProductQuickPriceModal = ({
         const clean = initialQuery.trim();
         const compact = normalizeSearchQuery(clean).replace(/\s+/g, "");
         const match = products.find((p) => {
-          const extraBarcodes = barcodesByProductId?.get(p.entity.id) ?? [];
           if (normalizeSearchQuery(p.codigoBarras) === compact) return true;
           if (normalizeSearchQuery(p.codigoProducto) === compact) return true;
           if (p.nombre.trim().toLowerCase() === clean.toLowerCase()) return true;
-          return extraBarcodes.some((bar) => normalizeSearchQuery(bar) === compact);
+          return false;
         });
 
         if (match) {
@@ -340,10 +339,9 @@ export const ProductQuickPriceModal = ({
 
     const compact = normalizeSearchQuery(clean).replace(/\s+/g, "");
     const match = products.find((p) => {
-      const extraBarcodes = barcodesByProductId?.get(p.entity.id) ?? [];
       if (normalizeSearchQuery(p.codigoBarras) === compact) return true;
       if (normalizeSearchQuery(p.codigoProducto) === compact) return true;
-      return extraBarcodes.some((bar) => normalizeSearchQuery(bar) === compact);
+      return false;
     });
 
     if (match) {
@@ -418,13 +416,11 @@ export const ProductQuickPriceModal = ({
 
     return products
       .filter((p) => {
-        const extraBarcodes = barcodesByProductId?.get(p.entity.id) ?? [];
         return matchesProductSearch(
           {
             name: p.nombre,
             code: p.codigoProducto,
             barcode: p.codigoBarras,
-            barcodes: extraBarcodes,
             category: p.categoria,
             subcategory: p.subcategoria,
             supplier: p.proveedor,
@@ -444,7 +440,7 @@ export const ProductQuickPriceModal = ({
         return a.nombre.localeCompare(b.nombre);
       })
       .slice(0, 10);
-  }, [barcodesByProductId, products, searchQuery]);
+  }, [products, searchQuery]);
 
   // Si el usuario presiona Enter en la búsqueda
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -456,10 +452,9 @@ export const ProductQuickPriceModal = ({
       const compact = normalizeSearchQuery(raw).replace(/\s+/g, "");
 
       const exactMatch = products.find((p) => {
-        const extraBarcodes = barcodesByProductId?.get(p.entity.id) ?? [];
         if (normalizeSearchQuery(p.codigoBarras) === compact) return true;
         if (normalizeSearchQuery(p.codigoProducto) === compact) return true;
-        return extraBarcodes.some((bar) => normalizeSearchQuery(bar) === compact);
+        return false;
       });
 
       const isBarcodeLike = /^\d{6,}$/.test(compact);

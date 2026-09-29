@@ -77,13 +77,12 @@ export const useProductsStore = create<ProductsCatalogState>()(
         const isSameTenant = state.loadedTenantId === tenantId;
         const hasData = state.products.length > 0;
 
-        // Si ya tenemos datos del mismo tenant y no se forzó recarga: carga instantánea en 0ms
+        // Si ya tenemos datos del mismo tenant y no se forzó recarga: mantener UI instantánea pero revalidar en segundo plano
         if (isSameTenant && hasData && !force) {
-          return;
+          set({ isBackgroundRefreshing: true });
+        } else {
+          set({ isLoading: true, error: null });
         }
-
-        // Primera carga o cambio de tenant o recarga forzada: mostrar indicador
-        set({ isLoading: true, error: null });
 
     try {
       const [list, barcodes, lists] = await Promise.all([
@@ -93,23 +92,12 @@ export const useProductsStore = create<ProductsCatalogState>()(
       ]);
 
       const barcodeMap: Record<string, string> = {};
-      const barcodesByProduct: Record<string, ProductBarcode[]> = {};
+      const activeBarcodes: ProductBarcode[] = [];
 
       for (const barcode of barcodes) {
         if (!barcode.barcode || !barcode.product_id) continue;
-        if (!barcodesByProduct[barcode.product_id]) {
-          barcodesByProduct[barcode.product_id] = [];
-        }
-        barcodesByProduct[barcode.product_id].push(barcode);
-      }
-
-      const activeBarcodes: ProductBarcode[] = [];
-      for (const [prodId, items] of Object.entries(barcodesByProduct)) {
-        const active = items.find((i) => i.is_primary) ?? items[items.length - 1];
-        if (active && active.barcode) {
-          barcodeMap[prodId] = active.barcode;
-          activeBarcodes.push(active);
-        }
+        barcodeMap[barcode.product_id] = barcode.barcode;
+        activeBarcodes.push(barcode);
       }
 
       set({

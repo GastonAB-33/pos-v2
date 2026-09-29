@@ -60,29 +60,26 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
 
   const barcodesByProductId = useMemo(() => {
     const map = new Map<string, string[]>();
-    for (const item of crud.allBarcodes) {
-      if (!item.barcode) continue;
-      const list = map.get(item.product_id) ?? [];
-      const trimmed = item.barcode.trim();
-      if (trimmed) list.push(trimmed);
-      map.set(item.product_id, list);
+    for (const [productId, barcode] of Object.entries(crud.primaryBarcodes)) {
+      if (barcode && barcode.trim()) {
+        map.set(productId, [barcode.trim()]);
+      }
     }
     return map;
-  }, [crud.allBarcodes]);
+  }, [crud.primaryBarcodes]);
 
   const filteredProducts = useMemo(() => {
     const rawSearch = filters.search.trim();
     const scope = filters.searchScope || "all";
 
     return productsView.filter((product) => {
-      const extraBarcodes = barcodesByProductId.get(product.entity.id) ?? [];
+      const barcode = crud.primaryBarcodes[product.entity.id] ?? product.codigoBarras;
 
       const matches = !rawSearch || matchesProductSearch(
         {
           name: product.nombre,
           code: product.codigoProducto,
-          barcode: product.codigoBarras,
-          barcodes: extraBarcodes,
+          barcode,
           category: product.categoria,
           subcategory: product.subcategoria,
           supplier: product.proveedor,
