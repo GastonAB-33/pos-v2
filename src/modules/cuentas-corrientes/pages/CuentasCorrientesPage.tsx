@@ -13,6 +13,7 @@ import { PosCustomerModal, type PosCustomerModalValues } from "@/modules/pos/com
 import { customersService } from "@/services/customers.service";
 import { auditService } from "@/services/audit.service";
 import { posCustomerProfilesService } from "@/services/pos-customer-profiles.service";
+import { formatCustomerDocument } from "@/modules/configuracion/hooks/useEntityRequirements";
 import {
   Users,
   CheckCircle2,
@@ -120,7 +121,7 @@ export const CuentasCorrientesPage = () => {
         code: buildCustomerCode(fullName),
         full_name: fullName,
         document_type: fiscalCuit ? "cuit" : values.documentType,
-        document_number: fiscalCuit || values.documentNumber.trim(),
+        document_number: fiscalCuit || (values.documentNumber ?? "").trim(),
         fiscal_business_name: values.fiscalBusinessName?.trim() || null,
         fiscal_address: values.fiscalAddress?.trim() || null,
         fiscal_condition: values.fiscalCondition?.trim() || null,
@@ -378,7 +379,7 @@ export const CuentasCorrientesPage = () => {
                               {cust.full_name}
                             </p>
                             <p className="text-[11px] text-slate-500 mt-0.5">
-                              {cust.document_type?.toUpperCase()} {cust.document_number}
+                              {formatCustomerDocument(cust.document_type, cust.document_number)}
                             </p>
                           </td>
 

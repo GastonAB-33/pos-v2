@@ -12,6 +12,7 @@ import type {
   BarcodeScaleSettings,
   BusinessSettings,
   CashSettings,
+  EntityRequirementsSettings,
   FacturacionSettings,
   MercadoPagoSettings,
   PosSettings,
@@ -28,6 +29,21 @@ const resolveDefaultVersion = () => {
   if (typeof version === "string" && version.trim()) return version.trim();
   return "0.0.1";
 };
+
+export const createDefaultEntityRequirements = (): EntityRequirementsSettings => ({
+  customer: {
+    document_number: true,
+    phone: false,
+    email: false,
+    address: false,
+  },
+  supplier: {
+    tax_id: false,
+    phone: false,
+    email: false,
+    address: false,
+  },
+});
 
 const createDefaultBusinessSettings = (): BusinessSettings => ({
   trade_name: "Mi negocio",
@@ -91,6 +107,7 @@ const createDefaultFacturacionSettings = (): FacturacionSettings => ({
   issuer_address: "",
   issuer_fiscal_condition: "",
   arca: createDefaultArcaSettings(),
+  entity_requirements: createDefaultEntityRequirements(),
 });
 
 const createDefaultBarcodeScaleSettings = (): BarcodeScaleSettings => ({
@@ -213,6 +230,16 @@ const normalizeTenantSettings = (input: TenantSettings): TenantSettings => ({
         input.facturacion?.arca?.allow_internal_fallback ??
         createDefaultFacturacionSettings().arca.allow_internal_fallback,
     },
+    entity_requirements: {
+      customer: {
+        ...createDefaultEntityRequirements().customer,
+        ...(input.facturacion?.entity_requirements?.customer ?? {}),
+      },
+      supplier: {
+        ...createDefaultEntityRequirements().supplier,
+        ...(input.facturacion?.entity_requirements?.supplier ?? {}),
+      },
+    },
   },
   codigos_balanza: {
     ...createDefaultBarcodeScaleSettings(),
@@ -263,6 +290,18 @@ const mergeSettingsPayload = (
       ...createDefaultArcaSettings(),
       ...current.facturacion.arca,
       ...(patch.facturacion?.arca ?? {}),
+    },
+    entity_requirements: {
+      customer: {
+        ...createDefaultEntityRequirements().customer,
+        ...(current.facturacion.entity_requirements?.customer ?? {}),
+        ...(patch.facturacion?.entity_requirements?.customer ?? {}),
+      },
+      supplier: {
+        ...createDefaultEntityRequirements().supplier,
+        ...(current.facturacion.entity_requirements?.supplier ?? {}),
+        ...(patch.facturacion?.entity_requirements?.supplier ?? {}),
+      },
     },
   },
   codigos_balanza: {

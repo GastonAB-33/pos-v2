@@ -111,7 +111,51 @@ export const productsService = {
     }
     return crud.delete(tenantId, id);
   },
-  getBarcodesByTenant: (tenantId: string) => barcodeCrud.getAllByTenant(tenantId),
+  getBarcodesByTenant: async (tenantId: string): Promise<ProductBarcode[]> => {
+    const allBarcodes = await barcodeCrud.getAllByTenant(tenantId);
+    const barcodesByProduct: Record<string, ProductBarcode[]> = {};
+
+    for (const barcode of allBarcodes) {
+      if (!barcode.barcode || !barcode.product_id) continue;
+      if (!barcodesByProduct[barcode.product_id]) {
+        barcodesByProduct[barcode.product_id] = [];
+      }
+      barcodesByProduct[barcode.product_id].push(barcode);
+    }
+
+    const activeBarcodes: ProductBarcode[] = [];
+
+    // REGLA: Cada producto tiene un ÚNICO código de barra.
+    // Purgar de la base de datos cualquier código duplicado u obsoleto conservando el más reciente.
+    for (const items of Object.values(barcodesByProduct)) {
+      if (items.length > 1) {
+        items.sort((a, b) => {
+          const timeA = new Date(a.updated_at || a.created_at || 0).getTime();
+          const timeB = new Date(b.updated_at || b.created_at || 0).getTime();
+          if (timeA !== timeB) return timeB - timeA;
+          if (a.is_primary && !b.is_primary) return -1;
+          if (!a.is_primary && b.is_primary) return 1;
+          return 0;
+        });
+
+        const activeBarcode = items[0];
+        const staleItems = items.slice(1);
+        void Promise.all(staleItems.map((stale) => barcodeCrud.delete(tenantId, stale.id)));
+
+        activeBarcodes.push({
+          ...activeBarcode,
+          is_primary: true,
+        });
+      } else if (items.length === 1) {
+        activeBarcodes.push({
+          ...items[0],
+          is_primary: true,
+        });
+      }
+    }
+
+    return activeBarcodes;
+  },
 
   getByBarcode: async (tenantId: string, rawBarcode: string): Promise<Product | null> => {
     const barcode = normalizeBarcode(rawBarcode);
@@ -119,14 +163,23 @@ export const productsService = {
 
     const matches = await barcodeCrud.query(tenantId, { eq: { barcode } });
     for (const match of matches) {
-      // Verificar si este código es el primario activo del producto
+      // Verificar si este código es el activo más reciente del producto
       const productBarcodes = await barcodeCrud.query(tenantId, {
         eq: { product_id: match.product_id },
       });
-      const activePrimary = productBarcodes.find((b) => b.is_primary) ?? productBarcodes[0];
+      productBarcodes.sort((a, b) => {
+        const timeA = new Date(a.updated_at || a.created_at || 0).getTime();
+        const timeB = new Date(b.updated_at || b.created_at || 0).getTime();
+        if (timeA !== timeB) return timeB - timeA;
+        if (a.is_primary && !b.is_primary) return -1;
+        if (!a.is_primary && b.is_primary) return 1;
+        return 0;
+      });
+
+      const activePrimary = productBarcodes[0] ?? null;
 
       // Si el código no es el activo del producto, es un remanente obsoleto: purgarlo
-      if (!match.is_primary || (activePrimary && activePrimary.id !== match.id)) {
+      if (!activePrimary || activePrimary.id !== match.id || normalizeBarcode(activePrimary.barcode) !== barcode) {
         void barcodeCrud.delete(tenantId, match.id);
         continue;
       }
@@ -147,35 +200,13 @@ export const productsService = {
   },
 
   getPrimaryBarcodesMapByTenant: async (tenantId: string): Promise<Record<string, string>> => {
-    const allBarcodes = await barcodeCrud.getAllByTenant(tenantId);
+    const activeBarcodes = await productsService.getBarcodesByTenant(tenantId);
     const barcodeMap: Record<string, string> = {};
-    const barcodesByProduct: Record<string, ProductBarcode[]> = {};
-
-    for (const barcode of allBarcodes) {
-      if (!barcode.barcode || !barcode.product_id) continue;
-      if (!barcodesByProduct[barcode.product_id]) {
-        barcodesByProduct[barcode.product_id] = [];
-      }
-      barcodesByProduct[barcode.product_id].push(barcode);
-    }
-
-    // Regla: cada producto tiene un único código de barra y un único código de producto.
-    // Si un producto acumuló múltiples registros de códigos en la base de datos por ediciones previas,
-    // conservar solo el primario activo y purgar automáticamente los obsoletos.
-    for (const [prodId, items] of Object.entries(barcodesByProduct)) {
-      if (items.length > 1) {
-        const activeBarcode = items.find((b) => b.is_primary) ?? items[items.length - 1];
-        const staleItems = items.filter((b) => b.id !== activeBarcode.id);
-        void Promise.all(staleItems.map((stale) => barcodeCrud.delete(tenantId, stale.id)));
-
-        if (activeBarcode.barcode) {
-          barcodeMap[prodId] = activeBarcode.barcode;
-        }
-      } else if (items.length === 1 && items[0].barcode) {
-        barcodeMap[prodId] = items[0].barcode;
+    for (const row of activeBarcodes) {
+      if (row.product_id && row.barcode) {
+        barcodeMap[row.product_id] = row.barcode;
       }
     }
-
     return barcodeMap;
   },
 
@@ -204,11 +235,19 @@ export const productsService = {
       const otherProductBarcodes = await barcodeCrud.query(tenantId, {
         eq: { product_id: match.product_id },
       });
-      const otherPrimary = otherProductBarcodes.find((item) => item.is_primary) ?? otherProductBarcodes[0];
+      otherProductBarcodes.sort((a, b) => {
+        const timeA = new Date(a.updated_at || a.created_at || 0).getTime();
+        const timeB = new Date(b.updated_at || b.created_at || 0).getTime();
+        if (timeA !== timeB) return timeB - timeA;
+        if (a.is_primary && !b.is_primary) return -1;
+        if (!a.is_primary && b.is_primary) return 1;
+        return 0;
+      });
+      const otherPrimary = otherProductBarcodes[0] ?? null;
 
       // Si el otro producto tiene asignado OTRO código como activo (o este match no es primario),
       // este registro es un remanente obsoleto/fantasma: se elimina para liberar el código.
-      if (!match.is_primary || (otherPrimary && otherPrimary.id !== match.id)) {
+      if (!otherPrimary || otherPrimary.id !== match.id || normalizeBarcode(otherPrimary.barcode) !== barcode) {
         await barcodeCrud.delete(tenantId, match.id);
         continue;
       }

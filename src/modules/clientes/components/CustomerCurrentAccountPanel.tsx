@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/useToast";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, DollarSign, Pencil, PlusCircle, RefreshCw } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
+import { formatCustomerDocument } from "@/modules/configuracion/hooks/useEntityRequirements";
 import type { Customer } from "@/types/entities";
 
 interface CustomerCurrentAccountPanelProps {
@@ -120,7 +121,7 @@ export const CustomerCurrentAccountPanel = ({
     const fullName = `${values.firstName.trim()} ${values.lastName.trim()}`.replace(/\s+/g, " ").trim();
     const fiscalCuit = (values.fiscalCuit ?? "").trim();
     const documentType = fiscalCuit ? "cuit" : values.documentType;
-    const documentNumber = fiscalCuit || values.documentNumber.trim();
+    const documentNumber = fiscalCuit || (values.documentNumber ?? "").trim();
     const currentAccountLimitRaw = values.currentAccountLimit ?? "";
     const parsedLimit = Number(currentAccountLimitRaw);
     const newAccountLimit =
@@ -269,7 +270,7 @@ export const CustomerCurrentAccountPanel = ({
             )}
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            {currentCustomer.document_type?.toUpperCase()} {currentCustomer.document_number}
+            {formatCustomerDocument(currentCustomer.document_type, currentCustomer.document_number)}
             {currentCustomer.phone ? ` • Tel: ${currentCustomer.phone}` : ""}
             {currentCustomer.email ? ` • Email: ${currentCustomer.email}` : ""}
           </p>

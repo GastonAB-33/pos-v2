@@ -21,6 +21,7 @@ export const toSupplierServiceInput = (
 ) => ({
   code: options?.existingCode ?? buildSupplierCode(values.name),
   name: values.name,
+  tax_id: normalizeEmpty(values.taxId),
   phone: normalizeEmpty(values.phone),
   email: normalizeEmpty(values.email),
   address: normalizeEmpty(values.address),

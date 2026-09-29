@@ -28,7 +28,11 @@ export const SuppliersTable = ({
   const columns = [
     columnHelper.accessor("name", {
       header: "Nombre",
-      cell: (info) => <span className="font-medium text-slate-900">{info.getValue()}</span>,
+      cell: (info) => <span className="font-medium text-slate-900 dark:text-slate-100">{info.getValue()}</span>,
+    }),
+    columnHelper.accessor("tax_id", {
+      header: "CUIT / Doc",
+      cell: (info) => info.getValue() || "-",
     }),
     columnHelper.accessor("phone", {
       header: "Telefono",

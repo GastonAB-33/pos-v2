@@ -18,8 +18,10 @@ import {
   Sparkles,
   Store,
   Type,
+  Users,
   Wallet,
 } from "lucide-react";
+import { broadcastEntityRequirementsChanged } from "@/modules/configuracion/hooks/useEntityRequirements";
 import { parseScaleBarcode } from "@/services/barcode/scale-barcode.service";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -385,6 +387,35 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     });
   };
 
+  const updateEntityRequirements = (
+    entity: "customer" | "supplier",
+    field: string,
+    value: boolean
+  ) => {
+    setDraft((current) => {
+      if (!current) return current;
+
+      const currentReqs = current.facturacion.entity_requirements ?? {
+        customer: { document_number: true, phone: false, email: false, address: false },
+        supplier: { tax_id: false, phone: false, email: false, address: false },
+      };
+
+      return {
+        ...current,
+        facturacion: {
+          ...current.facturacion,
+          entity_requirements: {
+            ...currentReqs,
+            [entity]: {
+              ...currentReqs[entity],
+              [field]: value,
+            },
+          },
+        },
+      };
+    });
+  };
+
   const updateMercadoPagoSettings = (
     patch: Partial<TenantSettings["sistema"]["mercado_pago"]>
   ) => {
@@ -425,6 +456,10 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     if (section === "apariencia") {
       applyAppearance(appearanceBeforeSave);
     }
+
+    if (section === "facturacion" && draft.facturacion.entity_requirements && tenantId) {
+      broadcastEntityRequirementsChanged(tenantId, draft.facturacion.entity_requirements);
+    }
   };
 
   const handleSaveAll = async () => {
@@ -433,6 +468,10 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     const appearanceBeforeSave = draft.apariencia;
     await saveAll();
     applyAppearance(appearanceBeforeSave);
+
+    if (draft.facturacion.entity_requirements && tenantId) {
+      broadcastEntityRequirementsChanged(tenantId, draft.facturacion.entity_requirements);
+    }
   };
 
   const mercadoPagoModeLabel: Record<MercadoPagoMode, string> = {
@@ -502,6 +541,19 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     (mercadoPagoConfig.mode === "mock" || hasMercadoPagoCredentials) &&
     !mercadoPagoConfig.force_unavailable;
   const hasVisibleSettings = Object.values(scopePreset.visibleSections).some(Boolean);
+
+  const customerReqs = draft.facturacion.entity_requirements?.customer ?? {
+    document_number: true,
+    phone: false,
+    email: false,
+    address: false,
+  };
+  const supplierReqs = draft.facturacion.entity_requirements?.supplier ?? {
+    tax_id: false,
+    phone: false,
+    email: false,
+    address: false,
+  };
 
   const selectedFontSizeObj =
     fontSizeOptions.find((opt) => opt.id === (draft.apariencia.font_size ?? fontSize)) ??
@@ -1284,6 +1336,191 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                 <div>
                   <label className="mb-1 block text-xs text-slate-600 dark:text-slate-400">Presupuesto</label>
                   <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.PRESUPUESTO} onChange={(event) => updateDocumentSequence("PRESUPUESTO", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.PRESUPUESTO))))} disabled={!canWriteConfiguracion} />
+                </div>
+              </div>
+            </div>
+
+            {/* REQUISITOS OBLIGATORIOS PARA CLIENTES Y PROVEEDORES */}
+            <div className="md:col-span-2 space-y-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-700/80 dark:bg-slate-800/40">
+              <div className="flex items-center gap-2">
+                <Users className="text-blue-600 dark:text-blue-400" size={18} />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    Requisitos de Registro de Clientes y Proveedores
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Configurá qué campos son obligatorios al crear o editar clientes y proveedores (desde POS, Clientes, Cuentas Corrientes y Proveedores).
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2 pt-1">
+                {/* Clientes */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Clientes
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Alta y edición
+                    </span>
+                  </div>
+
+                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
+                      checked={customerReqs.document_number}
+                      onChange={(e) => updateEntityRequirements("customer", "document_number", e.target.checked)}
+                      disabled={!canWriteConfiguracion}
+                    />
+                    <div className="flex-1">
+                      <span className="font-medium text-slate-800 dark:text-slate-200 block">
+                        DNI / CUIT obligatorio
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
+                        Si se desactiva, el DNI/CUIT es opcional al crear o editar clientes en POS y Cuentas Corrientes.
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
+                      checked={customerReqs.phone}
+                      onChange={(e) => updateEntityRequirements("customer", "phone", e.target.checked)}
+                      disabled={!canWriteConfiguracion}
+                    />
+                    <div className="flex-1">
+                      <span className="font-medium text-slate-800 dark:text-slate-200 block">
+                        Teléfono obligatorio
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
+                        Exigir número de teléfono de contacto para guardar el cliente.
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
+                      checked={customerReqs.email}
+                      onChange={(e) => updateEntityRequirements("customer", "email", e.target.checked)}
+                      disabled={!canWriteConfiguracion}
+                    />
+                    <div className="flex-1">
+                      <span className="font-medium text-slate-800 dark:text-slate-200 block">
+                        Email obligatorio
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
+                        Exigir correo electrónico válido al registrar el cliente.
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
+                      checked={customerReqs.address}
+                      onChange={(e) => updateEntityRequirements("customer", "address", e.target.checked)}
+                      disabled={!canWriteConfiguracion}
+                    />
+                    <div className="flex-1">
+                      <span className="font-medium text-slate-800 dark:text-slate-200 block">
+                        Dirección obligatoria
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
+                        Exigir domicilio al registrar el cliente.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Proveedores */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Proveedores
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Alta y edición
+                    </span>
+                  </div>
+
+                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
+                      checked={supplierReqs.tax_id}
+                      onChange={(e) => updateEntityRequirements("supplier", "tax_id", e.target.checked)}
+                      disabled={!canWriteConfiguracion}
+                    />
+                    <div className="flex-1">
+                      <span className="font-medium text-slate-800 dark:text-slate-200 block">
+                        CUIT / Identificación Fiscal obligatoria
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
+                        Exigir CUIT o identificación tributaria para registrar proveedores.
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
+                      checked={supplierReqs.phone}
+                      onChange={(e) => updateEntityRequirements("supplier", "phone", e.target.checked)}
+                      disabled={!canWriteConfiguracion}
+                    />
+                    <div className="flex-1">
+                      <span className="font-medium text-slate-800 dark:text-slate-200 block">
+                        Teléfono obligatorio
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
+                        Exigir teléfono de contacto del proveedor.
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
+                      checked={supplierReqs.email}
+                      onChange={(e) => updateEntityRequirements("supplier", "email", e.target.checked)}
+                      disabled={!canWriteConfiguracion}
+                    />
+                    <div className="flex-1">
+                      <span className="font-medium text-slate-800 dark:text-slate-200 block">
+                        Email obligatorio
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
+                        Exigir correo electrónico del proveedor.
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
+                      checked={supplierReqs.address}
+                      onChange={(e) => updateEntityRequirements("supplier", "address", e.target.checked)}
+                      disabled={!canWriteConfiguracion}
+                    />
+                    <div className="flex-1">
+                      <span className="font-medium text-slate-800 dark:text-slate-200 block">
+                        Dirección obligatoria
+                      </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
+                        Exigir domicilio comercial o fiscal del proveedor.
+                      </span>
+                    </div>
+                  </label>
                 </div>
               </div>
             </div>

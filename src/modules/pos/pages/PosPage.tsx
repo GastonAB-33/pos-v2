@@ -13,6 +13,7 @@ import { offlineService } from "@/services/offline.service";
 import { usePwa } from "@/features/pwa/hooks/usePwa";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { PosCustomerModal, type PosCustomerModalValues } from "@/modules/pos/components/PosCustomerModal";
+import { getEditableDocumentNumber } from "@/modules/configuracion/hooks/useEntityRequirements";
 import { CashOpenForm } from "@/modules/caja/components/CashOpenForm";
 import { ReceiptTicketPanel } from "@/modules/comprobantes/components/ReceiptTicketPanel";
 import { PosCart } from "@/modules/pos/components/PosCart";
@@ -798,14 +799,14 @@ export const PosPage = () => {
         firstName: names.firstName,
         lastName: names.lastName,
         documentType: customer?.document_type ?? "dni",
-        documentNumber: customer?.document_number ?? "",
+        documentNumber: getEditableDocumentNumber(customer?.document_number),
         phone: customer?.phone ?? "",
         email: customer?.email ?? "",
         address: customer?.address ?? "",
         fiscalBusinessName: customer?.fiscal_business_name ?? "",
         fiscalAddress: customer?.fiscal_address ?? "",
         fiscalCondition: customer?.fiscal_condition ?? "",
-        fiscalCuit: customer?.document_type === "cuit" ? customer.document_number : "",
+        fiscalCuit: customer?.document_type === "cuit" ? getEditableDocumentNumber(customer.document_number) : "",
         currentAccountEnabled: accountEnabled,
         currentAccountLimit:
           accountLimit != null && Number.isFinite(accountLimit) ? accountLimit.toString() : "",
@@ -861,7 +862,7 @@ export const PosPage = () => {
       const fullName = `${values.firstName.trim()} ${values.lastName.trim()}`.replace(/\s+/g, " ").trim();
       const fiscalCuit = (values.fiscalCuit ?? "").trim();
       const documentType = fiscalCuit ? "cuit" : values.documentType;
-      const documentNumber = fiscalCuit || values.documentNumber.trim();
+      const documentNumber = fiscalCuit || (values.documentNumber ?? "").trim();
       const currentAccountLimitRaw = values.currentAccountLimit ?? "";
       const parsedLimit = Number(currentAccountLimitRaw);
       const currentAccountLimit =

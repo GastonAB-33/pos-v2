@@ -1,10 +1,15 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { VoiceDictationButton } from "@/components/form/VoiceDictationButton";
-import type { Customer, PriceList } from "@/types/entities";
+import { useTenant } from "@/features/tenant/hooks/useTenant";
 import {
-  customerFormSchema,
+  getEditableDocumentNumber,
+  useEntityRequirements,
+} from "@/modules/configuracion/hooks/useEntityRequirements";
+import type { Customer, CustomerRequiredFieldsSettings, PriceList } from "@/types/entities";
+import {
+  buildCustomerFormSchema,
   type CustomerFormValues,
 } from "@/modules/clientes/schemas/customer-form.schema";
 
@@ -15,6 +20,7 @@ interface CustomerFormProps {
   disabled?: boolean;
   onCancel: () => void;
   onSubmit: (values: CustomerFormValues) => Promise<void>;
+  requirements?: CustomerRequiredFieldsSettings;
 }
 
 const defaultValues: CustomerFormValues = {
@@ -33,7 +39,21 @@ const defaultValues: CustomerFormValues = {
   currentAccountLimit: "",
 };
 
-export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, onSubmit }: CustomerFormProps) => {
+export const CustomerForm = ({
+  mode,
+  customer,
+  priceLists,
+  disabled,
+  onCancel,
+  onSubmit,
+  requirements,
+}: CustomerFormProps) => {
+  const { tenantId } = useTenant();
+  const { customerRequirements } = useEntityRequirements(tenantId);
+  const activeReq = requirements ?? customerRequirements;
+
+  const schema = useMemo(() => buildCustomerFormSchema(activeReq), [activeReq]);
+
   const {
     register,
     handleSubmit,
@@ -42,7 +62,7 @@ export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, o
     setValue,
     formState: { errors },
   } = useForm<CustomerFormValues>({
-    resolver: zodResolver(customerFormSchema),
+    resolver: zodResolver(schema),
     defaultValues,
   });
 
@@ -55,7 +75,7 @@ export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, o
     reset({
       fullName: customer.full_name,
       documentType: customer.document_type,
-      documentNumber: customer.document_number,
+      documentNumber: getEditableDocumentNumber(customer.document_number),
       fiscalBusinessName: customer.fiscal_business_name ?? "",
       fiscalAddress: customer.fiscal_address ?? "",
       fiscalCondition: customer.fiscal_condition ?? "",
@@ -106,7 +126,14 @@ export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, o
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Documento</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Documento{" "}
+            {activeReq.document_number ? (
+              <span className="text-red-500">*</span>
+            ) : (
+              <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
+            )}
+          </label>
           <input
             {...register("documentNumber")}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
@@ -173,7 +200,14 @@ export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, o
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Telefono</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Telefono{" "}
+            {activeReq.phone ? (
+              <span className="text-red-500">*</span>
+            ) : (
+              <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
+            )}
+          </label>
           <input
             {...register("phone")}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
@@ -184,10 +218,18 @@ export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, o
             spellCheck={false}
             data-lpignore="true"
           />
+          {errors.phone ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.phone.message}</p> : null}
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Email</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Email{" "}
+            {activeReq.email ? (
+              <span className="text-red-500">*</span>
+            ) : (
+              <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
+            )}
+          </label>
           <input
             type="email"
             {...register("email")}
@@ -204,7 +246,14 @@ export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, o
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Direccion</label>
+        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+          Direccion{" "}
+          {activeReq.address ? (
+            <span className="text-red-500">*</span>
+          ) : (
+            <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
+          )}
+        </label>
         <input
           {...register("address")}
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
@@ -215,6 +264,7 @@ export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, o
           spellCheck={false}
           data-lpignore="true"
         />
+        {errors.address ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.address.message}</p> : null}
       </div>
 
       <div>

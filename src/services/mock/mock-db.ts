@@ -143,6 +143,46 @@ const normalizeProducts = (rows: unknown[]): Product[] =>
     };
   });
 
+const normalizeProductBarcodes = (rows: unknown[]): ProductBarcode[] => {
+  const barcodes = rows as ProductBarcode[];
+  const byProduct: Record<string, ProductBarcode[]> = {};
+
+  for (const row of barcodes) {
+    if (!row || !row.product_id || !row.barcode) continue;
+    if (!byProduct[row.product_id]) {
+      byProduct[row.product_id] = [];
+    }
+    byProduct[row.product_id].push(row);
+  }
+
+  const activeRows: ProductBarcode[] = [];
+
+  for (const items of Object.values(byProduct)) {
+    if (items.length > 1) {
+      items.sort((a, b) => {
+        const timeA = new Date(a.updated_at || a.created_at || 0).getTime();
+        const timeB = new Date(b.updated_at || b.created_at || 0).getTime();
+        if (timeA !== timeB) return timeB - timeA;
+        if (a.is_primary && !b.is_primary) return -1;
+        if (!a.is_primary && b.is_primary) return 1;
+        return 0;
+      });
+    }
+
+    const chosen = items[0];
+    const cleanBarcode = chosen.barcode.trim();
+    if (cleanBarcode) {
+      activeRows.push({
+        ...chosen,
+        barcode: cleanBarcode,
+        is_primary: true,
+      });
+    }
+  }
+
+  return activeRows;
+};
+
 const normalizeDatabase = (candidate: Partial<MockDatabase>): MockDatabase => {
   const empty = createEmptyMockDatabase();
   const tableNames = Object.keys(empty) as DbTableName[];
@@ -153,6 +193,11 @@ const normalizeDatabase = (candidate: Partial<MockDatabase>): MockDatabase => {
 
     if (table === "products") {
       (empty[table] as Product[]) = normalizeProducts(rows);
+      continue;
+    }
+
+    if (table === "product_barcodes") {
+      (empty[table] as ProductBarcode[]) = normalizeProductBarcodes(rows);
       continue;
     }
 
