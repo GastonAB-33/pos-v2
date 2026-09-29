@@ -129,7 +129,7 @@ export const ClientesPage = () => {
     const created = await createCustomer({
       fullName,
       documentType: fiscalCuit ? "cuit" : values.documentType,
-      documentNumber: fiscalCuit || values.documentNumber.trim(),
+      documentNumber: fiscalCuit || (values.documentNumber ?? "").trim(),
       fiscalBusinessName: values.fiscalBusinessName,
       fiscalAddress: values.fiscalAddress,
       fiscalCondition: values.fiscalCondition,

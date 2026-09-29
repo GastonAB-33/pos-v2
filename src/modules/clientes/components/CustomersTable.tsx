@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-table";
 import { Pencil, Power, Trash2, WalletCards } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
+import { formatCustomerDocument } from "@/modules/configuracion/hooks/useEntityRequirements";
 import type { Customer } from "@/types/entities";
 
 interface CustomersTableProps {
@@ -38,14 +39,14 @@ export const CustomersTable = ({
   const columns = [
     columnHelper.accessor("full_name", {
       header: "Nombre",
-      cell: (info) => <span className="font-medium text-slate-900">{info.getValue()}</span>,
+      cell: (info) => <span className="font-medium text-slate-900 dark:text-slate-100">{info.getValue()}</span>,
     }),
     columnHelper.display({
       id: "document",
       header: "Documento",
       cell: (info) => {
         const row = info.row.original;
-        return `${row.document_type.toUpperCase()} ${row.document_number}`;
+        return formatCustomerDocument(row.document_type, row.document_number);
       },
     }),
     columnHelper.accessor("phone", {

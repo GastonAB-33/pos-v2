@@ -499,6 +499,25 @@ export interface CashSettings {
   require_notes_on_manual_movements: boolean;
 }
 
+export interface CustomerRequiredFieldsSettings {
+  document_number: boolean;
+  phone: boolean;
+  email: boolean;
+  address: boolean;
+}
+
+export interface SupplierRequiredFieldsSettings {
+  tax_id: boolean;
+  phone: boolean;
+  email: boolean;
+  address: boolean;
+}
+
+export interface EntityRequirementsSettings {
+  customer: CustomerRequiredFieldsSettings;
+  supplier: SupplierRequiredFieldsSettings;
+}
+
 export interface FacturacionSettings {
   document_sequences: {
     A: number;
@@ -513,6 +532,7 @@ export interface FacturacionSettings {
   issuer_address: string;
   issuer_fiscal_condition: string;
   arca: ArcaSettings;
+  entity_requirements?: EntityRequirementsSettings;
 }
 
 export type ArcaMode = "mock" | "sandbox" | "real";

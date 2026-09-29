@@ -5,21 +5,49 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
+import { useTenant } from "@/features/tenant/hooks/useTenant";
+import {
+  getEditableDocumentNumber,
+  useEntityRequirements,
+} from "@/modules/configuracion/hooks/useEntityRequirements";
+import type { CustomerRequiredFieldsSettings } from "@/types/entities";
 
-const posCustomerModalSchema = z.object({
-  firstName: z.string().min(2, "Nombre obligatorio"),
-  lastName: z.string().min(2, "Apellido obligatorio"),
-  documentType: z.enum(["dni", "cuit"]),
-  documentNumber: z.string().min(6, "Documento invalido").max(20, "Documento invalido"),
-  phone: z.string().max(30, "Maximo 30 caracteres").optional().or(z.literal("")),
-  email: z.string().email("Email invalido").optional().or(z.literal("")),
-  address: z.string().max(200, "Maximo 200 caracteres").optional().or(z.literal("")),
-  fiscalBusinessName: z.string().max(120, "Maximo 120 caracteres").optional().or(z.literal("")),
-  fiscalAddress: z.string().max(200, "Maximo 200 caracteres").optional().or(z.literal("")),
-  fiscalCondition: z.string().max(80, "Maximo 80 caracteres").optional().or(z.literal("")),
-  fiscalCuit: z.string().max(20, "Maximo 20 caracteres").optional().or(z.literal("")),
-  currentAccountEnabled: z.boolean().default(false),
-  currentAccountLimit: z.string().optional().or(z.literal("")),
+export const buildPosCustomerModalSchema = (req?: CustomerRequiredFieldsSettings) => {
+  const isDocRequired = req?.document_number ?? true;
+  const isPhoneRequired = req?.phone ?? false;
+  const isEmailRequired = req?.email ?? false;
+  const isAddressRequired = req?.address ?? false;
+
+  return z.object({
+    firstName: z.string().min(2, "Nombre obligatorio"),
+    lastName: z.string().min(2, "Apellido obligatorio"),
+    documentType: z.enum(["dni", "cuit"]),
+    documentNumber: isDocRequired
+      ? z.string().min(6, "Documento inválido (mínimo 6 caracteres)").max(20, "Documento inválido")
+      : z.string().max(20, "Máximo 20 caracteres").optional().or(z.literal("")),
+    phone: isPhoneRequired
+      ? z.string().min(6, "Teléfono obligatorio (mínimo 6 caracteres)").max(30, "Máximo 30 caracteres")
+      : z.string().max(30, "Máximo 30 caracteres").optional().or(z.literal("")),
+    email: isEmailRequired
+      ? z.string().min(1, "Email obligatorio").email("Email inválido")
+      : z.string().email("Email inválido").optional().or(z.literal("")),
+    address: isAddressRequired
+      ? z.string().min(3, "Dirección obligatoria (mínimo 3 caracteres)").max(200, "Máximo 200 caracteres")
+      : z.string().max(200, "Máximo 200 caracteres").optional().or(z.literal("")),
+    fiscalBusinessName: z.string().max(120, "Máximo 120 caracteres").optional().or(z.literal("")),
+    fiscalAddress: z.string().max(200, "Máximo 200 caracteres").optional().or(z.literal("")),
+    fiscalCondition: z.string().max(80, "Máximo 80 caracteres").optional().or(z.literal("")),
+    fiscalCuit: z.string().max(20, "Máximo 20 caracteres").optional().or(z.literal("")),
+    currentAccountEnabled: z.boolean().default(false),
+    currentAccountLimit: z.string().optional().or(z.literal("")),
+  });
+};
+
+export const posCustomerModalSchema = buildPosCustomerModalSchema({
+  document_number: true,
+  phone: false,
+  email: false,
+  address: false,
 });
 
 export type PosCustomerModalValues = z.infer<typeof posCustomerModalSchema>;
@@ -32,6 +60,7 @@ interface PosCustomerModalProps {
   onCancel: () => void;
   onSubmit: (values: PosCustomerModalValues) => Promise<void>;
   onOpenCurrentAccount?: () => void;
+  requirements?: CustomerRequiredFieldsSettings;
 }
 
 type PosCustomerModalTab = "personal" | "fiscal" | "account";
@@ -52,11 +81,26 @@ export const PosCustomerModal = ({
   onCancel,
   onSubmit,
   onOpenCurrentAccount,
+  requirements,
 }: PosCustomerModalProps) => {
+  const { tenantId } = useTenant();
+  const { customerRequirements } = useEntityRequirements(tenantId);
+  const activeReq = requirements ?? customerRequirements;
+
+  const schema = useMemo(() => buildPosCustomerModalSchema(activeReq), [activeReq]);
+
   const [tab, setTab] = useState<PosCustomerModalTab>("personal");
   const [highlightedTab, setHighlightedTab] = useState<PosCustomerModalTab | null>(null);
 
   useBodyScrollLock(true);
+
+  const cleanInitialValues = useMemo((): PosCustomerModalValues => {
+    return {
+      ...initialValues,
+      documentNumber: getEditableDocumentNumber(initialValues.documentNumber),
+      fiscalCuit: getEditableDocumentNumber(initialValues.fiscalCuit),
+    };
+  }, [initialValues]);
 
   const {
     register,
@@ -65,15 +109,15 @@ export const PosCustomerModal = ({
     watch,
     formState: { errors },
   } = useForm<PosCustomerModalValues>({
-    resolver: zodResolver(posCustomerModalSchema),
-    defaultValues: initialValues,
+    resolver: zodResolver(schema),
+    defaultValues: cleanInitialValues,
   });
 
   useEffect(() => {
-    reset(initialValues);
+    reset(cleanInitialValues);
     setTab("personal");
     setHighlightedTab(null);
-  }, [initialValues, reset]);
+  }, [cleanInitialValues, reset]);
 
   useEffect(() => {
     if (!highlightedTab) return;
@@ -109,14 +153,27 @@ export const PosCustomerModal = ({
     [mode]
   );
 
-  const hasPersonalErrors = Boolean(errors.firstName || errors.lastName || errors.documentNumber);
+  const hasPersonalErrors = Boolean(
+    errors.firstName ||
+    errors.lastName ||
+    errors.documentNumber ||
+    errors.phone ||
+    errors.email ||
+    errors.address
+  );
   const hasFiscalErrors = Boolean(
     errors.fiscalAddress || errors.fiscalBusinessName || errors.fiscalCondition || errors.fiscalCuit
   );
   const hasAccountErrors = Boolean(errors.currentAccountLimit || errors.currentAccountEnabled);
 
   const onInvalid = (formErrors: FieldErrors<PosCustomerModalValues>) => {
-    const personalError = formErrors.firstName || formErrors.lastName || formErrors.documentNumber;
+    const personalError =
+      formErrors.firstName ||
+      formErrors.lastName ||
+      formErrors.documentNumber ||
+      formErrors.phone ||
+      formErrors.email ||
+      formErrors.address;
     const fiscalError =
       formErrors.fiscalAddress ||
       formErrors.fiscalBusinessName ||
@@ -245,7 +302,12 @@ export const PosCustomerModal = ({
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Numero documento <span className="text-red-500 dark:text-red-400">*</span>
+                  Numero documento{" "}
+                  {activeReq.document_number ? (
+                    <span className="text-red-500 dark:text-red-400">*</span>
+                  ) : (
+                    <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
+                  )}
                 </label>
                 <input
                   {...register("documentNumber")}
@@ -263,7 +325,12 @@ export const PosCustomerModal = ({
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Telefono <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
+                  Telefono{" "}
+                  {activeReq.phone ? (
+                    <span className="text-red-500 dark:text-red-400">*</span>
+                  ) : (
+                    <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
+                  )}
                 </label>
                 <input
                   {...register("phone")}
@@ -275,10 +342,16 @@ export const PosCustomerModal = ({
                   spellCheck={false}
                   data-lpignore="true"
                 />
+                {errors.phone ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.phone.message}</p> : null}
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Email <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
+                  Email{" "}
+                  {activeReq.email ? (
+                    <span className="text-red-500 dark:text-red-400">*</span>
+                  ) : (
+                    <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
+                  )}
                 </label>
                 <input
                   type="email"
@@ -295,7 +368,12 @@ export const PosCustomerModal = ({
               </div>
               <div className="md:col-span-2">
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Direccion <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
+                  Direccion{" "}
+                  {activeReq.address ? (
+                    <span className="text-red-500 dark:text-red-400">*</span>
+                  ) : (
+                    <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
+                  )}
                 </label>
                 <input
                   {...register("address")}
@@ -307,6 +385,7 @@ export const PosCustomerModal = ({
                   spellCheck={false}
                   data-lpignore="true"
                 />
+                {errors.address ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.address.message}</p> : null}
               </div>
             </div>
           </div>

@@ -32,6 +32,7 @@ import type {
   OriginBank,
   PaymentMethod,
 } from "@/types/entities";
+import { formatCustomerDocument } from "@/modules/configuracion/hooks/useEntityRequirements";
 import {
   getPaymentMethodPosConfig,
   normalizePaymentMethodCode,
@@ -373,7 +374,9 @@ export const PosCheckoutPanel = ({
         return;
       }
       setValue("customerId", customer.id, { shouldDirty: true, shouldValidate: true });
-      setCustomerQuery(`${customer.full_name} (${customer.document_number})`);
+      const docText = formatCustomerDocument(customer.document_type, customer.document_number);
+      const displayLabel = docText === "Sin documento" ? customer.full_name : `${customer.full_name} (${docText})`;
+      setCustomerQuery(displayLabel);
       setIsCustomerMenuOpen(false);
       setIsEditingCustomerSearch(false);
     },
@@ -884,7 +887,7 @@ export const PosCheckoutPanel = ({
                     </span>
                     {selectedCustomer ? (
                       <span className="rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800 dark:text-emerald-300">
-                        {selectedCustomer.document_type.toUpperCase()} {selectedCustomer.document_number}
+                        {formatCustomerDocument(selectedCustomer.document_type, selectedCustomer.document_number)}
                       </span>
                     ) : (
                       <span className="rounded-full bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600 dark:text-slate-300">
@@ -981,7 +984,7 @@ export const PosCheckoutPanel = ({
                           {customer.full_name}
                         </span>
                         <span className="ml-auto font-mono text-[11px] text-slate-500 dark:text-slate-400">
-                          {customer.document_number}
+                          {formatCustomerDocument(customer.document_type, customer.document_number)}
                         </span>
                       </button>
                     ))
