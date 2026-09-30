@@ -41,11 +41,11 @@ const DuplicateProductReviewModal = ({
   onClose: () => void;
 }) => (
   <section className="fixed inset-0 z-[60] flex items-center justify-center bg-[var(--ui-overlay)] p-4">
-    <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-5 shadow-panel">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
+    <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-5 shadow-panel dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
         <div>
-          <h3 className="text-base font-semibold text-slate-900">Productos parecidos encontrados</h3>
-          <p className="mt-1 text-sm text-slate-500">
+          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Productos parecidos encontrados</h3>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             Antes de crear "{review.values.nombre}", revisa si ya existe para evitar duplicados.
           </p>
         </div>
@@ -56,11 +56,11 @@ const DuplicateProductReviewModal = ({
         {review.matches.map((product) => (
           <article
             key={product.id}
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-3"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700/80 dark:bg-slate-800/50"
           >
             <div>
-              <p className="font-semibold text-slate-900">{product.name}</p>
-              <p className="text-xs text-slate-500">
+              <p className="font-semibold text-slate-900 dark:text-slate-100">{product.name}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {product.code ? `Código: ${product.code} | ` : ""}Stock: {product.stock_current.toLocaleString("es-AR")}{" "}
                 {product.sale_mode === "weight" ? "kg" : "u."}
               </p>
@@ -77,8 +77,8 @@ const DuplicateProductReviewModal = ({
         ))}
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
-        <p className="text-xs text-slate-500">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           Si ninguno coincide realmente, puedes crear el nuevo producto igual.
         </p>
         <button type="button" className="ui-btn-ghost" onClick={onCreateAnyway} disabled={disabled}>
@@ -100,6 +100,11 @@ export const ComprasPage = () => {
   const [isSelectProductModalOpen, setIsSelectProductModalOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [newSupplierInitialName, setNewSupplierInitialName] = useState<string>("");
+  const [newProductPrefill, setNewProductPrefill] = useState<{
+    initialBarcode?: string | null;
+    initialName?: string | null;
+  }>({});
   const [preferredSupplierId, setPreferredSupplierId] = useState<string>();
   const [duplicateReview, setDuplicateReview] = useState<DuplicateReviewState | null>(null);
   const [returnModalTarget, setReturnModalTarget] = useState<{
@@ -132,6 +137,9 @@ export const ComprasPage = () => {
     addProductByBarcode,
     setItemQuantity,
     setItemUnitCost,
+    setItemDiscountPercent,
+    setItemProfitPercent,
+    setItemSalePrice,
     setItemVatPercent,
     setItemBonifiedQuantity,
     setItemUpdateSalePrice,
@@ -161,6 +169,7 @@ export const ComprasPage = () => {
 
   const handleFinalPaymentConfirm = async (paymentValues: PurchasePaymentValues): Promise<void> => {
     if (!canWritePurchases || !pendingHeaderValues) return;
+    clearFeedback();
     const purchase = await confirmPurchase(pendingHeaderValues, paymentValues);
     if (purchase) {
       setIsPaymentModalOpen(false);
@@ -177,7 +186,19 @@ export const ComprasPage = () => {
     if (created) {
       setPreferredSupplierId(created.id);
       setIsSupplierModalOpen(false);
+      setNewSupplierInitialName("");
     }
+  };
+
+  const handleOpenCreateProduct = (query?: string) => {
+    const trimmed = query?.trim() ?? "";
+    const isBarcodeLike = trimmed.length >= 6 && /^\d+$/.test(trimmed);
+    setNewProductPrefill({
+      initialBarcode: isBarcodeLike ? trimmed : null,
+      initialName: !isBarcodeLike && trimmed ? trimmed : null,
+    });
+    setIsSelectProductModalOpen(false);
+    setIsProductModalOpen(true);
   };
 
   const handleNewProductSubmit = async (values: ProductFormModalValues) => {
@@ -193,6 +214,7 @@ export const ComprasPage = () => {
     const created = await createProductAndAddToCart(values);
     if (created) {
       setIsProductModalOpen(false);
+      setNewProductPrefill({});
     }
   };
 
@@ -201,6 +223,7 @@ export const ComprasPage = () => {
     const created = await createProductAndAddToCart(duplicateReview.values);
     if (created) {
       setDuplicateReview(null);
+      setNewProductPrefill({});
     }
   };
 
@@ -241,8 +264,8 @@ export const ComprasPage = () => {
           <div className="space-y-4">
             <section className="workspace-toolbar workspace-toolbar--inline">
               <div className="workspace-meta">
-                <span className="font-semibold text-slate-800">{purchases.length} compras registradas</span>
-                <span>El historial se ordena desde la compra más reciente</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{purchases.length} compras registradas</span>
+                <span className="text-slate-500 dark:text-slate-400">El historial se ordena desde la compra más reciente</span>
               </div>
               <div className="workspace-toolbar__actions">
                 <button
@@ -272,11 +295,11 @@ export const ComprasPage = () => {
 
             <section className="workspace-history space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-base font-semibold text-slate-900">Historial de compras</h2>
+                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Historial de compras</h2>
                 <span className="ui-badge ui-badge--info">{purchases.length}</span>
               </div>
               {isLoading ? (
-                <div className="rounded-lg border border-slate-200 p-8 text-center text-sm text-slate-600">
+                <div className="rounded-lg border border-slate-200 dark:border-slate-800 p-8 text-center text-sm text-slate-600 dark:text-slate-400">
                   Cargando historial...
                 </div>
               ) : (
@@ -297,19 +320,19 @@ export const ComprasPage = () => {
           /* ========================================================================= */
           <div className="space-y-3">
             {/* 1. Panel de Registrar Nueva Compra (Barra superior compacta minimalista) */}
-            <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={() => setViewMode("history")}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
                   Volver al historial
                 </button>
                 <div>
-                  <h1 className="text-base font-bold text-slate-900">Registrar nueva compra</h1>
-                  <p className="text-[11px] text-slate-500">
+                  <h1 className="text-base font-bold text-slate-900 dark:text-slate-100">Registrar nueva compra</h1>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     Carga los datos del comprobante y los productos comprados
                   </p>
                 </div>
@@ -321,7 +344,7 @@ export const ComprasPage = () => {
                     type="button"
                     onClick={clearCart}
                     disabled={isSubmitting || !canWritePurchases}
-                    className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-900/60"
                     title="Vaciar lista de productos"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -339,7 +362,10 @@ export const ComprasPage = () => {
               preferredSupplierId={preferredSupplierId}
               formId="purchase-checkout-form"
               resetSignal={checkoutResetSignal}
-              onCreateSupplier={() => setIsSupplierModalOpen(true)}
+              onCreateSupplier={(initialName) => {
+                setNewSupplierInitialName(initialName?.trim() || "");
+                setIsSupplierModalOpen(true);
+              }}
               onSubmit={handleProceedToPayment}
             />
 
@@ -352,6 +378,9 @@ export const ComprasPage = () => {
               formId="purchase-checkout-form"
               onSetQuantity={setItemQuantity}
               onSetUnitCost={setItemUnitCost}
+              onSetDiscountPercent={setItemDiscountPercent}
+              onSetProfitPercent={setItemProfitPercent}
+              onSetSalePrice={setItemSalePrice}
               onSetVatPercent={setItemVatPercent}
               onSetBonifiedQuantity={setItemBonifiedQuantity}
               onSetUpdateSalePrice={setItemUpdateSalePrice}
@@ -360,7 +389,7 @@ export const ComprasPage = () => {
                 setSearch("");
                 setIsSelectProductModalOpen(true);
               }}
-              onOpenCreateProductModal={() => setIsProductModalOpen(true)}
+              onOpenCreateProductModal={() => handleOpenCreateProduct("")}
             />
           </div>
         )}
@@ -375,11 +404,12 @@ export const ComprasPage = () => {
         onSearchChange={setSearch}
         disabled={isSubmitting}
         canWrite={canWritePurchases}
-        onAddProduct={(product) => {
+        onAddProduct={(product, quantity, unitCost, vatPercent, bonifiedQty, discountPercent) => {
           if (!canWritePurchases) return;
-          addProductToCart(product);
+          addProductToCart(product, quantity, unitCost, vatPercent, bonifiedQty, discountPercent);
         }}
         onBarcodeScan={addProductByBarcode}
+        onCreateNewProduct={handleOpenCreateProduct}
         onClose={() => {
           setSearch("");
           setIsSelectProductModalOpen(false);
@@ -393,32 +423,44 @@ export const ComprasPage = () => {
         disabled={isSubmitting}
         categoryOptions={categoryOptions}
         subcategoryOptions={subcategoryOptions}
-        onClose={() => setIsProductModalOpen(false)}
+        initialBarcode={newProductPrefill.initialBarcode}
+        initialName={newProductPrefill.initialName}
+        onClose={() => {
+          setIsProductModalOpen(false);
+          setNewProductPrefill({});
+        }}
         onSubmit={handleNewProductSubmit}
       />
 
       {/* Modal 3: Crear Nuevo Proveedor */}
       {isSupplierModalOpen ? (
         <section className="fixed inset-0 z-[70] flex items-center justify-center bg-[var(--ui-overlay)] p-4">
-          <div className="max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-panel">
-            <div className="mb-4 flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-panel dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-4 flex items-start justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
               <div>
-                <h2 className="text-base font-semibold text-slate-900">Nuevo proveedor</h2>
-                <p className="mt-1 text-sm text-slate-500">
+                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Nuevo proveedor</h2>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                   Se guardará en Proveedores y quedará seleccionado en esta compra.
                 </p>
               </div>
               <IconButton
                 icon={X}
                 label="Cerrar alta de proveedor"
-                onClick={() => setIsSupplierModalOpen(false)}
+                onClick={() => {
+                  setIsSupplierModalOpen(false);
+                  setNewSupplierInitialName("");
+                }}
                 disabled={isSubmitting}
               />
             </div>
             <SupplierForm
               mode="create"
+              initialName={newSupplierInitialName}
               disabled={isSubmitting}
-              onCancel={() => setIsSupplierModalOpen(false)}
+              onCancel={() => {
+                setIsSupplierModalOpen(false);
+                setNewSupplierInitialName("");
+              }}
               onSubmit={handleCreateSupplier}
             />
           </div>
@@ -463,6 +505,7 @@ export const ComprasPage = () => {
         bankAccounts={bankAccounts}
         openCashSession={openCashSession}
         isSubmitting={isSubmitting}
+        errorMessage={feedback?.type === "error" ? feedback.message : null}
         onClose={() => setIsPaymentModalOpen(false)}
         onConfirm={handleFinalPaymentConfirm}
       />
