@@ -17,6 +17,7 @@ interface SupplierFormProps {
   onCancel: () => void;
   onSubmit: (values: SupplierFormValues) => Promise<void>;
   requirements?: SupplierRequiredFieldsSettings;
+  initialName?: string;
 }
 
 const defaultValues: SupplierFormValues = {
@@ -35,6 +36,7 @@ export const SupplierForm = ({
   onCancel,
   onSubmit,
   requirements,
+  initialName,
 }: SupplierFormProps) => {
   const { tenantId } = useTenant();
   const { supplierRequirements } = useEntityRequirements(tenantId);
@@ -51,12 +53,18 @@ export const SupplierForm = ({
     formState: { errors },
   } = useForm<SupplierFormValues>({
     resolver: zodResolver(schema),
-    defaultValues,
+    defaultValues: {
+      ...defaultValues,
+      name: initialName?.trim() || "",
+    },
   });
 
   useEffect(() => {
     if (!supplier) {
-      reset(defaultValues);
+      reset({
+        ...defaultValues,
+        name: initialName?.trim() || "",
+      });
       return;
     }
 
@@ -68,20 +76,20 @@ export const SupplierForm = ({
       address: supplier.address ?? "",
       observations: supplier.observations ?? "",
     });
-  }, [supplier, reset]);
+  }, [supplier, initialName, reset]);
 
   const observationsValue = watch("observations");
 
   return (
     <form autoComplete="off" className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
           Nombre <span className="text-red-500">*</span>
         </label>
         <input
           {...register("name")}
           placeholder="Ej: Distribuidora Central"
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
           disabled={disabled}
           autoComplete="off"
           autoCorrect="off"
@@ -94,7 +102,7 @@ export const SupplierForm = ({
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
             CUIT / Identificación fiscal{" "}
             {activeReq.tax_id ? (
               <span className="text-red-500">*</span>
@@ -105,7 +113,7 @@ export const SupplierForm = ({
           <input
             {...register("taxId")}
             placeholder="Ej: 30-12345678-9"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
             disabled={disabled}
             autoComplete="off"
             autoCorrect="off"
@@ -117,7 +125,7 @@ export const SupplierForm = ({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Teléfono{" "}
             {activeReq.phone ? (
               <span className="text-red-500">*</span>
@@ -128,7 +136,7 @@ export const SupplierForm = ({
           <input
             {...register("phone")}
             placeholder="Ej: 2664123456"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
             disabled={disabled}
             autoComplete="off"
             autoCorrect="off"
@@ -142,7 +150,7 @@ export const SupplierForm = ({
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Email{" "}
             {activeReq.email ? (
               <span className="text-red-500">*</span>
@@ -154,7 +162,7 @@ export const SupplierForm = ({
             type="email"
             {...register("email")}
             placeholder="proveedor@ejemplo.com"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
             disabled={disabled}
             autoComplete="off"
             autoCorrect="off"
@@ -166,7 +174,7 @@ export const SupplierForm = ({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Dirección{" "}
             {activeReq.address ? (
               <span className="text-red-500">*</span>
@@ -177,7 +185,7 @@ export const SupplierForm = ({
           <input
             {...register("address")}
             placeholder="Ej: Av. San Martín 1234"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
             disabled={disabled}
             autoComplete="off"
             autoCorrect="off"
@@ -191,7 +199,7 @@ export const SupplierForm = ({
 
       <div>
         <div className="mb-1 flex items-center justify-between gap-2">
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Observaciones</label>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">Observaciones</label>
           <VoiceDictationButton
             value={observationsValue ?? ""}
             onValueChange={(nextValue) =>
@@ -206,7 +214,7 @@ export const SupplierForm = ({
           rows={3}
           {...register("observations")}
           placeholder="Notas adicionales o información de contacto..."
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
           disabled={disabled}
           autoComplete="off"
           spellCheck={false}
@@ -217,7 +225,7 @@ export const SupplierForm = ({
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           disabled={disabled}
         >
           Cancelar
