@@ -18,6 +18,8 @@ import {
 } from "@/modules/productos/schemas/product-form.schema";
 import type { ProductFormModalValues, ProductViewModel } from "@/modules/productos/types/product.types";
 import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
+import { useProductsStore } from "@/features/products/store/products.store";
+import { cn } from "@/utils/cn";
 
 type CalcMode = "forward" | "reverse";
 
@@ -30,6 +32,7 @@ interface ProductFormModalProps {
   subcategoryOptions: string[];
   initialBarcode?: string | null;
   initialName?: string | null;
+  initialValues?: Partial<ProductFormModalValues> | null;
   onClose: () => void;
   onSubmit: (values: ProductFormModalValues) => Promise<void>;
 }
@@ -175,6 +178,7 @@ export const ProductFormModal = ({
   subcategoryOptions,
   initialBarcode,
   initialName,
+  initialValues,
   onClose,
   onSubmit,
 }: ProductFormModalProps) => {
@@ -185,6 +189,7 @@ export const ProductFormModal = ({
     watch,
     setValue,
     getValues,
+    setError,
     formState: { errors },
   } = useForm<ProductFormModalValues>({
     resolver: zodResolver(productFormModalSchema),
@@ -239,6 +244,7 @@ export const ProductFormModal = ({
         ...createDefaults(),
         codigoBarras: initialBarcode ? initialBarcode.trim() : "",
         nombre: initialName ? initialName.trim() : "",
+        ...(initialValues ?? {}),
       });
       setCalcMode("forward");
       setPhotoError(null);
@@ -309,6 +315,36 @@ export const ProductFormModal = ({
       (opt) => opt.trim().toLowerCase() === trimmedSubcategory.toLowerCase()
     );
   }, [subcategoryOptions, trimmedSubcategory]);
+
+  const catalogProducts = useProductsStore((state) => state.products);
+  const catalogBarcodes = useProductsStore((state) => state.allBarcodes);
+  const currentProductId = mode === "edit" ? product?.entity.id : null;
+
+  const duplicateCodeProduct = useMemo(() => {
+    const cleanCode = (codigoProducto ?? "").trim().toUpperCase();
+    if (!cleanCode) return null;
+    return (
+      catalogProducts.find(
+        (p) => p.id !== currentProductId && p.code && p.code.trim().toUpperCase() === cleanCode
+      ) ?? null
+    );
+  }, [catalogProducts, codigoProducto, currentProductId]);
+
+  const duplicateBarcodeProduct = useMemo(() => {
+    const cleanBarcode = normalizeVoiceBarcode(codigoBarras ?? "");
+    if (!cleanBarcode) return null;
+
+    const barcodeRow = catalogBarcodes.find(
+      (row) => row.product_id !== currentProductId && normalizeVoiceBarcode(row.barcode) === cleanBarcode
+    );
+    if (barcodeRow) {
+      return catalogProducts.find((p) => p.id === barcodeRow.product_id) ?? null;
+    }
+    const productWithCode = catalogProducts.find(
+      (p) => p.id !== currentProductId && p.code && p.code.trim().toUpperCase() === cleanBarcode.toUpperCase()
+    );
+    return productWithCode ?? null;
+  }, [catalogBarcodes, catalogProducts, codigoBarras, currentProductId]);
 
   useEffect(() => {
     if (!open) return;
@@ -446,6 +482,22 @@ export const ProductFormModal = ({
   );
 
   const handleFormSubmit = async (values: ProductFormModalValues) => {
+    if (duplicateCodeProduct) {
+      setError("codigoProducto", {
+        type: "manual",
+        message: `El código ya está asignado al producto "${duplicateCodeProduct.name}"`,
+      });
+      return;
+    }
+
+    if (duplicateBarcodeProduct) {
+      setError("codigoBarras", {
+        type: "manual",
+        message: `El código de barras ya está asignado al producto "${duplicateBarcodeProduct.name}"`,
+      });
+      return;
+    }
+
     let precioCosto = values.precioCosto;
     let precioSinIva = 0;
     let precioFinal = values.precioFinal;
@@ -627,7 +679,7 @@ export const ProductFormModal = ({
                 </div>
 
                 <div>
-                  <label className="mb-1 block whitespace-nowrap text-sm font-medium leading-5 text-slate-700">
+                  <label className="mb-1 block whitespace-nowrap text-sm font-medium leading-5 text-slate-700 dark:text-slate-200">
                     Código de barras
                   </label>
                   <div className="mb-1 flex h-8 items-center gap-1">
@@ -665,16 +717,24 @@ export const ProductFormModal = ({
                     spellCheck={false}
                     data-lpignore="true"
                     data-form-type="other"
-                    className="ui-input"
+                    className={cn(
+                      "ui-input",
+                      (errors.codigoBarras || duplicateBarcodeProduct) &&
+                        "border-red-500 focus:border-red-500 dark:border-red-500"
+                    )}
                     disabled={disabled}
                   />
                   {errors.codigoBarras ? (
-                    <p className="mt-1 text-xs text-red-600">{errors.codigoBarras.message}</p>
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.codigoBarras.message}</p>
+                  ) : duplicateBarcodeProduct ? (
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                      Ya existe un producto con este código de barras ("{duplicateBarcodeProduct.name}")
+                    </p>
                   ) : null}
                 </div>
 
                 <div>
-                  <label className="mb-1 block whitespace-nowrap text-sm font-medium leading-5 text-slate-700">
+                  <label className="mb-1 block whitespace-nowrap text-sm font-medium leading-5 text-slate-700 dark:text-slate-200">
                     Código de producto
                   </label>
                   <div className="mb-1 flex h-8 items-center justify-start">
@@ -704,11 +764,19 @@ export const ProductFormModal = ({
                     spellCheck={false}
                     data-lpignore="true"
                     data-form-type="other"
-                    className="ui-input"
+                    className={cn(
+                      "ui-input",
+                      (errors.codigoProducto || duplicateCodeProduct) &&
+                        "border-red-500 focus:border-red-500 dark:border-red-500"
+                    )}
                     disabled={disabled}
                   />
                   {errors.codigoProducto ? (
-                    <p className="mt-1 text-xs text-red-600">{errors.codigoProducto.message}</p>
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.codigoProducto.message}</p>
+                  ) : duplicateCodeProduct ? (
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                      Ya existe un producto con este código ("{duplicateCodeProduct.name}")
+                    </p>
                   ) : null}
                 </div>
               </div>
