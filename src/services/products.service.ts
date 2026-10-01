@@ -95,8 +95,60 @@ const extractStoragePathFromPublicUrl = (publicUrl: string): string | null => {
 export const productsService = {
   getAllByTenant: (tenantId: string) => crud.getAllByTenant(tenantId),
   getById: (tenantId: string, id: string) => crud.getById(tenantId, id),
-  create: (tenantId: string, input: CreateProductInput) => crud.create(tenantId, input),
-  update: (tenantId: string, id: string, input: UpdateProductInput) => crud.update(tenantId, id, input),
+  create: async (tenantId: string, input: CreateProductInput) => {
+    const rawCode = input.code?.trim();
+    if (rawCode) {
+      const normalizedCode = rawCode.toUpperCase();
+      const allProducts = await crud.getAllByTenant(tenantId);
+      const duplicateByCode = allProducts.find(
+        (p) => p.code && p.code.trim().toUpperCase() === normalizedCode
+      );
+      if (duplicateByCode) {
+        throw new Error(`Ya existe un producto con el código "${rawCode}" ("${duplicateByCode.name}")`);
+      }
+
+      const activeBarcodes = await productsService.getBarcodesByTenant(tenantId);
+      const barcodeDuplicate = activeBarcodes.find(
+        (b) => normalizeBarcode(b.barcode).toUpperCase() === normalizedCode
+      );
+      if (barcodeDuplicate) {
+        const productWithBarcode = allProducts.find((p) => p.id === barcodeDuplicate.product_id);
+        if (productWithBarcode) {
+          throw new Error(
+            `El código "${rawCode}" ya está asignado como código de barras en el producto "${productWithBarcode.name}"`
+          );
+        }
+      }
+    }
+    return crud.create(tenantId, input);
+  },
+  update: async (tenantId: string, id: string, input: UpdateProductInput) => {
+    const rawCode = input.code?.trim();
+    if (rawCode) {
+      const normalizedCode = rawCode.toUpperCase();
+      const allProducts = await crud.getAllByTenant(tenantId);
+      const duplicateByCode = allProducts.find(
+        (p) => p.id !== id && p.code && p.code.trim().toUpperCase() === normalizedCode
+      );
+      if (duplicateByCode) {
+        throw new Error(`Ya existe un producto con el código "${rawCode}" ("${duplicateByCode.name}")`);
+      }
+
+      const activeBarcodes = await productsService.getBarcodesByTenant(tenantId);
+      const barcodeDuplicate = activeBarcodes.find(
+        (b) => b.product_id !== id && normalizeBarcode(b.barcode).toUpperCase() === normalizedCode
+      );
+      if (barcodeDuplicate) {
+        const productWithBarcode = allProducts.find((p) => p.id === barcodeDuplicate.product_id);
+        if (productWithBarcode) {
+          throw new Error(
+            `El código "${rawCode}" ya está asignado como código de barras en el producto "${productWithBarcode.name}"`
+          );
+        }
+      }
+    }
+    return crud.update(tenantId, id, input);
+  },
   updateStock: async (tenantId: string, id: string, stockCurrent: number) =>
     crud.update(tenantId, id, {
       stock_current: stockCurrent,
@@ -262,6 +314,17 @@ export const productsService = {
 
       // El código verdaderamente está asignado a otro producto existente
       throw new Error(`El código de barras ya está asignado al producto "${otherProduct.name}"`);
+    }
+
+    // 1.1 Validar que el código de barras no esté asignado como código interno de OTRO producto
+    const allProducts = await crud.getAllByTenant(tenantId);
+    const productWithSameCode = allProducts.find(
+      (p) => p.id !== productId && p.code && p.code.trim().toUpperCase() === barcode.toUpperCase()
+    );
+    if (productWithSameCode) {
+      throw new Error(
+        `El código de barras "${rawBarcode.trim()}" ya está asignado como código de producto en "${productWithSameCode.name}"`
+      );
     }
 
     // 2. Gestionar los códigos del producto actual.

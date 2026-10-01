@@ -32,62 +32,104 @@ const DuplicateProductReviewModal = ({
   disabled,
   onUseExisting,
   onCreateAnyway,
+  onEditProduct,
   onClose,
 }: {
   review: DuplicateReviewState;
   disabled?: boolean;
   onUseExisting: (product: Product) => void;
   onCreateAnyway: () => void;
+  onEditProduct: () => void;
   onClose: () => void;
-}) => (
-  <section className="fixed inset-0 z-[60] flex items-center justify-center bg-[var(--ui-overlay)] p-4">
-    <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-5 shadow-panel dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
-        <div>
-          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Productos parecidos encontrados</h3>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Antes de crear "{review.values.nombre}", revisa si ya existe para evitar duplicados.
-          </p>
-        </div>
-        <IconButton icon={X} label="Cerrar" onClick={onClose} disabled={disabled} />
-      </div>
+}) => {
+  const enteredCode = review.values.codigoProducto?.trim().toUpperCase();
 
-      <div className="mt-4 space-y-2">
-        {review.matches.map((product) => (
-          <article
-            key={product.id}
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700/80 dark:bg-slate-800/50"
-          >
-            <div>
-              <p className="font-semibold text-slate-900 dark:text-slate-100">{product.name}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {product.code ? `Código: ${product.code} | ` : ""}Stock: {product.stock_current.toLocaleString("es-AR")}{" "}
-                {product.sale_mode === "weight" ? "kg" : "u."}
-              </p>
-            </div>
+  const exactCodeMatch = enteredCode
+    ? review.matches.find((p) => p.code && p.code.trim().toUpperCase() === enteredCode)
+    : null;
+
+  const isStrictDuplicate = Boolean(exactCodeMatch);
+
+  return (
+    <section className="fixed inset-0 z-[60] flex items-center justify-center bg-[var(--ui-overlay)] p-4">
+      <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-5 shadow-panel dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              {isStrictDuplicate ? "Código de producto ya registrado" : "Productos parecidos encontrados"}
+            </h3>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {isStrictDuplicate
+                ? `Ya existe un producto con el código "${review.values.codigoProducto}". No se permite duplicar códigos de producto en el sistema.`
+                : `Antes de crear "${review.values.nombre}", revisa si ya existe para evitar duplicados.`}
+            </p>
+          </div>
+          <IconButton icon={X} label="Cerrar" onClick={onClose} disabled={disabled} />
+        </div>
+
+        {isStrictDuplicate && exactCodeMatch ? (
+          <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700/80 dark:bg-amber-950/40 dark:text-amber-300">
+            El código <span className="font-semibold">{review.values.codigoProducto}</span> ya pertenece a{" "}
+            <span className="font-semibold">"{exactCodeMatch.name}"</span>. Para mantener la integridad de tu inventario no podés tener 2 productos con el mismo código. Podés usar este producto existente o modificar el código del nuevo producto.
+          </div>
+        ) : null}
+
+        <div className="mt-4 space-y-2">
+          {review.matches.map((product) => (
+            <article
+              key={product.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700/80 dark:bg-slate-800/50"
+            >
+              <div>
+                <p className="font-semibold text-slate-900 dark:text-slate-100">{product.name}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {product.code ? `Código: ${product.code} | ` : ""}Stock: {product.stock_current.toLocaleString("es-AR")}{" "}
+                  {product.sale_mode === "weight" ? "kg" : "u."}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="ui-btn-primary px-3 py-2 text-xs"
+                onClick={() => onUseExisting(product)}
+                disabled={disabled}
+              >
+                Usar existente
+              </button>
+            </article>
+          ))}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {isStrictDuplicate
+              ? "Para no duplicar el código, modifica los datos o usa el producto existente."
+              : "Si ninguno coincide realmente, puedes crear el nuevo producto igual."}
+          </p>
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              className="ui-btn-primary px-3 py-2 text-xs"
-              onClick={() => onUseExisting(product)}
+              className="ui-btn-ghost text-xs border border-slate-300 dark:border-slate-700 dark:text-slate-200"
+              onClick={onEditProduct}
               disabled={disabled}
             >
-              Usar existente
+              Modificar datos
             </button>
-          </article>
-        ))}
+            {!isStrictDuplicate ? (
+              <button
+                type="button"
+                className="ui-btn-ghost text-xs border border-slate-300 dark:border-slate-700 dark:text-slate-200"
+                onClick={onCreateAnyway}
+                disabled={disabled}
+              >
+                Crear de todos modos
+              </button>
+            ) : null}
+          </div>
+        </div>
       </div>
-
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Si ninguno coincide realmente, puedes crear el nuevo producto igual.
-        </p>
-        <button type="button" className="ui-btn-ghost" onClick={onCreateAnyway} disabled={disabled}>
-          Crear de todos modos
-        </button>
-      </div>
-    </div>
-  </section>
-);
+    </section>
+  );
+};
 
 export const ComprasPage = () => {
   const { tenantId } = useTenant();
@@ -104,6 +146,7 @@ export const ComprasPage = () => {
   const [newProductPrefill, setNewProductPrefill] = useState<{
     initialBarcode?: string | null;
     initialName?: string | null;
+    initialValues?: Partial<ProductFormModalValues> | null;
   }>({});
   const [preferredSupplierId, setPreferredSupplierId] = useState<string>();
   const [duplicateReview, setDuplicateReview] = useState<DuplicateReviewState | null>(null);
@@ -225,6 +268,17 @@ export const ComprasPage = () => {
       setDuplicateReview(null);
       setNewProductPrefill({});
     }
+  };
+
+  const handleEditDuplicateReview = () => {
+    if (!duplicateReview) return;
+    setNewProductPrefill({
+      initialBarcode: duplicateReview.values.codigoBarras || null,
+      initialName: duplicateReview.values.nombre || null,
+      initialValues: duplicateReview.values,
+    });
+    setDuplicateReview(null);
+    setIsProductModalOpen(true);
   };
 
   if (!tenantId) {
@@ -425,6 +479,7 @@ export const ComprasPage = () => {
         subcategoryOptions={subcategoryOptions}
         initialBarcode={newProductPrefill.initialBarcode}
         initialName={newProductPrefill.initialName}
+        initialValues={newProductPrefill.initialValues}
         onClose={() => {
           setIsProductModalOpen(false);
           setNewProductPrefill({});
@@ -477,6 +532,7 @@ export const ComprasPage = () => {
             setDuplicateReview(null);
           }}
           onCreateAnyway={handleCreateDuplicateAnyway}
+          onEditProduct={handleEditDuplicateReview}
           onClose={() => setDuplicateReview(null)}
         />
       ) : null}

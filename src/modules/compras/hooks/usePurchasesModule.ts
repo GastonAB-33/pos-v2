@@ -1056,13 +1056,26 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
   );
 
   const findPotentialDuplicateProducts = (values: ProductFormModalValues): Product[] => {
+    const code = values.codigoProducto?.trim().toUpperCase();
     const barcode = normalizeBarcode(values.codigoBarras);
     const byId = new Map(products.map((product) => [product.id, product]));
+
+    if (code) {
+      const codeMatch = products.find((p) => p.code && p.code.trim().toUpperCase() === code);
+      if (codeMatch) return [codeMatch];
+
+      const barcodeWithCode = productBarcodes.find((row) => normalizeBarcode(row.barcode).toUpperCase() === code);
+      const productByBarcode = barcodeWithCode ? byId.get(barcodeWithCode.product_id) : null;
+      if (productByBarcode) return [productByBarcode];
+    }
 
     if (barcode) {
       const barcodeMatch = productBarcodes.find((row) => normalizeBarcode(row.barcode) === barcode);
       const product = barcodeMatch ? byId.get(barcodeMatch.product_id) : null;
       if (product) return [product];
+
+      const codeWithBarcode = products.find((p) => p.code && p.code.trim().toUpperCase() === barcode.toUpperCase());
+      if (codeWithBarcode) return [codeWithBarcode];
     }
 
     const normalizedName = normalizeText(values.nombre);
