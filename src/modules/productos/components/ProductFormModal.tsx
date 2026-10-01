@@ -20,6 +20,10 @@ import type { ProductFormModalValues, ProductViewModel } from "@/modules/product
 import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
 import { useProductsStore } from "@/features/products/store/products.store";
 import { cn } from "@/utils/cn";
+import {
+  replaceSpokenSpanishNumbers,
+  deduplicateRepeatedPhrases,
+} from "@/features/voice/utils/voice-normalizer";
 
 type CalcMode = "forward" | "reverse";
 
@@ -84,34 +88,16 @@ const normalizeToUniqueSorted = (values: string[]): string[] => {
 const collapseSpaces = (value: string): string => value.replace(/\s+/g, " ").trim();
 
 const replaceSpokenNumbers = (value: string): string => {
-  const replacements: Array<[RegExp, string]> = [
-    [/\bcero\b/gi, "0"],
-    [/\buno\b/gi, "1"],
-    [/\bdos\b/gi, "2"],
-    [/\btres\b/gi, "3"],
-    [/\bcuatro\b/gi, "4"],
-    [/\bcinco\b/gi, "5"],
-    [/\bseis\b/gi, "6"],
-    [/\bsiete\b/gi, "7"],
-    [/\bocho\b/gi, "8"],
-    [/\bnueve\b/gi, "9"],
-    [/\bdiez\b/gi, "10"],
-    [/\bcoma\b/gi, "."],
-    [/\bpunto\b/gi, "."],
-  ];
-
-  let normalized = value;
-  for (const [pattern, replacement] of replacements) {
-    normalized = normalized.replace(pattern, replacement);
-  }
-
-  return normalized;
+  return replaceSpokenSpanishNumbers(value);
 };
 
-const normalizeVoiceName = (value: string): string => collapseSpaces(value);
+const normalizeVoiceName = (value: string): string => {
+  const deduplicated = deduplicateRepeatedPhrases(value);
+  return collapseSpaces(deduplicated);
+};
 
 const normalizeVoiceBarcode = (value: string): string => {
-  const normalized = replaceSpokenNumbers(value);
+  const normalized = replaceSpokenSpanishNumbers(value);
   return normalized.replace(/\D/g, "");
 };
 
@@ -579,6 +565,7 @@ export const ProductFormModal = ({
                         })
                       }
                       insertMode="replace"
+                      fieldType="text"
                       disabled={disabled}
                       label="Dictar nombre"
                     />
@@ -607,6 +594,7 @@ export const ProductFormModal = ({
                       value={String(stock ?? "")}
                       onValueChange={handleStockVoiceChange}
                       insertMode="replace"
+                      fieldType="number"
                       disabled={disabled}
                       label="Dictar stock"
                     />
@@ -693,6 +681,7 @@ export const ProductFormModal = ({
                           })
                         }
                         insertMode="replace"
+                        fieldType="code"
                         disabled={disabled}
                         label="Dictar código de barras"
                       />
@@ -748,6 +737,7 @@ export const ProductFormModal = ({
                           })
                         }
                         insertMode="replace"
+                        fieldType="code"
                         disabled={disabled}
                         label="Dictar código de producto"
                       />

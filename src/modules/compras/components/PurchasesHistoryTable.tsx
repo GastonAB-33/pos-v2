@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowLeftRight, Eye, Gift, X } from "lucide-react";
+import { ArrowLeftRight, Eye, Gift, Search, X } from "lucide-react";
 import type { Purchase, Supplier } from "@/types/entities";
 import { IconButton } from "@/components/ui/IconButton";
 
@@ -50,6 +50,34 @@ const getPaymentMethodLabel = (method: string | null | undefined): string => {
   }
 };
 
+const renderStatusBadge = (status: string) => {
+  if (status === "confirmed") {
+    return <span className="ui-badge ui-badge--success">Confirmada</span>;
+  }
+
+  if (status === "partial_return") {
+    return (
+      <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+        Devolución parcial
+      </span>
+    );
+  }
+
+  if (status === "returned") {
+    return (
+      <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800 dark:bg-red-950/60 dark:text-red-300">
+        Devuelta total
+      </span>
+    );
+  }
+
+  if (status === "cancelled") {
+    return <span className="ui-badge ui-badge--danger">Cancelada</span>;
+  }
+
+  return <span className="ui-badge ui-badge--warn">{status}</span>;
+};
+
 export const PurchasesHistoryTable = ({
   rows,
   canWrite,
@@ -57,6 +85,31 @@ export const PurchasesHistoryTable = ({
   onOpenReturnModal,
 }: PurchasesHistoryTableProps) => {
   const [selectedPurchase, setSelectedPurchase] = useState<PurchaseHistoryRow | null>(null);
+  const [filterText, setFilterText] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  const filteredRows = useMemo(() => {
+    let result = rows;
+
+    if (statusFilter !== "all") {
+      result = result.filter((r) => r.purchase.status === statusFilter);
+    }
+
+    const q = filterText.trim().toLowerCase();
+    if (q) {
+      result = result.filter((r) => {
+        const p = r.purchase;
+        const s = r.supplier;
+        const num = (p.purchase_number || "").toLowerCase();
+        const doc = (p.document_number || "").toLowerCase();
+        const sup = (s?.name || "").toLowerCase();
+        const notes = (p.notes || "").toLowerCase();
+        return num.includes(q) || doc.includes(q) || sup.includes(q) || notes.includes(q);
+      });
+    }
+
+    return result;
+  }, [rows, statusFilter, filterText]);
 
   const columns = [
     columnHelper.accessor((row) => row.purchase.issue_date || row.purchase.created_at, {
@@ -113,35 +166,7 @@ export const PurchasesHistoryTable = ({
     columnHelper.accessor((row) => row.purchase.status, {
       id: "status",
       header: "Estado",
-      cell: (info) => {
-        const status = info.getValue();
-
-        if (status === "confirmed") {
-          return <span className="ui-badge ui-badge--success">Confirmada</span>;
-        }
-
-        if (status === "partial_return") {
-          return (
-            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-              Devolución parcial
-            </span>
-          );
-        }
-
-        if (status === "returned") {
-          return (
-            <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800 dark:bg-red-950/60 dark:text-red-300">
-              Devuelta total
-            </span>
-          );
-        }
-
-        if (status === "cancelled") {
-          return <span className="ui-badge ui-badge--danger">Cancelada</span>;
-        }
-
-        return <span className="ui-badge ui-badge--warn">{status}</span>;
-      },
+      cell: (info) => renderStatusBadge(info.getValue()),
     }),
     columnHelper.accessor((row) => row.purchase.total, {
       id: "total",
@@ -198,60 +223,235 @@ export const PurchasesHistoryTable = ({
   ];
 
   const table = useReactTable({
-    data: rows,
+    data: filteredRows,
     columns,
     getCoreRowModel: getCoreRowModel(),
   });
 
   if (!rows.length) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+      <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
         No hay compras registradas.
       </div>
     );
   }
 
   return (
-    <>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-        <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-sm">
-          <thead className="bg-slate-50 dark:bg-slate-800/80">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="px-4 py-2.5 text-left font-semibold text-slate-700 dark:text-slate-200">
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody className="divide-y divide-slate-200 dark:divide-slate-800 bg-white dark:bg-slate-900">
-            {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-4 py-2.5 text-slate-700 dark:text-slate-300">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="space-y-3">
+      {/* 1. Barra de Búsqueda y Filtros de Estado */}
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+          <input
+            type="text"
+            value={filterText}
+            onChange={(e) => setFilterText(e.target.value)}
+            placeholder="Buscar por proveedor, comprobante, nº compra..."
+            className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-8 text-xs text-slate-900 placeholder:text-slate-400 shadow-xs transition focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder:text-slate-500"
+          />
+          {filterText ? (
+            <button
+              type="button"
+              onClick={() => setFilterText("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              title="Borrar búsqueda"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 sm:pb-0">
+          <button
+            type="button"
+            onClick={() => setStatusFilter("all")}
+            className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+              statusFilter === "all"
+                ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-xs"
+                : "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            }`}
+          >
+            Todas ({rows.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("confirmed")}
+            className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+              statusFilter === "confirmed"
+                ? "bg-emerald-600 text-white dark:bg-emerald-500 dark:text-slate-950 shadow-xs"
+                : "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            }`}
+          >
+            Confirmadas
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("partial_return")}
+            className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+              statusFilter === "partial_return"
+                ? "bg-amber-600 text-white dark:bg-amber-500 dark:text-slate-950 shadow-xs"
+                : "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            }`}
+          >
+            Devoluciones
+          </button>
+        </div>
       </div>
+
+      {/* Si no hay resultados para el filtro actual */}
+      {!filteredRows.length ? (
+        <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+          <p>No se encontraron compras con el filtro aplicado.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setFilterText("");
+              setStatusFilter("all");
+            }}
+            className="mt-2 text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400"
+          >
+            Limpiar filtros
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* 2. Vista Móvil: Tarjetas individuales (block md:hidden) */}
+          <div className="space-y-3 md:hidden">
+            {filteredRows.map((row) => {
+              const { purchase, supplier } = row;
+              const formattedDate = new Date(
+                purchase.issue_date ? `${purchase.issue_date}T00:00:00` : purchase.created_at
+              ).toLocaleDateString("es-AR");
+              const items = purchase.items ?? [];
+              const totalUnits = items.reduce(
+                (acc, i) => acc + i.quantity + (i.bonified_quantity || 0),
+                0
+              );
+              const isReturnable = purchase.status === "confirmed" || purchase.status === "partial_return";
+
+              return (
+                <article
+                  key={purchase.id}
+                  className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs transition dark:border-slate-800 dark:bg-slate-900"
+                >
+                  {/* Encabezado: Nº Compra + Fecha y Badge */}
+                  <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5 dark:border-slate-800/80">
+                    <div>
+                      <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                        {purchase.purchase_number}
+                      </span>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        {formattedDate}
+                        {purchase.document_type ? ` • ${purchase.document_type}` : ""}
+                        {purchase.document_number ? ` Nº ${purchase.document_number}` : ""}
+                      </div>
+                    </div>
+                    <div>{renderStatusBadge(purchase.status)}</div>
+                  </div>
+
+                  {/* Contenido: Proveedor, Pago e Ítems */}
+                  <div className="grid grid-cols-2 gap-2.5 py-3 text-xs border-b border-slate-100 dark:border-slate-800/80">
+                    <div>
+                      <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Proveedor</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 truncate block">
+                        {supplier?.name || "Sin proveedor"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Medio de pago</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300 block truncate">
+                        {getPaymentMethodLabel(purchase.payment_method)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Productos</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">
+                        {items.length} prod. ({totalUnits} u.)
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Total abonado</span>
+                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                        {currency.format(purchase.total)}
+                      </span>
+                      {purchase.returned_total && purchase.returned_total > 0 ? (
+                        <span className="block text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                          Devuelto: -{currency.format(purchase.returned_total)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Acciones para móvil con botones cómodos */}
+                  <div className="flex items-center gap-2 pt-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPurchase(row)}
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white py-2 text-xs font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >
+                      <Eye className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                      Ver detalle
+                    </button>
+
+                    {isReturnable && canWrite ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenReturnModal(purchase, supplier)}
+                        disabled={disabled}
+                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-50 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/60"
+                      >
+                        <ArrowLeftRight className="h-4 w-4 text-amber-700 dark:text-amber-400" />
+                        Devolver
+                      </button>
+                    ) : null}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          {/* 3. Vista Escritorio: Tabla completa (hidden md:block) */}
+          <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-800/80">
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => (
+                      <th key={header.id} className="px-4 py-2.5 text-left font-semibold text-slate-700 dark:text-slate-200">
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext())}
+                      </th>
+                    ))}
+                  </tr>
+                ))}
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                {table.getRowModel().rows.map((row) => (
+                  <tr key={row.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="px-4 py-2.5 text-slate-700 dark:text-slate-300">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {/* Modal de Detalle de Compra */}
       {selectedPurchase ? (
-        <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-2 sm:p-4">
-          <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-panel dark:border-slate-800 dark:bg-slate-900">
-            <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+        <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-2 sm:p-4 backdrop-blur-[1px]">
+          <div className="flex max-h-[92dvh] sm:max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-panel dark:border-slate-800 dark:bg-slate-900">
+            <header className="flex items-start justify-between gap-4 border-b border-slate-200 p-4 sm:px-5 sm:py-4 dark:border-slate-800">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-brand-700 dark:text-brand-400">
                   Detalle de Compra
                 </p>
-                <h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-100">
+                <h2 className="mt-1 text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
                   {selectedPurchase.purchase.purchase_number}
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -265,28 +465,28 @@ export const PurchasesHistoryTable = ({
               />
             </header>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs sm:grid-cols-4 dark:border-slate-700/80 dark:bg-slate-800/50">
+            <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-3.5">
+              <div className="grid grid-cols-2 gap-2.5 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs sm:grid-cols-4 dark:border-slate-700/80 dark:bg-slate-800/50">
                 <div>
-                  <span className="block text-slate-500 dark:text-slate-400">Comprobante</span>
+                  <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Comprobante</span>
                   <span className="font-semibold text-slate-800 dark:text-slate-100">
                     {selectedPurchase.purchase.document_type || "Factura"}
                   </span>
                 </div>
                 <div>
-                  <span className="block text-slate-500 dark:text-slate-400">Número</span>
+                  <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Número</span>
                   <span className="font-semibold text-slate-800 dark:text-slate-100">
                     {selectedPurchase.purchase.document_number || "S/N"}
                   </span>
                 </div>
                 <div>
-                  <span className="block text-slate-500 dark:text-slate-400">Medio de Pago</span>
+                  <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Medio de Pago</span>
                   <span className="font-semibold text-slate-800 dark:text-slate-100">
                     {getPaymentMethodLabel(selectedPurchase.purchase.payment_method)}
                   </span>
                 </div>
                 <div>
-                  <span className="block text-slate-500 dark:text-slate-400">Fecha</span>
+                  <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Fecha</span>
                   <span className="font-semibold text-slate-800 dark:text-slate-100">
                     {selectedPurchase.purchase.issue_date ||
                       new Date(selectedPurchase.purchase.created_at).toLocaleDateString("es-AR")}
@@ -304,9 +504,9 @@ export const PurchasesHistoryTable = ({
                       key={item.id}
                       className="flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-700/80 dark:bg-slate-800/60"
                     >
-                      <div>
-                        <p className="font-semibold text-slate-900 dark:text-slate-100">{item.product_name_snapshot}</p>
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">{item.product_name_snapshot}</p>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                           <span>Cant. pagada: {item.quantity} u.</span>
                           {item.bonified_quantity ? (
                             <span className="inline-flex items-center gap-0.5 font-medium text-emerald-700 dark:text-emerald-400">
@@ -322,7 +522,8 @@ export const PurchasesHistoryTable = ({
                           {item.vat_percent ? <span>• IVA: {item.vat_percent}%</span> : null}
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800">
+                        <span className="text-xs text-slate-500 dark:text-slate-400 sm:hidden block text-left">Subtotal ítem:</span>
                         <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
                           {currency.format(item.line_total)}
                         </span>
@@ -363,10 +564,10 @@ export const PurchasesHistoryTable = ({
               </div>
             </div>
 
-            <footer className="border-t border-slate-200 px-5 py-3 text-right dark:border-slate-800">
+            <footer className="border-t border-slate-200 p-3 sm:px-5 sm:py-3 text-right dark:border-slate-800">
               <button
                 type="button"
-                className="ui-btn-primary"
+                className="ui-btn-primary w-full sm:w-auto"
                 onClick={() => setSelectedPurchase(null)}
               >
                 Cerrar
@@ -375,7 +576,7 @@ export const PurchasesHistoryTable = ({
           </div>
         </section>
       ) : null}
-    </>
+    </div>
   );
 };
 
