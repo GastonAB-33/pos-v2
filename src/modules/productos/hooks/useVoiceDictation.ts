@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  mergeTranscriptsWithoutOverlap,
+  normalizeVoiceInput,
+} from "@/features/voice/utils/voice-normalizer";
 
 interface SpeechRecognitionEventLike {
+  resultIndex: number;
   results: {
     length: number;
     [index: number]: {
@@ -29,6 +34,8 @@ interface SpeechRecognitionLike {
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
 const getSpeechRecognitionConstructor = (): SpeechRecognitionConstructor | null => {
+  if (typeof window === "undefined") return null;
+
   const scope = window as unknown as {
     SpeechRecognition?: SpeechRecognitionConstructor;
     webkitSpeechRecognition?: SpeechRecognitionConstructor;
@@ -41,9 +48,11 @@ export const useVoiceDictation = () => {
   const [isSupported, setIsSupported] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
+  const [interimText, setInterimText] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const accumulatedFinalRef = useRef("");
 
   useEffect(() => {
     setIsSupported(Boolean(getSpeechRecognitionConstructor()));
@@ -51,20 +60,27 @@ export const useVoiceDictation = () => {
 
   useEffect(() => {
     return () => {
-      recognitionRef.current?.abort();
+      try {
+        recognitionRef.current?.abort();
+      } catch {}
       recognitionRef.current = null;
     };
   }, []);
 
   const startRecording = useCallback(() => {
     setError(null);
+    setInterimText("");
     const Recognition = getSpeechRecognitionConstructor();
     if (!Recognition) {
       setError("El navegador no soporta dictado por voz.");
       return;
     }
 
-    recognitionRef.current?.abort();
+    try {
+      recognitionRef.current?.abort();
+    } catch {}
+
+    accumulatedFinalRef.current = "";
 
     const recognition = new Recognition();
     recognition.continuous = true;
@@ -74,44 +90,83 @@ export const useVoiceDictation = () => {
     recognition.onstart = () => setIsRecording(true);
 
     recognition.onresult = (event) => {
-      let fullText = "";
-      for (let i = 0; i < event.results.length; i += 1) {
-        const segment = event.results[i]?.[0]?.transcript ?? "";
-        fullText += `${segment} `;
+      let interim = "";
+
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const item = event.results[i];
+        const text = item?.[0]?.transcript ?? "";
+
+        if (item?.isFinal) {
+          accumulatedFinalRef.current = mergeTranscriptsWithoutOverlap(
+            accumulatedFinalRef.current,
+            text
+          );
+        } else {
+          interim += `${text} `;
+        }
       }
 
-      setTranscript(fullText.trim());
+      setInterimText(interim.trim());
+
+      const rawFinal = accumulatedFinalRef.current.trim();
+      const combined = interim.trim()
+        ? mergeTranscriptsWithoutOverlap(rawFinal, interim)
+        : rawFinal;
+
+      const { value: normalized } = normalizeVoiceInput(combined, {
+        autoNumbers: true,
+        autoPunctuation: true,
+        capitalize: true,
+      });
+
+      setTranscript(normalized);
     };
 
     recognition.onerror = (event) => {
-      setError(event.error ? `Error de dictado: ${event.error}` : "Error de dictado por voz.");
+      if (event.error && event.error !== "aborted") {
+        setError(`Error de dictado: ${event.error}`);
+      }
       setIsRecording(false);
     };
 
     recognition.onend = () => {
       setIsRecording(false);
+      setInterimText("");
     };
 
     recognitionRef.current = recognition;
-    recognition.start();
+    try {
+      recognition.start();
+    } catch {
+      setError("No se pudo iniciar el dictado por voz.");
+      setIsRecording(false);
+    }
   }, []);
 
   const stopRecording = useCallback(() => {
-    recognitionRef.current?.stop();
+    try {
+      recognitionRef.current?.stop();
+    } catch {}
+    setIsRecording(false);
   }, []);
 
   const clearRecording = useCallback(() => {
-    recognitionRef.current?.abort();
+    try {
+      recognitionRef.current?.abort();
+    } catch {}
     recognitionRef.current = null;
     setIsRecording(false);
     setError(null);
     setTranscript("");
+    setInterimText("");
+    accumulatedFinalRef.current = "";
   }, []);
 
   return {
     isSupported,
     isRecording,
     transcript,
+    interimText,
     error,
     setTranscript,
     setError,
@@ -120,4 +175,3 @@ export const useVoiceDictation = () => {
     clearRecording,
   };
 };
-
