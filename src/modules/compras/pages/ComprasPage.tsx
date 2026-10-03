@@ -193,6 +193,11 @@ export const ComprasPage = () => {
     findPotentialDuplicateProducts,
     createProductAndAddToCart,
     createSupplier,
+    purchaseVatPercent,
+    setPurchaseVatPercent,
+    purchaseIibbPercent,
+    setPurchaseIibbPercent,
+    purchaseIibbAmount,
   } = usePurchasesModule(tenantId, user?.id ?? null);
 
   const historyRows = purchases.map((purchase) => ({
@@ -204,6 +209,11 @@ export const ComprasPage = () => {
     if (!canWritePurchases) return;
     if (!cart.length) {
       alert("Debés agregar al menos un producto al carrito de compras antes de continuar al pago.");
+      return;
+    }
+    const supplier = suppliersById.get(headerValues.supplierId);
+    if (!supplier) {
+      alert("Debes seleccionar un proveedor válido de la lista o crearlo antes de continuar al pago.");
       return;
     }
     setPendingHeaderValues(headerValues);
@@ -416,6 +426,10 @@ export const ComprasPage = () => {
               preferredSupplierId={preferredSupplierId}
               formId="purchase-checkout-form"
               resetSignal={checkoutResetSignal}
+              vatPercent={purchaseVatPercent}
+              onVatPercentChange={setPurchaseVatPercent}
+              iibbPercent={purchaseIibbPercent}
+              iibbAmount={purchaseIibbAmount}
               onCreateSupplier={(initialName) => {
                 setNewSupplierInitialName(initialName?.trim() || "");
                 setIsSupplierModalOpen(true);
@@ -423,13 +437,17 @@ export const ComprasPage = () => {
               onSubmit={handleProceedToPayment}
             />
 
-            {/* 3. Panel de Productos de Compra y Resumen / Confirmación */}
+            {/* 3. Panel de Productos de Compra y Resumen / Confirmación (con impuestos al final) */}
             <PurchaseCart
               items={cart}
               summary={summary}
               disabled={isSubmitting}
               canWrite={canWritePurchases}
               formId="purchase-checkout-form"
+              vatPercent={purchaseVatPercent}
+              onVatPercentChange={setPurchaseVatPercent}
+              iibbPercent={purchaseIibbPercent}
+              onIibbPercentChange={setPurchaseIibbPercent}
               onSetQuantity={setItemQuantity}
               onSetUnitCost={setItemUnitCost}
               onSetDiscountPercent={setItemDiscountPercent}

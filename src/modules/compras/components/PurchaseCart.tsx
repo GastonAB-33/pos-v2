@@ -22,7 +22,10 @@ export interface PurchaseCartItemView {
 
 export interface PurchaseSummary {
   subtotal: number;
+  vatPercent?: number;
   vatTotal: number;
+  iibbPercent?: number;
+  iibbTotal?: number;
   total: number;
   totalUnits: number;
   totalDiscountAmount?: number;
@@ -34,6 +37,10 @@ interface PurchaseCartProps {
   canWrite: boolean;
   disabled?: boolean;
   formId?: string;
+  vatPercent?: number;
+  onVatPercentChange?: (vat: number) => void;
+  iibbPercent?: number;
+  onIibbPercentChange?: (iibb: number) => void;
   onSetQuantity: (productId: string, quantity: number) => void;
   onSetUnitCost: (productId: string, unitCost: number) => void;
   onSetDiscountPercent?: (productId: string, discountPercent: number) => void;
@@ -68,6 +75,10 @@ export const PurchaseCart = ({
   canWrite,
   disabled,
   formId = "purchase-checkout-form",
+  vatPercent = 21,
+  onVatPercentChange,
+  iibbPercent = 0,
+  onIibbPercentChange,
   onSetQuantity,
   onSetUnitCost,
   onSetDiscountPercent,
@@ -86,6 +97,16 @@ export const PurchaseCart = ({
   const [profitDrafts, setProfitDrafts] = useState<Record<string, string>>({});
   const [salePriceDrafts, setSalePriceDrafts] = useState<Record<string, string>>({});
   const [bonifiedDrafts, setBonifiedDrafts] = useState<Record<string, string>>({});
+  const [vatDraft, setVatDraft] = useState<string | null>(null);
+  const [iibbDraft, setIibbDraft] = useState<string | null>(null);
+
+  useEffect(() => {
+    setVatDraft(null);
+  }, [vatPercent]);
+
+  useEffect(() => {
+    setIibbDraft(null);
+  }, [iibbPercent]);
 
   const getUnitLabel = (item: PurchaseCartItemView) =>
     item.sale_mode === "weight" ? "kg" : "u.";
@@ -722,51 +743,150 @@ export const PurchaseCart = ({
         </div>
       )}
 
-      {/* Resumen Total y Botón de Confirmación Responsivo para Móvil */}
-      {items.length > 0 && (
-        <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 dark:border-slate-700/80 dark:bg-slate-800/80">
-          <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs">
-            <div>
-              <span className="text-slate-500 dark:text-slate-400">Subtotal compra: </span>
-              <strong className="text-slate-800 dark:text-slate-200">{currency.format(summary.subtotal)}</strong>
+      {/* Resumen Total y Botón de Confirmación Responsivo para Móvil (al final de la compra) */}
+      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/90 p-3.5 sm:p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/80">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          {/* Fila de Totales e Impuestos con inputs numéricos directos */}
+          <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5 text-xs">
+            {/* % IVA directo escribiendo el número */}
+            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/90">
+              <label
+                htmlFor="purchase-vat-input"
+                className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200"
+              >
+                % IVA:
+              </label>
+              <div className="flex items-center">
+                <input
+                  id="purchase-vat-input"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                  value={vatDraft ?? (vatPercent === 0 ? "0" : vatPercent.toString())}
+                  onFocus={handleNumericInputFocus}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setVatDraft(raw);
+                    const val = raw.trim().replace(",", ".");
+                    if (val === "") {
+                      onVatPercentChange?.(0);
+                    } else {
+                      const parsed = Number(val);
+                      if (!isNaN(parsed) && parsed >= 0) {
+                        onVatPercentChange?.(Math.min(100, parsed));
+                      }
+                    }
+                  }}
+                  onBlur={() => setVatDraft(null)}
+                  disabled={disabled || !canWrite}
+                  placeholder="21"
+                  className="w-14 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-center text-xs font-bold text-slate-900 transition focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
+                />
+              </div>
+              <span className="font-bold text-blue-700 dark:text-blue-400">
+                ({currency.format(summary.vatTotal)})
+              </span>
             </div>
-            {summary.vatTotal > 0 && (
-              <>
-                <span className="text-slate-300 dark:text-slate-600">•</span>
-                <div>
-                  <span className="text-slate-500 dark:text-slate-400">IVA total: </span>
-                  <strong className="text-slate-800 dark:text-slate-200">{currency.format(summary.vatTotal)}</strong>
-                </div>
-              </>
-            )}
+
+            <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
+
+            {/* Subtotal neto */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-slate-500 dark:text-slate-400">Neto:</span>
+              <strong className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                {currency.format(summary.subtotal)}
+              </strong>
+            </div>
+
+            <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
+
+            {/* % IIBB directo escribiendo el número */}
+            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/90">
+              <label
+                htmlFor="purchase-iibb-input"
+                className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200"
+              >
+                % IIBB:
+              </label>
+              <div className="flex items-center">
+                <input
+                  id="purchase-iibb-input"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                  value={iibbDraft ?? (iibbPercent === 0 ? "0" : iibbPercent.toString())}
+                  onFocus={handleNumericInputFocus}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setIibbDraft(raw);
+                    const val = raw.trim().replace(",", ".");
+                    if (val === "") {
+                      onIibbPercentChange?.(0);
+                    } else {
+                      const parsed = Number(val);
+                      if (!isNaN(parsed) && parsed >= 0) {
+                        onIibbPercentChange?.(Math.min(100, parsed));
+                      }
+                    }
+                  }}
+                  onBlur={() => setIibbDraft(null)}
+                  disabled={disabled || !canWrite}
+                  placeholder="0"
+                  className="w-14 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-center text-xs font-bold text-slate-900 transition focus:border-amber-500 focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
+                />
+              </div>
+              <span className="font-bold text-amber-700 dark:text-amber-400">
+                ({currency.format(summary.iibbTotal ?? 0)})
+              </span>
+            </div>
+
             {summary.totalDiscountAmount != null && summary.totalDiscountAmount > 0 && (
               <>
-                <span className="text-slate-300 dark:text-slate-600">•</span>
-                <div className="rounded-md bg-amber-100/80 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:text-amber-300">
-                  Ahorro en compra: +{currency.format(summary.totalDiscountAmount)}
+                <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
+                <div className="rounded-md border border-amber-300 bg-amber-100/80 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                  Ahorro: +{currency.format(summary.totalDiscountAmount)}
                 </div>
               </>
             )}
-            <span className="text-slate-300 dark:text-slate-600">•</span>
-            <div className="text-sm">
-              <span className="font-semibold text-slate-700 dark:text-slate-300">Total a pagar: </span>
-              <strong className="text-base font-extrabold text-brand-700 dark:text-brand-400">
+
+            <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
+
+            {/* Total a pagar */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Total:</span>
+              <strong className="text-base sm:text-lg font-black text-brand-700 dark:text-brand-400">
                 {currency.format(summary.total)}
               </strong>
             </div>
           </div>
 
+          {/* Botón de confirmación / pago */}
           <button
             type="submit"
             form={formId}
-            disabled={disabled || !canWrite}
-            className="inline-flex w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg bg-brand-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-brand-700 disabled:opacity-50"
+            disabled={disabled || !canWrite || items.length === 0}
+            title={items.length === 0 ? "Agregá productos al carrito para proceder al pago" : "Proceder al registro del pago"}
+            className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-brand-500 dark:hover:bg-brand-600"
           >
             <span>Proceder al pago</span>
             <ArrowRight className="h-4 w-4" />
           </button>
         </div>
-      )}
+      </div>
     </section>
   );
 };
