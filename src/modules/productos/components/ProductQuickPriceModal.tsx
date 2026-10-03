@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   DollarSign,
   Package,
+  Pencil,
   Plus,
   RotateCcw,
   Save,
@@ -57,6 +58,7 @@ interface ProductQuickPriceModalProps {
     }
   ) => Promise<unknown>;
   onCreateNewProduct?: (initialQuery?: string) => void;
+  onEditProduct?: (product: ProductViewModel) => void;
   initialQuery?: string | null;
 }
 
@@ -75,6 +77,7 @@ export const ProductQuickPriceModal = ({
   canWrite,
   onSavePrice,
   onCreateNewProduct,
+  onEditProduct,
   initialQuery,
 }: ProductQuickPriceModalProps) => {
   useBodyScrollLock(open);
@@ -250,6 +253,18 @@ export const ProductQuickPriceModal = ({
     }
 
     onCreateNewProduct?.(targetQuery);
+  };
+
+  // Abrir la ficha completa del producto para editar nombre, categoría, etc.
+  const handleOpenEditProduct = () => {
+    if (!selectedProduct || !onEditProduct) return;
+    if (isPriceDirty) {
+      const confirmLeave = window.confirm(
+        "Hay cambios de precio sin guardar en la consulta rápida. ¿Deseas descartarlos para editar la ficha completa del producto?"
+      );
+      if (!confirmLeave) return;
+    }
+    onEditProduct(selectedProduct);
   };
 
   // Acciones ante cambios no guardados: Guardar y avanzar
@@ -797,20 +812,36 @@ export const ProductQuickPriceModal = ({
                     : "border-slate-200 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-800/40"
                 }`}
               >
-                {/* Etiquetas superiores */}
-                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                  <span className="rounded bg-slate-200/80 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
-                    {selectedProduct.categoria || "Sin categoría"}
-                  </span>
-                  {selectedProduct.codigoProducto && (
-                    <span className="font-mono text-xs text-slate-500 bg-white/80 dark:bg-slate-850 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-slate-700">
-                      Cód: {selectedProduct.codigoProducto}
+                {/* Etiquetas superiores y botón de edición */}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <span className="rounded bg-slate-200/80 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                      {selectedProduct.categoria || "Sin categoría"}
                     </span>
-                  )}
-                  {selectedProduct.codigoBarras && (
-                    <span className="font-mono text-xs text-slate-600 bg-white dark:bg-slate-850 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-                      {selectedProduct.codigoBarras}
-                    </span>
+                    {selectedProduct.codigoProducto && (
+                      <span className="font-mono text-xs text-slate-500 bg-white/80 dark:bg-slate-850 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-slate-700">
+                        Cód: {selectedProduct.codigoProducto}
+                      </span>
+                    )}
+                    {selectedProduct.codigoBarras && (
+                      <span className="font-mono text-xs text-slate-600 bg-white dark:bg-slate-850 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                        {selectedProduct.codigoBarras}
+                      </span>
+                    )}
+                  </div>
+
+                  {onEditProduct && (
+                    <button
+                      type="button"
+                      onClick={handleOpenEditProduct}
+                      disabled={!canWrite}
+                      title="Editar ficha completa (nombre, categoría, códigos, etc.)"
+                      aria-label="Editar ficha completa del producto"
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 shadow-2xs transition hover:border-brand-500 hover:bg-slate-100 hover:text-brand-600 active:scale-95 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-brand-400 dark:hover:bg-slate-700 dark:hover:text-brand-300"
+                    >
+                      <Pencil className="h-3 w-3 text-slate-500 dark:text-slate-400" />
+                      <span className="text-[11px]">Editar ficha</span>
+                    </button>
                   )}
                 </div>
 

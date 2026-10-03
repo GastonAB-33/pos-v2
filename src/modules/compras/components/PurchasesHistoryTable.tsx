@@ -551,6 +551,17 @@ export const PurchasesHistoryTable = ({
                     <span className="text-slate-800 dark:text-slate-200">{currency.format(selectedPurchase.purchase.vat_total)}</span>
                   </div>
                 ) : null}
+                {(() => {
+                  const match = selectedPurchase.purchase.notes?.match(/IIBB(?:[^:]*):\s*\$?([0-9.,]+)/i);
+                  const iibbVal = match ? match[1] : null;
+                  if (!iibbVal) return null;
+                  return (
+                    <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+                      <span>Percepción IIBB:</span>
+                      <span className="text-slate-800 dark:text-slate-200">${iibbVal}</span>
+                    </div>
+                  );
+                })()}
                 <div className="flex justify-between text-base font-bold text-slate-900 border-t border-slate-200 dark:border-slate-700 dark:text-slate-100 pt-1">
                   <span>Total Compra:</span>
                   <span className="text-brand-700 dark:text-brand-400">{currency.format(selectedPurchase.purchase.total)}</span>

@@ -1,6 +1,15 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Calendar, Check, ChevronDown, FileText, Plus, Search, User, StickyNote, X } from "lucide-react";
+import {
+  Calendar,
+  Check,
+  ChevronDown,
+  FileText,
+  Plus,
+  Search,
+  User,
+  StickyNote,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Supplier } from "@/types/entities";
 import {
@@ -15,6 +24,10 @@ interface PurchaseCheckoutPanelProps {
   preferredSupplierId?: string;
   formId?: string;
   resetSignal?: number;
+  vatPercent: number;
+  onVatPercentChange: (vat: number) => void;
+  iibbPercent: number;
+  iibbAmount: number;
   onCreateSupplier: (initialName?: string) => void;
   onSubmit: (values: PurchaseHeaderValues) => Promise<boolean | void> | boolean | void;
 }
@@ -28,6 +41,10 @@ export const PurchaseCheckoutPanel = ({
   preferredSupplierId,
   formId = "purchase-checkout-form",
   resetSignal,
+  vatPercent,
+  onVatPercentChange,
+  iibbPercent,
+  iibbAmount,
   onCreateSupplier,
   onSubmit,
 }: PurchaseCheckoutPanelProps) => {
@@ -45,26 +62,33 @@ export const PurchaseCheckoutPanel = ({
       documentType: "FACTURA_A",
       documentNumber: "",
       issueDate: getTodayDate(),
+      vatPercent: vatPercent || 21,
+      iibbPercent: iibbPercent || 0,
+      iibbAmount: iibbAmount || 0,
       notes: "",
     },
   });
 
   const selectedSupplierId = watch("supplierId");
+  const selectedDocumentType = watch("documentType");
   const [supplierSearchText, setSupplierSearchText] = useState("");
   const [isSupplierDropdownOpen, setIsSupplierDropdownOpen] = useState(false);
   const supplierBoxRef = useRef<HTMLDivElement>(null);
 
-  // Sincronizar texto de búsqueda cuando cambia el proveedor seleccionado
+  // Encontrar el proveedor actualmente seleccionado en la lista real
+  const currentSelectedSupplier = useMemo(
+    () => suppliers.find((s) => s.id === selectedSupplierId) ?? null,
+    [suppliers, selectedSupplierId]
+  );
+
+  // Sincronizar texto de búsqueda cuando cambia el proveedor
   useEffect(() => {
-    if (selectedSupplierId) {
-      const match = suppliers.find((s) => s.id === selectedSupplierId);
-      if (match) {
-        setSupplierSearchText(match.name);
-      }
-    } else {
+    if (currentSelectedSupplier) {
+      setSupplierSearchText(currentSelectedSupplier.name);
+    } else if (!selectedSupplierId) {
       setSupplierSearchText("");
     }
-  }, [selectedSupplierId, suppliers]);
+  }, [currentSelectedSupplier, selectedSupplierId]);
 
   useEffect(() => {
     if (preferredSupplierId) {
@@ -77,10 +101,8 @@ export const PurchaseCheckoutPanel = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (supplierBoxRef.current && !supplierBoxRef.current.contains(event.target as Node)) {
         setIsSupplierDropdownOpen(false);
-        // Si el texto escrito no coincide con el seleccionado, restaurar el nombre del seleccionado
-        const currentSelected = suppliers.find((s) => s.id === selectedSupplierId);
-        if (currentSelected) {
-          setSupplierSearchText(currentSelected.name);
+        if (currentSelectedSupplier) {
+          setSupplierSearchText(currentSelectedSupplier.name);
         } else {
           setSupplierSearchText("");
         }
@@ -88,7 +110,7 @@ export const PurchaseCheckoutPanel = ({
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [selectedSupplierId, suppliers]);
+  }, [currentSelectedSupplier]);
 
   // Filtrado reactivo de proveedores
   const filteredSuppliers = useMemo(() => {
@@ -97,9 +119,27 @@ export const PurchaseCheckoutPanel = ({
     return suppliers.filter(
       (s) =>
         s.name.toLowerCase().includes(q) ||
-        (s.code && s.code.toLowerCase().includes(q))
+        (s.code && s.code.toLowerCase().includes(q)) ||
+        (s.tax_id && s.tax_id.includes(q))
     );
   }, [suppliers, supplierSearchText]);
+
+  // Sugerencia automática de IVA al cambiar tipo de comprobante
+  useEffect(() => {
+    if (selectedDocumentType === "FACTURA_A") {
+      if (vatPercent === 0) {
+        setValue("vatPercent", 21);
+        onVatPercentChange(21);
+      }
+    } else if (
+      selectedDocumentType === "FACTURA_C" ||
+      selectedDocumentType === "REMITO" ||
+      selectedDocumentType === "PRESUPUESTO"
+    ) {
+      setValue("vatPercent", 0);
+      onVatPercentChange(0);
+    }
+  }, [selectedDocumentType, setValue, onVatPercentChange, vatPercent]);
 
   const handleSelectSupplier = (supplier: Supplier) => {
     setValue("supplierId", supplier.id, { shouldValidate: true });
@@ -110,7 +150,28 @@ export const PurchaseCheckoutPanel = ({
   const handleClearSupplier = () => {
     setValue("supplierId", "", { shouldValidate: true });
     setSupplierSearchText("");
-    setIsSupplierDropdownOpen(false);
+    setIsSupplierDropdownOpen(true);
+  };
+
+  // Auto-link si el usuario tipea el nombre exacto de un proveedor existente
+  const handleSearchChange = (text: string) => {
+    setSupplierSearchText(text);
+    setIsSupplierDropdownOpen(true);
+
+    if (!text.trim()) {
+      setValue("supplierId", "", { shouldValidate: true });
+      return;
+    }
+
+    const exactMatch = suppliers.find(
+      (s) => s.name.trim().toLowerCase() === text.trim().toLowerCase()
+    );
+    if (exactMatch) {
+      setValue("supplierId", exactMatch.id, { shouldValidate: true });
+    } else if (selectedSupplierId && text.trim() !== currentSelectedSupplier?.name.trim()) {
+      // Si el texto ya no coincide con el seleccionado, desvincular el ID anterior para evitar enviar datos incorrectos
+      setValue("supplierId", "", { shouldValidate: true });
+    }
   };
 
   useEffect(() => {
@@ -120,14 +181,28 @@ export const PurchaseCheckoutPanel = ({
         documentType: "FACTURA_A",
         documentNumber: "",
         issueDate: getTodayDate(),
+        vatPercent: 21,
+        iibbPercent: 0,
+        iibbAmount: 0,
         notes: "",
       });
       setSupplierSearchText("");
+      onVatPercentChange(21);
     }
-  }, [resetSignal, reset]);
+  }, [resetSignal, reset, onVatPercentChange]);
 
   const submit = async (values: PurchaseHeaderValues) => {
-    await onSubmit(values);
+    // Validación estricta final de proveedor
+    if (!values.supplierId || !suppliers.some((s) => s.id === values.supplierId)) {
+      alert("Debes seleccionar un proveedor válido de la lista o crearlo antes de continuar.");
+      return;
+    }
+    await onSubmit({
+      ...values,
+      vatPercent,
+      iibbPercent,
+      iibbAmount,
+    });
   };
 
   return (
@@ -137,16 +212,21 @@ export const PurchaseCheckoutPanel = ({
           <FileText className="h-4 w-4 text-brand-600 dark:text-brand-400" />
           Datos de la compra y factura
         </h2>
-        <span className="text-[11px] text-slate-400 dark:text-slate-500">Campos del comprobante y proveedor</span>
+        <span className="text-[11px] text-slate-400 dark:text-slate-500">
+          Proveedor, comprobante y fecha de emisión
+        </span>
       </div>
 
-      <form id={formId} autoComplete="off" onSubmit={handleSubmit(submit)} className="space-y-3">
+      <form id={formId} autoComplete="off" onSubmit={handleSubmit(submit)} className="space-y-3.5">
         {/* Input oculto para que react-hook-form valide supplierId */}
         <input type="hidden" {...register("supplierId")} />
+        <input type="hidden" {...register("vatPercent", { valueAsNumber: true })} />
+        <input type="hidden" {...register("iibbPercent", { valueAsNumber: true })} />
+        <input type="hidden" {...register("iibbAmount", { valueAsNumber: true })} />
 
         {/* Grid principal de datos */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {/* Proveedor con Buscador en Vivo (Combobox) */}
+          {/* Proveedor con Selector Inteligente y Touch-friendly */}
           <div className="relative sm:col-span-2 lg:col-span-2" ref={supplierBoxRef}>
             <div className="mb-1 flex items-center justify-between">
               <label className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
@@ -164,57 +244,69 @@ export const PurchaseCheckoutPanel = ({
               </button>
             </div>
 
-            <div className="relative">
-              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5 text-slate-400">
-                <Search className="h-3.5 w-3.5" />
-              </div>
-              <input
-                type="text"
-                autoComplete="off"
-                placeholder="Escribe para buscar proveedor..."
-                value={supplierSearchText}
-                onChange={(e) => {
-                  setSupplierSearchText(e.target.value);
-                  setIsSupplierDropdownOpen(true);
-                  if (!e.target.value.trim()) {
-                    setValue("supplierId", "", { shouldValidate: true });
-                  }
-                }}
-                onFocus={() => setIsSupplierDropdownOpen(true)}
-                disabled={disabled || !canWrite}
-                className={`w-full rounded-lg border py-2 pl-8 pr-14 text-xs font-medium transition focus:outline-none focus:ring-1 ${
-                  errors.supplierId
-                    ? "border-red-400 bg-red-50/30 text-slate-800 dark:border-red-500 dark:bg-red-950/20 dark:text-slate-100"
-                    : "border-slate-300 bg-white text-slate-800 focus:border-brand-500 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-brand-400"
-                }`}
-              />
-
-              <div className="absolute inset-y-0 right-0 flex items-center pr-1.5">
-                {selectedSupplierId ? (
-                  <button
-                    type="button"
-                    onClick={handleClearSupplier}
-                    disabled={disabled || !canWrite}
-                    className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                    title="Limpiar proveedor"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                ) : null}
+            {/* Si ya hay un proveedor seleccionado, mostrar tarjeta de confirmación visual */}
+            {currentSelectedSupplier ? (
+              <div className="flex items-center justify-between rounded-lg border border-emerald-300 bg-emerald-50/90 p-2 dark:border-emerald-800 dark:bg-emerald-950/40">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                    <Check className="h-3.5 w-3.5" />
+                  </div>
+                  <div className="min-w-0 truncate">
+                    <p className="text-xs font-bold text-emerald-950 dark:text-emerald-200 truncate">
+                      {currentSelectedSupplier.name}
+                    </p>
+                    {currentSelectedSupplier.tax_id ? (
+                      <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
+                        CUIT: {currentSelectedSupplier.tax_id}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setIsSupplierDropdownOpen((prev) => !prev)}
+                  onClick={handleClearSupplier}
                   disabled={disabled || !canWrite}
-                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  className="shrink-0 rounded px-2 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
                 >
-                  <ChevronDown className="h-3.5 w-3.5" />
+                  Cambiar
                 </button>
               </div>
-            </div>
+            ) : (
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5 text-slate-400">
+                  <Search className="h-3.5 w-3.5" />
+                </div>
+                <input
+                  type="text"
+                  autoComplete="off"
+                  placeholder="Toca para buscar o elegir proveedor..."
+                  value={supplierSearchText}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  onFocus={() => setIsSupplierDropdownOpen(true)}
+                  disabled={disabled || !canWrite}
+                  className={`w-full rounded-lg border py-2.5 pl-8 pr-10 text-xs font-medium transition focus:outline-none focus:ring-1 ${
+                    errors.supplierId
+                      ? "border-red-400 bg-red-50/30 text-slate-800 dark:border-red-500 dark:bg-red-950/20 dark:text-slate-100"
+                      : "border-slate-300 bg-white text-slate-800 focus:border-brand-500 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-brand-400"
+                  }`}
+                />
 
-            {/* Menú desplegable con coincidencias en tiempo real */}
-            {isSupplierDropdownOpen && (
-              <div className="absolute z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                <div className="absolute inset-y-0 right-0 flex items-center pr-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsSupplierDropdownOpen((prev) => !prev)}
+                    disabled={disabled || !canWrite}
+                    className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Menú desplegable con coincidencias en tiempo real optimizado para móvil */}
+            {isSupplierDropdownOpen && !currentSelectedSupplier && (
+              <div className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
                 {filteredSuppliers.length === 0 ? (
                   <div className="p-3 text-center">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -226,44 +318,47 @@ export const PurchaseCheckoutPanel = ({
                         setIsSupplierDropdownOpen(false);
                         onCreateSupplier(supplierSearchText.trim());
                       }}
-                      className="mt-2 inline-flex items-center gap-1 rounded bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100 dark:bg-brand-950/60 dark:text-brand-300 dark:hover:bg-brand-900/60"
+                      className="mt-2.5 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-brand-700 dark:bg-brand-500"
                     >
-                      <Plus className="h-3 w-3" />
-                      Dar de alta este proveedor
+                      <Plus className="h-3.5 w-3.5" />
+                      Crear y asociar este proveedor
                     </button>
                   </div>
                 ) : (
-                  filteredSuppliers.map((supplier) => {
-                    const isSelected = supplier.id === selectedSupplierId;
-                    return (
+                  <div className="space-y-1">
+                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      Toca un proveedor para seleccionarlo:
+                    </div>
+                    {filteredSuppliers.map((supplier) => (
                       <button
                         key={supplier.id}
                         type="button"
                         onClick={() => handleSelectSupplier(supplier)}
-                        className={`flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-xs transition ${
-                          isSelected
-                            ? "bg-brand-50 font-bold text-brand-800 dark:bg-brand-950/60 dark:text-brand-300"
-                            : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-                        }`}
+                        className="flex min-h-[44px] w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition hover:bg-slate-100 active:bg-slate-200 dark:text-slate-100 dark:hover:bg-slate-800 dark:active:bg-slate-700"
                       >
                         <div className="min-w-0 flex-1 truncate">
-                          <span className="font-semibold">{supplier.name}</span>
-                          {supplier.code ? (
-                            <span className="ml-1.5 text-[10px] text-slate-400 dark:text-slate-500">
-                              ({supplier.code})
-                            </span>
-                          ) : null}
+                          <p className="font-semibold text-slate-900 dark:text-slate-100">
+                            {supplier.name}
+                          </p>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-400">
+                            {supplier.tax_id ? `CUIT: ${supplier.tax_id}` : "Sin CUIT"}
+                            {supplier.code ? ` • Cód: ${supplier.code}` : ""}
+                          </p>
                         </div>
-                        {isSelected && <Check className="h-3.5 w-3.5 text-brand-600 dark:text-brand-400" />}
+                        <span className="shrink-0 rounded bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                          Elegir
+                        </span>
                       </button>
-                    );
-                  })
+                    ))}
+                  </div>
                 )}
               </div>
             )}
 
-            {errors.supplierId ? (
-              <p className="mt-0.5 text-[11px] text-red-600 dark:text-red-400">{errors.supplierId.message}</p>
+            {errors.supplierId && !currentSelectedSupplier ? (
+              <p className="mt-1 text-[11px] font-medium text-red-600 dark:text-red-400">
+                ⚠️ {errors.supplierId.message}
+              </p>
             ) : null}
           </div>
 
@@ -274,7 +369,7 @@ export const PurchaseCheckoutPanel = ({
             </label>
             <select
               {...register("documentType")}
-              className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-medium text-slate-800 transition focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-brand-400"
+              className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2.5 text-xs font-medium text-slate-800 transition focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-brand-400"
               disabled={disabled || !canWrite}
             >
               <option value="FACTURA_A">Factura A</option>
@@ -287,7 +382,7 @@ export const PurchaseCheckoutPanel = ({
             </select>
           </div>
 
-          {/* Nº Comprobante con autocompletado y sugerencias del navegador DESACTIVADAS */}
+          {/* Nº Comprobante */}
           <div>
             <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
               Nº Comprobante
@@ -321,15 +416,17 @@ export const PurchaseCheckoutPanel = ({
           </div>
         </div>
 
-        {/* Fila secundaria: Observaciones */}
+
+
+        {/* Fila: Observaciones */}
         <div>
           <label className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300">
             <StickyNote className="h-3 w-3 text-slate-400" />
-            Observaciones / Notas de la compra (Opcional)
+            Observaciones / Notas de la factura (Opcional)
           </label>
           <input
             type="text"
-            placeholder="Notas breves sobre la factura, remito o entrega del proveedor..."
+            placeholder="Notas sobre remito, vencimiento o entrega..."
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="off"
@@ -339,11 +436,11 @@ export const PurchaseCheckoutPanel = ({
             className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs text-slate-800 transition focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-brand-400"
             disabled={disabled || !canWrite}
           />
-          {errors.notes ? <p className="mt-0.5 text-[11px] text-red-600 dark:text-red-400">{errors.notes.message}</p> : null}
+          {errors.notes ? (
+            <p className="mt-0.5 text-[11px] text-red-600 dark:text-red-400">{errors.notes.message}</p>
+          ) : null}
         </div>
       </form>
     </section>
   );
 };
-
-

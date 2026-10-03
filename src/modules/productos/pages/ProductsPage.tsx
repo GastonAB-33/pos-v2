@@ -258,6 +258,11 @@ export const ProductsPage = () => {
         canWrite={canWriteProductos}
         onSavePrice={products.updateProductPricing}
         onCreateNewProduct={handleOpenCreateFromQuickPrice}
+        onEditProduct={(product) => {
+          setQuickPriceOpen(false);
+          setQuickPriceInitialQuery(null);
+          setFormModal({ mode: "edit", product });
+        }}
       />
 
       {importOpen ? (

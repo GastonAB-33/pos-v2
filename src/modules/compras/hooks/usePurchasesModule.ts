@@ -110,6 +110,9 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<PurchaseFeedback | null>(null);
+  const [purchaseVatPercent, setPurchaseVatPercent] = useState<number>(0);
+  const [purchaseIibbPercent, setPurchaseIibbPercent] = useState<number>(0);
+  const [purchaseIibbAmount, setPurchaseIibbAmount] = useState<number>(0);
 
   const clearFeedback = () => setFeedback(null);
 
@@ -491,12 +494,27 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     }
 
     subtotal = roundAmount(subtotal);
-    const total = subtotal;
+    const vatTotal = roundAmount(subtotal * ((purchaseVatPercent || 0) / 100));
+    const calculatedIibb =
+      purchaseIibbAmount > 0
+        ? purchaseIibbAmount
+        : roundAmount(subtotal * ((purchaseIibbPercent || 0) / 100));
+    const iibbTotal = roundAmount(calculatedIibb);
+    const total = roundAmount(subtotal + vatTotal + iibbTotal);
     totalUnits = roundQty(totalUnits);
     totalDiscountAmount = roundAmount(totalDiscountAmount);
 
-    return { subtotal, vatTotal: 0, totalDiscountAmount, total, totalUnits };
-  }, [cart]);
+    return {
+      subtotal,
+      vatPercent: purchaseVatPercent,
+      vatTotal,
+      iibbPercent: purchaseIibbPercent,
+      iibbTotal,
+      total,
+      totalUnits,
+      totalDiscountAmount,
+    };
+  }, [cart, purchaseVatPercent, purchaseIibbPercent, purchaseIibbAmount]);
 
   const confirmPurchase = async (
     headerOrCheckoutValues: PurchaseHeaderValues | PurchaseCheckoutValues,
@@ -522,8 +540,22 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       documentType: headerOrCheckoutValues.documentType,
       documentNumber: headerOrCheckoutValues.documentNumber,
       issueDate: headerOrCheckoutValues.issueDate,
+      vatPercent: headerOrCheckoutValues.vatPercent ?? purchaseVatPercent,
+      iibbPercent: headerOrCheckoutValues.iibbPercent ?? purchaseIibbPercent,
+      iibbAmount: headerOrCheckoutValues.iibbAmount ?? purchaseIibbAmount,
       notes: headerOrCheckoutValues.notes,
     };
+
+    // Validar existencia real del proveedor para evitar violación de Foreign Key
+    const targetSupplier = suppliers.find((s) => s.id === headerValues.supplierId);
+    if (!targetSupplier) {
+      setFeedback({
+        type: "error",
+        message:
+          "El proveedor seleccionado no existe en el sistema o fue eliminado. Por favor vuelve a seleccionarlo de la lista o créalo.",
+      });
+      return null;
+    }
 
     const paymentValues: PurchasePaymentValues =
       optionalPaymentValues ?? {
@@ -639,8 +671,16 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
             .filter(Boolean)
             .join(" - ");
 
+      const fiscalParts = [
+        headerValues.vatPercent > 0 ? `IVA ${headerValues.vatPercent}%: $${summary.vatTotal.toFixed(2)}` : null,
+        (summary.iibbTotal ?? 0) > 0
+          ? `Percep. IIBB${headerValues.iibbPercent > 0 ? ` ${headerValues.iibbPercent}%` : ""}: $${(summary.iibbTotal ?? 0).toFixed(2)}`
+          : null,
+      ].filter(Boolean);
+      const fiscalNotes = fiscalParts.length > 0 ? `[Fiscal: ${fiscalParts.join(" | ")}]` : null;
+
       const combinedNotes =
-        [headerValues.notes?.trim(), paymentDetailNotes].filter(Boolean).join(" | ") || null;
+        [fiscalNotes, headerValues.notes?.trim(), paymentDetailNotes].filter(Boolean).join(" | ") || null;
 
       const purchase = await purchasesService.create(tenantId, {
         supplier_id: headerValues.supplierId,
@@ -888,12 +928,20 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       return purchase;
     } catch (error) {
       console.error("[usePurchasesModule] confirmPurchase failed:", error);
-      const message =
+      const raw =
         error instanceof Error && error.message
           ? error.message
           : typeof error === "object" && error !== null && "message" in error
           ? String((error as { message: unknown }).message)
-          : "No se pudo registrar la compra";
+          : String(error ?? "");
+      let message = raw || "No se pudo registrar la compra";
+      if (
+        raw.toLowerCase().includes("purchases_supplier_id_fkey") ||
+        raw.toLowerCase().includes("foreign key")
+      ) {
+        message =
+          "Error de proveedor: El proveedor seleccionado no existe en la base de datos remota. Por favor recarga los proveedores o pulsa '+ Nuevo' para darlo de alta.";
+      }
       setFeedback({ type: "error", message });
       return null;
     } finally {
@@ -1288,6 +1336,12 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     findPotentialDuplicateProducts,
     createProductAndAddToCart,
     createSupplier,
+    purchaseVatPercent,
+    setPurchaseVatPercent,
+    purchaseIibbPercent,
+    setPurchaseIibbPercent,
+    purchaseIibbAmount,
+    setPurchaseIibbAmount,
   };
 };
 

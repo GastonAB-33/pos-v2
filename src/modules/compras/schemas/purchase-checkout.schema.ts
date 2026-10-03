@@ -13,6 +13,9 @@ export const purchaseHeaderSchema = z.object({
   ]).default("FACTURA_A"),
   documentNumber: z.string().max(50, "Máximo 50 caracteres").optional().or(z.literal("")),
   issueDate: z.string().min(1, "Fecha obligatoria"),
+  vatPercent: z.number().min(0).max(100).default(0),
+  iibbPercent: z.number().min(0).max(100).default(0),
+  iibbAmount: z.number().min(0).default(0),
   notes: z.string().max(240, "Máximo 240 caracteres").optional().or(z.literal("")),
 });
 
