@@ -10,6 +10,7 @@ import { purchasesService } from "@/services/purchases.service";
 import { stockService } from "@/services/stock.service";
 import { suppliersService } from "@/services/suppliers.service";
 import { supplierCurrentAccountsService } from "@/services/supplier-current-accounts.service";
+import { dataProvider } from "@/services/config/data-provider";
 import type {
   BankAccount,
   CashSession,
@@ -110,7 +111,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<PurchaseFeedback | null>(null);
-  const [purchaseVatPercent, setPurchaseVatPercent] = useState<number>(0);
+  const [purchaseVatPercent, setPurchaseVatPercent] = useState<number>(21);
   const [purchaseIibbPercent, setPurchaseIibbPercent] = useState<number>(0);
   const [purchaseIibbAmount, setPurchaseIibbAmount] = useState<number>(0);
 
@@ -547,7 +548,19 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     };
 
     // Validar existencia real del proveedor para evitar violación de Foreign Key
-    const targetSupplier = suppliers.find((s) => s.id === headerValues.supplierId);
+    let targetSupplier = suppliers.find((s) => s.id === headerValues.supplierId);
+    if (!targetSupplier) {
+      try {
+        const direct = await suppliersService.getById(tenantId, headerValues.supplierId);
+        if (direct) {
+          targetSupplier = direct;
+          setSuppliers((prev) => [direct, ...prev.filter((s) => s.id !== direct.id)]);
+        }
+      } catch {
+        // Fallback silencioso
+      }
+    }
+
     if (!targetSupplier) {
       setFeedback({
         type: "error",
@@ -555,6 +568,33 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
           "El proveedor seleccionado no existe en el sistema o fue eliminado. Por favor vuelve a seleccionarlo de la lista o créalo.",
       });
       return null;
+    }
+
+    // Si el proveedor tiene un ID local de mock (creado previamente antes de sincronizar con Supabase),
+    // lo persistimos en Supabase inmediatamente para obtener su UUID real y que la compra no falle por Foreign Key.
+    if (dataProvider !== "mock" && targetSupplier.id.startsWith("mock-")) {
+      try {
+        const syncedSupplier = await suppliersService.create(tenantId, {
+          name: targetSupplier.name,
+          code: targetSupplier.code || "",
+          phone: targetSupplier.phone ?? null,
+          email: targetSupplier.email ?? null,
+          address: targetSupplier.address ?? null,
+          observations: targetSupplier.observations ?? null,
+          tax_id: targetSupplier.tax_id ?? null,
+          is_active: true,
+        });
+        if (syncedSupplier && !syncedSupplier.id.startsWith("mock-")) {
+          headerValues.supplierId = syncedSupplier.id;
+          targetSupplier = syncedSupplier;
+          setSuppliers((prev) => [
+            syncedSupplier,
+            ...prev.filter((s) => s.id !== targetSupplier!.id && s.id !== syncedSupplier.id),
+          ]);
+        }
+      } catch (err) {
+        console.warn("[usePurchasesModule] No se pudo migrar el proveedor mock a Supabase:", err);
+      }
     }
 
     const paymentValues: PurchasePaymentValues =
