@@ -93,8 +93,13 @@ export const PurchaseCheckoutPanel = ({
   useEffect(() => {
     if (preferredSupplierId) {
       setValue("supplierId", preferredSupplierId, { shouldValidate: true });
+      const supplier = suppliers.find((s) => s.id === preferredSupplierId);
+      if (supplier) {
+        setSupplierSearchText(supplier.name);
+      }
+      setIsSupplierDropdownOpen(false);
     }
-  }, [preferredSupplierId, setValue]);
+  }, [preferredSupplierId, setValue, suppliers]);
 
   // Click outside para cerrar dropdown de proveedores
   useEffect(() => {
@@ -124,22 +129,25 @@ export const PurchaseCheckoutPanel = ({
     );
   }, [suppliers, supplierSearchText]);
 
-  // Sugerencia automática de IVA al cambiar tipo de comprobante
+  // Sugerencia automática de IVA al cambiar tipo de comprobante (sólo reacciona a cambio de tipo, no a edición de porcentaje)
+  const prevDocTypeRef = useRef<string>(selectedDocumentType);
+
   useEffect(() => {
-    if (selectedDocumentType === "FACTURA_A") {
-      if (vatPercent === 0) {
+    if (prevDocTypeRef.current !== selectedDocumentType) {
+      prevDocTypeRef.current = selectedDocumentType;
+      if (selectedDocumentType === "FACTURA_A") {
         setValue("vatPercent", 21);
         onVatPercentChange(21);
+      } else if (
+        selectedDocumentType === "FACTURA_C" ||
+        selectedDocumentType === "REMITO" ||
+        selectedDocumentType === "PRESUPUESTO"
+      ) {
+        setValue("vatPercent", 0);
+        onVatPercentChange(0);
       }
-    } else if (
-      selectedDocumentType === "FACTURA_C" ||
-      selectedDocumentType === "REMITO" ||
-      selectedDocumentType === "PRESUPUESTO"
-    ) {
-      setValue("vatPercent", 0);
-      onVatPercentChange(0);
     }
-  }, [selectedDocumentType, setValue, onVatPercentChange, vatPercent]);
+  }, [selectedDocumentType, setValue, onVatPercentChange]);
 
   const handleSelectSupplier = (supplier: Supplier) => {
     setValue("supplierId", supplier.id, { shouldValidate: true });

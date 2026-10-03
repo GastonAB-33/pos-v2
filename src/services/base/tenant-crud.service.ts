@@ -29,19 +29,41 @@ const isAuthExpiredError = (error: unknown): boolean => {
   );
 };
 
+const isMissingColumnError = (error: unknown): string | null => {
+  if (!error || typeof error !== "object") return null;
+  const candidate = error as { message?: string; details?: string };
+  const message = String(candidate.message ?? "");
+  const details = String(candidate.details ?? "");
+  const pgrst = message.match(/could not find the '([^']+)' column/i);
+  if (pgrst) return pgrst[1];
+  const pg = message.match(/column "([^"]+)" of relation "[^"]+" does not exist/i);
+  if (pg) return pg[1];
+  const pgDetails = details.match(/column "([^"]+)" of relation "[^"]+" does not exist/i);
+  if (pgDetails) return pgDetails[1];
+  return null;
+};
+
 const isMissingTableError = (error: unknown): boolean => {
   if (!error || typeof error !== "object") return false;
+  // Si es un error de columna faltante en PostgREST/Postgres, NO es tabla faltante
+  if (isMissingColumnError(error)) return false;
+
   const candidate = error as { code?: string; message?: string; status?: number; details?: string };
   const message = String(candidate.message ?? "").toLowerCase();
   const code = String(candidate.code ?? "");
   const status = Number(candidate.status ?? 0);
+
+  if (message.includes("column") || message.includes("columna")) {
+    return false;
+  }
+
   return (
     code === "PGRST205" ||
     code === "42P01" ||
     status === 404 ||
     message.includes("could not find the table") ||
-    message.includes("schema cache") ||
-    message.includes("does not exist")
+    (message.includes("schema cache") && (message.includes("table") || message.includes("relation"))) ||
+    (message.includes("does not exist") && (message.includes("table") || message.includes("relation")))
   );
 };
 
@@ -257,32 +279,53 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
       return row;
     }
 
-    try {
-      const data = await this.execWithAuthRetry(async () =>
-        supabase.from(this.tableName).insert(row).select("*").single()
-      );
+    const payload: Record<string, unknown> = { ...(row as unknown as Record<string, unknown>) };
 
-      if (!data) {
-        throw new Error("No se pudo crear el registro");
-      }
-
-      return data;
-    } catch (error) {
-      if (isMissingTableError(error)) {
-        console.warn(
-          `[TenantCrudService] Tabla "${this.tableName}" no encontrada en Supabase al crear. Guardando en almacenamiento local.`
+    while (true) {
+      try {
+        const data = await this.execWithAuthRetry(async () =>
+          supabase.from(this.tableName).insert(payload).select("*").single()
         );
-        const table = this.getMockRows();
-        table.push(row);
-        persistMockDatabase();
-        return row;
+
+        if (!data) {
+          throw new Error("No se pudo crear el registro");
+        }
+
+        return data as TEntity;
+      } catch (error) {
+        const missingCol = isMissingColumnError(error);
+        if (missingCol && missingCol in payload) {
+          console.warn(
+            `[TenantCrudService] Columna "${missingCol}" no existe en "${this.tableName}". Reintentando inserción sin este campo.`
+          );
+          if (missingCol === "tax_id" && payload.tax_id) {
+            const currentObs = typeof payload.observations === "string" ? payload.observations : "";
+            if (!currentObs.includes(String(payload.tax_id))) {
+              payload.observations = currentObs
+                ? `${currentObs} | CUIT: ${payload.tax_id}`
+                : `CUIT: ${payload.tax_id}`;
+            }
+          }
+          delete payload[missingCol];
+          continue;
+        }
+
+        if (isMissingTableError(error)) {
+          console.warn(
+            `[TenantCrudService] Tabla "${this.tableName}" no encontrada en Supabase al crear. Guardando en almacenamiento local.`
+          );
+          const table = this.getMockRows();
+          table.push(row);
+          persistMockDatabase();
+          return row;
+        }
+        throw error;
       }
-      throw error;
     }
   }
 
   async update(tenantId: string, id: string, input: UpdateEntityInput<TEntity>): Promise<TEntity | null> {
-    const payload = {
+    const payload: Record<string, unknown> = {
       ...input,
       updated_at: nowIso(),
     };
@@ -303,32 +346,48 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
       return updated;
     }
 
-    try {
-      const data = await this.execWithAuthRetry(async () =>
-        supabase
-          .from(this.tableName)
-          .update(payload)
-          .eq("tenant_id", tenantId)
-          .eq("id", id)
-          .select("*")
-          .maybeSingle()
-      );
+    while (true) {
+      try {
+        const data = await this.execWithAuthRetry(async () =>
+          supabase
+            .from(this.tableName)
+            .update(payload)
+            .eq("tenant_id", tenantId)
+            .eq("id", id)
+            .select("*")
+            .maybeSingle()
+        );
 
-      return (data as TEntity | null) ?? null;
-    } catch (error) {
-      if (isMissingTableError(error)) {
-        const table = this.getMockRows();
-        const index = table.findIndex((row) => row.tenant_id === tenantId && row.id === id);
-        if (index < 0) return null;
-        const updated = {
-          ...table[index],
-          ...payload,
-        } as TEntity;
-        table[index] = updated;
-        persistMockDatabase();
-        return updated;
+        return (data as TEntity | null) ?? null;
+      } catch (error) {
+        const missingCol = isMissingColumnError(error);
+        if (missingCol && missingCol in payload) {
+          console.warn(
+            `[TenantCrudService] Columna "${missingCol}" no existe en "${this.tableName}". Reintentando actualización sin este campo.`
+          );
+          if (missingCol === "tax_id" && payload.tax_id) {
+            const currentObs = typeof payload.observations === "string" ? payload.observations : "";
+            if (!currentObs.includes(String(payload.tax_id))) {
+              payload.observations = currentObs
+                ? `${currentObs} | CUIT: ${payload.tax_id}`
+                : `CUIT: ${payload.tax_id}`;
+            }
+          }
+          delete payload[missingCol];
+          continue;
+        }
+
+        if (isMissingTableError(error)) {
+          const table = this.getMockRows();
+          const index = table.findIndex((row) => row.tenant_id === tenantId && row.id === id);
+          if (index < 0) return null;
+          const updated = { ...table[index], ...payload } as TEntity;
+          table[index] = updated;
+          persistMockDatabase();
+          return updated;
+        }
+        throw error;
       }
-      throw error;
     }
   }
 
