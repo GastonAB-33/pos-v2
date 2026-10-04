@@ -1151,7 +1151,6 @@ export const usePosSale = (tenantId: string | null) => {
         }
       }
 
-      setFeedback({ type: "success", message: `Promo agregada: ${promotion.name}` });
       return { ok: true, barcode: rawBarcode, promotion, parsedScale: null };
     },
     [products]
@@ -1246,12 +1245,14 @@ export const usePosSale = (tenantId: string | null) => {
           parsedScale,
         });
         if (!added) {
+          const message = "No se pudo agregar producto de balanza";
+          setFeedback({ type: "error", message });
           return {
             ok: false,
             barcode,
             product: scaleProduct,
             parsedScale,
-            error: "No se pudo agregar producto de balanza",
+            error: message,
           };
         }
 
@@ -1270,7 +1271,7 @@ export const usePosSale = (tenantId: string | null) => {
             return addPromotionToCart(promotion, barcode);
           }
 
-          const message = `No se encontro producto para el codigo ${barcode}`;
+          const message = `No se encontró producto para el código ${barcode}`;
           setFeedback({ type: "error", message });
           return { ok: false, barcode, error: message };
         }
@@ -1278,7 +1279,9 @@ export const usePosSale = (tenantId: string | null) => {
         const scanQuantity = Math.max(0.001, posSettings.barcode_scan_quantity || 1);
         const added = await addProductToCart(product, scanQuantity);
         if (!added) {
-          return { ok: false, barcode, product, parsedScale: null, error: "No se pudo agregar al carrito" };
+          const message = "No se pudo agregar al carrito";
+          setFeedback({ type: "error", message });
+          return { ok: false, barcode, product, parsedScale: null, error: message };
         }
 
         return { ok: true, barcode, product, parsedScale: null };

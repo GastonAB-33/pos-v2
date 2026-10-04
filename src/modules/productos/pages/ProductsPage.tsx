@@ -109,20 +109,25 @@ export const ProductsPage = () => {
     const wasFromQuickPrice = formModal?.fromQuickPrice;
     const mode = formModal?.mode ?? "create";
     const targetEntity = formModal?.product?.entity ?? null;
+    const productName = values.nombre?.trim() || "Producto";
 
     if (wasFromQuickPrice) {
       // Desbloquear de inmediato la interfaz y volver a la Consulta Rápida para seguir escaneando
       setFormModal(null);
       setQuickPriceOpen(true);
       setQuickPriceInitialQuery(null);
-      setQuickPriceBackgroundSaving(`Guardando "${values.nombre || "producto"}"...`);
+      setQuickPriceBackgroundSaving(`Guardando "${productName}"...`);
 
       // Guardar en segundo plano de forma no bloqueante
       products
         .saveProduct(mode, values, targetEntity)
         .then(() => {
           setQuickPriceBackgroundSaving(null);
-          toastSuccess(`"${values.nombre}" guardado correctamente`);
+          toastSuccess(
+            mode === "create"
+              ? `Producto "${productName}" creado correctamente`
+              : `Producto "${productName}" actualizado correctamente`
+          );
         })
         .catch((err) => {
           setQuickPriceBackgroundSaving(null);
@@ -131,8 +136,17 @@ export const ProductsPage = () => {
       return;
     }
 
-    await products.saveProduct(mode, values, targetEntity);
-    setFormModal(null);
+    try {
+      await products.saveProduct(mode, values, targetEntity);
+      setFormModal(null);
+      toastSuccess(
+        mode === "create"
+          ? `Producto "${productName}" creado correctamente`
+          : `Producto "${productName}" actualizado correctamente`
+      );
+    } catch (err) {
+      toastError(err instanceof Error ? err.message : "Error al guardar el producto");
+    }
   };
 
   const handleCloseFormModal = () => {

@@ -651,13 +651,12 @@ export const PosPage = () => {
       try {
         const result = await addProductByBarcode(barcode);
         if (!result.ok || (!result.product && !result.promotion)) {
-          toastError(result.error ?? `No se encontró producto para el código ${barcode}`);
+          // El error se muestra exactamente 1 vez a través del feedback unificado de usePosSale
           return false;
         }
 
         const scannedProduct = result.product;
         if (!scannedProduct && !result.promotion) {
-          toastError(result.error ?? `No se encontró producto para el código ${barcode}`);
           return false;
         }
 
@@ -676,7 +675,6 @@ export const PosPage = () => {
       focusScannerCapture,
       isCashGateBlocking,
       isSubmitting,
-      toastError,
       triggerCartSuccessHighlight,
     ]
   );
