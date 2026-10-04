@@ -103,14 +103,36 @@ export const ProductsPage = () => {
     return <section className="ui-panel">No tenés permisos para ver este módulo.</section>;
   }
 
+  const [quickPriceBackgroundSaving, setQuickPriceBackgroundSaving] = useState<string | null>(null);
+
   const handleSaveProduct = async (values: ProductFormModalValues) => {
     const wasFromQuickPrice = formModal?.fromQuickPrice;
-    await products.saveProduct(formModal?.mode ?? "create", values, formModal?.product?.entity ?? null);
-    setFormModal(null);
+    const mode = formModal?.mode ?? "create";
+    const targetEntity = formModal?.product?.entity ?? null;
+
     if (wasFromQuickPrice) {
-      setQuickPriceInitialQuery(values.codigoBarras || values.codigoProducto || values.nombre || null);
+      // Desbloquear de inmediato la interfaz y volver a la Consulta Rápida para seguir escaneando
+      setFormModal(null);
       setQuickPriceOpen(true);
+      setQuickPriceInitialQuery(null);
+      setQuickPriceBackgroundSaving(`Guardando "${values.nombre || "producto"}"...`);
+
+      // Guardar en segundo plano de forma no bloqueante
+      products
+        .saveProduct(mode, values, targetEntity)
+        .then(() => {
+          setQuickPriceBackgroundSaving(null);
+          toastSuccess(`"${values.nombre}" guardado correctamente`);
+        })
+        .catch((err) => {
+          setQuickPriceBackgroundSaving(null);
+          toastError(err instanceof Error ? err.message : "Error al guardar el producto");
+        });
+      return;
     }
+
+    await products.saveProduct(mode, values, targetEntity);
+    setFormModal(null);
   };
 
   const handleCloseFormModal = () => {
@@ -256,6 +278,7 @@ export const ProductsPage = () => {
         products={products.productsView}
         barcodesByProductId={products.barcodesByProductId}
         canWrite={canWriteProductos}
+        backgroundSavingText={quickPriceBackgroundSaving}
         onSavePrice={products.updateProductPricing}
         onCreateNewProduct={handleOpenCreateFromQuickPrice}
         onEditProduct={(product) => {

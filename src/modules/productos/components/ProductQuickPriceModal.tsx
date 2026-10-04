@@ -60,6 +60,7 @@ interface ProductQuickPriceModalProps {
   onCreateNewProduct?: (initialQuery?: string) => void;
   onEditProduct?: (product: ProductViewModel) => void;
   initialQuery?: string | null;
+  backgroundSavingText?: string | null;
 }
 
 const currencyFormatter = new Intl.NumberFormat("es-AR", {
@@ -79,6 +80,7 @@ export const ProductQuickPriceModal = ({
   onCreateNewProduct,
   onEditProduct,
   initialQuery,
+  backgroundSavingText,
 }: ProductQuickPriceModalProps) => {
   useBodyScrollLock(open);
 
@@ -732,6 +734,12 @@ export const ProductQuickPriceModal = ({
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                   En vivo
                 </span>
+                {backgroundSavingText && (
+                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-semibold text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-300/40 dark:border-blue-700/60 shrink-0 animate-pulse">
+                    <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-ping shrink-0" />
+                    {backgroundSavingText}
+                  </span>
+                )}
               </div>
               <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 truncate hidden sm:block">
                 Escaneá con lector de barra o buscá para actualizar precios al instante.

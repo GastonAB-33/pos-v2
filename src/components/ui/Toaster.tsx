@@ -85,7 +85,7 @@ export const Toaster = () => {
   return (
     <section
       aria-label="Notificaciones del sistema"
-      className="pointer-events-none fixed bottom-4 right-4 z-[10000] flex w-full max-w-md flex-col-reverse gap-3"
+      className="pointer-events-none fixed top-4 right-4 sm:top-5 sm:right-5 z-[10000] flex w-full max-w-sm sm:max-w-md flex-col gap-2.5"
     >
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onClose={removeToast} />
