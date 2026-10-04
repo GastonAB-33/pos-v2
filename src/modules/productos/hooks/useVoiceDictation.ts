@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  mergeTranscriptsWithoutOverlap,
-  normalizeVoiceInput,
-} from "@/features/voice/utils/voice-normalizer";
+import { normalizeVoiceInput } from "@/features/voice/utils/voice-normalizer";
 
 interface SpeechRecognitionEventLike {
   resultIndex: number;
@@ -21,6 +18,7 @@ interface SpeechRecognitionEventLike {
 interface SpeechRecognitionLike {
   continuous: boolean;
   interimResults: boolean;
+  maxAlternatives?: number;
   lang: string;
   onstart: (() => void) | null;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
@@ -44,6 +42,30 @@ const getSpeechRecognitionConstructor = (): SpeechRecognitionConstructor | null 
   return scope.SpeechRecognition ?? scope.webkitSpeechRecognition ?? null;
 };
 
+const resolveSpanishLanguage = (): string => {
+  if (typeof navigator !== "undefined" && navigator.language?.toLowerCase().startsWith("es")) {
+    return navigator.language;
+  }
+  return "es-AR";
+};
+
+const mapVoiceError = (errorKey?: string): string | null => {
+  if (!errorKey || errorKey === "aborted") return null;
+  switch (errorKey) {
+    case "not-allowed":
+    case "permission-denied":
+      return "Permiso de micrófono denegado. Habilita el acceso en el navegador.";
+    case "no-speech":
+      return "No se detectó audio. Habla claro y cerca del micrófono.";
+    case "network":
+      return "Error de conexión con el servicio de voz de Google. Revisa tu internet.";
+    case "audio-capture":
+      return "No se detectó ningún micrófono activo.";
+    default:
+      return `Error de dictado: ${errorKey}`;
+  }
+};
+
 export const useVoiceDictation = () => {
   const [isSupported, setIsSupported] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -52,7 +74,7 @@ export const useVoiceDictation = () => {
   const [error, setError] = useState<string | null>(null);
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const accumulatedFinalRef = useRef("");
+  const latestRawTranscriptRef = useRef("");
 
   useEffect(() => {
     setIsSupported(Boolean(getSpeechRecognitionConstructor()));
@@ -65,6 +87,18 @@ export const useVoiceDictation = () => {
       } catch {}
       recognitionRef.current = null;
     };
+  }, []);
+
+  const commitTranscript = useCallback(() => {
+    const raw = latestRawTranscriptRef.current.trim();
+    if (!raw) return;
+
+    const { value: normalized } = normalizeVoiceInput(raw, {
+      autoNumbers: true,
+      autoPunctuation: true,
+      capitalize: true,
+    });
+    setTranscript(normalized);
   }, []);
 
   const startRecording = useCallback(() => {
@@ -80,40 +114,44 @@ export const useVoiceDictation = () => {
       recognitionRef.current?.abort();
     } catch {}
 
-    accumulatedFinalRef.current = "";
+    latestRawTranscriptRef.current = "";
 
     const recognition = new Recognition();
-    recognition.continuous = true;
+    try {
+      recognition.continuous = true;
+    } catch {
+      recognition.continuous = false;
+    }
     recognition.interimResults = true;
-    recognition.lang = "es-AR";
+    try {
+      recognition.maxAlternatives = 1;
+    } catch {}
+    recognition.lang = resolveSpanishLanguage();
 
     recognition.onstart = () => setIsRecording(true);
 
     recognition.onresult = (event) => {
-      let interim = "";
+      let currentFinal = "";
+      let currentInterim = "";
 
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      for (let i = 0; i < event.results.length; i += 1) {
         const item = event.results[i];
         const text = item?.[0]?.transcript ?? "";
-
         if (item?.isFinal) {
-          accumulatedFinalRef.current = mergeTranscriptsWithoutOverlap(
-            accumulatedFinalRef.current,
-            text
-          );
+          currentFinal += `${text} `;
         } else {
-          interim += `${text} `;
+          currentInterim += `${text} `;
         }
       }
 
-      setInterimText(interim.trim());
+      setInterimText(currentInterim.trim() || currentFinal.trim());
 
-      const rawFinal = accumulatedFinalRef.current.trim();
-      const combined = interim.trim()
-        ? mergeTranscriptsWithoutOverlap(rawFinal, interim)
-        : rawFinal;
+      const rawFull = `${currentFinal} ${currentInterim}`.trim();
+      if (!rawFull) return;
 
-      const { value: normalized } = normalizeVoiceInput(combined, {
+      latestRawTranscriptRef.current = rawFull;
+
+      const { value: normalized } = normalizeVoiceInput(rawFull, {
         autoNumbers: true,
         autoPunctuation: true,
         capitalize: true,
@@ -123,13 +161,15 @@ export const useVoiceDictation = () => {
     };
 
     recognition.onerror = (event) => {
-      if (event.error && event.error !== "aborted") {
-        setError(`Error de dictado: ${event.error}`);
+      const friendly = mapVoiceError(event.error);
+      if (friendly) {
+        setError(friendly);
       }
       setIsRecording(false);
     };
 
     recognition.onend = () => {
+      commitTranscript();
       setIsRecording(false);
       setInterimText("");
     };
@@ -138,28 +178,29 @@ export const useVoiceDictation = () => {
     try {
       recognition.start();
     } catch {
-      setError("No se pudo iniciar el dictado por voz.");
+      setError("No se pudo iniciar el dictado por voz. Revisa los permisos.");
       setIsRecording(false);
     }
-  }, []);
+  }, [commitTranscript]);
 
   const stopRecording = useCallback(() => {
+    commitTranscript();
     try {
       recognitionRef.current?.stop();
     } catch {}
     setIsRecording(false);
-  }, []);
+  }, [commitTranscript]);
 
   const clearRecording = useCallback(() => {
     try {
       recognitionRef.current?.abort();
     } catch {}
     recognitionRef.current = null;
+    latestRawTranscriptRef.current = "";
     setIsRecording(false);
     setError(null);
     setTranscript("");
     setInterimText("");
-    accumulatedFinalRef.current = "";
   }, []);
 
   return {

@@ -99,20 +99,20 @@ export const productsService = {
     const rawCode = input.code?.trim();
     if (rawCode) {
       const normalizedCode = rawCode.toUpperCase();
-      const allProducts = await crud.getAllByTenant(tenantId);
-      const duplicateByCode = allProducts.find(
+      const existingByCode = await crud.query(tenantId, { eq: { code: rawCode } });
+      const duplicateByCode = existingByCode.find(
         (p) => p.code && p.code.trim().toUpperCase() === normalizedCode
       );
       if (duplicateByCode) {
         throw new Error(`Ya existe un producto con el código "${rawCode}" ("${duplicateByCode.name}")`);
       }
 
-      const activeBarcodes = await productsService.getBarcodesByTenant(tenantId);
-      const barcodeDuplicate = activeBarcodes.find(
+      const barcodeMatches = await barcodeCrud.query(tenantId, { eq: { barcode: rawCode } });
+      const barcodeDuplicate = barcodeMatches.find(
         (b) => normalizeBarcode(b.barcode).toUpperCase() === normalizedCode
       );
       if (barcodeDuplicate) {
-        const productWithBarcode = allProducts.find((p) => p.id === barcodeDuplicate.product_id);
+        const productWithBarcode = await crud.getById(tenantId, barcodeDuplicate.product_id);
         if (productWithBarcode) {
           throw new Error(
             `El código "${rawCode}" ya está asignado como código de barras en el producto "${productWithBarcode.name}"`
@@ -126,20 +126,20 @@ export const productsService = {
     const rawCode = input.code?.trim();
     if (rawCode) {
       const normalizedCode = rawCode.toUpperCase();
-      const allProducts = await crud.getAllByTenant(tenantId);
-      const duplicateByCode = allProducts.find(
+      const existingByCode = await crud.query(tenantId, { eq: { code: rawCode } });
+      const duplicateByCode = existingByCode.find(
         (p) => p.id !== id && p.code && p.code.trim().toUpperCase() === normalizedCode
       );
       if (duplicateByCode) {
         throw new Error(`Ya existe un producto con el código "${rawCode}" ("${duplicateByCode.name}")`);
       }
 
-      const activeBarcodes = await productsService.getBarcodesByTenant(tenantId);
-      const barcodeDuplicate = activeBarcodes.find(
+      const barcodeMatches = await barcodeCrud.query(tenantId, { eq: { barcode: rawCode } });
+      const barcodeDuplicate = barcodeMatches.find(
         (b) => b.product_id !== id && normalizeBarcode(b.barcode).toUpperCase() === normalizedCode
       );
       if (barcodeDuplicate) {
-        const productWithBarcode = allProducts.find((p) => p.id === barcodeDuplicate.product_id);
+        const productWithBarcode = await crud.getById(tenantId, barcodeDuplicate.product_id);
         if (productWithBarcode) {
           throw new Error(
             `El código "${rawCode}" ya está asignado como código de barras en el producto "${productWithBarcode.name}"`

@@ -179,7 +179,7 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
         isActive: payload.estadoActivo,
         isFavorite: payload.favorito,
       });
-      await reloadAudit();
+      void reloadAudit();
       return;
     }
 
@@ -189,7 +189,7 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
       isActive: payload.estadoActivo,
       isFavorite: payload.favorito,
     });
-    await reloadAudit();
+    void reloadAudit();
   };
 
   const deleteSelected = async () => {

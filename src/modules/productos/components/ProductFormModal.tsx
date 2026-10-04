@@ -552,10 +552,10 @@ export const ProductFormModal = ({
                   Información principal del producto, identificación y stock.
                 </p>
               </div>
-              <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-2 xl:grid-cols-3 dark:border-slate-700/80 dark:bg-slate-900/90">
                 <div className="xl:col-span-2">
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <label className="block text-sm font-medium text-slate-700">Nombre</label>
+                  <div className="mb-1 flex min-h-[34px] items-center justify-between gap-2">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">Nombre</label>
                     <VoiceDictationButton
                       value={nombre ?? ""}
                       onValueChange={(nextValue) =>
@@ -582,13 +582,13 @@ export const ProductFormModal = ({
                     className="ui-input"
                     disabled={disabled}
                   />
-                  {errors.nombre ? <p className="mt-1 text-xs text-red-600">{errors.nombre.message}</p> : null}
+                  {errors.nombre ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.nombre.message}</p> : null}
                 </div>
 
                 <div>
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <label className="block text-sm font-medium text-slate-700">
-                      {saleMode === "weight" ? "Stock en kg" : "Stock en unidades"}
+                  <div className="mb-1 flex min-h-[34px] items-center justify-between gap-2">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                      {saleMode === "weight" ? "Stock en kg" : "Stock (unidades)"}
                     </label>
                     <VoiceDictationButton
                       value={String(stock ?? "")}
@@ -622,12 +622,12 @@ export const ProductFormModal = ({
                     className="ui-input"
                     disabled={disabled}
                   />
-                  <p className="mt-1 text-[11px] text-slate-500">
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                     {saleMode === "weight"
                       ? "Para pesables, el stock se guarda en kg. Ej: 10 kg disponibles = 10,000 kg."
                       : "Para unitarios, el stock se guarda como unidades."}
                   </p>
-                  {errors.stock ? <p className="mt-1 text-xs text-red-600">{errors.stock.message}</p> : null}
+                  {errors.stock ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.stock.message}</p> : null}
                 </div>
 
                 <div className="xl:col-span-3">

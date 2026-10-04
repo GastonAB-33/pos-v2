@@ -22,6 +22,7 @@ interface PosCartItemView {
 interface PosCartProps {
   id?: string;
   items: PosCartItemView[];
+  isHighlighted?: boolean;
   barcodeValue: string;
   subtotalBeforePromotions: number;
   promotionDiscountTotal: number;
@@ -64,6 +65,7 @@ const productUnitLabel = (item: PosCartItemView): string =>
 export const PosCart = ({
   id,
   items,
+  isHighlighted = false,
   barcodeValue,
   subtotalBeforePromotions,
   promotionDiscountTotal,
@@ -122,13 +124,32 @@ export const PosCart = ({
   };
 
   return (
-    <section id={id} className="pos-surface flex flex-col space-y-2">
+    <section
+      id={id}
+      className={[
+        "pos-surface flex flex-col space-y-2 transition-all duration-300",
+        isHighlighted
+          ? "ring-2 ring-emerald-500 border-emerald-500 shadow-lg shadow-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/20"
+          : "",
+      ].join(" ")}
+    >
       {/* Encabezado del Carrito */}
       <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 pb-2 dark:border-slate-800">
         <div className="flex items-center gap-2">
-          <ShoppingCart size={17} className="text-blue-600" />
-          <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+          <ShoppingCart
+            size={17}
+            className={[
+              "transition-all duration-200",
+              isHighlighted ? "text-emerald-500 scale-110" : "text-blue-600",
+            ].join(" ")}
+          />
+          <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             Carrito ({items.length} {items.length === 1 ? "ítem" : "ítems"})
+            {isHighlighted && (
+              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/80 px-1.5 py-0.5 rounded-full border border-emerald-300/40 dark:border-emerald-700/60 animate-pulse">
+                ✓ Agregado
+              </span>
+            )}
           </h2>
         </div>
         {items.length > 0 && onClearCart ? (

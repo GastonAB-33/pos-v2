@@ -194,6 +194,27 @@ export const PosPage = () => {
   const [cashDefaultOpeningAmount, setCashDefaultOpeningAmount] = useState(0);
   const [hasLoadedCashDefaults, setHasLoadedCashDefaults] = useState(false);
   const [cashGateFeedback, setCashGateFeedback] = useState<string | null>(null);
+  const [isCartHighlighted, setIsCartHighlighted] = useState(false);
+  const cartHighlightTimeoutRef = useRef<number | null>(null);
+
+  const triggerCartSuccessHighlight = useCallback(() => {
+    setIsCartHighlighted(true);
+    if (cartHighlightTimeoutRef.current) {
+      window.clearTimeout(cartHighlightTimeoutRef.current);
+    }
+    cartHighlightTimeoutRef.current = window.setTimeout(() => {
+      setIsCartHighlighted(false);
+      cartHighlightTimeoutRef.current = null;
+    }, 1000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (cartHighlightTimeoutRef.current) {
+        window.clearTimeout(cartHighlightTimeoutRef.current);
+      }
+    };
+  }, []);
   const scannerCaptureRef = useRef<HTMLInputElement | null>(null);
   const cartPanelId = "pos-cart-panel";
   const checkoutPanelId = "pos-checkout-panel";
@@ -630,37 +651,17 @@ export const PosPage = () => {
       try {
         const result = await addProductByBarcode(barcode);
         if (!result.ok || (!result.product && !result.promotion)) {
-          toastError(result.error ?? `No se encontro producto para ${barcode}`);
+          // El error se muestra exactamente 1 vez a través del feedback unificado de usePosSale
           return false;
         }
 
-        if (result.promotion) {
-          toastSuccess(`Promo: ${result.promotion.name}`);
-          return true;
-        }
         const scannedProduct = result.product;
-        if (!scannedProduct) {
-          toastError(result.error ?? `No se encontro producto para ${barcode}`);
+        if (!scannedProduct && !result.promotion) {
           return false;
         }
 
-        const isScaleScan = Boolean(result.parsedScale);
-        const scaleWeight =
-          result.parsedScale?.weight != null && result.parsedScale.weight > 0
-            ? result.parsedScale.weight
-            : null;
-        const scaleSuffix =
-          scaleWeight != null ? ` (${scaleWeight.toLocaleString("es-AR")} kg)` : "";
-
-        if (isScaleScan) {
-          toastSuccess(
-            `Balanza: ${scannedProduct.name}${scaleSuffix}${
-              result.parsedScale?.productCode ? ` | PLU ${result.parsedScale.productCode}` : ""
-            }`
-          );
-        } else {
-          toastSuccess(`Escaneado: ${scannedProduct.name}`);
-        }
+        // Resaltar visualmente el carrito en verde sin alerta toast obstructiva
+        triggerCartSuccessHighlight();
         return true;
       } finally {
         window.setTimeout(() => {
@@ -674,8 +675,7 @@ export const PosPage = () => {
       focusScannerCapture,
       isCashGateBlocking,
       isSubmitting,
-      toastError,
-      toastSuccess,
+      triggerCartSuccessHighlight,
     ]
   );
 
@@ -1466,6 +1466,7 @@ export const PosPage = () => {
               if (!canWritePos || isCashGateBlocking) return;
               const added = await addProductToCart(product, quantity);
               if (added) {
+                triggerCartSuccessHighlight();
                 window.setTimeout(() => {
                   focusScannerCapture();
                 }, 0);
@@ -1478,6 +1479,7 @@ export const PosPage = () => {
               <PosCart
                 id={cartPanelId}
                 items={cart}
+                isHighlighted={isCartHighlighted}
                 barcodeValue={visibleBarcodeValue}
                 subtotalBeforePromotions={subtotalBeforePromotions}
                 promotionDiscountTotal={promotionDiscountTotal}

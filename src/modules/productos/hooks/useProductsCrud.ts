@@ -522,12 +522,14 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           is_active: created.is_active,
         },
       });
-      setFeedback({
-        type: imageUploadWarning ? "error" : "success",
-        message: imageUploadWarning
-          ? `Producto creado sin imagen. ${imageUploadWarning}`
-          : "Producto creado",
-      });
+      if (imageUploadWarning) {
+        setFeedback({
+          type: "error",
+          message: `Producto creado sin imagen. ${imageUploadWarning}`,
+        });
+      } else {
+        setFeedback(null);
+      }
     } catch (error) {
       const message = error instanceof Error && error.message ? error.message : "Error al crear producto";
       setFeedback({ type: "error", message });
@@ -648,7 +650,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           next_is_favorite: options?.isFavorite ?? existing.is_favorite,
         },
       });
-      setFeedback({ type: "success", message: "Producto actualizado" });
+      setFeedback(null);
     } catch (error) {
       const message = error instanceof Error && error.message ? error.message : "Error al actualizar producto";
       setFeedback({ type: "error", message });
