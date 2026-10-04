@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { cn } from "@/utils/cn";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
@@ -21,9 +22,11 @@ import { PosCartItemEditModal } from "@/modules/pos/components/PosCartItemEditMo
 import { PosCheckoutPanel } from "@/modules/pos/components/PosCheckoutPanel";
 import { PosProductList } from "@/modules/pos/components/PosProductList";
 import { PosQuickProductModal } from "@/modules/pos/components/PosQuickProductModal";
+import { PosSmartView } from "@/modules/pos/components/PosSmartView";
 import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
 import { usePosSale } from "@/modules/pos/hooks/usePosSale";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
+import { useUiStore } from "@/store/ui.store";
 import { useProductsStore } from "@/features/products/store/products.store";
 import type { OpenCashValues } from "@/modules/caja/schemas/cash.schemas";
 import { computePricingBackward, roundMoney } from "@/modules/productos/utils/product-pricing";
@@ -181,6 +184,8 @@ export const PosPage = () => {
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [isQuickProductModalOpen, setIsQuickProductModalOpen] = useState(false);
   const [lastNotFoundBarcode, setLastNotFoundBarcode] = useState<string>("");
+  const posWindowMode = useUiStore((state) => state.posWindowMode);
+  const isSmartPos = posWindowMode === "smart_pos";
   const [editingCartItemId, setEditingCartItemId] = useState<string | null>(null);
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   const [isCustomerModalSubmitting, setIsCustomerModalSubmitting] = useState(false);
@@ -1275,263 +1280,309 @@ export const PosPage = () => {
   }
 
   return (
-    <div className="pos-page space-y-4 pb-24 lg:pb-2">
-      <section className="pos-surface pos-surface--header space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            {clientLogoUrl ? (
-              <img
-                src={clientLogoUrl}
-                alt={clientDisplayName}
-                className="h-10 w-10 rounded-xl bg-slate-50 object-cover"
-              />
-            ) : (
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-sm font-semibold text-white">
-                {clientDisplayName.slice(0, 2).toUpperCase()}
-              </span>
-            )}
-            <div>
-              <p className="pos-overline uppercase tracking-wider text-[11px] font-bold text-slate-500">{clientDisplayName}</p>
-              <h1 className="pos-title font-bold text-slate-900 dark:text-slate-100">Punto de venta</h1>
-            </div>
-          </div>
+    <div className={cn("pos-page space-y-4 pb-24 lg:pb-2", isSmartPos && "pos-page--smart p-1 sm:p-2")}>
+      {/* Input invisible de captura permanente para lector de códigos de barra físico */}
+      <input
+        ref={scannerCaptureRef}
+        type="text"
+        className="pos-scanner-capture"
+        data-scanner-capture="true"
+        autoFocus
+        inputMode="none"
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
+        aria-label="Captura scanner"
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.currentTarget.value = "";
+          }
+        }}
+        onBlur={() => {
+          window.setTimeout(() => {
+            const activeElement = document.activeElement;
+            const isEditableElement =
+              activeElement instanceof HTMLInputElement ||
+              activeElement instanceof HTMLTextAreaElement ||
+              activeElement instanceof HTMLSelectElement ||
+              Boolean((activeElement as HTMLElement | null)?.isContentEditable);
 
-          <div className="flex items-center">
-            {isCashGateResolving && !openCashSessionId ? (
-              <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
-                <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
-                Validando caja...
-              </span>
-            ) : openCashSessionId ? (
-              <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                Caja abierta
-              </span>
-            ) : (
-              <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                Caja cerrada
-              </span>
-            )}
-          </div>
+            if (!isEditableElement) {
+              scannerCaptureRef.current?.focus();
+            }
+          }, 80);
+        }}
+      />
 
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {shouldShowReturnToPanel ? (
-              <button
-                type="button"
-                onClick={handleReturnToPanel}
-                className="ui-btn-ghost text-xs"
-              >
-                Volver al panel
-              </button>
-            ) : null}
-            <input
-              ref={scannerCaptureRef}
-              type="text"
-              className="pos-scanner-capture"
-              data-scanner-capture="true"
-              autoFocus
-              inputMode="none"
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
-              aria-label="Captura scanner"
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.currentTarget.value = "";
-                }
-              }}
-              onBlur={() => {
-                window.setTimeout(() => {
-                  const activeElement = document.activeElement;
-                  const isEditableElement =
-                    activeElement instanceof HTMLInputElement ||
-                    activeElement instanceof HTMLTextAreaElement ||
-                    activeElement instanceof HTMLSelectElement ||
-                    Boolean((activeElement as HTMLElement | null)?.isContentEditable);
+      {isSmartPos ? (
+        <PosSmartView
+          items={cart}
+          isHighlighted={isCartHighlighted}
+          onIncrease={increaseQuantity}
+          onDecrease={decreaseQuantity}
+          onEdit={(item) => setEditingCartItemId(item.product_id)}
+          onRemove={removeFromCart}
+          onClearCart={clearCart}
+          disabled={isSubmitting || isCashGateBlocking}
+          canWrite={canWritePos}
+          products={products}
+          primaryBarcodes={primaryBarcodes}
+          onAddProduct={async (product, quantity = 1) => {
+            if (!canWritePos || isCashGateBlocking) return false;
+            const added = await addProductToCart(product, quantity);
+            if (added) {
+              triggerCartSuccessHighlight();
+              window.setTimeout(() => {
+                focusScannerCapture();
+              }, 0);
+            }
+            return added;
+          }}
+          onScanBarcode={handleBarcodeScan}
+          subtotal={checkoutSummary.subtotal}
+          total={checkoutSummary.subtotal}
+          onCheckout={() => setIsCheckoutModalOpen(true)}
+          userName={user?.fullName ?? "Operador"}
+          operatorInitials={operatorInitials}
+          isRefreshingCatalog={isRefreshingCatalog || isSyncing}
+          onRefreshCatalog={() => {
+            void handleRefreshCatalog();
+          }}
+          onOpenReceipts={() => {
+            setIsReceiptsListModalOpen(true);
+            void loadRecentReceipts();
+          }}
+          onOpenQuickProduct={() => setIsQuickProductModalOpen(true)}
+        />
+      ) : (
+        <>
+          <section className="pos-surface pos-surface--header space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                {clientLogoUrl ? (
+                  <img
+                    src={clientLogoUrl}
+                    alt={clientDisplayName}
+                    className="h-10 w-10 rounded-xl bg-slate-50 object-cover"
+                  />
+                ) : (
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-sm font-semibold text-white">
+                    {clientDisplayName.slice(0, 2).toUpperCase()}
+                  </span>
+                )}
+                <div>
+                  <p className="pos-overline uppercase tracking-wider text-[11px] font-bold text-slate-500">{clientDisplayName}</p>
+                  <h1 className="pos-title font-bold text-slate-900 dark:text-slate-100">Punto de venta</h1>
+                </div>
+              </div>
 
-                  if (!isEditableElement) {
-                    scannerCaptureRef.current?.focus();
-                  }
-                }, 80);
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                void handleRefreshCatalog();
-              }}
-              disabled={isRefreshingCatalog || isSubmitting}
-              className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
-              title="Actualizar productos y catálogo desde el servidor"
-            >
-              <RefreshCw
-                size={14}
-                className={isRefreshingCatalog || isSyncing ? "animate-spin text-brand-600" : ""}
-              />
-              <span className="hidden sm:inline">
-                {isRefreshingCatalog ? "Actualizando..." : "Actualizar productos"}
-              </span>
-            </button>
-            {isInstallSupported && canInstall ? (
-              <button
-                type="button"
-                onClick={() => {
-                  void installApp();
-                }}
-                className="ui-btn-ghost text-xs"
-                disabled={isInstalling}
-              >
-                {isInstalling ? "Instalando..." : "Instalar app"}
-              </button>
-            ) : null}
-            {canWritePos ? (
-              <button
-                type="button"
-                onClick={() => setIsQuickProductModalOpen(true)}
-                className="ui-btn-ghost text-xs"
-              >
-                Producto rápido
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => {
-                setIsReceiptsListModalOpen(true);
-                void loadRecentReceipts();
-              }}
-              className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
-              title="Ver comprobantes y tickets recientes"
-            >
-              <FileText size={14} />
-              Comprobantes
-            </button>
-            <IconButton
-              icon={Camera}
-              label="Escanear con cámara"
-              onClick={() => setIsCameraScannerOpen(true)}
-              disabled={!canWritePos}
-            />
-            {canWritePos && selectedCustomerId ? (
-              <IconButton
-                icon={ShoppingCart}
-                label="Ver perfil del cliente"
-                onClick={() => {
-                  const customer = customers.find((item) => item.id === selectedCustomerId);
-                  if (customer) {
-                    openCustomerModal(customer);
-                  }
-                }}
-              />
-            ) : null}
-            <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-2.5 py-1 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-600 text-[11px] font-bold text-white">
-                {operatorInitials}
-              </span>
-              <div className="leading-tight">
-                <p className="font-semibold text-slate-900 dark:text-slate-100">
-                  {user?.fullName ?? "Operador"}
-                </p>
-                <p className="text-[10px] text-slate-500">Operador de caja</p>
+              <div className="flex items-center">
+                {isCashGateResolving && !openCashSessionId ? (
+                  <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+                    Validando caja...
+                  </span>
+                ) : openCashSessionId ? (
+                  <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                    Caja abierta
+                  </span>
+                ) : (
+                  <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                    Caja cerrada
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {shouldShowReturnToPanel ? (
+                  <button
+                    type="button"
+                    onClick={handleReturnToPanel}
+                    className="ui-btn-ghost text-xs"
+                  >
+                    Volver al panel
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleRefreshCatalog();
+                  }}
+                  disabled={isRefreshingCatalog || isSubmitting}
+                  className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
+                  title="Actualizar productos y catálogo desde el servidor"
+                >
+                  <RefreshCw
+                    size={14}
+                    className={isRefreshingCatalog || isSyncing ? "animate-spin text-brand-600" : ""}
+                  />
+                  <span className="hidden sm:inline">
+                    {isRefreshingCatalog ? "Actualizando..." : "Actualizar productos"}
+                  </span>
+                </button>
+                {isInstallSupported && canInstall ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void installApp();
+                    }}
+                    className="ui-btn-ghost text-xs"
+                    disabled={isInstalling}
+                  >
+                    {isInstalling ? "Instalando..." : "Instalar app"}
+                  </button>
+                ) : null}
+                {canWritePos ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsQuickProductModalOpen(true)}
+                    className="ui-btn-ghost text-xs"
+                  >
+                    Producto rápido
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsReceiptsListModalOpen(true);
+                    void loadRecentReceipts();
+                  }}
+                  className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
+                  title="Ver comprobantes y tickets recientes"
+                >
+                  <FileText size={14} />
+                  Comprobantes
+                </button>
+                <IconButton
+                  icon={Camera}
+                  label="Escanear con cámara"
+                  onClick={() => setIsCameraScannerOpen(true)}
+                  disabled={!canWritePos}
+                />
+                {canWritePos && selectedCustomerId ? (
+                  <IconButton
+                    icon={ShoppingCart}
+                    label="Ver perfil del cliente"
+                    onClick={() => {
+                      const customer = customers.find((item) => item.id === selectedCustomerId);
+                      if (customer) {
+                        openCustomerModal(customer);
+                      }
+                    }}
+                  />
+                ) : null}
+                <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-2.5 py-1 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-600 text-[11px] font-bold text-white">
+                    {operatorInitials}
+                  </span>
+                  <div className="leading-tight">
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">
+                      {user?.fullName ?? "Operador"}
+                    </p>
+                    <p className="text-[10px] text-slate-500">Operador de caja</p>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        {lastSyncMessage ? (
-          <p className={`text-xs ${lastSyncError ? "text-red-600" : "text-slate-500"}`}>
-            {lastSyncMessage}
-          </p>
-        ) : null}
-      </section>
+            {lastSyncMessage ? (
+              <p className={`text-xs ${lastSyncError ? "text-red-600" : "text-slate-500"}`}>
+                {lastSyncMessage}
+              </p>
+            ) : null}
+          </section>
 
-      {selectedCustomer && appliedPriceList && !appliedPriceList.is_active ? (
-        <p className="text-xs text-amber-700">
-          El cliente tiene una lista inactiva asignada. Se mantiene por compatibilidad.
-        </p>
-      ) : null}
+          {selectedCustomer && appliedPriceList && !appliedPriceList.is_active ? (
+            <p className="text-xs text-amber-700">
+              El cliente tiene una lista inactiva asignada. Se mantiene por compatibilidad.
+            </p>
+          ) : null}
 
-      {!paymentMethods.length ? (
-        <div className="ui-empty-state">
-          No hay medios de pago activos. Configuralos desde el modulo Medios de pago.
-        </div>
-      ) : null}
+          {!paymentMethods.length ? (
+            <div className="ui-empty-state">
+              No hay medios de pago activos. Configuralos desde el modulo Medios de pago.
+            </div>
+          ) : null}
 
-      {isLoading ? (
-        <div className="ui-loading">Cargando POS...</div>
-      ) : (
-        <div className="pos-content-grid">
-          <PosProductList
-            products={products}
-            favoriteProducts={favoriteProducts}
-            primaryBarcodes={primaryBarcodes}
-            saleTabs={saleTabs}
-            activeTabId={activeTabId}
-            onSwitchSaleTab={switchSaleTab}
-            onCreateSaleTab={createNewSaleTab}
-            onCloseSaleTab={closeSaleTab}
-            canWrite={canWritePos}
-            disabled={isSubmitting || isCashGateBlocking}
-            onAddProduct={async (product, quantity) => {
-              if (!canWritePos || isCashGateBlocking) return;
-              const added = await addProductToCart(product, quantity);
-              if (added) {
-                triggerCartSuccessHighlight();
-                window.setTimeout(() => {
-                  focusScannerCapture();
-                }, 0);
-              }
-              return added;
-            }}
-          />
-
-            <div className="pos-side-column">
-              <PosCart
-                id={cartPanelId}
-                items={cart}
-                isHighlighted={isCartHighlighted}
-                barcodeValue={visibleBarcodeValue}
-                subtotalBeforePromotions={subtotalBeforePromotions}
-                promotionDiscountTotal={promotionDiscountTotal}
-                cartPromotionDiscountTotal={cartPromotionDiscountTotal}
-                subtotal={checkoutSummary.subtotal}
-                surchargeTotal={0}
-                paymentDiscountTotal={0}
-                total={checkoutSummary.subtotal}
+          {isLoading ? (
+            <div className="ui-loading">Cargando POS...</div>
+          ) : (
+            <div className="pos-content-grid">
+              <PosProductList
+                products={products}
+                favoriteProducts={favoriteProducts}
+                primaryBarcodes={primaryBarcodes}
+                saleTabs={saleTabs}
+                activeTabId={activeTabId}
+                onSwitchSaleTab={switchSaleTab}
+                onCreateSaleTab={createNewSaleTab}
+                onCloseSaleTab={closeSaleTab}
                 canWrite={canWritePos}
                 disabled={isSubmitting || isCashGateBlocking}
-                onBarcodeChange={setVisibleBarcodeValue}
-                onBarcodeSubmit={handleVisibleBarcodeSubmit}
-                onIncrease={increaseQuantity}
-                onDecrease={decreaseQuantity}
-                onSetQuantity={setCartItemQuantity}
-                onEdit={(item) => setEditingCartItemId(item.product_id)}
-                onRemove={removeFromCart}
-                onClearCart={clearCart}
-                onOpenQuickProduct={() => setIsQuickProductModalOpen(true)}
-                onCheckout={() => setIsCheckoutModalOpen(true)}
+                onAddProduct={async (product, quantity) => {
+                  if (!canWritePos || isCashGateBlocking) return;
+                  const added = await addProductToCart(product, quantity);
+                  if (added) {
+                    triggerCartSuccessHighlight();
+                    window.setTimeout(() => {
+                      focusScannerCapture();
+                    }, 0);
+                  }
+                  return added;
+                }}
               />
-            </div>
-          </div>
-        )}
 
-      {!isLoading && cart.length && !isCashGateBlocking ? (
-        <div className="pos-mobile-dock">
-          <div>
-            <p className="text-xs uppercase tracking-[0.12em] text-slate-500">Carrito</p>
-            <p className="text-sm font-semibold text-slate-900">
-              {cart.length} items | {currency.format(checkoutSummary.subtotal)}
-            </p>
-          </div>
-          <button
-            type="button"
-            className="ui-btn-primary whitespace-nowrap"
-            onClick={() => {
-              setIsCheckoutModalOpen(true);
-            }}
-          >
-            Confirmar venta
-          </button>
-        </div>
-      ) : null}
+              <div className="pos-side-column">
+                <PosCart
+                  id={cartPanelId}
+                  items={cart}
+                  isHighlighted={isCartHighlighted}
+                  barcodeValue={visibleBarcodeValue}
+                  subtotalBeforePromotions={subtotalBeforePromotions}
+                  promotionDiscountTotal={promotionDiscountTotal}
+                  cartPromotionDiscountTotal={cartPromotionDiscountTotal}
+                  subtotal={checkoutSummary.subtotal}
+                  surchargeTotal={0}
+                  paymentDiscountTotal={0}
+                  total={checkoutSummary.subtotal}
+                  canWrite={canWritePos}
+                  disabled={isSubmitting || isCashGateBlocking}
+                  onBarcodeChange={setVisibleBarcodeValue}
+                  onBarcodeSubmit={handleVisibleBarcodeSubmit}
+                  onIncrease={increaseQuantity}
+                  onDecrease={decreaseQuantity}
+                  onSetQuantity={setCartItemQuantity}
+                  onEdit={(item) => setEditingCartItemId(item.product_id)}
+                  onRemove={removeFromCart}
+                  onClearCart={clearCart}
+                  onOpenQuickProduct={() => setIsQuickProductModalOpen(true)}
+                  onCheckout={() => setIsCheckoutModalOpen(true)}
+                />
+              </div>
+            </div>
+          )}
+
+          {!isLoading && cart.length && !isCashGateBlocking ? (
+            <div className="pos-mobile-dock">
+              <div>
+                <p className="text-xs uppercase tracking-[0.12em] text-slate-500">Carrito</p>
+                <p className="text-sm font-semibold text-slate-900">
+                  {cart.length} items | {currency.format(checkoutSummary.subtotal)}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="ui-btn-primary whitespace-nowrap"
+                onClick={() => {
+                  setIsCheckoutModalOpen(true);
+                }}
+              >
+                Confirmar venta
+              </button>
+            </div>
+          ) : null}
+        </>
+      )}
 
       {shouldShowCashOpeningModal ? (
         <section className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/55 p-4">

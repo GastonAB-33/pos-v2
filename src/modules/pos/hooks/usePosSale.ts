@@ -34,7 +34,7 @@ import { stockService } from "@/services/stock.service";
 import type { ArcaSettings, BankAccount, BarcodeScaleSettings, Customer, InstallmentPlan, Invoice, InvoiceDocumentType, MercadoPagoSettings, OriginBank, PaymentMethod, PaymentMethodType, PosSettings, PriceList, Product, ProductBarcode, Receipt, Sale } from "@/types/entities";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
 
-interface PosCartItem {
+export interface PosCartItem {
   product_id: string;
   name: string;
   category: string;
@@ -53,7 +53,7 @@ interface PosCartItem {
   is_manual_item: boolean;
 }
 
-interface PosCartItemComputed extends PosCartItem {
+export interface PosCartItemComputed extends PosCartItem {
   line_subtotal: number;
   promotion_discount_total: number;
   product_promotion_discount_total: number;
