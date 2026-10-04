@@ -165,33 +165,69 @@ export const parseSpokenNumberWords = (phrase: string): number | null => {
   return total + currentGroup;
 };
 
+export const normalizeVoiceWord = (w: string): string => {
+  return w
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w]/g, "");
+};
+
 /**
  * Deduplica palabras o frases consecutivas que el motor de voz repite por error:
- * ej. "coca coca cola" -> "coca cola"
- * ej. "arroz largo arroz largo" -> "arroz largo"
+ * ej. "coca cola coca cola" -> "coca cola"
+ * ej. "arroz largo fino arroz largo fino" -> "arroz largo fino"
+ * ej. "pilas pilas" -> "pilas"
+ * ej. "azúcar azúcar ledesma" -> "azúcar ledesma"
  */
 export const deduplicateRepeatedPhrases = (text: string): string => {
-  if (!text) return "";
+  if (!text || !text.trim()) return text;
 
-  let cleaned = text;
+  const rawWords = text.trim().split(/\s+/);
+  if (rawWords.length <= 1) return text;
 
-  // 1. Frases de 2 a 4 palabras repetidas consecutivamente:
-  // "arroz largo fino arroz largo fino" -> "arroz largo fino"
-  cleaned = cleaned.replace(/\b([a-záéíóúñ0-9]+(?:\s+[a-záéíóúñ0-9]+){1,3})\s+\1\b/gi, "$1");
+  let words = [...rawWords];
+  let changed = true;
 
-  // 2. Palabras individuales consecutivas repetidas:
-  // "tres tres" -> "tres", "coca coca" -> "coca"
-  cleaned = cleaned.replace(/\b([a-záéíóúñ0-9]+)\s+\1\b/gi, "$1");
+  // Repetir mientras se detecten frases o palabras duplicadas
+  while (changed) {
+    changed = false;
+    const n = words.length;
 
-  // Repetir una vez más para casos anidados (ej: "hola hola hola" -> "hola")
-  cleaned = cleaned.replace(/\b([a-záéíóúñ0-9]+)\s+\1\b/gi, "$1");
+    // Probar tamaños de frase k desde n/2 hacia abajo hasta 1 (máximo 10 palabras por frase)
+    const maxK = Math.min(Math.floor(n / 2), 10);
 
-  return cleaned;
+    for (let k = maxK; k >= 1; k -= 1) {
+      for (let i = 0; i <= words.length - 2 * k; i += 1) {
+        let match = true;
+        for (let j = 0; j < k; j += 1) {
+          const w1 = normalizeVoiceWord(words[i + j]);
+          const w2 = normalizeVoiceWord(words[i + k + j]);
+          if (!w1 || !w2 || w1 !== w2) {
+            match = false;
+            break;
+          }
+        }
+
+        if (match) {
+          // Eliminar la segunda ocurrencia de la frase repetida de k palabras
+          words.splice(i + k, k);
+          changed = true;
+          break;
+        }
+      }
+      if (changed) break;
+    }
+  }
+
+  return words.join(" ");
 };
 
 /**
  * Une dos fragmentos de transcripción evitando solapamiento (overlap) en la frontera:
- * ej. base: "Coca Cola" + nuevo: "Cola Zero" -> "Coca Cola Zero"
+ * ej. base: "aceite de" + nuevo: "de girasol natura" -> "aceite de girasol natura"
+ * ej. base: "coca cola" + nuevo: "coca cola" -> "coca cola"
+ * ej. base: "arroz" + nuevo: "arroz largo fino" -> "arroz largo fino"
  */
 export const mergeTranscriptsWithoutOverlap = (base: string, addition: string): string => {
   const cleanBase = base.trim();
@@ -203,17 +239,29 @@ export const mergeTranscriptsWithoutOverlap = (base: string, addition: string): 
   const baseWords = cleanBase.split(/\s+/);
   const addWords = cleanAddition.split(/\s+/);
 
-  // Buscar coincidencia de sufijo en base con prefijo en addition (hasta 5 palabras de solapamiento)
-  const maxOverlap = Math.min(baseWords.length, addWords.length, 5);
+  // Buscar coincidencia de sufijo en base con prefijo en addition (hasta 8 palabras de solapamiento)
+  const maxOverlap = Math.min(baseWords.length, addWords.length, 8);
 
   for (let overlap = maxOverlap; overlap >= 1; overlap -= 1) {
-    const baseTail = baseWords.slice(-overlap).map((w) => w.toLowerCase()).join(" ");
-    const addHead = addWords.slice(0, overlap).map((w) => w.toLowerCase()).join(" ");
+    const baseTail = baseWords.slice(-overlap).map((w) => normalizeVoiceWord(w)).join(" ");
+    const addHead = addWords.slice(0, overlap).map((w) => normalizeVoiceWord(w)).join(" ");
 
     if (baseTail === addHead) {
       const nonOverlappingAddition = addWords.slice(overlap).join(" ");
       return nonOverlappingAddition ? `${cleanBase} ${nonOverlappingAddition}` : cleanBase;
     }
+  }
+
+  // Si addition contiene completamente a base desde el inicio
+  const normBase = baseWords.map((w) => normalizeVoiceWord(w)).join(" ");
+  const normAdd = addWords.map((w) => normalizeVoiceWord(w)).join(" ");
+  if (normAdd.startsWith(normBase)) {
+    return cleanAddition;
+  }
+
+  // Si base contiene completamente a addition desde el final
+  if (normBase.endsWith(normAdd)) {
+    return cleanBase;
   }
 
   return `${cleanBase} ${cleanAddition}`;
