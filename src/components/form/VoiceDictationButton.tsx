@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Mic, MicOff, Volume2, AlertCircle } from "lucide-react";
 import {
   useVoiceFieldDictation,
@@ -36,8 +36,6 @@ export const VoiceDictationButton = ({
     clearError,
   } = useVoiceFieldDictation();
 
-  const pressTimerRef = useRef<number | null>(null);
-  const isHoldingRef = useRef(false);
   const [showLiveTooltip, setShowLiveTooltip] = useState(false);
 
   useEffect(() => {
@@ -65,47 +63,19 @@ export const VoiceDictationButton = ({
     });
   };
 
-  const handlePointerDown = (e: React.PointerEvent) => {
+  const handleToggle = (e: React.SyntheticEvent) => {
+    e.preventDefault();
     if (disabled || !isSupported) return;
-    // Prevenir menú contextual en toque largo móvil
-    if (e.pointerType === "touch") {
-      e.preventDefault();
-    }
-
     if (isRecording) {
       stopDictation();
-      return;
-    }
-
-    isHoldingRef.current = false;
-    pressTimerRef.current = window.setTimeout(() => {
-      isHoldingRef.current = true;
-    }, 350);
-
-    handleStart();
-  };
-
-  const handlePointerUp = () => {
-    if (pressTimerRef.current) {
-      clearTimeout(pressTimerRef.current);
-      pressTimerRef.current = null;
-    }
-
-    // Si mantuvo presionado por más de 350ms, actúa como "Push to Talk" y se detiene al soltar
-    if (isHoldingRef.current && isRecording) {
-      stopDictation();
-      isHoldingRef.current = false;
+    } else {
+      handleStart();
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === " " || e.key === "Enter") {
-      e.preventDefault();
-      if (isRecording) {
-        stopDictation();
-      } else {
-        handleStart();
-      }
+      handleToggle(e);
     }
   };
 
@@ -113,9 +83,7 @@ export const VoiceDictationButton = ({
     <div className={["relative inline-flex items-center gap-1.5", className ?? ""].join(" ")}>
       <button
         type="button"
-        onPointerDown={handlePointerDown}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
+        onClick={handleToggle}
         onKeyDown={handleKeyDown}
         className={[
           "group relative inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-all select-none focus:outline-none focus:ring-2 focus:ring-blue-500/30",
@@ -131,8 +99,8 @@ export const VoiceDictationButton = ({
           !isSupported
             ? "Dictado por voz no disponible en este navegador"
             : isRecording
-            ? "Clic o soltar para detener"
-            : "Clic o mantener presionado para dictar"
+            ? "Pulsar para detener dictado"
+            : "Pulsar para dictar con voz"
         }
       >
         {isRecording ? (

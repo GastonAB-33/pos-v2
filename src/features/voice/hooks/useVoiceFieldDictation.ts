@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  mergeTranscriptsWithoutOverlap,
   normalizeVoiceInput,
   type VoiceFieldType,
 } from "../utils/voice-normalizer";
@@ -22,6 +21,7 @@ interface SpeechRecognitionEventLike {
 interface SpeechRecognitionLike {
   continuous: boolean;
   interimResults: boolean;
+  maxAlternatives?: number;
   lang: string;
   onstart: (() => void) | null;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
@@ -55,18 +55,28 @@ const getSpeechRecognitionConstructor = (): SpeechRecognitionConstructor | null 
   return scope.SpeechRecognition ?? scope.webkitSpeechRecognition ?? null;
 };
 
+const resolveSpanishLanguage = (requested?: string): string => {
+  if (requested) return requested;
+  if (typeof navigator !== "undefined" && navigator.language?.toLowerCase().startsWith("es")) {
+    return navigator.language;
+  }
+  return "es-AR";
+};
+
 const mapVoiceError = (errorKey?: string): string | null => {
   if (!errorKey || errorKey === "aborted") return null;
   switch (errorKey) {
     case "not-allowed":
     case "permission-denied":
-      return "Permiso de micrófono denegado. Habilítalo en tu navegador.";
+      return "Permiso de micrófono denegado. Habilita el acceso en el candado de la barra del navegador.";
     case "no-speech":
-      return "No se detectó audio. Intenta hablar más cerca del micrófono.";
+      return "No se detectó audio. Habla claro y cerca del micrófono.";
     case "network":
-      return "Error de red con el servicio de voz.";
+      return "Error de red con el servicio de voz. Revisa tu conexión a internet.";
     case "audio-capture":
       return "No se detectó ningún micrófono activo.";
+    case "service-not-allowed":
+      return "Servicio de voz no permitido por el navegador.";
     default:
       return `Error de dictado: ${errorKey}`;
   }
@@ -80,46 +90,76 @@ export const useVoiceFieldDictation = () => {
   const [error, setError] = useState<string | null>(null);
 
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const animFrameRef = useRef<number | null>(null);
+  const animIntervalRef = useRef<number | null>(null);
 
   const baseTextRef = useRef("");
-  const accumulatedFinalRef = useRef("");
+  const latestRawTranscriptRef = useRef("");
   const onValueChangeRef = useRef<((value: string) => void) | null>(null);
   const insertModeRef = useRef<VoiceDictationInsertMode>("append");
   const fieldTypeRef = useRef<VoiceFieldType>("text");
+  const isRecordingRef = useRef(false);
 
   useEffect(() => {
     setIsSupported(Boolean(getSpeechRecognitionConstructor()));
   }, []);
 
-  const cleanupAudioAnalyser = useCallback(() => {
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current);
-      animFrameRef.current = null;
-    }
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
-      mediaStreamRef.current = null;
-    }
-    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-      audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
+  const stopAnimation = useCallback(() => {
+    if (animIntervalRef.current) {
+      window.clearInterval(animIntervalRef.current);
+      animIntervalRef.current = null;
     }
     setAudioLevel(0);
   }, []);
 
+  const startAnimation = useCallback(() => {
+    stopAnimation();
+    // Simular visualmente ondas de sonido activas sin bloquear ni pedir hardware MediaStream extra
+    animIntervalRef.current = window.setInterval(() => {
+      const level = Math.floor(Math.random() * 55) + 30; // 30% a 85%
+      setAudioLevel(level);
+    }, 120);
+  }, [stopAnimation]);
+
+  const commitCurrentTranscript = useCallback(() => {
+    const rawToCommit = latestRawTranscriptRef.current.trim();
+    if (!rawToCommit || !onValueChangeRef.current) return;
+
+    const { value: normalizedText, isReset } = normalizeVoiceInput(rawToCommit, {
+      fieldType: fieldTypeRef.current,
+      autoNumbers: true,
+      autoPunctuation: true,
+      capitalize: true,
+    });
+
+    if (isReset) {
+      latestRawTranscriptRef.current = "";
+      onValueChangeRef.current("");
+      return;
+    }
+
+    let finalValue = normalizedText;
+    if (insertModeRef.current === "append" && baseTextRef.current.trim()) {
+      finalValue = `${baseTextRef.current.trim()} ${normalizedText}`.trim();
+    }
+
+    onValueChangeRef.current(finalValue);
+  }, []);
+
   const stopDictation = useCallback(() => {
+    isRecordingRef.current = false;
+    stopAnimation();
+    setIsRecording(false);
+    setInterimTranscript("");
+
+    // Asegurar que lo dictado hasta el momento de pulsar detener se consolide
+    commitCurrentTranscript();
+
     try {
       recognitionRef.current?.stop();
     } catch {
       // Ignorar si ya estaba detenido
     }
-    cleanupAudioAnalyser();
-    setIsRecording(false);
-    setInterimTranscript("");
-  }, [cleanupAudioAnalyser]);
+  }, [stopAnimation, commitCurrentTranscript]);
 
   useEffect(() => {
     return () => {
@@ -127,51 +167,12 @@ export const useVoiceFieldDictation = () => {
         recognitionRef.current?.abort();
       } catch {}
       recognitionRef.current = null;
-      cleanupAudioAnalyser();
+      stopAnimation();
     };
-  }, [cleanupAudioAnalyser]);
+  }, [stopAnimation]);
 
   const clearError = useCallback(() => {
     setError(null);
-  }, []);
-
-  const startAudioAnalyser = useCallback(async () => {
-    if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) return;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      mediaStreamRef.current = stream;
-
-      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextClass) return;
-
-      const audioCtx = new AudioContextClass();
-      audioContextRef.current = audioCtx;
-
-      const source = audioCtx.createMediaStreamSource(stream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 64;
-      source.connect(analyser);
-
-      const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-
-      const updateLevel = () => {
-        if (!mediaStreamRef.current) return;
-        analyser.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for (let i = 0; i < bufferLength; i += 1) {
-          sum += dataArray[i];
-        }
-        const avg = sum / bufferLength;
-        const normalizedLevel = Math.min(100, Math.round((avg / 128) * 100));
-        setAudioLevel(normalizedLevel);
-        animFrameRef.current = requestAnimationFrame(updateLevel);
-      };
-
-      updateLevel();
-    } catch {
-      // Si el usuario deniega getUserMedia o falla, el reconocimiento de voz nativo puede seguir funcionando
-    }
   }, []);
 
   const startDictation = useCallback(
@@ -179,7 +180,7 @@ export const useVoiceFieldDictation = () => {
       currentValue,
       onValueChange,
       insertMode = "append",
-      language = "es-AR",
+      language,
       fieldType = "text",
     }: StartVoiceDictationInput) => {
       setError(null);
@@ -195,52 +196,56 @@ export const useVoiceFieldDictation = () => {
       try {
         recognitionRef.current?.abort();
       } catch {}
-      cleanupAudioAnalyser();
 
       baseTextRef.current = currentValue;
-      accumulatedFinalRef.current = "";
+      latestRawTranscriptRef.current = "";
       onValueChangeRef.current = onValueChange;
       insertModeRef.current = insertMode;
       fieldTypeRef.current = fieldType;
 
       const recognition = new Recognition();
-      recognition.continuous = true;
+
+      // Compatibilidad con iOS Safari y Android
+      try {
+        recognition.continuous = true;
+      } catch {
+        recognition.continuous = false;
+      }
       recognition.interimResults = true;
-      recognition.lang = language;
+      try {
+        recognition.maxAlternatives = 1;
+      } catch {}
+      recognition.lang = resolveSpanishLanguage(language);
 
       recognition.onstart = () => {
+        isRecordingRef.current = true;
         setIsRecording(true);
-        startAudioAnalyser();
+        startAnimation();
       };
 
       recognition.onresult = (event) => {
+        let currentFinal = "";
         let currentInterim = "";
 
-        // Procesar usando event.resultIndex para no volver a calcular viejos fragmentos
-        for (let i = event.resultIndex; i < event.results.length; i += 1) {
-          const resultItem = event.results[i];
-          const textChunk = resultItem?.[0]?.transcript ?? "";
+        // Inspeccionar todos los resultados del evento para reconstruir el texto completo
+        for (let i = 0; i < event.results.length; i += 1) {
+          const item = event.results[i];
+          const textChunk = item?.[0]?.transcript ?? "";
 
-          if (resultItem?.isFinal) {
-            // Unir sin solapamiento para evitar repeticiones provocadas por el motor
-            accumulatedFinalRef.current = mergeTranscriptsWithoutOverlap(
-              accumulatedFinalRef.current,
-              textChunk
-            );
+          if (item?.isFinal) {
+            currentFinal += `${textChunk} `;
           } else {
             currentInterim += `${textChunk} `;
           }
         }
 
-        setInterimTranscript(currentInterim.trim());
+        const fullRaw = `${currentFinal} ${currentInterim}`.trim();
+        if (!fullRaw) return;
 
-        // Normalizar texto consolidado final
-        const rawFinal = accumulatedFinalRef.current.trim();
-        const rawFull = currentInterim.trim()
-          ? mergeTranscriptsWithoutOverlap(rawFinal, currentInterim)
-          : rawFinal;
+        latestRawTranscriptRef.current = fullRaw;
+        setInterimTranscript(currentInterim.trim() || currentFinal.trim());
 
-        const { value: normalizedText, isReset } = normalizeVoiceInput(rawFull, {
+        const { value: normalizedText, isReset } = normalizeVoiceInput(fullRaw, {
           fieldType: fieldTypeRef.current,
           autoNumbers: true,
           autoPunctuation: true,
@@ -248,13 +253,12 @@ export const useVoiceFieldDictation = () => {
         });
 
         if (isReset) {
-          accumulatedFinalRef.current = "";
+          latestRawTranscriptRef.current = "";
           setInterimTranscript("");
           onValueChangeRef.current?.("");
           return;
         }
 
-        // Construir valor con baseText si es modo append
         let finalValue = normalizedText;
         if (insertModeRef.current === "append" && baseTextRef.current.trim()) {
           finalValue = `${baseTextRef.current.trim()} ${normalizedText}`.trim();
@@ -268,41 +272,32 @@ export const useVoiceFieldDictation = () => {
         if (friendly) {
           setError(friendly);
         }
+        isRecordingRef.current = false;
         setIsRecording(false);
-        cleanupAudioAnalyser();
+        stopAnimation();
       };
 
       recognition.onend = () => {
+        // Al terminar, consolidar lo último capturado
+        commitCurrentTranscript();
+
+        isRecordingRef.current = false;
         setIsRecording(false);
         setInterimTranscript("");
-        cleanupAudioAnalyser();
-
-        // En onend consolidar el texto finalizado normalizado
-        if (accumulatedFinalRef.current.trim() && onValueChangeRef.current) {
-          const { value: finalClean } = normalizeVoiceInput(accumulatedFinalRef.current, {
-            fieldType: fieldTypeRef.current,
-            autoNumbers: true,
-            autoPunctuation: true,
-            capitalize: true,
-          });
-
-          let finalValue = finalClean;
-          if (insertModeRef.current === "append" && baseTextRef.current.trim()) {
-            finalValue = `${baseTextRef.current.trim()} ${finalClean}`.trim();
-          }
-          onValueChangeRef.current(finalValue);
-        }
+        stopAnimation();
       };
 
       recognitionRef.current = recognition;
       try {
         recognition.start();
       } catch (err) {
-        setError("No se pudo iniciar el micrófono.");
+        console.error("[VoiceDictation] Error starting recognition:", err);
+        setError("No se pudo iniciar el micrófono. Revisa los permisos.");
         setIsRecording(false);
+        stopAnimation();
       }
     },
-    [cleanupAudioAnalyser, startAudioAnalyser]
+    [startAnimation, stopAnimation, commitCurrentTranscript]
   );
 
   return {
