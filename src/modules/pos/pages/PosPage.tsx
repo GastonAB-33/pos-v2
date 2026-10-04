@@ -26,9 +26,11 @@ import { usePosSale } from "@/modules/pos/hooks/usePosSale";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
 import { useProductsStore } from "@/features/products/store/products.store";
 import type { OpenCashValues } from "@/modules/caja/schemas/cash.schemas";
+import { computePricingBackward, roundMoney } from "@/modules/productos/utils/product-pricing";
 import { auditService } from "@/services/audit.service";
 import { cashService } from "@/services/cash.service";
 import { customersService } from "@/services/customers.service";
+import { productsService } from "@/services/products.service";
 import { invoicesService } from "@/services/invoices.service";
 import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
 import { posCustomerProfilesService } from "@/services/pos-customer-profiles.service";
@@ -178,6 +180,7 @@ export const PosPage = () => {
   const [customerModalState, setCustomerModalState] = useState<PosCustomerModalState | null>(null);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [isQuickProductModalOpen, setIsQuickProductModalOpen] = useState(false);
+  const [lastNotFoundBarcode, setLastNotFoundBarcode] = useState<string>("");
   const [editingCartItemId, setEditingCartItemId] = useState<string | null>(null);
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   const [isCustomerModalSubmitting, setIsCustomerModalSubmitting] = useState(false);
@@ -648,18 +651,23 @@ export const PosPage = () => {
     async (barcode: string): Promise<boolean> => {
       if (!canWritePos || isSubmitting || isCashGateBlocking) return false;
 
+      const cleanBarcode = barcode.trim();
       try {
-        const result = await addProductByBarcode(barcode);
+        const result = await addProductByBarcode(cleanBarcode);
         if (!result.ok || (!result.product && !result.promotion)) {
-          // El error se muestra exactamente 1 vez a través del feedback unificado de usePosSale
+          // Guardar el código escaneado que no fue encontrado para precargar en Producto Rápido
+          setLastNotFoundBarcode(cleanBarcode);
           return false;
         }
 
         const scannedProduct = result.product;
         if (!scannedProduct && !result.promotion) {
+          setLastNotFoundBarcode(cleanBarcode);
           return false;
         }
 
+        // Si fue encontrado, limpiamos el último código no encontrado
+        setLastNotFoundBarcode("");
         // Resaltar visualmente el carrito en verde sin alerta toast obstructiva
         triggerCartSuccessHighlight();
         return true;
@@ -1628,6 +1636,7 @@ export const PosPage = () => {
 
       <PosQuickProductModal
         open={isQuickProductModalOpen}
+        initialBarcode={lastNotFoundBarcode}
         categories={productCategories}
         disabled={isSubmitting || isCashGateBlocking || !canWritePos}
         onClose={() => {
@@ -1639,6 +1648,7 @@ export const PosPage = () => {
         onAddManual={(values) => {
           const ok = addManualProductToCart(values);
           if (ok) {
+            setLastNotFoundBarcode("");
             window.setTimeout(() => {
               focusScannerCapture();
             }, 0);
@@ -1648,6 +1658,7 @@ export const PosPage = () => {
         onCreateAndAdd={async (values) => {
           const ok = await createProductFromPosAndAddToCart(values);
           if (ok) {
+            setLastNotFoundBarcode("");
             window.setTimeout(() => {
               focusScannerCapture();
             }, 0);
@@ -1665,7 +1676,51 @@ export const PosPage = () => {
             focusScannerCapture();
           }, 0);
         }}
-        onSubmit={(values) => {
+        onSubmit={async (values, scope) => {
+          if (scope === "system_and_sale" && tenantId && !values.productId.startsWith("manual-")) {
+            try {
+              const existingProduct = products.find((p) => p.id === values.productId);
+              const costPrice = existingProduct?.cost_price ?? 0;
+              const vatPercent = existingProduct?.vat_percent ?? 21;
+              const computed = computePricingBackward({
+                precioCosto: costPrice,
+                precioFinal: values.unitPrice,
+                porcentajeIva: vatPercent,
+              });
+
+              const updated = await productsService.update(tenantId, values.productId, {
+                price: roundMoney(values.unitPrice),
+                price_without_vat: computed.precioSinIva,
+                profit_percent: computed.porcentajeGanancia,
+              });
+
+              if (updated) {
+                useProductsStore.getState().upsertProduct(updated);
+              }
+              void reload();
+
+              if (user?.id) {
+                void auditService.createSafe(tenantId, {
+                  user_id: user.id,
+                  module: "pos",
+                  action: "update_product_price",
+                  entity_type: "product",
+                  entity_id: values.productId,
+                  description: `Precio de venta actualizado desde POS para ${existingProduct?.name ?? values.name}: $${values.unitPrice}`,
+                  metadata: {
+                    previous_price: existingProduct?.price,
+                    next_price: values.unitPrice,
+                  },
+                });
+              }
+
+              toastSuccess("Precio de venta actualizado en el sistema y en la venta");
+            } catch (error) {
+              console.error("Error al actualizar precio en el sistema:", error);
+              toastError("No se pudo actualizar el precio en el catálogo, pero se aplicó a la venta");
+            }
+          }
+
           updateCartItem(values);
         }}
       />

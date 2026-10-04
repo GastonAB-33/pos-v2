@@ -19,6 +19,7 @@ interface PosQuickProductModalProps {
   catalogDescription?: string;
   submitButtonText?: string;
   initialName?: string;
+  initialBarcode?: string;
 }
 
 type SaveMode = "sale_only" | "catalog";
@@ -45,6 +46,7 @@ export const PosQuickProductModal = ({
   catalogDescription,
   submitButtonText,
   initialName,
+  initialBarcode,
 }: PosQuickProductModalProps) => {
   useBodyScrollLock(open);
   const [saveMode, setSaveMode] = useState<SaveMode>("catalog");
@@ -55,13 +57,14 @@ export const PosQuickProductModal = ({
   const [unitPrice, setUnitPrice] = useState("");
   const [costPrice, setCostPrice] = useState("");
   const [stock, setStock] = useState("");
-  const [code, setCode] = useState("");
-  const [barcode, setBarcode] = useState("");
+  const [code, setCode] = useState(initialBarcode ?? "");
+  const [barcode, setBarcode] = useState(initialBarcode ?? "");
   const [favorite, setFavorite] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
+    const cleanInitialBarcode = initialBarcode?.trim() ?? "";
     setSaveMode("catalog");
     setSaleMode("unit");
     setName(initialName ?? "");
@@ -70,14 +73,14 @@ export const PosQuickProductModal = ({
     setUnitPrice("");
     setCostPrice("");
     setStock("");
-    setCode("");
-    setBarcode("");
+    setCode(cleanInitialBarcode);
+    setBarcode(cleanInitialBarcode);
     setFavorite(true);
     setIsSubmitting(false);
-  }, [categories, initialName, open]);
+  }, [categories, initialBarcode, initialName, open]);
 
   const quantityLabel = saleMode === "weight" ? "Cantidad a vender (gramos)" : "Cantidad a vender";
-  const priceLabel = saleMode === "weight" ? "Precio por kg" : "Precio unitario";
+  const priceLabel = saleMode === "weight" ? "Precio venta (por kg)" : "Precio venta";
   const stockLabel = saleMode === "weight" ? "Stock inicial en kg" : "Stock inicial";
   const parsedQuantity = useMemo(() => parsePositive(quantity), [quantity]);
   const suggestedStock =
@@ -252,6 +255,23 @@ export const PosQuickProductModal = ({
               />
             </div>
 
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Codigo de barras</label>
+              <input
+                type="text"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-lpignore="true"
+                data-form-type="other"
+                value={barcode}
+                onChange={(event) => setBarcode(event.target.value)}
+                placeholder="Opcional o escaneado"
+                className="ui-input"
+              />
+            </div>
+
             {saveMode === "catalog" ? (
               <>
                 <div>
@@ -303,22 +323,6 @@ export const PosQuickProductModal = ({
                     data-form-type="other"
                     value={code}
                     onChange={(event) => setCode(event.target.value)}
-                    className="ui-input"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Codigo de barras</label>
-                  <input
-                    type="text"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    data-lpignore="true"
-                    data-form-type="other"
-                    value={barcode}
-                    onChange={(event) => setBarcode(event.target.value)}
                     className="ui-input"
                   />
                 </div>
