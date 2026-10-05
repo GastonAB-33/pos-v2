@@ -158,7 +158,7 @@ export const DualRateAmountInput: React.FC<DualRateAmountInputProps> = ({
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 transition-colors dark:border-slate-700 dark:bg-slate-900/90",
+        "flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-0.5 transition-colors dark:border-slate-700 dark:bg-slate-900/90",
         className
       )}
     >
@@ -169,7 +169,7 @@ export const DualRateAmountInput: React.FC<DualRateAmountInputProps> = ({
           onClick={() => handleModeSwitch("percent")}
           disabled={disabled}
           className={cn(
-            "rounded px-1.5 py-0.5 text-[10px] font-bold transition select-none disabled:opacity-50",
+            "rounded px-1 py-0.5 text-[9px] font-bold leading-none transition select-none disabled:opacity-50",
             mode === "percent"
               ? cn(
                   "bg-white shadow-xs dark:bg-slate-900",
@@ -186,7 +186,7 @@ export const DualRateAmountInput: React.FC<DualRateAmountInputProps> = ({
           onClick={() => handleModeSwitch("amount")}
           disabled={disabled}
           className={cn(
-            "rounded px-1.5 py-0.5 text-[10px] font-bold transition select-none disabled:opacity-50",
+            "rounded px-1 py-0.5 text-[9px] font-bold leading-none transition select-none disabled:opacity-50",
             mode === "amount"
               ? cn(
                   "bg-white shadow-xs dark:bg-slate-900",
@@ -203,12 +203,12 @@ export const DualRateAmountInput: React.FC<DualRateAmountInputProps> = ({
       {/* Etiqueta del concepto */}
       <label
         htmlFor={id}
-        className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 cursor-pointer"
+        className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 cursor-pointer"
       >
         {label}:
       </label>
 
-      {/* Input numérico */}
+      {/* Input numérico con ancho constante y compacto */}
       <div className="flex items-center">
         <input
           id={id}
@@ -229,15 +229,14 @@ export const DualRateAmountInput: React.FC<DualRateAmountInputProps> = ({
           disabled={disabled}
           placeholder="0"
           className={cn(
-            "rounded border border-slate-300 bg-white px-1.5 py-0.5 text-center text-xs font-bold text-slate-900 transition focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100",
-            mode === "percent" ? "w-14" : "w-20",
+            "w-12 sm:w-14 rounded border border-slate-300 bg-white px-1 py-0.5 text-center text-xs font-bold text-slate-900 transition focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100",
             accentColorStyles.focusBorder
           )}
         />
       </div>
 
       {/* Valor complementario calculado entre paréntesis */}
-      <span className={cn("font-bold text-xs whitespace-nowrap", accentColorStyles.text)}>
+      <span className={cn("font-bold text-[10px] sm:text-[11px] whitespace-nowrap", accentColorStyles.text)}>
         {mode === "percent"
           ? `(${currency.format(calculatedAmount)})`
           : `(${equivalentPercent.toFixed(2)} %)`}

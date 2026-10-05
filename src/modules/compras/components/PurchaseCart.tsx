@@ -750,12 +750,12 @@ export const PurchaseCart = ({
       <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/90 p-3.5 sm:p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/80">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           {/* Grid de Totales e Impuestos: fila 1 (IVA y Neto), fila 2 (IIBB y Total) */}
-          <div className="grid grid-cols-[auto_auto] items-center gap-x-4 sm:gap-x-6 gap-y-2 text-xs">
+          <div className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_auto] items-center gap-x-2.5 sm:gap-x-4 gap-y-1.5 text-xs w-full max-w-full">
             {/* Fila 1, Columna 1: % IVA */}
-            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/90">
+            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-0.5 dark:border-slate-700 dark:bg-slate-900/90">
               <label
                 htmlFor="purchase-vat-input"
-                className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200"
+                className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200"
               >
                 % IVA:
               </label>
@@ -790,16 +790,16 @@ export const PurchaseCart = ({
                   onBlur={() => setVatDraft(null)}
                   disabled={disabled || !canWrite}
                   placeholder="21"
-                  className="w-14 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-center text-xs font-bold text-slate-900 transition focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
+                  className="w-12 sm:w-14 rounded border border-slate-300 bg-white px-1 py-0.5 text-center text-xs font-bold text-slate-900 transition focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
                 />
               </div>
-              <span className="font-bold text-blue-700 dark:text-blue-400">
+              <span className="font-bold text-[10px] sm:text-[11px] text-blue-700 dark:text-blue-400 whitespace-nowrap">
                 ({currency.format(summary.vatTotal)})
               </span>
             </div>
 
             {/* Fila 1, Columna 2: Subtotal neto */}
-            <div className="flex items-center gap-1.5 whitespace-nowrap">
+            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap justify-self-end">
               <span className="text-slate-500 dark:text-slate-400">Neto:</span>
               <strong className="text-sm font-bold text-slate-800 dark:text-slate-100">
                 {currency.format(summary.subtotal)}
@@ -829,7 +829,7 @@ export const PurchaseCart = ({
             />
 
             {/* Fila 2, Columna 2: Total a pagar */}
-            <div className="flex items-center gap-1.5 whitespace-nowrap">
+            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap justify-self-end">
               <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Total:</span>
               <strong className="text-base sm:text-lg font-black text-brand-700 dark:text-brand-400">
                 {currency.format(summary.total)}
