@@ -251,7 +251,6 @@ export const useVoiceFieldDictation = () => {
 
         latestRawTranscriptRef.current = fullRaw;
         setInterimTranscript(currentInterim || currentFinal);
-
         const { value: normalizedText, isReset } = normalizeVoiceInput(fullRaw, {
           fieldType: fieldTypeRef.current,
           autoNumbers: true,
