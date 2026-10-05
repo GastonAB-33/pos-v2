@@ -795,7 +795,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                 </p>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-3">
                 <button
                   type="button"
                   onClick={() => setPosWindowMode("same_tab")}
@@ -809,7 +809,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <span className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100">
                       <AppWindow size={16} className="text-blue-600 dark:text-blue-400" />
-                      Misma pestaña (Integrado)
+                      Misma pestaña (Estándar)
                     </span>
                     {posWindowMode === "same_tab" ? (
                       <span className="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-900 dark:text-blue-300">
@@ -818,7 +818,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                     ) : null}
                   </div>
                   <p className="text-xs text-slate-500">
-                    Navega dentro de la ventana actual manteniendo el menú lateral y las demás herramientas del sistema a mano.
+                    Navega dentro de la ventana actual manteniendo el catálogo tradicional a la izquierda y el carrito a la derecha.
                   </p>
                 </button>
 
@@ -845,6 +845,32 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   </div>
                   <p className="text-xs text-slate-500">
                     Abre el Punto de Venta en una ventana independiente. Ideal para trabajar en pantalla completa o utilizar un segundo monitor en caja.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPosWindowMode("smart_pos")}
+                  className={cn(
+                    "flex flex-col rounded-lg border p-3.5 text-left transition-all",
+                    posWindowMode === "smart_pos"
+                      ? "border-blue-600 bg-white ring-2 ring-blue-500/20 dark:border-blue-500 dark:bg-slate-900"
+                      : "border-slate-200 bg-white/70 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/50"
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100">
+                      <Sparkles size={16} className="text-fuchsia-500 dark:text-fuchsia-400" />
+                      POS Inteligente
+                    </span>
+                    {posWindowMode === "smart_pos" ? (
+                      <span className="rounded bg-fuchsia-100 px-2 py-0.5 text-[10px] font-bold text-fuchsia-700 dark:bg-fuchsia-900/60 dark:text-fuchsia-300">
+                        ACTIVO
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Diseño optimizado y minimalista en la misma pantalla: productos escaneados en 2 columnas al centro, buscador superior y totales y funciones a la derecha.
                   </p>
                 </button>
               </div>

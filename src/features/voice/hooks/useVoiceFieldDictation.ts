@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   normalizeVoiceInput,
+  mergeTranscriptsWithoutOverlap,
+  deduplicateRepeatedPhrases,
   type VoiceFieldType,
 } from "../utils/voice-normalizer";
 
@@ -139,7 +141,7 @@ export const useVoiceFieldDictation = () => {
 
     let finalValue = normalizedText;
     if (insertModeRef.current === "append" && baseTextRef.current.trim()) {
-      finalValue = `${baseTextRef.current.trim()} ${normalizedText}`.trim();
+      finalValue = mergeTranscriptsWithoutOverlap(baseTextRef.current.trim(), normalizedText);
     }
 
     onValueChangeRef.current(finalValue);
@@ -227,24 +229,28 @@ export const useVoiceFieldDictation = () => {
         let currentFinal = "";
         let currentInterim = "";
 
-        // Inspeccionar todos los resultados del evento para reconstruir el texto completo
+        // Inspeccionar y fusionar resultados del evento evitando solapamientos entre chunks
         for (let i = 0; i < event.results.length; i += 1) {
           const item = event.results[i];
-          const textChunk = item?.[0]?.transcript ?? "";
+          const textChunk = (item?.[0]?.transcript ?? "").trim();
+          if (!textChunk) continue;
 
           if (item?.isFinal) {
-            currentFinal += `${textChunk} `;
+            currentFinal = mergeTranscriptsWithoutOverlap(currentFinal, textChunk);
           } else {
-            currentInterim += `${textChunk} `;
+            currentInterim = mergeTranscriptsWithoutOverlap(currentInterim, textChunk);
           }
         }
 
-        const fullRaw = `${currentFinal} ${currentInterim}`.trim();
+        const combinedRaw = currentInterim
+          ? mergeTranscriptsWithoutOverlap(currentFinal, currentInterim)
+          : currentFinal;
+
+        const fullRaw = deduplicateRepeatedPhrases(combinedRaw.trim());
         if (!fullRaw) return;
 
         latestRawTranscriptRef.current = fullRaw;
-        setInterimTranscript(currentInterim.trim() || currentFinal.trim());
-
+        setInterimTranscript(currentInterim || currentFinal);
         const { value: normalizedText, isReset } = normalizeVoiceInput(fullRaw, {
           fieldType: fieldTypeRef.current,
           autoNumbers: true,
@@ -261,7 +267,7 @@ export const useVoiceFieldDictation = () => {
 
         let finalValue = normalizedText;
         if (insertModeRef.current === "append" && baseTextRef.current.trim()) {
-          finalValue = `${baseTextRef.current.trim()} ${normalizedText}`.trim();
+          finalValue = mergeTranscriptsWithoutOverlap(baseTextRef.current.trim(), normalizedText);
         }
 
         onValueChangeRef.current?.(finalValue);

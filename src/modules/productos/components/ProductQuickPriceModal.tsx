@@ -711,13 +711,13 @@ export const ProductQuickPriceModal = ({
 
   return (
     <section
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-4 backdrop-blur-xs animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-2 sm:p-4 backdrop-blur-xs animate-in fade-in duration-200"
       aria-modal="true"
       role="dialog"
     >
-      <div className="relative w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900 md:p-6 max-h-[92vh] flex flex-col overflow-hidden">
+      <div className="relative w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-5 md:p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 max-h-[92dvh] sm:max-h-[92vh] flex flex-col overflow-hidden">
         {/* Encabezado */}
-        <div className="mb-4 flex items-center justify-between gap-2.5 sm:gap-3 border-b border-slate-200 pb-3 dark:border-slate-800 flex-shrink-0">
+        <div className="mb-3 sm:mb-4 flex items-center justify-between gap-2 sm:gap-3 border-b border-slate-200 pb-2.5 sm:pb-3 dark:border-slate-800 flex-shrink-0">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             {/* Ícono de etiqueta (con shrink-0 para que nunca se deforme ni corte en pantallas móviles) */}
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 shadow-xs">
@@ -764,7 +764,7 @@ export const ProductQuickPriceModal = ({
         </div>
 
         {/* Barra de Búsqueda y Escáner */}
-        <div className="mb-4 relative flex-shrink-0">
+        <div className="mb-3 sm:mb-4 relative flex-shrink-0">
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <Search
@@ -806,7 +806,7 @@ export const ProductQuickPriceModal = ({
         </div>
 
         {/* Contenido Principal */}
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pr-1">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overscroll-contain pr-1 touch-pan-y pb-2">
           {selectedProduct && searchQuery.trim().length === 0 ? (
             <div className="space-y-4">
               {/* Tarjeta de Información del Producto Seleccionado (Panel de Vista Previa) */}
@@ -1225,25 +1225,25 @@ export const ProductQuickPriceModal = ({
                 </div>
               </div>
             ) : (
-              <div className="py-10 px-4 text-center rounded-xl border border-dashed border-amber-300 bg-amber-50/50 dark:border-amber-800/60 dark:bg-amber-950/20 animate-in fade-in duration-150">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 mx-auto mb-3">
-                  <AlertTriangle size={24} />
+              <div className="py-5 sm:py-8 px-3.5 sm:px-4 text-center rounded-2xl border border-dashed border-amber-300 bg-amber-50/60 dark:border-amber-800/60 dark:bg-amber-950/20 animate-in fade-in duration-150">
+                <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 mx-auto mb-2 sm:mb-3">
+                  <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
-                <h4 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
                   No se encontró ningún producto
                 </h4>
-                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
                   No hay coincidencias en el catálogo para el código o nombre:
                 </p>
-                <p className="mt-1.5 font-mono text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900/60 inline-block px-3 py-1 rounded-lg">
+                <p className="mt-1.5 font-mono text-xs sm:text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900/60 inline-block px-3 py-1 rounded-lg max-w-full truncate">
                   "{searchQuery}"
                 </p>
                 {onCreateNewProduct && (
-                  <div className="mt-5">
+                  <div className="mt-3.5 sm:mt-5">
                     <button
                       type="button"
                       onClick={() => attemptCreateNew(searchQuery)}
-                      className="ui-btn-primary inline-flex items-center gap-2 text-sm py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-md transition-transform active:scale-95"
+                      className="ui-btn-primary inline-flex items-center justify-center gap-2 text-xs sm:text-sm py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-md transition-transform active:scale-95 w-full sm:w-auto"
                     >
                       <Plus size={18} />
                       Crear producto nuevo con este código
@@ -1253,25 +1253,25 @@ export const ProductQuickPriceModal = ({
               </div>
             )
           ) : notFoundCode ? (
-            <div className="py-10 px-4 text-center rounded-xl border border-dashed border-amber-300 bg-amber-50/50 dark:border-amber-800/60 dark:bg-amber-950/20 animate-in fade-in duration-150">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 mx-auto mb-3">
-                <AlertTriangle size={24} />
+            <div className="py-5 sm:py-8 px-3.5 sm:px-4 text-center rounded-2xl border border-dashed border-amber-300 bg-amber-50/60 dark:border-amber-800/60 dark:bg-amber-950/20 animate-in fade-in duration-150">
+              <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 mx-auto mb-2 sm:mb-3">
+                <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6" />
               </div>
-              <h4 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
                 No se encontró ningún producto
               </h4>
-              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
                 No hay coincidencias en el catálogo para el código o nombre:
               </p>
-              <p className="mt-1.5 font-mono text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900/60 inline-block px-3 py-1 rounded-lg">
+              <p className="mt-1.5 font-mono text-xs sm:text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900/60 inline-block px-3 py-1 rounded-lg max-w-full truncate">
                 "{notFoundCode}"
               </p>
               {onCreateNewProduct && (
-                <div className="mt-5">
+                <div className="mt-3.5 sm:mt-5">
                   <button
                     type="button"
                     onClick={() => attemptCreateNew(notFoundCode)}
-                    className="ui-btn-primary inline-flex items-center gap-2 text-sm py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-md transition-transform active:scale-95"
+                    className="ui-btn-primary inline-flex items-center justify-center gap-2 text-xs sm:text-sm py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-md transition-transform active:scale-95 w-full sm:w-auto"
                   >
                     <Plus size={18} />
                     Crear producto nuevo con este código
@@ -1281,9 +1281,9 @@ export const ProductQuickPriceModal = ({
             </div>
           ) : (
             /* Estado vacío: esperando búsqueda o escaneo */
-            <div className="py-12 flex flex-col items-center justify-center text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/30">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100/60 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 mb-3">
-                <Package size={24} />
+            <div className="py-6 sm:py-12 px-3.5 sm:px-4 flex flex-col items-center justify-center text-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/30">
+              <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl bg-emerald-100/60 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 mb-2 sm:mb-3">
+                <Package className="h-5 w-5 sm:h-6 sm:w-6" />
               </div>
               <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                 Esperando producto para consultar
@@ -1295,7 +1295,7 @@ export const ProductQuickPriceModal = ({
                 <button
                   type="button"
                   onClick={() => attemptCreateNew()}
-                  className="mt-4 ui-btn-secondary inline-flex items-center gap-1.5 text-xs py-1.5 px-3 font-semibold"
+                  className="mt-3.5 sm:mt-4 ui-btn-secondary inline-flex items-center gap-1.5 text-xs py-1.5 px-3 font-semibold"
                 >
                   <Plus size={14} />
                   Crear un producto nuevo

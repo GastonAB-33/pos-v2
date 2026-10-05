@@ -198,6 +198,7 @@ export const ComprasPage = () => {
     purchaseIibbPercent,
     setPurchaseIibbPercent,
     purchaseIibbAmount,
+    setPurchaseIibbAmount,
   } = usePurchasesModule(tenantId, user?.id ?? null);
 
   const historyRows = purchases.map((purchase) => ({
@@ -448,6 +449,8 @@ export const ComprasPage = () => {
               onVatPercentChange={setPurchaseVatPercent}
               iibbPercent={purchaseIibbPercent}
               onIibbPercentChange={setPurchaseIibbPercent}
+              iibbAmount={purchaseIibbAmount}
+              onIibbAmountChange={setPurchaseIibbAmount}
               onSetQuantity={setItemQuantity}
               onSetUnitCost={setItemUnitCost}
               onSetDiscountPercent={setItemDiscountPercent}

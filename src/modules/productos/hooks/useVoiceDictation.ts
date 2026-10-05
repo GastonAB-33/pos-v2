@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { normalizeVoiceInput } from "@/features/voice/utils/voice-normalizer";
+import {
+  normalizeVoiceInput,
+  mergeTranscriptsWithoutOverlap,
+  deduplicateRepeatedPhrases,
+} from "@/features/voice/utils/voice-normalizer";
 
 interface SpeechRecognitionEventLike {
   resultIndex: number;
@@ -136,19 +140,24 @@ export const useVoiceDictation = () => {
 
       for (let i = 0; i < event.results.length; i += 1) {
         const item = event.results[i];
-        const text = item?.[0]?.transcript ?? "";
+        const text = (item?.[0]?.transcript ?? "").trim();
+        if (!text) continue;
+
         if (item?.isFinal) {
-          currentFinal += `${text} `;
+          currentFinal = mergeTranscriptsWithoutOverlap(currentFinal, text);
         } else {
-          currentInterim += `${text} `;
+          currentInterim = mergeTranscriptsWithoutOverlap(currentInterim, text);
         }
       }
 
-      setInterimText(currentInterim.trim() || currentFinal.trim());
+      const combined = currentInterim
+        ? mergeTranscriptsWithoutOverlap(currentFinal, currentInterim)
+        : currentFinal;
 
-      const rawFull = `${currentFinal} ${currentInterim}`.trim();
+      const rawFull = deduplicateRepeatedPhrases(combined.trim());
       if (!rawFull) return;
 
+      setInterimText(currentInterim || currentFinal);
       latestRawTranscriptRef.current = rawFull;
 
       const { value: normalized } = normalizeVoiceInput(rawFull, {
