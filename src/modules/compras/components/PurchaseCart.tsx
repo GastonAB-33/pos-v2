@@ -749,9 +749,9 @@ export const PurchaseCart = ({
       {/* Resumen Total y Botón de Confirmación Responsivo para Móvil (al final de la compra) */}
       <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/90 p-3.5 sm:p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/80">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          {/* Fila de Totales e Impuestos con inputs numéricos directos */}
-          <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5 text-xs">
-            {/* % IVA directo escribiendo el número */}
+          {/* Grid de Totales e Impuestos: fila 1 (IVA y Neto), fila 2 (IIBB y Total) */}
+          <div className="grid grid-cols-[auto_auto] items-center gap-x-4 sm:gap-x-6 gap-y-2 text-xs">
+            {/* Fila 1, Columna 1: % IVA */}
             <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/90">
               <label
                 htmlFor="purchase-vat-input"
@@ -798,19 +798,15 @@ export const PurchaseCart = ({
               </span>
             </div>
 
-            <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
-
-            {/* Subtotal neto */}
-            <div className="flex items-center gap-1.5">
+            {/* Fila 1, Columna 2: Subtotal neto */}
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
               <span className="text-slate-500 dark:text-slate-400">Neto:</span>
               <strong className="text-sm font-bold text-slate-800 dark:text-slate-100">
                 {currency.format(summary.subtotal)}
               </strong>
             </div>
 
-            <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
-
-            {/* IIBB con selector dual (% o $) */}
+            {/* Fila 2, Columna 1: IIBB con selector dual (% o $) */}
             <DualRateAmountInput
               id="purchase-iibb-input"
               label="IIBB"
@@ -832,24 +828,19 @@ export const PurchaseCart = ({
               accentColor="amber"
             />
 
-            {summary.totalDiscountAmount != null && summary.totalDiscountAmount > 0 && (
-              <>
-                <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
-                <div className="rounded-md border border-amber-300 bg-amber-100/80 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                  Ahorro: +{currency.format(summary.totalDiscountAmount)}
-                </div>
-              </>
-            )}
-
-            <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
-
-            {/* Total a pagar */}
-            <div className="flex items-center gap-1.5">
+            {/* Fila 2, Columna 2: Total a pagar */}
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
               <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Total:</span>
               <strong className="text-base sm:text-lg font-black text-brand-700 dark:text-brand-400">
                 {currency.format(summary.total)}
               </strong>
             </div>
+
+            {summary.totalDiscountAmount != null && summary.totalDiscountAmount > 0 && (
+              <div className="col-span-2 rounded-md border border-amber-300 bg-amber-100/80 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                Ahorro: +{currency.format(summary.totalDiscountAmount)}
+              </div>
+            )}
           </div>
 
           {/* Botón de confirmación / pago */}
