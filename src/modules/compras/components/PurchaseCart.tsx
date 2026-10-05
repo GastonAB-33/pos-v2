@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Gift, Package, PackagePlus, Percent, Plus, ShoppingBag, Tag, Trash2 } from "lucide-react";
 import { handleNumericInputFocus } from "@/utils/input-helpers";
 import { computeRealCost } from "@/modules/compras/hooks/usePurchasesModule";
+import { DualRateAmountInput, type RateAmountMode } from "@/components/ui/DualRateAmountInput";
 
 export interface PurchaseCartItemView {
   product_id: string;
@@ -41,6 +42,8 @@ interface PurchaseCartProps {
   onVatPercentChange?: (vat: number) => void;
   iibbPercent?: number;
   onIibbPercentChange?: (iibb: number) => void;
+  iibbAmount?: number;
+  onIibbAmountChange?: (amount: number) => void;
   onSetQuantity: (productId: string, quantity: number) => void;
   onSetUnitCost: (productId: string, unitCost: number) => void;
   onSetDiscountPercent?: (productId: string, discountPercent: number) => void;
@@ -79,6 +82,8 @@ export const PurchaseCart = ({
   onVatPercentChange,
   iibbPercent = 0,
   onIibbPercentChange,
+  iibbAmount = 0,
+  onIibbAmountChange,
   onSetQuantity,
   onSetUnitCost,
   onSetDiscountPercent,
@@ -98,15 +103,13 @@ export const PurchaseCart = ({
   const [salePriceDrafts, setSalePriceDrafts] = useState<Record<string, string>>({});
   const [bonifiedDrafts, setBonifiedDrafts] = useState<Record<string, string>>({});
   const [vatDraft, setVatDraft] = useState<string | null>(null);
-  const [iibbDraft, setIibbDraft] = useState<string | null>(null);
+  const [iibbMode, setIibbMode] = useState<RateAmountMode>(
+    iibbAmount > 0 ? "amount" : "percent"
+  );
 
   useEffect(() => {
     setVatDraft(null);
   }, [vatPercent]);
-
-  useEffect(() => {
-    setIibbDraft(null);
-  }, [iibbPercent]);
 
   const getUnitLabel = (item: PurchaseCartItemView) =>
     item.sale_mode === "weight" ? "kg" : "u.";
@@ -807,52 +810,27 @@ export const PurchaseCart = ({
 
             <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
 
-            {/* % IIBB directo escribiendo el número */}
-            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/90">
-              <label
-                htmlFor="purchase-iibb-input"
-                className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200"
-              >
-                % IIBB:
-              </label>
-              <div className="flex items-center">
-                <input
-                  id="purchase-iibb-input"
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  data-lpignore="true"
-                  value={iibbDraft ?? (iibbPercent === 0 ? "0" : iibbPercent.toString())}
-                  onFocus={handleNumericInputFocus}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    setIibbDraft(raw);
-                    const val = raw.trim().replace(",", ".");
-                    if (val === "") {
-                      onIibbPercentChange?.(0);
-                    } else {
-                      const parsed = Number(val);
-                      if (!isNaN(parsed) && parsed >= 0) {
-                        onIibbPercentChange?.(Math.min(100, parsed));
-                      }
-                    }
-                  }}
-                  onBlur={() => setIibbDraft(null)}
-                  disabled={disabled || !canWrite}
-                  placeholder="0"
-                  className="w-14 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-center text-xs font-bold text-slate-900 transition focus:border-amber-500 focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
-                />
-              </div>
-              <span className="font-bold text-amber-700 dark:text-amber-400">
-                ({currency.format(summary.iibbTotal ?? 0)})
-              </span>
-            </div>
+            {/* IIBB con selector dual (% o $) */}
+            <DualRateAmountInput
+              id="purchase-iibb-input"
+              label="IIBB"
+              mode={iibbMode}
+              onModeChange={setIibbMode}
+              percentValue={iibbPercent}
+              amountValue={iibbAmount > 0 ? iibbAmount : summary.iibbTotal ?? 0}
+              baseTotal={summary.subtotal}
+              onPercentChange={(val) => {
+                onIibbPercentChange?.(val);
+                onIibbAmountChange?.(0);
+              }}
+              onAmountChange={(val) => {
+                onIibbAmountChange?.(val);
+                const derivedPercent = summary.subtotal > 0 ? (val / summary.subtotal) * 100 : 0;
+                onIibbPercentChange?.(Math.min(100, Math.round(derivedPercent * 100) / 100));
+              }}
+              disabled={disabled || !canWrite}
+              accentColor="amber"
+            />
 
             {summary.totalDiscountAmount != null && summary.totalDiscountAmount > 0 && (
               <>
