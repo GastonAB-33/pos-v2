@@ -545,6 +545,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       iibbPercent: headerOrCheckoutValues.iibbPercent ?? purchaseIibbPercent,
       iibbAmount: headerOrCheckoutValues.iibbAmount ?? purchaseIibbAmount,
       notes: headerOrCheckoutValues.notes,
+      invoicePhotoUrl: headerOrCheckoutValues.invoicePhotoUrl,
     };
 
     // Validar existencia real del proveedor para evitar violación de Foreign Key
@@ -734,6 +735,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         vat_total: summary.vatTotal,
         total: summary.total,
         notes: combinedNotes,
+        invoice_photo_url: headerValues.invoicePhotoUrl?.trim() || null,
         created_by: userId,
       });
 

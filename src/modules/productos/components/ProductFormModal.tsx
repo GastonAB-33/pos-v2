@@ -23,6 +23,8 @@ import { cn } from "@/utils/cn";
 import {
   replaceSpokenSpanishNumbers,
   deduplicateRepeatedPhrases,
+  convertSpokenBarcode,
+  convertSpokenProductCode,
 } from "@/features/voice/utils/voice-normalizer";
 
 type CalcMode = "forward" | "reverse";
@@ -97,13 +99,11 @@ const normalizeVoiceName = (value: string): string => {
 };
 
 const normalizeVoiceBarcode = (value: string): string => {
-  const normalized = replaceSpokenSpanishNumbers(value);
-  return normalized.replace(/\D/g, "");
+  return convertSpokenBarcode(value);
 };
 
 const normalizeVoiceProductCode = (value: string): string => {
-  const normalized = replaceSpokenNumbers(value).toUpperCase();
-  return normalized.replace(/[^A-Z0-9-_]/g, "").slice(0, 80);
+  return convertSpokenProductCode(value);
 };
 
 const parseVoiceNumber = (value: string, fallback: number): number => {
@@ -681,7 +681,7 @@ export const ProductFormModal = ({
                           })
                         }
                         insertMode="replace"
-                        fieldType="code"
+                        fieldType="barcode"
                         disabled={disabled}
                         label="Dictar código de barras"
                       />

@@ -5,7 +5,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowLeftRight, Eye, Gift, Search, X } from "lucide-react";
+import { ArrowLeftRight, Camera, Download, Eye, Gift, Maximize2, Search, X } from "lucide-react";
 import type { Purchase, Supplier } from "@/types/entities";
 import { IconButton } from "@/components/ui/IconButton";
 
@@ -87,6 +87,7 @@ export const PurchasesHistoryTable = ({
   const [selectedPurchase, setSelectedPurchase] = useState<PurchaseHistoryRow | null>(null);
   const [filterText, setFilterText] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [photoViewerUrl, setPhotoViewerUrl] = useState<string | null>(null);
 
   const filteredRows = useMemo(() => {
     let result = rows;
@@ -194,6 +195,18 @@ export const PurchasesHistoryTable = ({
 
         return (
           <div className="flex items-center gap-1.5">
+            {purchase.invoice_photo_url ? (
+              <button
+                type="button"
+                onClick={() => setPhotoViewerUrl(purchase.invoice_photo_url!)}
+                className="inline-flex items-center gap-1 rounded-md border border-brand-200 bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-300 dark:hover:bg-brand-900/60"
+                title="Ver fotografía de la factura física adjunta"
+              >
+                <Camera className="h-3.5 w-3.5" />
+                Factura
+              </button>
+            ) : null}
+
             <button
               type="button"
               onClick={() => setSelectedPurchase(info.row.original)}
@@ -383,7 +396,19 @@ export const PurchasesHistoryTable = ({
                   </div>
 
                   {/* Acciones para móvil con botones cómodos */}
-                  <div className="flex items-center gap-2 pt-2.5">
+                  <div className="flex flex-wrap items-center gap-2 pt-2.5">
+                    {purchase.invoice_photo_url ? (
+                      <button
+                        type="button"
+                        onClick={() => setPhotoViewerUrl(purchase.invoice_photo_url!)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 py-2 px-3 text-xs font-semibold text-brand-700 shadow-xs transition hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-300"
+                        title="Ver fotografía de la factura física adjunta"
+                      >
+                        <Camera className="h-4 w-4" />
+                        Factura
+                      </button>
+                    ) : null}
+
                     <button
                       type="button"
                       onClick={() => setSelectedPurchase(row)}
@@ -540,6 +565,41 @@ export const PurchasesHistoryTable = ({
                 </div>
               ) : null}
 
+              {/* Fotografía de la factura física adjunta */}
+              {selectedPurchase.purchase.invoice_photo_url ? (
+                <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-3 dark:border-brand-800/80 dark:bg-brand-950/30">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="flex items-center gap-1.5 text-xs font-bold text-brand-900 dark:text-brand-300">
+                      <Camera className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+                      Fotografía de la factura física
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPhotoViewerUrl(selectedPurchase.purchase.invoice_photo_url!)}
+                      className="inline-flex items-center gap-1 rounded-md bg-white border border-brand-300 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50 shadow-xs dark:bg-slate-800 dark:border-brand-700 dark:text-brand-300"
+                    >
+                      <Maximize2 className="h-3 w-3" /> Ver ampliada
+                    </button>
+                  </div>
+                  <div
+                    className="relative h-32 sm:h-44 w-full overflow-hidden rounded-lg border border-brand-200 bg-slate-100 cursor-pointer group dark:border-brand-800/60 dark:bg-slate-900"
+                    onClick={() => setPhotoViewerUrl(selectedPurchase.purchase.invoice_photo_url!)}
+                    title="Toca para ampliar el comprobante"
+                  >
+                    <img
+                      src={selectedPurchase.purchase.invoice_photo_url}
+                      alt="Factura física"
+                      className="h-full w-full object-contain transition-transform group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="rounded-lg bg-black/60 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-xs flex items-center gap-1.5">
+                        <Maximize2 className="h-4 w-4" /> Ampliar comprobante
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700/80 dark:bg-slate-800/50">
                 <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
                   <span>Subtotal neto:</span>
@@ -586,6 +646,53 @@ export const PurchasesHistoryTable = ({
             </footer>
           </div>
         </section>
+      ) : null}
+
+      {/* Lightbox / Visor de foto de factura a pantalla completa */}
+      {photoViewerUrl ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-3 sm:p-6 animate-fadeIn"
+          onClick={() => setPhotoViewerUrl(null)}
+        >
+          <div
+            className="relative flex max-h-[92vh] max-w-4xl flex-col items-center justify-center overflow-hidden rounded-2xl bg-slate-900 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex w-full items-center justify-between border-b border-slate-800 px-4 py-2.5 text-white">
+              <div className="flex items-center gap-2">
+                <Camera className="h-4 w-4 text-brand-400" />
+                <span className="text-xs font-bold">Fotografía original de la factura</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={photoViewerUrl}
+                  download="factura-compra.jpg"
+                  className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+                  title="Descargar fotografía"
+                >
+                  <Download className="h-3.5 w-3.5" /> Descargar
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPhotoViewerUrl(null)}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+                  title="Cerrar visor"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            <div className="flex max-h-[calc(92vh-4rem)] w-full items-center justify-center overflow-auto p-2">
+              <img
+                src={photoViewerUrl}
+                alt="Factura original"
+                className="max-h-[78vh] w-auto max-w-full rounded-lg object-contain shadow-md"
+              />
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

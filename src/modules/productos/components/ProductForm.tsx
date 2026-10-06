@@ -3,6 +3,10 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { VoiceDictationButton } from "@/components/form/VoiceDictationButton";
+import {
+  convertSpokenBarcode,
+  convertSpokenProductCode,
+} from "@/features/voice/utils/voice-normalizer";
 import type { Product } from "@/types/entities";
 import {
   productFormSchema,
@@ -110,6 +114,9 @@ export const ProductForm = ({
   const porcentajeIva = watch("porcentajeIva");
   const precioFinal = watch("precioFinal");
 
+  const codigoBarras = watch("codigoBarras");
+  const codigoProducto = watch("codigoProducto");
+
   useEffect(() => {
     const setIfChangedNumber = (
       field: "precioSinIva" | "porcentajeGanancia" | "precioFinal" | "precioCosto",
@@ -181,6 +188,19 @@ export const ProductForm = ({
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               disabled={disabled}
             />
+            <VoiceDictationButton
+              value={codigoBarras ?? ""}
+              onValueChange={(nextValue) =>
+                setValue("codigoBarras", convertSpokenBarcode(nextValue), {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
+              insertMode="replace"
+              fieldType="barcode"
+              disabled={disabled}
+              label="Dictar código de barras"
+            />
             <button
               type="button"
               className="rounded-lg border border-slate-300 px-2 py-2 text-xs font-semibold text-slate-700"
@@ -197,18 +217,33 @@ export const ProductForm = ({
 
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">Código de producto</label>
-          <input
-            {...register("codigoProducto")}
-            type="text"
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            data-lpignore="true"
-            data-form-type="other"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            disabled={disabled}
-          />
+          <div className="flex items-center gap-2">
+            <input
+              {...register("codigoProducto")}
+              type="text"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              data-lpignore="true"
+              data-form-type="other"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              disabled={disabled}
+            />
+            <VoiceDictationButton
+              value={codigoProducto ?? ""}
+              onValueChange={(nextValue) =>
+                setValue("codigoProducto", convertSpokenProductCode(nextValue), {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
+              insertMode="replace"
+              fieldType="code"
+              disabled={disabled}
+              label="Dictar código de producto"
+            />
+          </div>
           {errors.codigoProducto ? (
             <p className="mt-1 text-xs text-red-600">{errors.codigoProducto.message}</p>
           ) : null}

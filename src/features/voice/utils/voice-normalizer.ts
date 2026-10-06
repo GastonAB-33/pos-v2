@@ -327,7 +327,155 @@ export const autoCapitalizeSentences = (text: string): string => {
   return text.replace(/(^\s*|\.\s+|\n\s*)([a-záéíóúñ])/g, (_, prefix, letter) => `${prefix}${letter.toUpperCase()}`);
 };
 
-export type VoiceFieldType = "text" | "number" | "code" | "currency";
+export type VoiceFieldType = "text" | "number" | "code" | "barcode" | "currency";
+
+/**
+ * Convierte palabras habladas de dígitos o números en español específicamente para códigos de barras.
+ * Permite dictado dígito a dígito ("cero tres nueve ocho cero cero...") o en parejas/grupos
+ * ("setenta y siete nueve ochenta..."). Deduplica automáticamente repeticiones.
+ */
+export const convertSpokenBarcode = (raw: string): string => {
+  if (!raw || !raw.trim()) return "";
+
+  // 1. Deduplicar palabras o secuencias repetidas primero
+  let text = deduplicateRepeatedPhrases(raw.trim());
+
+  // 2. Normalizar conectores de decenas: "treinta y uno" -> "31", "setenta y siete" -> "77"
+  const tensRegex = /\b(veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa)\s+y\s+(uno|un|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve)\b/gi;
+  text = text.replace(tensRegex, (_match, tenWord, unitWord) => {
+    const tenVal = SPANISH_DIGITS[tenWord.toLowerCase()] ?? 0;
+    const unitVal = SPANISH_DIGITS[unitWord.toLowerCase()] ?? 0;
+    return String(tenVal + unitVal);
+  });
+
+  // 3. Diccionario explícito de dígitos y números frecuentes en dictado de códigos
+  const barcodeNumberMap: Record<string, string> = {
+    cero: "0",
+    un: "1",
+    uno: "1",
+    una: "1",
+    dos: "2",
+    tres: "3",
+    cuatro: "4",
+    cinco: "5",
+    seis: "6",
+    siete: "7",
+    ocho: "8",
+    nueve: "9",
+    diez: "10",
+    once: "11",
+    doce: "12",
+    trece: "13",
+    catorce: "14",
+    quince: "15",
+    dieciseis: "16",
+    dieciséis: "16",
+    diecisiete: "17",
+    dieciocho: "18",
+    diecinueve: "19",
+    veinte: "20",
+    veintiun: "21",
+    veintiuno: "21",
+    veintiún: "21",
+    veintiuna: "21",
+    veintidos: "22",
+    veintidós: "22",
+    veintitres: "23",
+    veintitrés: "23",
+    veinticuatro: "24",
+    veinticinco: "25",
+    veintiseis: "26",
+    veintiséis: "26",
+    veintisiete: "27",
+    veintiocho: "28",
+    veintinueve: "29",
+    treinta: "30",
+    cuarenta: "40",
+    cincuenta: "50",
+    sesenta: "60",
+    setenta: "70",
+    ochenta: "80",
+    noventa: "90",
+    cien: "100",
+    ciento: "100",
+    doscientos: "200",
+    quinientos: "500",
+  };
+
+  const tokens = text.toLowerCase().split(/\s+/);
+  const digitsBuffer: string[] = [];
+
+  for (const token of tokens) {
+    const cleanToken = token.replace(/[^a-záéíóúñ0-9]/g, "");
+    if (!cleanToken) continue;
+
+    if (/^\d+$/.test(cleanToken)) {
+      digitsBuffer.push(cleanToken);
+    } else if (cleanToken in barcodeNumberMap) {
+      digitsBuffer.push(barcodeNumberMap[cleanToken]);
+    }
+  }
+
+  const rawDigits = digitsBuffer.join("");
+  if (!rawDigits) {
+    // Si no coincidió con palabras numéricas, extraer cualquier dígito residual
+    return text.replace(/\D/g, "");
+  }
+
+  // Deduplicación en el string de dígitos si se repitió exactamente la mitad (ej. 779123779123)
+  if (rawDigits.length >= 8 && rawDigits.length % 2 === 0) {
+    const half = rawDigits.length / 2;
+    if (rawDigits.slice(0, half) === rawDigits.slice(half)) {
+      return rawDigits.slice(0, half);
+    }
+  }
+
+  return rawDigits;
+};
+
+/**
+ * Convierte palabras habladas a código alfanumérico limpio de producto (mayúsculas, números, guiones).
+ * Deduplica automáticamente repeticiones continuas.
+ */
+export const convertSpokenProductCode = (raw: string): string => {
+  if (!raw || !raw.trim()) return "";
+
+  // 1. Deduplicar palabras o secuencias repetidas primero
+  let text = deduplicateRepeatedPhrases(raw.trim());
+
+  // 2. Mapear comandos y símbolos hablados
+  text = text
+    .replace(/\b(guion|guión|medio)\b/gi, "-")
+    .replace(/\b(barra|diagonal)\b/gi, "/")
+    .replace(/\b(punto)\b/gi, ".")
+    .replace(/\b(guion bajo|guión bajo)\b/gi, "_");
+
+  // 3. Reemplazar dígitos hablados individuales
+  text = text.replace(
+    /\b(cero|un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b/gi,
+    (match) => {
+      const lower = match.toLowerCase();
+      const num = SPANISH_DIGITS[lower];
+      return num !== undefined ? String(num) : match;
+    }
+  );
+
+  // 4. Limpiar espacios y caracteres no permitidos
+  const cleanCode = text
+    .toUpperCase()
+    .replace(/[^A-Z0-9\-_]/g, "")
+    .slice(0, 80);
+
+  // 5. Deduplicación si se repitió idéntico en dos mitades (ej. PROD123PROD123)
+  if (cleanCode.length >= 6 && cleanCode.length % 2 === 0) {
+    const half = cleanCode.length / 2;
+    if (cleanCode.slice(0, half) === cleanCode.slice(half)) {
+      return cleanCode.slice(0, half);
+    }
+  }
+
+  return cleanCode;
+};
 
 /**
  * Pipeline integral de normalización fonética y contextual para dictado de campos:
@@ -365,25 +513,30 @@ export const normalizeVoiceInput = (
     return { value: "", isReset: true };
   }
 
-  // 3. Conversión de números hablados
-  if (autoNumbers || fieldType === "number" || fieldType === "currency" || fieldType === "code") {
+  // 3. Tratamiento especializado para códigos de barra
+  if (fieldType === "barcode") {
+    const barcode = convertSpokenBarcode(text);
+    return { value: barcode, isReset: false };
+  }
+
+  // 4. Tratamiento especializado para códigos de producto alfanuméricos
+  if (fieldType === "code") {
+    const code = convertSpokenProductCode(text);
+    return { value: code, isReset: false };
+  }
+
+  // 5. Conversión de números hablados para campos numéricos y texto general
+  if (autoNumbers || fieldType === "number" || fieldType === "currency") {
     processed = replaceSpokenSpanishNumbers(processed);
   }
 
-  // 4. Tratamiento según el tipo de campo
+  // 6. Tratamiento para tipo numérico
   if (fieldType === "number") {
-    // Extraer solo dígitos y punto decimal
     const numMatch = processed.replace(/[^\d.,]/g, "").replace(/,/g, ".");
     return { value: numMatch, isReset: false };
   }
 
-  if (fieldType === "code") {
-    // Alfanumérico limpio sin espacios, mayúsculas (código de barras o de producto)
-    const codeClean = processed.toUpperCase().replace(/[^A-Z0-9\-_]/g, "");
-    return { value: codeClean, isReset: false };
-  }
-
-  // 5. Capitalización para campos de texto
+  // 7. Capitalización para campos de texto
   if (capitalize) {
     processed = autoCapitalizeSentences(processed);
   }

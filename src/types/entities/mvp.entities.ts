@@ -259,6 +259,7 @@ export interface Purchase extends TenantScopedEntity {
   total: number;
   returned_total?: number;
   notes: string | null;
+  invoice_photo_url?: string | null;
   created_by: string | null;
   items?: PurchaseItem[];
   supplier?: Supplier | null;

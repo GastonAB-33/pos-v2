@@ -17,6 +17,7 @@ export const purchaseHeaderSchema = z.object({
   iibbPercent: z.number().min(0).max(100).default(0),
   iibbAmount: z.number().min(0).default(0),
   notes: z.string().max(240, "Máximo 240 caracteres").optional().or(z.literal("")),
+  invoicePhotoUrl: z.string().optional().or(z.literal("")),
 });
 
 export type PurchaseHeaderValues = z.infer<typeof purchaseHeaderSchema>;

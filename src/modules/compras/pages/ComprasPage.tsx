@@ -150,6 +150,7 @@ export const ComprasPage = () => {
   }>({});
   const [preferredSupplierId, setPreferredSupplierId] = useState<string>();
   const [duplicateReview, setDuplicateReview] = useState<DuplicateReviewState | null>(null);
+  const [returnToProductSelectAfterCreate, setReturnToProductSelectAfterCreate] = useState(false);
   const [returnModalTarget, setReturnModalTarget] = useState<{
     purchase: Purchase;
     supplier: Supplier | null;
@@ -244,13 +245,14 @@ export const ComprasPage = () => {
     }
   };
 
-  const handleOpenCreateProduct = (query?: string) => {
+  const handleOpenCreateProduct = (query?: string, returnToSelect: boolean = true) => {
     const trimmed = query?.trim() ?? "";
     const isBarcodeLike = trimmed.length >= 6 && /^\d+$/.test(trimmed);
     setNewProductPrefill({
       initialBarcode: isBarcodeLike ? trimmed : null,
       initialName: !isBarcodeLike && trimmed ? trimmed : null,
     });
+    setReturnToProductSelectAfterCreate(returnToSelect);
     setIsSelectProductModalOpen(false);
     setIsProductModalOpen(true);
   };
@@ -269,6 +271,10 @@ export const ComprasPage = () => {
     if (created) {
       setIsProductModalOpen(false);
       setNewProductPrefill({});
+      if (returnToProductSelectAfterCreate) {
+        setSearch("");
+        setIsSelectProductModalOpen(true);
+      }
     }
   };
 
@@ -278,6 +284,10 @@ export const ComprasPage = () => {
     if (created) {
       setDuplicateReview(null);
       setNewProductPrefill({});
+      if (returnToProductSelectAfterCreate) {
+        setSearch("");
+        setIsSelectProductModalOpen(true);
+      }
     }
   };
 
@@ -504,6 +514,9 @@ export const ComprasPage = () => {
         onClose={() => {
           setIsProductModalOpen(false);
           setNewProductPrefill({});
+          if (returnToProductSelectAfterCreate) {
+            setIsSelectProductModalOpen(true);
+          }
         }}
         onSubmit={handleNewProductSubmit}
       />
@@ -551,10 +564,19 @@ export const ComprasPage = () => {
           onUseExisting={(product) => {
             addProductToCart(product);
             setDuplicateReview(null);
+            if (returnToProductSelectAfterCreate) {
+              setSearch("");
+              setIsSelectProductModalOpen(true);
+            }
           }}
           onCreateAnyway={handleCreateDuplicateAnyway}
           onEditProduct={handleEditDuplicateReview}
-          onClose={() => setDuplicateReview(null)}
+          onClose={() => {
+            setDuplicateReview(null);
+            if (returnToProductSelectAfterCreate) {
+              setIsSelectProductModalOpen(true);
+            }
+          }}
         />
       ) : null}
 
