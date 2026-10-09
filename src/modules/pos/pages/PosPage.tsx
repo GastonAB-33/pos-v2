@@ -20,6 +20,7 @@ import { ReceiptTicketPanel } from "@/modules/comprobantes/components/ReceiptTic
 import { PosCart } from "@/modules/pos/components/PosCart";
 import { PosCartItemEditModal } from "@/modules/pos/components/PosCartItemEditModal";
 import { PosCheckoutPanel } from "@/modules/pos/components/PosCheckoutPanel";
+import { PosDebtPaymentModal } from "@/modules/pos/components/PosDebtPaymentModal";
 import { PosProductList } from "@/modules/pos/components/PosProductList";
 import { PosQuickProductModal } from "@/modules/pos/components/PosQuickProductModal";
 import { PosSmartView } from "@/modules/pos/components/PosSmartView";
@@ -149,6 +150,9 @@ export const PosPage = () => {
     reload,
     addProductToCart,
     addManualProductToCart,
+    addDebtPaymentToCart,
+    removeDebtPaymentFromCart,
+    debtPaymentTotal,
     createProductFromPosAndAddToCart,
     addProductByBarcode,
     setSelectedCustomer,
@@ -182,6 +186,7 @@ export const PosPage = () => {
   const [printMenuReceiptId, setPrintMenuReceiptId] = useState<string | null>(null);
   const [customerModalState, setCustomerModalState] = useState<PosCustomerModalState | null>(null);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+  const [isDebtPaymentModalOpen, setIsDebtPaymentModalOpen] = useState(false);
   const [isQuickProductModalOpen, setIsQuickProductModalOpen] = useState(false);
   const [lastNotFoundBarcode, setLastNotFoundBarcode] = useState<string>("");
   const posWindowMode = useUiStore((state) => state.posWindowMode);
@@ -279,6 +284,10 @@ export const PosPage = () => {
   const editingCartItem = useMemo(
     () => cart.find((item) => item.product_id === editingCartItemId) ?? null,
     [cart, editingCartItemId]
+  );
+  const existingDebtItem = useMemo(
+    () => cart.find((item) => item.is_debt_payment_item) ?? null,
+    [cart]
   );
   const returnToPanelPath = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -1320,9 +1329,18 @@ export const PosPage = () => {
           isHighlighted={isCartHighlighted}
           onIncrease={increaseQuantity}
           onDecrease={decreaseQuantity}
-          onEdit={(item) => setEditingCartItemId(item.product_id)}
+          onEdit={(item) => {
+            if (item.is_debt_payment_item) {
+              setIsDebtPaymentModalOpen(true);
+            } else {
+              setEditingCartItemId(item.product_id);
+            }
+          }}
           onRemove={removeFromCart}
           onClearCart={clearCart}
+          onOpenDebtPaymentModal={() => setIsDebtPaymentModalOpen(true)}
+          hasDebtPaymentInCart={Boolean(existingDebtItem)}
+          debtPaymentAmount={debtPaymentTotal}
           disabled={isSubmitting || isCashGateBlocking}
           canWrite={canWritePos}
           products={products}
@@ -1678,12 +1696,37 @@ export const PosPage = () => {
                     focusScannerCapture();
                   }, 0);
                 }}
+                hasDebtPaymentInCart={Boolean(existingDebtItem)}
                 onSubmit={handleConfirmSale}
               />
             </div>
           </div>
         </section>
       ) : null}
+
+      <PosDebtPaymentModal
+        open={isDebtPaymentModalOpen}
+        customers={customers}
+        selectedCustomer={selectedCustomer}
+        existingDebtItem={existingDebtItem}
+        disabled={isSubmitting || isCashGateBlocking || !canWritePos}
+        onClose={() => {
+          setIsDebtPaymentModalOpen(false);
+          window.setTimeout(() => {
+            focusScannerCapture();
+          }, 0);
+        }}
+        onSelectCustomer={(cust) => {
+          if (cust) {
+            setSelectedCustomer(cust.id);
+          }
+        }}
+        onConfirm={({ customer, amount, notes }) => {
+          addDebtPaymentToCart({ customer, amount, notes });
+          triggerCartSuccessHighlight();
+        }}
+        onRemoveExisting={removeDebtPaymentFromCart}
+      />
 
       <PosQuickProductModal
         open={isQuickProductModalOpen}

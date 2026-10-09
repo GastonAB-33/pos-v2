@@ -40,10 +40,11 @@ Use this component pattern whenever a fiscal, accounting, or commercial value ca
      `[% | $] IIBB: [ 150.00 ] → (4.88 %)`
    - This provides instant confirmation against paper invoices without mental math.
 
-3. **Segmented Button Toggle**:
+3. **Alternating Toggle Button (Mobile & Desktop Ergonomics)**:
    - The toggle is integrated directly ahead of the concept label:
      `[ % | $ ] Concept:`
-   - Uses rounded pill buttons (`rounded px-1.5 py-0.5 text-[10px] font-bold`) with subtle active elevation.
+   - The entire pill acts as a **single unified toggle button**: tapping or clicking anywhere on it alternates between `%` and `$`. This eliminates tiny touch targets on mobile and guarantees reliable switching on touchscreen devices.
+   - Shows both `%` and `$` indicators with the active mode clearly elevated and highlighted with the accent color.
 
 4. **Seamless Two-Way Conversion**:
    - Switching from `%` to `$` derives the initial dollar amount based on the current subtotal:

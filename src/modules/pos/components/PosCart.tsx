@@ -17,6 +17,7 @@ interface PosCartItemView {
   scale_weight: number | null;
   scale_total_price: number | null;
   scale_barcode: string | null;
+  is_debt_payment_item?: boolean;
 }
 
 interface PosCartProps {
@@ -232,6 +233,11 @@ export const PosCart = ({
                     </p>
                     <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
                       <span>{currency.format(item.unit_price)} / {productUnitLabel(item)}</span>
+                      {item.is_debt_payment_item ? (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-200 border border-amber-300 dark:border-amber-800">
+                          Cobro Cta. Cte.
+                        </span>
+                      ) : null}
                       {item.sale_mode === "weight" ? (
                         <span className="rounded bg-amber-100 px-1 py-0.2 text-[9px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-200">
                           Balanza
@@ -259,18 +265,23 @@ export const PosCart = ({
 
                 {/* Fila 2: Stepper de cantidad a la izquierda, botones Editar y Borrar a la derecha */}
                 <div className="mt-1.5 flex items-center justify-between border-t border-slate-100 pt-1.5 dark:border-slate-800/80">
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => onDecrease(item.product_id)}
-                      disabled={disabled || !canWrite}
-                      className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      step={qtyStep}
+                  {item.is_debt_payment_item ? (
+                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                      Pago único
+                    </span>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => onDecrease(item.product_id)}
+                        disabled={disabled || !canWrite}
+                        className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        step={qtyStep}
                       min={0}
                       placeholder="0"
                       title={
@@ -334,6 +345,7 @@ export const PosCart = ({
                       <span className="text-[10px] font-medium text-slate-400">g</span>
                     ) : null}
                   </div>
+                  )}
 
                   <div className="flex items-center gap-1">
                     <button

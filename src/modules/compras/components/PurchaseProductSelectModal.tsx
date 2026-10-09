@@ -13,13 +13,19 @@ import {
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { VoiceDictationButton } from "@/components/form/VoiceDictationButton";
 import { IconButton } from "@/components/ui/IconButton";
-import { matchesProductSearch } from "@/utils/search";
+import {
+  matchesProductSearch,
+  PRODUCT_SEARCH_SCOPE_OPTIONS,
+  getSearchPlaceholder,
+  type ProductSearchScope,
+} from "@/utils/search";
 import type { Product } from "@/types/entities";
 import type { PurchaseCartItemView } from "@/modules/compras/components/PurchaseCart";
 
 interface PurchaseProductSelectModalProps {
   open: boolean;
   products: Product[];
+  barcodesByProductId?: Map<string, string[]>;
   cart: PurchaseCartItemView[];
   search: string;
   disabled?: boolean;
@@ -49,6 +55,7 @@ const currency = new Intl.NumberFormat("es-AR", {
 export const PurchaseProductSelectModal = ({
   open,
   products,
+  barcodesByProductId,
   cart,
   search,
   disabled,
@@ -60,6 +67,7 @@ export const PurchaseProductSelectModal = ({
   onClose,
 }: PurchaseProductSelectModalProps) => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const [searchScope, setSearchScope] = useState<ProductSearchScope>("all");
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [scannerFeedback, setScannerFeedback] = useState<
     { type: "success" | "error"; message: string } | undefined
@@ -85,12 +93,26 @@ export const PurchaseProductSelectModal = ({
     );
   }, [cart]);
 
-  // Resultados de búsqueda en vivo (estilo Consulta Rápida: hasta 20 ítems)
+  // Resultados de búsqueda en vivo con filtro de ámbito (Todos / Solo nombre / Solo código / Solo código de barras)
   const filteredProducts = useMemo(() => {
     const q = search.trim();
     if (!q) return [];
-    return products.filter((p) => matchesProductSearch(p, q)).slice(0, 20);
-  }, [products, search]);
+    return products
+      .filter((p) =>
+        matchesProductSearch(
+          {
+            name: p.name,
+            code: p.code,
+            barcodes: barcodesByProductId?.get(p.id) ?? [],
+            category: p.category,
+            subcategory: p.subcategory,
+          },
+          q,
+          searchScope
+        )
+      )
+      .slice(0, 20);
+  }, [barcodesByProductId, products, search, searchScope]);
 
   if (!open) return null;
 
@@ -114,40 +136,42 @@ export const PurchaseProductSelectModal = ({
 
     setIsScanning(true);
 
-    // 1. Probar como código de barras primero (onBarcodeScan ya lo agrega al carrito)
-    const result = await onBarcodeScan(query);
-    if (result.ok && result.product) {
+    try {
+      // 1. Probar como código de barras primero solo si el ámbito no es "solo nombre"
+      if (searchScope !== "name") {
+        const result = await onBarcodeScan(query);
+        if (result.ok && result.product) {
+          setScannerFeedback({
+            type: "success",
+            message: `${result.product.name} agregado a la compra`,
+          });
+          onSearchChange("");
+          setIsScanning(false);
+          window.setTimeout(() => {
+            searchInputRef.current?.focus({ preventScroll: true });
+          }, 0);
+          return;
+        }
+      }
+
+      // 2. Si no fue código exacto pero hay 1 única coincidencia o más, agregar el primero
+      if (filteredProducts.length > 0) {
+        handleQuickAdd(filteredProducts[0]);
+        setIsScanning(false);
+        return;
+      }
+
+      // 3. Si no hay coincidencias en el catálogo
       setScannerFeedback({
-        type: "success",
-        message: `${result.product.name} agregado a la compra`,
+        type: "error",
+        message: "No se encontró ningún producto con ese criterio de búsqueda",
       });
-      onSearchChange("");
+    } finally {
       setIsScanning(false);
       window.setTimeout(() => {
         searchInputRef.current?.focus({ preventScroll: true });
       }, 0);
-      return;
     }
-
-    // 2. Si no fue código exacto pero hay 1 única coincidencia
-    if (filteredProducts.length === 1) {
-      handleQuickAdd(filteredProducts[0]);
-      setIsScanning(false);
-      return;
-    }
-
-    // 3. Si no hay coincidencias en el catálogo
-    if (filteredProducts.length === 0) {
-      setScannerFeedback({
-        type: "error",
-        message: result.error ?? "No se encontró ningún producto con ese código o nombre",
-      });
-    }
-
-    setIsScanning(false);
-    window.setTimeout(() => {
-      searchInputRef.current?.focus({ preventScroll: true });
-    }, 0);
   };
 
   return (
@@ -208,7 +232,7 @@ export const PurchaseProductSelectModal = ({
                   event.preventDefault();
                   void handleSearchSubmit();
                 }}
-                placeholder="Escanear barra o buscar nombre/cód..."
+                placeholder={getSearchPlaceholder(searchScope)}
                 className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-9 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-xs transition focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder:text-slate-500"
                 disabled={disabled || !canWrite || isScanning}
               />
@@ -228,6 +252,24 @@ export const PurchaseProductSelectModal = ({
               ) : null}
             </div>
 
+            {/* Selector de Ámbito de Búsqueda: Todos / Solo nombre / Solo código / Solo código de barras */}
+            <select
+              value={searchScope}
+              onChange={(e) => setSearchScope(e.target.value as ProductSearchScope)}
+              className="rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-xs transition focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer shrink-0 max-w-[100px] xs:max-w-[135px] sm:max-w-none truncate"
+              aria-label="Filtro de búsqueda"
+            >
+              {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
+                <option
+                  key={opt.value}
+                  value={opt.value}
+                  className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-200"
+                >
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+
             <VoiceDictationButton
               value={search}
               onValueChange={(nextVal: string) => {
@@ -235,7 +277,7 @@ export const PurchaseProductSelectModal = ({
                 if (scannerFeedback) setScannerFeedback(undefined);
               }}
               insertMode="replace"
-              fieldType="text"
+              fieldType={searchScope === "barcode" ? "barcode" : searchScope === "code" ? "code" : "text"}
               disabled={disabled || !canWrite || isScanning}
               label="Dictar por voz"
             />
@@ -406,7 +448,7 @@ export const PurchaseProductSelectModal = ({
                   No se encontró ningún producto
                 </h4>
                 <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-                  No hay coincidencias en el catálogo para el código o nombre:
+                  No hay coincidencias en el catálogo {searchScope === "name" ? "por nombre" : searchScope === "code" ? "por código de producto" : searchScope === "barcode" ? "por código de barras" : "para el código o nombre"}:
                 </p>
                 <p className="mt-1 sm:mt-1.5 font-mono text-xs sm:text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900/60 inline-block px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-lg max-w-full truncate">
                   "{search.trim()}"

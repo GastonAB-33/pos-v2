@@ -78,7 +78,7 @@ export const PurchaseCart = ({
   canWrite,
   disabled,
   formId = "purchase-checkout-form",
-  vatPercent = 21,
+  vatPercent = 0,
   onVatPercentChange,
   iibbPercent = 0,
   onIibbPercentChange,
@@ -789,7 +789,7 @@ export const PurchaseCart = ({
                   }}
                   onBlur={() => setVatDraft(null)}
                   disabled={disabled || !canWrite}
-                  placeholder="21"
+                  placeholder="0"
                   className="w-12 sm:w-14 rounded border border-slate-300 bg-white px-1 py-0.5 text-center text-xs font-bold text-slate-900 transition focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
                 />
               </div>

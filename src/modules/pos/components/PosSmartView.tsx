@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import {
+  Coins,
   FileText,
   Plus,
   RefreshCw,
@@ -10,7 +11,12 @@ import {
 } from "lucide-react";
 import type { Product } from "@/types/entities";
 import type { PosCartItem } from "@/modules/pos/hooks/usePosSale";
-import { matchesProductSearch } from "@/utils/search";
+import {
+  matchesProductSearch,
+  PRODUCT_SEARCH_SCOPE_OPTIONS,
+  getSearchPlaceholder,
+  type ProductSearchScope,
+} from "@/utils/search";
 import { cn } from "@/utils/cn";
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -30,6 +36,9 @@ export interface PosSmartViewProps {
   onClearCart: () => void;
   disabled?: boolean;
   canWrite?: boolean;
+  onOpenDebtPaymentModal?: () => void;
+  hasDebtPaymentInCart?: boolean;
+  debtPaymentAmount?: number;
 
   // Catálogo y búsqueda
   products: Product[];
@@ -61,6 +70,9 @@ export const PosSmartView = ({
   onClearCart,
   disabled = false,
   canWrite = true,
+  onOpenDebtPaymentModal,
+  hasDebtPaymentInCart = false,
+  debtPaymentAmount = 0,
   products,
   primaryBarcodes,
   onAddProduct,
@@ -76,17 +88,9 @@ export const PosSmartView = ({
   onOpenQuickProduct,
 }: PosSmartViewProps) => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [searchScope, setSearchScope] = useState<ProductSearchScope>("all");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Lista de categorías únicas para el dropdown
-  const categories = useMemo(() => {
-    const unique = Array.from(
-      new Set(products.map((p) => p.category?.trim()).filter(Boolean))
-    ) as string[];
-    return unique.sort((a, b) => a.localeCompare(b));
-  }, [products]);
 
   // Filtrado de productos para el buscador inteligente
   const searchResults = useMemo(() => {
@@ -96,7 +100,7 @@ export const PosSmartView = ({
     return products
       .filter((product) => {
         const barcode = primaryBarcodes[product.id] ?? "";
-        const matchesQuery = matchesProductSearch(
+        return matchesProductSearch(
           {
             name: product.name,
             code: product.code,
@@ -106,17 +110,11 @@ export const PosSmartView = ({
             subcategory: product.subcategory,
           },
           raw,
-          "all"
+          searchScope
         );
-
-        if (!matchesQuery) return false;
-        if (selectedCategory !== "all" && product.category !== selectedCategory) {
-          return false;
-        }
-        return true;
       })
       .slice(0, 10);
-  }, [products, primaryBarcodes, searchQuery, selectedCategory]);
+  }, [products, primaryBarcodes, searchQuery, searchScope]);
 
   const handleSearchKeyDown = async (
     event: React.KeyboardEvent<HTMLInputElement>
@@ -126,12 +124,14 @@ export const PosSmartView = ({
       const query = searchQuery.trim();
       if (!query) return;
 
-      // Intentar primero como código de barras directo
-      const scanned = await onScanBarcode(query);
-      if (scanned) {
-        setSearchQuery("");
-        setIsSearchOpen(false);
-        return;
+      // Intentar primero como código de barras directo si el ámbito no es "solo nombre"
+      if (searchScope !== "name") {
+        const scanned = await onScanBarcode(query);
+        if (scanned) {
+          setSearchQuery("");
+          setIsSearchOpen(false);
+          return;
+        }
       }
 
       // Si no es un escaneo directo pero hay un resultado exacto o primero en la lista
@@ -201,7 +201,7 @@ export const PosSmartView = ({
                 if (searchQuery.trim()) setIsSearchOpen(true);
               }}
               onKeyDown={handleSearchKeyDown}
-              placeholder="Buscar por nombre, código o barra..."
+              placeholder={getSearchPlaceholder(searchScope)}
               className="flex-1 bg-transparent text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none min-w-0"
               autoComplete="off"
               autoCorrect="off"
@@ -224,16 +224,18 @@ export const PosSmartView = ({
             <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700/80 mx-1 shrink-0" />
 
             <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="bg-transparent text-xs font-medium text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer py-0.5 px-1 shrink-0 max-w-[120px] truncate"
+              value={searchScope}
+              onChange={(e) => setSearchScope(e.target.value as ProductSearchScope)}
+              className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer py-0.5 px-1 shrink-0 max-w-[150px] truncate"
+              aria-label="Filtro de búsqueda"
             >
-              <option value="all" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-200">
-                Todos
-              </option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-200">
-                  {cat}
+              {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
+                <option
+                  key={opt.value}
+                  value={opt.value}
+                  className="bg-white dark:bg-[#0d162d] text-slate-900 dark:text-slate-100 font-medium py-1"
+                >
+                  {opt.label}
                 </option>
               ))}
             </select>
@@ -295,12 +297,19 @@ export const PosSmartView = ({
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
-                    <h3
-                      className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 uppercase tracking-tight line-clamp-1"
-                      title={item.name}
-                    >
-                      {item.name}
-                    </h3>
+                    <div className="min-w-0">
+                      <h3
+                        className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 uppercase tracking-tight line-clamp-1"
+                        title={item.name}
+                      >
+                        {item.name}
+                      </h3>
+                      {item.is_debt_payment_item ? (
+                        <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/60">
+                          Cobro Cta. Cte.
+                        </span>
+                      ) : null}
+                    </div>
                     <span className="font-bold text-xs sm:text-sm text-blue-600 dark:text-sky-400 whitespace-nowrap">
                       {currency.format(
                         "line_total" in item && typeof (item as { line_total?: number }).line_total === "number"
@@ -310,33 +319,45 @@ export const PosSmartView = ({
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    {currency.format(item.unit_price)} /{" "}
-                    {item.sale_mode === "weight" ? "kg" : "u."}
+                    {item.is_debt_payment_item ? (
+                      <span>Cancelación de saldo pendiente</span>
+                    ) : (
+                      <>
+                        {currency.format(item.unit_price)} /{" "}
+                        {item.sale_mode === "weight" ? "kg" : "u."}
+                      </>
+                    )}
                   </p>
                 </div>
 
                 <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200 dark:border-slate-800/70">
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => onDecrease(item.product_id)}
-                      disabled={disabled || !canWrite}
-                      className="w-7 h-7 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 flex items-center justify-center text-xs font-bold transition disabled:opacity-40"
-                    >
-                      -
-                    </button>
-                    <span className="min-w-[24px] text-center font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100">
-                      {item.sale_mode === "weight" ? `${item.quantity} kg` : item.quantity}
+                  {item.is_debt_payment_item ? (
+                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                      Pago único
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => onIncrease(item.product_id)}
-                      disabled={disabled || !canWrite}
-                      className="w-7 h-7 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 flex items-center justify-center text-xs font-bold transition disabled:opacity-40"
-                    >
-                      +
-                    </button>
-                  </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => onDecrease(item.product_id)}
+                        disabled={disabled || !canWrite}
+                        className="w-7 h-7 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 flex items-center justify-center text-xs font-bold transition disabled:opacity-40"
+                      >
+                        -
+                      </button>
+                      <span className="min-w-[24px] text-center font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100">
+                        {item.sale_mode === "weight" ? `${item.quantity} kg` : item.quantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onIncrease(item.product_id)}
+                        disabled={disabled || !canWrite}
+                        className="w-7 h-7 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 flex items-center justify-center text-xs font-bold transition disabled:opacity-40"
+                      >
+                        +
+                      </button>
+                    </div>
+                  )}
 
                   <div className="flex items-center gap-1.5">
                     <button
@@ -427,14 +448,21 @@ export const PosSmartView = ({
                 Carrito ({items.length} {items.length === 1 ? "ítem" : "ítems"})
               </span>
             </div>
-            {items.length > 0 ? (
+            {onOpenDebtPaymentModal ? (
               <button
                 type="button"
-                onClick={onClearCart}
+                onClick={onOpenDebtPaymentModal}
                 disabled={disabled || !canWrite}
-                className="rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-800/40 px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700/60 transition disabled:opacity-50"
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition shadow-2xs disabled:opacity-50",
+                  hasDebtPaymentInCart
+                    ? "border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-600/80 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/60"
+                    : "border-indigo-200 bg-indigo-50/80 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-700/70 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-900/60"
+                )}
+                title={hasDebtPaymentInCart ? "Modificar cobro de cuenta corriente" : "Agregar cobro de deuda de cuenta corriente al carrito"}
               >
-                Vaciar
+                <Coins size={13} className={hasDebtPaymentInCart ? "text-amber-600 dark:text-amber-400" : "text-indigo-600 dark:text-indigo-400"} />
+                <span>{hasDebtPaymentInCart ? "Editar deuda" : "Cobrar deuda"}</span>
               </button>
             ) : null}
           </div>
@@ -446,6 +474,16 @@ export const PosSmartView = ({
                 {currency.format(subtotal)}
               </span>
             </div>
+
+            {hasDebtPaymentInCart && debtPaymentAmount > 0 ? (
+              <div className="flex items-center justify-between text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 rounded-lg border border-amber-200 dark:border-amber-900/60">
+                <span className="flex items-center gap-1.5">
+                  <Coins size={13} className="text-amber-600 dark:text-amber-400" />
+                  <span>Cobro Cta. Cte.</span>
+                </span>
+                <span>+{currency.format(debtPaymentAmount)}</span>
+              </div>
+            ) : null}
 
             <div className="flex items-baseline justify-between pt-2 border-t border-slate-200 dark:border-slate-800/80">
               <span className="text-sm font-bold text-slate-900 dark:text-slate-100">Total final</span>

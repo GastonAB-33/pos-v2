@@ -69,6 +69,7 @@ interface PosCheckoutPanelProps {
     debt: number;
     available: number | null;
   } | null;
+  hasDebtPaymentInCart?: boolean;
   disabled?: boolean;
   onCustomerChange: (customerId: string) => void;
   onPaymentMethodChange: (paymentMethodId: string) => void;
@@ -175,6 +176,7 @@ export const PosCheckoutPanel = ({
   canWrite,
   canManageCustomers,
   currentAccountSnapshot,
+  hasDebtPaymentInCart = false,
   disabled,
   onCustomerChange,
   onPaymentMethodChange,
@@ -473,7 +475,7 @@ export const PosCheckoutPanel = ({
       currentAccountSnapshot.available <= 0
   );
   const canUseCurrentAccountMethod =
-    canUseCurrentAccount && isCurrentAccountEnabled && !isCurrentAccountNoFunds;
+    canUseCurrentAccount && isCurrentAccountEnabled && !isCurrentAccountNoFunds && !hasDebtPaymentInCart;
 
   useEffect(() => {
     if (!selectedMethod) return;
@@ -1058,7 +1060,7 @@ export const PosCheckoutPanel = ({
                 disabled ||
                 !canWrite ||
                 (isCurrentAccount &&
-                  (!canUseCurrentAccount || !isCurrentAccountEnabled || isCurrentAccountNoFunds));
+                  (!canUseCurrentAccount || !isCurrentAccountEnabled || isCurrentAccountNoFunds || hasDebtPaymentInCart));
 
               const isCardSelected = watchedPaymentMethodId === method.id;
 

@@ -111,7 +111,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<PurchaseFeedback | null>(null);
-  const [purchaseVatPercent, setPurchaseVatPercent] = useState<number>(21);
+  const [purchaseVatPercent, setPurchaseVatPercent] = useState<number>(0);
   const [purchaseIibbPercent, setPurchaseIibbPercent] = useState<number>(0);
   const [purchaseIibbAmount, setPurchaseIibbAmount] = useState<number>(0);
 
@@ -168,6 +168,8 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         new Map<string, PurchaseItem[]>()
       );
 
+      const productsByIdMap = new Map(allProducts.map((p) => [p.id, p]));
+
       setProducts(allProducts);
       setProductBarcodes(allProductBarcodes);
       setBankAccounts(allBankAccounts);
@@ -177,7 +179,14 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         allPurchases
           .map((purchase) => ({
             ...purchase,
-            items: purchaseItemsByPurchaseId.get(purchase.id) ?? [],
+            items: (purchaseItemsByPurchaseId.get(purchase.id) ?? []).map((item) => {
+              const matchedProd = productsByIdMap.get(item.product_id);
+              return {
+                ...item,
+                product: matchedProd ?? null,
+                sale_price: matchedProd?.price ?? undefined,
+              };
+            }),
           }))
           .sort((a, b) => b.created_at.localeCompare(a.created_at))
       );
@@ -476,7 +485,12 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     setCart((prev) => prev.filter((item) => item.product_id !== productId));
   };
 
-  const clearCart = () => setCart([]);
+  const clearCart = () => {
+    setCart([]);
+    setPurchaseVatPercent(0);
+    setPurchaseIibbPercent(0);
+    setPurchaseIibbAmount(0);
+  };
 
   const summary: PurchaseSummary = useMemo(() => {
     let subtotal = 0;
@@ -1345,6 +1359,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
   return {
     products: filteredProducts,
     allProducts: products,
+    barcodesByProductId,
     categoryOptions,
     subcategoryOptions,
     suppliers,

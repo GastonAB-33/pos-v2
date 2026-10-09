@@ -6,7 +6,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { ArrowLeftRight, Camera, Download, Eye, Gift, Maximize2, Search, X } from "lucide-react";
-import type { Purchase, Supplier } from "@/types/entities";
+import type { Product, Purchase, Supplier } from "@/types/entities";
 import { IconButton } from "@/components/ui/IconButton";
 
 interface PurchaseHistoryRow {
@@ -19,6 +19,7 @@ interface PurchasesHistoryTableProps {
   canWrite: boolean;
   disabled?: boolean;
   onOpenReturnModal: (purchase: Purchase, supplier: Supplier | null) => void;
+  products?: Product[];
 }
 
 const columnHelper = createColumnHelper<PurchaseHistoryRow>();
@@ -83,11 +84,17 @@ export const PurchasesHistoryTable = ({
   canWrite,
   disabled,
   onOpenReturnModal,
+  products,
 }: PurchasesHistoryTableProps) => {
   const [selectedPurchase, setSelectedPurchase] = useState<PurchaseHistoryRow | null>(null);
   const [filterText, setFilterText] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [photoViewerUrl, setPhotoViewerUrl] = useState<string | null>(null);
+
+  const productsById = useMemo(
+    () => new Map((products ?? []).map((p) => [p.id, p])),
+    [products]
+  );
 
   const filteredRows = useMemo(() => {
     let result = rows;
@@ -524,37 +531,50 @@ export const PurchasesHistoryTable = ({
                   Productos comprados ({selectedPurchase.purchase.items?.length ?? 0})
                 </h3>
                 <div className="space-y-2">
-                  {selectedPurchase.purchase.items?.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-700/80 dark:bg-slate-800/60"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">{item.product_name_snapshot}</p>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          <span>Cant. pagada: {item.quantity} u.</span>
-                          {item.bonified_quantity ? (
-                            <span className="inline-flex items-center gap-0.5 font-medium text-emerald-700 dark:text-emerald-400">
-                              <Gift className="h-3 w-3" /> +{item.bonified_quantity} bonificados
-                            </span>
-                          ) : null}
-                          {item.returned_quantity ? (
-                            <span className="font-medium text-amber-700 dark:text-amber-400">
-                              ({item.returned_quantity} devueltos)
-                            </span>
-                          ) : null}
-                          <span>• Costo unit: {currency.format(item.unit_cost)}</span>
-                          {item.vat_percent ? <span>• IVA: {item.vat_percent}%</span> : null}
+                  {selectedPurchase.purchase.items?.map((item) => {
+                    const product = item.product ?? productsById.get(item.product_id);
+                    const salePrice = item.sale_price ?? product?.price;
+                    const unitLabel = product?.sale_mode === "weight" ? "kg" : "u.";
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-700/80 dark:bg-slate-800/60"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">
+                            {item.product_name_snapshot}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            <span>Cant. pagada: {item.quantity} {unitLabel}</span>
+                            {item.bonified_quantity ? (
+                              <span className="inline-flex items-center gap-0.5 font-medium text-emerald-700 dark:text-emerald-400">
+                                <Gift className="h-3 w-3" /> +{item.bonified_quantity} bonificados
+                              </span>
+                            ) : null}
+                            {item.returned_quantity ? (
+                              <span className="font-medium text-amber-700 dark:text-amber-400">
+                                ({item.returned_quantity} devueltos)
+                              </span>
+                            ) : null}
+                            <span>• Costo unit: {currency.format(item.unit_cost)}</span>
+                            {item.vat_percent ? <span>• IVA: {item.vat_percent}%</span> : null}
+                            {salePrice != null && salePrice > 0 ? (
+                              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                • Precio venta: {currency.format(salePrice)}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800">
+                          <span className="text-xs text-slate-500 dark:text-slate-400 sm:hidden block text-left">Subtotal ítem:</span>
+                          <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                            {currency.format(item.line_total)}
+                          </span>
                         </div>
                       </div>
-                      <div className="text-right shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800">
-                        <span className="text-xs text-slate-500 dark:text-slate-400 sm:hidden block text-left">Subtotal ítem:</span>
-                        <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                          {currency.format(item.line_total)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
