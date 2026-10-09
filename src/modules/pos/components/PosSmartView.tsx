@@ -448,23 +448,36 @@ export const PosSmartView = ({
                 Carrito ({items.length} {items.length === 1 ? "ítem" : "ítems"})
               </span>
             </div>
-            {onOpenDebtPaymentModal ? (
-              <button
-                type="button"
-                onClick={onOpenDebtPaymentModal}
-                disabled={disabled || !canWrite}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition shadow-2xs disabled:opacity-50",
-                  hasDebtPaymentInCart
-                    ? "border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-600/80 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/60"
-                    : "border-indigo-200 bg-indigo-50/80 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-700/70 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-900/60"
-                )}
-                title={hasDebtPaymentInCart ? "Modificar cobro de cuenta corriente" : "Agregar cobro de deuda de cuenta corriente al carrito"}
-              >
-                <Coins size={13} className={hasDebtPaymentInCart ? "text-amber-600 dark:text-amber-400" : "text-indigo-600 dark:text-indigo-400"} />
-                <span>{hasDebtPaymentInCart ? "Editar deuda" : "Cobrar deuda"}</span>
-              </button>
-            ) : null}
+            <div className="flex items-center gap-1.5">
+              {onOpenDebtPaymentModal ? (
+                <button
+                  type="button"
+                  onClick={onOpenDebtPaymentModal}
+                  disabled={disabled || !canWrite}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition shadow-2xs disabled:opacity-50",
+                    hasDebtPaymentInCart
+                      ? "border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-600/80 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/60"
+                      : "border-indigo-200 bg-indigo-50/80 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-700/70 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-900/60"
+                  )}
+                  title={hasDebtPaymentInCart ? "Modificar cobro de cuenta corriente" : "Agregar cobro de deuda de cuenta corriente al carrito"}
+                >
+                  <Coins size={13} className={hasDebtPaymentInCart ? "text-amber-600 dark:text-amber-400" : "text-indigo-600 dark:text-indigo-400"} />
+                  <span>{hasDebtPaymentInCart ? "Editar deuda" : "Cobrar deuda"}</span>
+                </button>
+              ) : null}
+
+              {items.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={onClearCart}
+                  disabled={disabled || !canWrite}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-800/40 px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700/60 transition disabled:opacity-50"
+                >
+                  Vaciar
+                </button>
+              ) : null}
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -484,7 +497,6 @@ export const PosSmartView = ({
                 <span>+{currency.format(debtPaymentAmount)}</span>
               </div>
             ) : null}
-
             <div className="flex items-baseline justify-between pt-2 border-t border-slate-200 dark:border-slate-800/80">
               <span className="text-sm font-bold text-slate-900 dark:text-slate-100">Total final</span>
               <span className="text-2xl font-black text-blue-600 dark:text-sky-400 tracking-tight">
