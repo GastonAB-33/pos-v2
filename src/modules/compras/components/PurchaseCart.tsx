@@ -221,7 +221,7 @@ export const PurchaseCart = ({
   };
 
   return (
-    <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3.5 sm:p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3.5 sm:p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 w-full max-w-full overflow-hidden">
       {/* Header minimalista de la lista */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5 dark:border-slate-800">
         <div className="flex items-center gap-2">
@@ -334,19 +334,19 @@ export const PurchaseCart = ({
             return (
               <article
                 key={item.product_id}
-                className="rounded-lg border border-slate-200/80 bg-slate-50/40 p-3 transition hover:border-slate-300 hover:bg-slate-50/80 dark:border-slate-700/80 dark:bg-slate-800/50 dark:hover:border-slate-600 dark:hover:bg-slate-800/80"
+                className="w-full max-w-full overflow-hidden rounded-lg border border-slate-200/80 bg-slate-50/40 p-3 transition hover:border-slate-300 hover:bg-slate-50/80 dark:border-slate-700/80 dark:bg-slate-800/50 dark:hover:border-slate-600 dark:hover:bg-slate-800/80"
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start justify-between gap-2 w-full max-w-full">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="text-xs font-bold text-slate-900 truncate dark:text-slate-100">{item.name}</p>
                       {item.sale_mode === "weight" && (
-                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                        <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
                           Balanza (kg)
                         </span>
                       )}
                     </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                       <span>
                         Stock actual:{" "}
                         <strong className="text-slate-700 dark:text-slate-200">
@@ -366,7 +366,7 @@ export const PurchaseCart = ({
                     type="button"
                     onClick={() => onRemove(item.product_id)}
                     disabled={disabled || !canWrite}
-                    className="inline-flex items-center gap-1 rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950/50 dark:hover:text-red-400"
+                    className="shrink-0 inline-flex items-center gap-1 rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950/50 dark:hover:text-red-400"
                     title="Quitar producto"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -374,12 +374,12 @@ export const PurchaseCart = ({
                   </button>
                 </div>
 
-                {/* Controles de edición en cuadrícula de 7 columnas */}
-                <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+                {/* Controles de edición en cuadrícula responsiva de 7 columnas */}
+                <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7 w-full max-w-full">
                   {/* 1. Cantidad a pagar */}
-                  <div>
-                    <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Cant. a pagar ({getUnitLabel(item)})
+                  <div className="min-w-0">
+                    <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate" title={`Cant. a pagar (${getUnitLabel(item)})`}>
+                      Cant. pagar ({getUnitLabel(item)})
                     </label>
                     <input
                       type="number"
@@ -404,7 +404,7 @@ export const PurchaseCart = ({
                         })
                       }
                       onBlur={() => commitQuantity(item)}
-                      className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-brand-400"
+                      className="w-full min-w-0 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-brand-400"
                       disabled={disabled || !canWrite}
                       autoComplete="off"
                       autoCorrect="off"
@@ -414,9 +414,9 @@ export const PurchaseCart = ({
                   </div>
 
                   {/* 2. Precio unitario */}
-                  <div>
-                    <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Precio unitario ({item.sale_mode === "weight" ? "$/kg" : "$/u"})
+                  <div className="min-w-0">
+                    <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate" title={`Precio unitario (${item.sale_mode === "weight" ? "$/kg" : "$/u"})`}>
+                      Precio unit. ({item.sale_mode === "weight" ? "$/kg" : "$/u"})
                     </label>
                     <input
                       type="number"
@@ -446,7 +446,7 @@ export const PurchaseCart = ({
                         })
                       }
                       onBlur={() => commitCost(item)}
-                      className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-brand-400"
+                      className="w-full min-w-0 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-brand-400"
                       disabled={disabled || !canWrite}
                       title="Precio que cobra el proveedor por unidad (con descuento incluido)"
                       autoComplete="off"
@@ -457,10 +457,10 @@ export const PurchaseCart = ({
                   </div>
 
                   {/* 3. Unidades bonificadas */}
-                  <div>
-                    <label className="mb-0.5 flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-                      <Gift className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400" />
-                      Unid. bonif. ({getUnitLabel(item)})
+                  <div className="min-w-0">
+                    <label className="mb-0.5 flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 truncate" title={`Unidades bonificadas (${getUnitLabel(item)})`}>
+                      <Gift className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      Bonif. ({getUnitLabel(item)})
                     </label>
                     <input
                       type="number"
@@ -491,7 +491,7 @@ export const PurchaseCart = ({
                         })
                       }
                       onBlur={() => commitBonified(item)}
-                      className="w-full rounded-md border border-emerald-300 bg-emerald-50/40 px-2 py-1.5 text-xs font-bold text-emerald-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-200 dark:focus:border-emerald-400"
+                      className="w-full min-w-0 rounded-md border border-emerald-300 bg-emerald-50/40 px-2 py-1.5 text-xs font-bold text-emerald-900 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-emerald-700/60 dark:bg-emerald-950/40 dark:text-emerald-200 dark:focus:border-emerald-400"
                       disabled={disabled || !canWrite}
                       autoComplete="off"
                       autoCorrect="off"
@@ -501,9 +501,9 @@ export const PurchaseCart = ({
                   </div>
 
                   {/* 4. Descuento proveedor */}
-                  <div>
-                    <label className="mb-0.5 flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-wider text-brand-700 dark:text-brand-400">
-                      <Tag className="h-2.5 w-2.5 text-brand-600 dark:text-brand-400" />
+                  <div className="min-w-0">
+                    <label className="mb-0.5 flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-wider text-brand-700 dark:text-brand-400 truncate" title="Descuento del proveedor (%)">
+                      <Tag className="h-2.5 w-2.5 text-brand-600 dark:text-brand-400 shrink-0" />
                       Desc. prov. (%)
                     </label>
                     <input
@@ -536,7 +536,7 @@ export const PurchaseCart = ({
                         })
                       }
                       onBlur={() => commitDiscount(item)}
-                      className="w-full rounded-md border border-brand-300 bg-brand-50/40 px-2 py-1.5 text-xs font-bold text-brand-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-brand-700/60 dark:bg-brand-950/40 dark:text-brand-200 dark:focus:border-brand-400"
+                      className="w-full min-w-0 rounded-md border border-brand-300 bg-brand-50/40 px-2 py-1.5 text-xs font-bold text-brand-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-brand-700/60 dark:bg-brand-950/40 dark:text-brand-200 dark:focus:border-brand-400"
                       disabled={disabled || !canWrite}
                       title="Descuento del proveedor: por ingeniería inversa se calcula el costo de lista real sin descuento para asignar ganancia e IVA"
                       autoComplete="off"
@@ -547,9 +547,9 @@ export const PurchaseCart = ({
                   </div>
 
                   {/* 5. % Ganancia */}
-                  <div>
-                    <label className="mb-0.5 flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-wider text-purple-700 dark:text-purple-400">
-                      <Percent className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400" />
+                  <div className="min-w-0">
+                    <label className="mb-0.5 flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-wider text-purple-700 dark:text-purple-400 truncate" title="Margen de ganancia (%)">
+                      <Percent className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400 shrink-0" />
                       Ganancia (%)
                     </label>
                     <input
@@ -581,7 +581,7 @@ export const PurchaseCart = ({
                         })
                       }
                       onBlur={() => commitProfit(item)}
-                      className="w-full rounded-md border border-purple-300 bg-purple-50/30 px-2 py-1.5 text-xs font-bold text-purple-900 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 dark:border-purple-700/60 dark:bg-purple-950/40 dark:text-purple-200 dark:focus:border-purple-400"
+                      className="w-full min-w-0 rounded-md border border-purple-300 bg-purple-50/30 px-2 py-1.5 text-xs font-bold text-purple-900 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 dark:border-purple-700/60 dark:bg-purple-950/40 dark:text-purple-200 dark:focus:border-purple-400"
                       disabled={disabled || !canWrite}
                       title="Margen de ganancia aplicado sobre el costo real"
                       autoComplete="off"
@@ -592,15 +592,15 @@ export const PurchaseCart = ({
                   </div>
 
                   {/* 6. IVA */}
-                  <div>
-                    <label className="mb-0.5 flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      <Percent className="h-2.5 w-2.5 text-slate-400" />
+                  <div className="min-w-0">
+                    <label className="mb-0.5 flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate">
+                      <Percent className="h-2.5 w-2.5 text-slate-400 shrink-0" />
                       IVA
                     </label>
                     <select
                       value={item.vat_percent}
                       onChange={(event) => onSetVatPercent(item.product_id, Number(event.target.value))}
-                      className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-brand-400"
+                      className="w-full min-w-0 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-800 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-brand-400"
                       disabled={disabled || !canWrite}
                     >
                       {VAT_OPTIONS.map((opt) => (
@@ -611,9 +611,9 @@ export const PurchaseCart = ({
                     </select>
                   </div>
 
-                  {/* 7. Precio final unitario */}
-                  <div>
-                    <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-400">
+                  {/* 7. Precio final unitario: En móvil abarca las 2 columnas para no desbordar y brindar máxima claridad */}
+                  <div className="col-span-2 sm:col-span-2 lg:col-span-1 min-w-0">
+                    <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-400 truncate" title={`Precio final unitario (${item.sale_mode === "weight" ? "$/kg" : "$/u"})`}>
                       Precio final unit. ({item.sale_mode === "weight" ? "$/kg" : "$/u"})
                     </label>
                     <input
@@ -644,7 +644,7 @@ export const PurchaseCart = ({
                         })
                       }
                       onBlur={() => commitSalePrice(item)}
-                      className="w-full rounded-md border border-blue-300 bg-blue-50/40 px-2 py-1.5 text-xs font-bold text-blue-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-blue-700/60 dark:bg-blue-950/40 dark:text-blue-200 dark:focus:border-blue-400"
+                      className="w-full min-w-0 rounded-md border border-blue-300 bg-blue-50/40 px-2 py-1.5 text-xs font-bold text-blue-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-blue-700/60 dark:bg-blue-950/40 dark:text-blue-200 dark:focus:border-blue-400"
                       disabled={disabled || !canWrite}
                       title="Precio de venta final al público (aplica ganancia e IVA sobre el costo real)"
                       autoComplete="off"
@@ -655,10 +655,10 @@ export const PurchaseCart = ({
                   </div>
                 </div>
 
-                {/* Subtotal, Costo antes, Opciones de Actualización de Venta (solo si varió el costo) y Totales por fila */}
-                <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-slate-200/60 pt-2 text-[11px] dark:border-slate-700/60">
+                {/* Subtotal, Costo antes, Opciones de Actualización de Venta y Totales por fila */}
+                <div className="mt-2 flex flex-col gap-2 border-t border-slate-200/60 pt-2 text-[11px] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between dark:border-slate-700/60 w-full max-w-full">
                   {/* Subtotal y Costo antes */}
-                  <div className="flex flex-wrap items-center gap-2 text-slate-600 dark:text-slate-400">
+                  <div className="flex flex-wrap items-center gap-2 text-slate-600 dark:text-slate-400 min-w-0">
                     <span>
                       Subtotal: <strong className="text-slate-800 dark:text-slate-200">{currency.format(lineTotal)}</strong>
                     </span>
@@ -687,35 +687,35 @@ export const PurchaseCart = ({
 
                   {/* Opciones inline de actualización de precio (SOLO aparecen si hubo cambio de costo) */}
                   {hasCostDiff && (
-                    <div className="flex flex-wrap items-center gap-3 rounded-md border border-slate-200/60 bg-slate-50/80 px-2 py-1 text-[11px] text-slate-700 dark:border-slate-700/60 dark:bg-slate-900/80 dark:text-slate-300">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-md border border-slate-200/60 bg-slate-50/80 px-2 py-1 text-[11px] text-slate-700 dark:border-slate-700/60 dark:bg-slate-900/80 dark:text-slate-300 w-full sm:w-auto max-w-full">
                       {/* Casilla 1: Mantener precio venta */}
-                      <label className="inline-flex cursor-pointer items-center gap-1.5 select-none">
+                      <label className="inline-flex cursor-pointer items-center gap-1.5 select-none text-[10px] sm:text-[11px]">
                         <input
                           type="radio"
                           name={`sale-price-policy-${item.product_id}`}
                           checked={!item.update_sale_price}
                           onChange={() => onSetUpdateSalePrice?.(item.product_id, false)}
                           disabled={disabled || !canWrite}
-                          className="h-3.5 w-3.5 text-brand-600 focus:ring-brand-500"
+                          className="h-3.5 w-3.5 text-brand-600 focus:ring-brand-500 shrink-0"
                         />
                         <span className="font-medium">
-                          <span className="hidden 2xl:inline">Mantener precio venta anterior </span>
+                          <span>Mantener anterior </span>
                           ({currency.format(item.current_sale_price || 0)})
                         </span>
                       </label>
 
                       {/* Casilla 2: Actualizar precio venta */}
-                      <label className="inline-flex cursor-pointer items-center gap-1.5 select-none">
+                      <label className="inline-flex cursor-pointer items-center gap-1.5 select-none text-[10px] sm:text-[11px]">
                         <input
                           type="radio"
                           name={`sale-price-policy-${item.product_id}`}
                           checked={Boolean(item.update_sale_price)}
                           onChange={() => onSetUpdateSalePrice?.(item.product_id, true)}
                           disabled={disabled || !canWrite}
-                          className="h-3.5 w-3.5 text-brand-600 focus:ring-brand-500"
+                          className="h-3.5 w-3.5 text-brand-600 focus:ring-brand-500 shrink-0"
                         />
                         <span className="font-medium">
-                          <span className="hidden 2xl:inline">Aplicar nuevo precio venta </span>
+                          <span>Aplicar nuevo </span>
                           ({currency.format(item.new_sale_price || 0)})
                         </span>
                       </label>
@@ -723,16 +723,17 @@ export const PurchaseCart = ({
                   )}
 
                   {/* Total del ítem y desglose de descuento */}
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-col xs:flex-row items-start xs:items-center justify-between sm:justify-end gap-1.5 w-full sm:w-auto min-w-0">
                     {item.discount_percent > 0 && (
                       <span
-                        className="inline-flex items-center gap-1 rounded bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-300"
+                        className="inline-flex flex-wrap items-center gap-1 rounded bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-300 max-w-full break-words leading-tight"
                         title={`Descuento del proveedor: -${currency.format(unitSavings * item.quantity)}. Pagás al proveedor ${currency.format(item.unit_cost)}/u. Costo de lista real asignado al producto: ${currency.format(realCost)}/u. Ahorro retenido para el local: +${currency.format(unitSavings * item.quantity)}`}
                       >
-                        🏷️ Desc. {item.discount_percent}%: Costo real asignado {currency.format(realCost)} • Ahorro en compra: +{currency.format(unitSavings * item.quantity)}
+                        <span>🏷️ Desc. {item.discount_percent}% (Costo real: {currency.format(realCost)})</span>
+                        <span>• Ahorro: +{currency.format(unitSavings * item.quantity)}</span>
                       </span>
                     )}
-                    <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-slate-100">
+                    <div className="flex items-center justify-between sm:justify-end gap-1.5 font-bold text-slate-900 dark:text-slate-100 w-full xs:w-auto shrink-0">
                       <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">Total general:</span>
                       <span className="text-base sm:text-lg font-black text-brand-700 dark:text-brand-400">
                         {currency.format(lineTotal)}
@@ -747,8 +748,8 @@ export const PurchaseCart = ({
       )}
 
       {/* Resumen Total y Botón de Confirmación Responsivo para Móvil (al final de la compra) */}
-      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/90 p-3.5 sm:p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/80">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/90 p-3.5 sm:p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/80 w-full max-w-full overflow-hidden">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between w-full max-w-full">
           {/* Grid de Totales e Impuestos: fila 1 (IVA y Neto), fila 2 (IIBB y Total) */}
           <div className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_auto] items-center gap-x-2.5 sm:gap-x-4 gap-y-1.5 text-xs w-full max-w-full">
             {/* Fila 1, Columna 1: % IVA */}

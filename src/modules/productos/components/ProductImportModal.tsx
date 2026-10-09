@@ -96,6 +96,7 @@ export const ProductImportModal = ({
             <p className="font-semibold text-slate-800">Formato esperado</p>
             <p className="mt-1">Obligatorios: <strong>nombre</strong> y <strong>categoría</strong>.</p>
             <p>Numéricos (si se informan): stock, precio costo, % ganancia, % IVA, precio final.</p>
+            <p className="text-emerald-700 font-medium">💡 Si informás precio final y % ganancia dejando el costo vacío o en 0, el sistema calcula automáticamente el costo.</p>
             <p>La columna <strong>lista de precio</strong> es solo informativa y no se toma para importar.</p>
           </div>
 
@@ -264,6 +265,7 @@ export const ProductImportModal = ({
                           <th className="px-2 py-2 text-left">Categoría</th>
                           <th className="px-2 py-2 text-left">Subcategoría</th>
                           <th className="px-2 py-2 text-left">Tipo</th>
+                          <th className="px-2 py-2 text-left">Costo</th>
                           <th className="px-2 py-2 text-left">Precio final</th>
                           <th className="px-2 py-2 text-left">Stock</th>
                         </tr>
@@ -276,6 +278,9 @@ export const ProductImportModal = ({
                             <td className="px-2 py-2 text-slate-700">{row.category}</td>
                             <td className="px-2 py-2 text-slate-700">{row.subcategory ?? "-"}</td>
                             <td className="px-2 py-2 text-slate-700">{row.sale_mode === "weight" ? "Pesable" : "Unidad"}</td>
+                            <td className="px-2 py-2 text-slate-700 font-medium">
+                              ${row.cost_price.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
                             <td className="px-2 py-2 text-slate-700">
                               {row.price_final.toLocaleString("es-AR")}
                               {row.sale_mode === "weight" ? " / kg" : ""}

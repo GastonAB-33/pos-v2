@@ -326,7 +326,7 @@ export const ComprasPage = () => {
       title="Compras a proveedores"
       description="Registro de compras con impacto en stock y caja diaria"
     >
-      <div className="purchases-operational-page space-y-4">
+      <div className="purchases-operational-page space-y-4 w-full max-w-full overflow-x-hidden">
         {feedback ? (
           <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>
             {feedback.message}
@@ -337,7 +337,7 @@ export const ComprasPage = () => {
           /* ========================================================================= */
           /* VISTA: HISTORIAL DE COMPRAS                                              */
           /* ========================================================================= */
-          <div className="space-y-4">
+          <div className="space-y-4 w-full max-w-full overflow-x-hidden">
             <section className="workspace-toolbar workspace-toolbar--inline">
               <div className="workspace-meta">
                 <span className="font-semibold text-slate-800 dark:text-slate-200">{purchases.length} compras registradas</span>
@@ -395,7 +395,7 @@ export const ComprasPage = () => {
           /* ========================================================================= */
           /* VISTA: REGISTRAR NUEVA COMPRA (PANEL COMPLETO EN PANTALLA)                */
           /* ========================================================================= */
-          <div className="space-y-3">
+          <div className="space-y-3 w-full max-w-full overflow-x-hidden">
             {/* 1. Barra superior: Nueva Compra (minimalista) */}
             <section className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-xs dark:border-slate-800 dark:bg-slate-900">
               <div className="flex items-center gap-2.5">

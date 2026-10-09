@@ -478,23 +478,36 @@ export const PurchasesHistoryTable = ({
       {selectedPurchase ? (
         <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-2 sm:p-4 backdrop-blur-[1px]">
           <div className="flex max-h-[92dvh] sm:max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-panel dark:border-slate-800 dark:bg-slate-900">
-            <header className="flex items-start justify-between gap-4 border-b border-slate-200 p-4 sm:px-5 sm:py-4 dark:border-slate-800">
-              <div>
+            <header className="flex items-start justify-between gap-3 border-b border-slate-200 p-4 sm:px-5 sm:py-4 dark:border-slate-800">
+              <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-wider text-brand-700 dark:text-brand-400">
                   Detalle de Compra
                 </p>
-                <h2 className="mt-1 text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+                <h2 className="mt-1 text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
                   {selectedPurchase.purchase.purchase_number}
                 </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                   Proveedor: {selectedPurchase.supplier?.name || "Sin proveedor"}
                 </p>
               </div>
-              <IconButton
-                icon={X}
-                label="Cerrar detalle"
-                onClick={() => setSelectedPurchase(null)}
-              />
+              <div className="flex items-center gap-2 shrink-0">
+                {selectedPurchase.purchase.invoice_photo_url ? (
+                  <button
+                    type="button"
+                    onClick={() => setPhotoViewerUrl(selectedPurchase.purchase.invoice_photo_url!)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-2.5 py-1.5 text-xs font-bold text-brand-700 shadow-xs hover:bg-brand-100 active:scale-95 transition dark:border-brand-700 dark:bg-brand-950/60 dark:text-brand-300 dark:hover:bg-brand-900/60"
+                    title="Ver fotografía de la factura física adjunta"
+                  >
+                    <Camera className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+                    <span>Ver factura</span>
+                  </button>
+                ) : null}
+                <IconButton
+                  icon={X}
+                  label="Cerrar detalle"
+                  onClick={() => setSelectedPurchase(null)}
+                />
+              </div>
             </header>
 
             <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-3.5">
@@ -525,6 +538,41 @@ export const PurchasesHistoryTable = ({
                   </span>
                 </div>
               </div>
+
+              {/* Botón y banner destacado de factura física cargada si existe */}
+              {selectedPurchase.purchase.invoice_photo_url ? (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50/70 p-2.5 sm:px-3.5 dark:border-brand-800/80 dark:bg-brand-950/40">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-brand-300 bg-white cursor-pointer dark:border-brand-700 dark:bg-slate-900"
+                      onClick={() => setPhotoViewerUrl(selectedPurchase.purchase.invoice_photo_url!)}
+                      title="Toca para ampliar la foto de la factura"
+                    >
+                      <img
+                        src={selectedPurchase.purchase.invoice_photo_url}
+                        alt="Factura"
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-brand-950 dark:text-brand-200 truncate">
+                        Factura física adjunta
+                      </p>
+                      <p className="text-[11px] text-brand-700 dark:text-brand-400">
+                        Comprobante cargado en la compra
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPhotoViewerUrl(selectedPurchase.purchase.invoice_photo_url!)}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-brand-700 active:scale-95 transition dark:bg-brand-500"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    <span>Ver foto</span>
+                  </button>
+                </div>
+              ) : null}
 
               <div>
                 <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
