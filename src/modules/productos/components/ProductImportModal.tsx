@@ -56,13 +56,24 @@ export const ProductImportModal = ({
   const [activeTab, setActiveTab] = useState<PreviewTab>("valid");
 
   const busy = loading || isParsing;
-  const hasImportErrors = (preview?.errorRows.length ?? 0) > 0;
+  const combinedErrorRows = useMemo(() => {
+    const previewErrors = preview?.errorRows ?? [];
+    const executionErrors = importResult?.errorRows ?? [];
+    if (!executionErrors.length) return previewErrors;
+    // Evitar duplicar errores si ya venían del preview
+    const seen = new Set(previewErrors.map((e) => `${e.rowNumber}-${e.message}`));
+    const uniqueExecErrors = executionErrors.filter(
+      (e) => !seen.has(`${e.rowNumber}-${e.message}`)
+    );
+    return [...previewErrors, ...uniqueExecErrors];
+  }, [preview, importResult]);
+
+  const hasImportErrors = combinedErrorRows.length > 0;
   const hasImportableRows = (preview?.validRows.length ?? 0) > 0;
 
   const topErrors = useMemo(() => {
-    if (!preview) return [];
-    return preview.errorRows.slice(0, 200);
-  }, [preview]);
+    return combinedErrorRows.slice(0, 200);
+  }, [combinedErrorRows]);
 
   const topValidRows = useMemo(() => {
     if (!preview) return [];
@@ -159,6 +170,9 @@ export const ProductImportModal = ({
                 void onConfirmImport(preview, mode)
                   .then((result) => {
                     setImportResult(result);
+                    if (result.errors > 0) {
+                      setActiveTab("invalid");
+                    }
                   })
                   .catch((reason) => {
                     const message =
@@ -172,13 +186,13 @@ export const ProductImportModal = ({
               {loading ? "Importando..." : "Confirmar importación"}
             </button>
 
-            {preview?.errorRows.length ? (
+            {combinedErrorRows.length ? (
               <button
                 type="button"
                 className="ui-btn-ghost"
                 disabled={busy}
                 onClick={() => {
-                  void onDownloadErrors(preview.errorRows);
+                  void onDownloadErrors(combinedErrorRows);
                 }}
               >
                 Descargar errores XLSX
@@ -211,7 +225,9 @@ export const ProductImportModal = ({
               </div>
               <div className="ui-summary-card">
                 <p className="ui-summary-label">Filas con error</p>
-                <p className="ui-kpi text-red-700">{preview.errorRows.length}</p>
+                <p className={`ui-kpi ${combinedErrorRows.length > 0 ? "text-red-700 font-bold" : "text-slate-600"}`}>
+                  {combinedErrorRows.length}
+                </p>
               </div>
             </div>
           ) : (
@@ -233,7 +249,7 @@ export const ProductImportModal = ({
                   className={activeTab === "invalid" ? "ui-btn-primary px-2 py-1 text-xs" : "ui-btn-ghost px-2 py-1 text-xs"}
                   onClick={() => setActiveTab("invalid")}
                 >
-                  Productos con errores ({preview.errorRows.length})
+                  Productos con errores ({combinedErrorRows.length})
                 </button>
               </div>
 

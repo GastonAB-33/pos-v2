@@ -51,6 +51,9 @@ export interface PosCartItem {
   scale_total_price: number | null;
   scale_barcode: string | null;
   is_manual_item: boolean;
+  is_debt_payment_item?: boolean;
+  debt_customer_id?: string | null;
+  debt_customer_name?: string | null;
 }
 
 export interface PosCartItemComputed extends PosCartItem {
@@ -117,6 +120,11 @@ export interface PosSaleTab {
 
 const roundQty = (value: number): number => Number(value.toFixed(3));
 const roundAmount = (value: number): number => Number(value.toFixed(2));
+const currency = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  maximumFractionDigits: 2,
+});
 const buildSaleNumber = (): string => {
   const randomSuffix = Math.floor(Math.random() * 10000)
     .toString()
@@ -778,11 +786,13 @@ export const usePosSale = (tenantId: string | null) => {
   const promotionsResolution = useMemo(
     () =>
       promotionsService.resolveApplicablePromotions(
-        cartState.map((item) => ({
-          product_id: item.product_id,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-        })),
+        cartState
+          .filter((item) => !item.is_debt_payment_item)
+          .map((item) => ({
+            product_id: item.product_id,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+          })),
         new Date(),
         promotions
       ),
@@ -795,6 +805,19 @@ export const usePosSale = (tenantId: string | null) => {
     );
 
     const itemsWithProductPromotions = cartState.map((item) => {
+      if (item.is_debt_payment_item) {
+        return {
+          ...item,
+          line_subtotal: roundAmount(item.quantity * item.unit_price),
+          promotion_discount_total: 0,
+          product_promotion_discount_total: 0,
+          cart_promotion_discount_total: 0,
+          line_total: roundAmount(item.quantity * item.unit_price),
+          applied_promotion_name: null,
+          applied_promotion_snapshot: null,
+        };
+      }
+
       const resolved = resolutionByProductId.get(item.product_id);
       return {
         ...item,
@@ -814,8 +837,9 @@ export const usePosSale = (tenantId: string | null) => {
       return itemsWithProductPromotions;
     }
 
+    const eligibleItems = itemsWithProductPromotions.filter((item) => !item.is_debt_payment_item);
     const subtotalAfterProductPromotions = roundAmount(
-      itemsWithProductPromotions.reduce((acc, item) => acc + item.line_total, 0)
+      eligibleItems.reduce((acc, item) => acc + item.line_total, 0)
     );
 
     if (subtotalAfterProductPromotions <= 0) {
@@ -828,10 +852,15 @@ export const usePosSale = (tenantId: string | null) => {
     }));
 
     let accumulated = 0;
-    for (let index = 0; index < allocated.length; index += 1) {
+    const eligibleIndices = allocated
+      .map((item, idx) => (!item.is_debt_payment_item ? idx : -1))
+      .filter((idx) => idx !== -1);
+
+    for (let i = 0; i < eligibleIndices.length; i += 1) {
+      const index = eligibleIndices[i];
       const item = allocated[index];
 
-      const isLast = index === allocated.length - 1;
+      const isLast = i === eligibleIndices.length - 1;
       const proportional = isLast
         ? roundAmount(promotionsResolution.cart_discount_total - accumulated)
         : roundAmount(
@@ -851,11 +880,25 @@ export const usePosSale = (tenantId: string | null) => {
     return allocated;
   }, [cartState, promotionsResolution]);
 
-  const subtotalBeforePromotions = promotionsResolution.subtotal_before_promotions;
+  const debtPaymentTotal = useMemo(
+    () =>
+      roundAmount(
+        cartState
+          .filter((item) => item.is_debt_payment_item)
+          .reduce((acc, item) => acc + item.unit_price * item.quantity, 0)
+      ),
+    [cartState]
+  );
+
+  const subtotalBeforePromotions = roundAmount(
+    promotionsResolution.subtotal_before_promotions + debtPaymentTotal
+  );
   const promotionDiscountTotal = promotionsResolution.product_discount_total;
   const cartPromotionDiscountTotal = promotionsResolution.cart_discount_total;
   const totalPromotionDiscount = promotionsResolution.total_discount;
-  const subtotal = promotionsResolution.subtotal_after_promotions;
+  const subtotal = roundAmount(
+    promotionsResolution.subtotal_after_promotions + debtPaymentTotal
+  );
 
   const addProductToCart = async (
     product: Product,
@@ -1003,6 +1046,68 @@ export const usePosSale = (tenantId: string | null) => {
     ]);
 
     return true;
+  }, []);
+
+  const addDebtPaymentToCart = useCallback(
+    (input: {
+      customer: Customer;
+      amount: number;
+      notes?: string;
+    }): boolean => {
+      const amount = roundAmount(input.amount);
+      if (!input.customer) {
+        setFeedback({ type: "error", message: "Selecciona un cliente para cobrar deuda" });
+        return false;
+      }
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        setFeedback({ type: "error", message: "El monto debe ser mayor a 0" });
+        return false;
+      }
+
+      const customer = input.customer;
+      const debtItem: PosCartItem = {
+        product_id: `debt-${customer.id}`,
+        name: `Cobro Cta. Cte. - ${customer.full_name}`,
+        category: "Cuenta Corriente",
+        sale_mode: "unit",
+        quantity: 1,
+        unit_price: amount,
+        base_unit_price: amount,
+        stock_available: Number.MAX_SAFE_INTEGER,
+        price_list_id: null,
+        price_list_name: null,
+        price_list_is_active: null,
+        is_scale_item: false,
+        scale_weight: null,
+        scale_total_price: null,
+        scale_barcode: null,
+        is_manual_item: true,
+        is_debt_payment_item: true,
+        debt_customer_id: customer.id,
+        debt_customer_name: customer.full_name,
+      };
+
+      if (selectedCustomerId !== customer.id) {
+        setSelectedCustomerId(customer.id);
+      }
+
+      setCartState((prev) => [
+        ...prev.filter((i) => !i.is_debt_payment_item),
+        debtItem,
+      ]);
+
+      setFeedback({
+        type: "success",
+        message: `Cobro de cuenta corriente (${currency.format(amount)}) agregado al carrito`,
+      });
+      return true;
+    },
+    [selectedCustomerId]
+  );
+
+  const removeDebtPaymentFromCart = useCallback(() => {
+    setCartState((prev) => prev.filter((i) => !i.is_debt_payment_item));
   }, []);
 
   const createProductFromPosAndAddToCart = useCallback(
@@ -1413,14 +1518,14 @@ export const usePosSale = (tenantId: string | null) => {
 
   const increaseQuantity = (productId: string) => {
     const item = cartState.find((row) => row.product_id === productId);
-    if (!item) return;
+    if (!item || item.is_debt_payment_item) return;
     const step = item.sale_mode === "weight" ? 0.05 : 1;
     setCartItemQuantity(productId, roundQty(item.quantity + step));
   };
 
   const decreaseQuantity = (productId: string) => {
     const item = cartState.find((row) => row.product_id === productId);
-    if (!item) return;
+    if (!item || item.is_debt_payment_item) return;
     const step = item.sale_mode === "weight" ? 0.05 : 1;
     const nextQty = roundQty(item.quantity - step);
     if (nextQty <= 0) {
@@ -2086,6 +2191,8 @@ export const usePosSale = (tenantId: string | null) => {
                 : null,
               cart_promotion_discount_allocated: item.cart_promotion_discount_total,
               is_manual_sale_item: item.is_manual_item,
+              is_debt_payment_item: item.is_debt_payment_item ?? false,
+              debt_customer_id: item.debt_customer_id ?? null,
             },
           });
 
@@ -2395,6 +2502,26 @@ export const usePosSale = (tenantId: string | null) => {
         }
       }
 
+      // Registrar cancelación/pago de deuda en cuenta corriente si el carrito incluye cobro de deuda
+      const debtPaymentItems = cart.filter((item) => item.is_debt_payment_item);
+      for (const debtItem of debtPaymentItems) {
+        const targetCustomerId = debtItem.debt_customer_id || values.customerId;
+        if (targetCustomerId) {
+          try {
+            await currentAccountsService.createMovement(tenantId, {
+              customer_id: targetCustomerId,
+              sale_id: sale.id,
+              type: "payment",
+              amount: roundAmount(debtItem.line_total),
+              notes: `Cancelación de deuda en Venta #${sale.sale_number} (${debtItem.name})`,
+              created_by: resolvedCreatedBy,
+            });
+          } catch (debtErr) {
+            console.error("Error al registrar cancelación de deuda en cuenta corriente:", debtErr);
+          }
+        }
+      }
+
       const receipt = await receiptsService.create(tenantId, {
         sale_id: sale.id,
         sale_number: sale.sale_number,
@@ -2647,6 +2774,24 @@ export const usePosSale = (tenantId: string | null) => {
         );
       }
 
+      if (debtPaymentItems.length) {
+        for (const dItem of debtPaymentItems) {
+          const cId = dItem.debt_customer_id || normalizedCustomerId;
+          if (cId) {
+            setCustomers((previous) =>
+              previous.map((cust) =>
+                cust.id !== cId
+                  ? cust
+                  : {
+                      ...cust,
+                      current_balance: roundAmount(cust.current_balance - dItem.line_total),
+                    }
+              )
+            );
+          }
+        }
+      }
+
       return sale;
     } catch (error) {
       const backendError = getBackendErrorMessage(error);
@@ -2700,6 +2845,9 @@ export const usePosSale = (tenantId: string | null) => {
     reload: loadPosData,
     addProductToCart,
     addManualProductToCart,
+    addDebtPaymentToCart,
+    removeDebtPaymentFromCart,
+    debtPaymentTotal,
     createProductFromPosAndAddToCart,
     addProductByBarcode,
     setSelectedCustomer,

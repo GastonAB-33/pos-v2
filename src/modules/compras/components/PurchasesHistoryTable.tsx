@@ -5,8 +5,8 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowLeftRight, Eye, Gift, Search, X } from "lucide-react";
-import type { Purchase, Supplier } from "@/types/entities";
+import { ArrowLeftRight, Camera, Download, Eye, Gift, Maximize2, Search, X } from "lucide-react";
+import type { Product, Purchase, Supplier } from "@/types/entities";
 import { IconButton } from "@/components/ui/IconButton";
 
 interface PurchaseHistoryRow {
@@ -19,6 +19,7 @@ interface PurchasesHistoryTableProps {
   canWrite: boolean;
   disabled?: boolean;
   onOpenReturnModal: (purchase: Purchase, supplier: Supplier | null) => void;
+  products?: Product[];
 }
 
 const columnHelper = createColumnHelper<PurchaseHistoryRow>();
@@ -83,10 +84,17 @@ export const PurchasesHistoryTable = ({
   canWrite,
   disabled,
   onOpenReturnModal,
+  products,
 }: PurchasesHistoryTableProps) => {
   const [selectedPurchase, setSelectedPurchase] = useState<PurchaseHistoryRow | null>(null);
   const [filterText, setFilterText] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [photoViewerUrl, setPhotoViewerUrl] = useState<string | null>(null);
+
+  const productsById = useMemo(
+    () => new Map((products ?? []).map((p) => [p.id, p])),
+    [products]
+  );
 
   const filteredRows = useMemo(() => {
     let result = rows;
@@ -194,6 +202,18 @@ export const PurchasesHistoryTable = ({
 
         return (
           <div className="flex items-center gap-1.5">
+            {purchase.invoice_photo_url ? (
+              <button
+                type="button"
+                onClick={() => setPhotoViewerUrl(purchase.invoice_photo_url!)}
+                className="inline-flex items-center gap-1 rounded-md border border-brand-200 bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-300 dark:hover:bg-brand-900/60"
+                title="Ver fotografía de la factura física adjunta"
+              >
+                <Camera className="h-3.5 w-3.5" />
+                Factura
+              </button>
+            ) : null}
+
             <button
               type="button"
               onClick={() => setSelectedPurchase(info.row.original)}
@@ -383,7 +403,19 @@ export const PurchasesHistoryTable = ({
                   </div>
 
                   {/* Acciones para móvil con botones cómodos */}
-                  <div className="flex items-center gap-2 pt-2.5">
+                  <div className="flex flex-wrap items-center gap-2 pt-2.5">
+                    {purchase.invoice_photo_url ? (
+                      <button
+                        type="button"
+                        onClick={() => setPhotoViewerUrl(purchase.invoice_photo_url!)}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 py-2 px-3 text-xs font-semibold text-brand-700 shadow-xs transition hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-300"
+                        title="Ver fotografía de la factura física adjunta"
+                      >
+                        <Camera className="h-4 w-4" />
+                        Factura
+                      </button>
+                    ) : null}
+
                     <button
                       type="button"
                       onClick={() => setSelectedPurchase(row)}
@@ -499,37 +531,50 @@ export const PurchasesHistoryTable = ({
                   Productos comprados ({selectedPurchase.purchase.items?.length ?? 0})
                 </h3>
                 <div className="space-y-2">
-                  {selectedPurchase.purchase.items?.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-700/80 dark:bg-slate-800/60"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">{item.product_name_snapshot}</p>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          <span>Cant. pagada: {item.quantity} u.</span>
-                          {item.bonified_quantity ? (
-                            <span className="inline-flex items-center gap-0.5 font-medium text-emerald-700 dark:text-emerald-400">
-                              <Gift className="h-3 w-3" /> +{item.bonified_quantity} bonificados
-                            </span>
-                          ) : null}
-                          {item.returned_quantity ? (
-                            <span className="font-medium text-amber-700 dark:text-amber-400">
-                              ({item.returned_quantity} devueltos)
-                            </span>
-                          ) : null}
-                          <span>• Costo unit: {currency.format(item.unit_cost)}</span>
-                          {item.vat_percent ? <span>• IVA: {item.vat_percent}%</span> : null}
+                  {selectedPurchase.purchase.items?.map((item) => {
+                    const product = item.product ?? productsById.get(item.product_id);
+                    const salePrice = item.sale_price ?? product?.price;
+                    const unitLabel = product?.sale_mode === "weight" ? "kg" : "u.";
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-700/80 dark:bg-slate-800/60"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">
+                            {item.product_name_snapshot}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            <span>Cant. pagada: {item.quantity} {unitLabel}</span>
+                            {item.bonified_quantity ? (
+                              <span className="inline-flex items-center gap-0.5 font-medium text-emerald-700 dark:text-emerald-400">
+                                <Gift className="h-3 w-3" /> +{item.bonified_quantity} bonificados
+                              </span>
+                            ) : null}
+                            {item.returned_quantity ? (
+                              <span className="font-medium text-amber-700 dark:text-amber-400">
+                                ({item.returned_quantity} devueltos)
+                              </span>
+                            ) : null}
+                            <span>• Costo unit: {currency.format(item.unit_cost)}</span>
+                            {item.vat_percent ? <span>• IVA: {item.vat_percent}%</span> : null}
+                            {salePrice != null && salePrice > 0 ? (
+                              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                • Precio venta: {currency.format(salePrice)}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800">
+                          <span className="text-xs text-slate-500 dark:text-slate-400 sm:hidden block text-left">Subtotal ítem:</span>
+                          <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                            {currency.format(item.line_total)}
+                          </span>
                         </div>
                       </div>
-                      <div className="text-right shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800">
-                        <span className="text-xs text-slate-500 dark:text-slate-400 sm:hidden block text-left">Subtotal ítem:</span>
-                        <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                          {currency.format(item.line_total)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -537,6 +582,41 @@ export const PurchasesHistoryTable = ({
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700/80 dark:bg-slate-800/50 dark:text-slate-300">
                   <span className="font-semibold text-slate-700 dark:text-slate-200">Observaciones / Historial:</span>
                   <p className="mt-1 whitespace-pre-wrap">{selectedPurchase.purchase.notes}</p>
+                </div>
+              ) : null}
+
+              {/* Fotografía de la factura física adjunta */}
+              {selectedPurchase.purchase.invoice_photo_url ? (
+                <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-3 dark:border-brand-800/80 dark:bg-brand-950/30">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="flex items-center gap-1.5 text-xs font-bold text-brand-900 dark:text-brand-300">
+                      <Camera className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+                      Fotografía de la factura física
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPhotoViewerUrl(selectedPurchase.purchase.invoice_photo_url!)}
+                      className="inline-flex items-center gap-1 rounded-md bg-white border border-brand-300 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50 shadow-xs dark:bg-slate-800 dark:border-brand-700 dark:text-brand-300"
+                    >
+                      <Maximize2 className="h-3 w-3" /> Ver ampliada
+                    </button>
+                  </div>
+                  <div
+                    className="relative h-32 sm:h-44 w-full overflow-hidden rounded-lg border border-brand-200 bg-slate-100 cursor-pointer group dark:border-brand-800/60 dark:bg-slate-900"
+                    onClick={() => setPhotoViewerUrl(selectedPurchase.purchase.invoice_photo_url!)}
+                    title="Toca para ampliar el comprobante"
+                  >
+                    <img
+                      src={selectedPurchase.purchase.invoice_photo_url}
+                      alt="Factura física"
+                      className="h-full w-full object-contain transition-transform group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="rounded-lg bg-black/60 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-xs flex items-center gap-1.5">
+                        <Maximize2 className="h-4 w-4" /> Ampliar comprobante
+                      </span>
+                    </div>
+                  </div>
                 </div>
               ) : null}
 
@@ -586,6 +666,53 @@ export const PurchasesHistoryTable = ({
             </footer>
           </div>
         </section>
+      ) : null}
+
+      {/* Lightbox / Visor de foto de factura a pantalla completa */}
+      {photoViewerUrl ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-3 sm:p-6 animate-fadeIn"
+          onClick={() => setPhotoViewerUrl(null)}
+        >
+          <div
+            className="relative flex max-h-[92vh] max-w-4xl flex-col items-center justify-center overflow-hidden rounded-2xl bg-slate-900 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex w-full items-center justify-between border-b border-slate-800 px-4 py-2.5 text-white">
+              <div className="flex items-center gap-2">
+                <Camera className="h-4 w-4 text-brand-400" />
+                <span className="text-xs font-bold">Fotografía original de la factura</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={photoViewerUrl}
+                  download="factura-compra.jpg"
+                  className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+                  title="Descargar fotografía"
+                >
+                  <Download className="h-3.5 w-3.5" /> Descargar
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPhotoViewerUrl(null)}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+                  title="Cerrar visor"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            <div className="flex max-h-[calc(92vh-4rem)] w-full items-center justify-center overflow-auto p-2">
+              <img
+                src={photoViewerUrl}
+                alt="Factura original"
+                className="max-h-[78vh] w-auto max-w-full rounded-lg object-contain shadow-md"
+              />
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

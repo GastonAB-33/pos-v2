@@ -11,14 +11,21 @@ import {
   X,
 } from "lucide-react";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
+import { VoiceDictationButton } from "@/components/form/VoiceDictationButton";
 import { IconButton } from "@/components/ui/IconButton";
-import { matchesProductSearch } from "@/utils/search";
+import {
+  matchesProductSearch,
+  PRODUCT_SEARCH_SCOPE_OPTIONS,
+  getSearchPlaceholder,
+  type ProductSearchScope,
+} from "@/utils/search";
 import type { Product } from "@/types/entities";
 import type { PurchaseCartItemView } from "@/modules/compras/components/PurchaseCart";
 
 interface PurchaseProductSelectModalProps {
   open: boolean;
   products: Product[];
+  barcodesByProductId?: Map<string, string[]>;
   cart: PurchaseCartItemView[];
   search: string;
   disabled?: boolean;
@@ -48,6 +55,7 @@ const currency = new Intl.NumberFormat("es-AR", {
 export const PurchaseProductSelectModal = ({
   open,
   products,
+  barcodesByProductId,
   cart,
   search,
   disabled,
@@ -59,6 +67,7 @@ export const PurchaseProductSelectModal = ({
   onClose,
 }: PurchaseProductSelectModalProps) => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const [searchScope, setSearchScope] = useState<ProductSearchScope>("all");
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [scannerFeedback, setScannerFeedback] = useState<
     { type: "success" | "error"; message: string } | undefined
@@ -84,12 +93,26 @@ export const PurchaseProductSelectModal = ({
     );
   }, [cart]);
 
-  // Resultados de búsqueda en vivo (estilo Consulta Rápida: hasta 20 ítems)
+  // Resultados de búsqueda en vivo con filtro de ámbito (Todos / Solo nombre / Solo código / Solo código de barras)
   const filteredProducts = useMemo(() => {
     const q = search.trim();
     if (!q) return [];
-    return products.filter((p) => matchesProductSearch(p, q)).slice(0, 20);
-  }, [products, search]);
+    return products
+      .filter((p) =>
+        matchesProductSearch(
+          {
+            name: p.name,
+            code: p.code,
+            barcodes: barcodesByProductId?.get(p.id) ?? [],
+            category: p.category,
+            subcategory: p.subcategory,
+          },
+          q,
+          searchScope
+        )
+      )
+      .slice(0, 20);
+  }, [barcodesByProductId, products, search, searchScope]);
 
   if (!open) return null;
 
@@ -113,64 +136,77 @@ export const PurchaseProductSelectModal = ({
 
     setIsScanning(true);
 
-    // 1. Probar como código de barras primero (onBarcodeScan ya lo agrega al carrito)
-    const result = await onBarcodeScan(query);
-    if (result.ok && result.product) {
+    try {
+      // 1. Probar como código de barras primero solo si el ámbito no es "solo nombre"
+      if (searchScope !== "name") {
+        const result = await onBarcodeScan(query);
+        if (result.ok && result.product) {
+          setScannerFeedback({
+            type: "success",
+            message: `${result.product.name} agregado a la compra`,
+          });
+          onSearchChange("");
+          setIsScanning(false);
+          window.setTimeout(() => {
+            searchInputRef.current?.focus({ preventScroll: true });
+          }, 0);
+          return;
+        }
+      }
+
+      // 2. Si no fue código exacto pero hay 1 única coincidencia o más, agregar el primero
+      if (filteredProducts.length > 0) {
+        handleQuickAdd(filteredProducts[0]);
+        setIsScanning(false);
+        return;
+      }
+
+      // 3. Si no hay coincidencias en el catálogo
       setScannerFeedback({
-        type: "success",
-        message: `${result.product.name} agregado a la compra`,
+        type: "error",
+        message: "No se encontró ningún producto con ese criterio de búsqueda",
       });
-      onSearchChange("");
+    } finally {
       setIsScanning(false);
       window.setTimeout(() => {
         searchInputRef.current?.focus({ preventScroll: true });
       }, 0);
-      return;
     }
-
-    // 2. Si no fue código exacto pero hay 1 única coincidencia
-    if (filteredProducts.length === 1) {
-      handleQuickAdd(filteredProducts[0]);
-      setIsScanning(false);
-      return;
-    }
-
-    // 3. Si no hay coincidencias en el catálogo
-    if (filteredProducts.length === 0) {
-      setScannerFeedback({
-        type: "error",
-        message: result.error ?? "No se encontró ningún producto con ese código o nombre",
-      });
-    }
-
-    setIsScanning(false);
-    window.setTimeout(() => {
-      searchInputRef.current?.focus({ preventScroll: true });
-    }, 0);
   };
 
   return (
     <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-2 sm:p-4">
       <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-panel dark:border-slate-800 dark:bg-slate-900">
         {/* Header */}
-        <header className="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-3.5 sm:px-5 sm:py-4 dark:border-slate-800">
-          <div>
-            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-brand-700 dark:text-brand-400">
-              <ShoppingCart className="h-4 w-4" />
-              Seleccionar producto para la compra
+        <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-3.5 py-2.5 sm:px-5 sm:py-4 dark:border-slate-800">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-brand-700 dark:text-brand-400">
+              <ShoppingCart className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+              <span className="truncate">Seleccionar producto para la compra</span>
             </div>
-            <h2 className="mt-1 text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+            <h2 className="text-sm sm:text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
               Agregar producto a la compra
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="hidden sm:block text-xs text-slate-500 dark:text-slate-400">
               Escaneá el código de barras o buscá por nombre o código interno.
             </p>
           </div>
-          <IconButton icon={X} label="Cerrar" onClick={onClose} disabled={disabled} />
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => onCreateNewProduct(search.trim())}
+              className="inline-flex items-center gap-1 rounded-lg border border-brand-300 bg-brand-50/80 px-2.5 py-1.5 text-xs font-bold text-brand-700 hover:bg-brand-100 dark:border-brand-700 dark:bg-brand-950/40 dark:text-brand-300"
+              title="Crear un producto nuevo directamente"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span className="hidden xs:inline sm:inline">Nuevo</span>
+            </button>
+            <IconButton icon={X} label="Cerrar" onClick={onClose} disabled={disabled} />
+          </div>
         </header>
 
-        {/* Buscador Rápido con Autofocus y Cámara */}
-        <div className="border-b border-slate-100 px-4 py-3 sm:px-5 dark:border-slate-800">
+        {/* Buscador Rápido con Autofocus, Dictado por Voz y Cámara */}
+        <div className="border-b border-slate-100 px-3 py-2.5 sm:px-5 sm:py-3 dark:border-slate-800">
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search
@@ -196,8 +232,8 @@ export const PurchaseProductSelectModal = ({
                   event.preventDefault();
                   void handleSearchSubmit();
                 }}
-                placeholder="Escanear barra o buscar por nombre / código (Enter)..."
-                className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-9 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-xs transition focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder:text-slate-500"
+                placeholder={getSearchPlaceholder(searchScope)}
+                className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-9 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-xs transition focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder:text-slate-500"
                 disabled={disabled || !canWrite || isScanning}
               />
               {search ? (
@@ -208,17 +244,47 @@ export const PurchaseProductSelectModal = ({
                     setScannerFeedback(undefined);
                     searchInputRef.current?.focus();
                   }}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                   title="Limpiar búsqueda"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-3.5 w-3.5" />
                 </button>
               ) : null}
             </div>
 
+            {/* Selector de Ámbito de Búsqueda: Todos / Solo nombre / Solo código / Solo código de barras */}
+            <select
+              value={searchScope}
+              onChange={(e) => setSearchScope(e.target.value as ProductSearchScope)}
+              className="rounded-xl border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-xs transition focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer shrink-0 max-w-[100px] xs:max-w-[135px] sm:max-w-none truncate"
+              aria-label="Filtro de búsqueda"
+            >
+              {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
+                <option
+                  key={opt.value}
+                  value={opt.value}
+                  className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-200"
+                >
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+
+            <VoiceDictationButton
+              value={search}
+              onValueChange={(nextVal: string) => {
+                onSearchChange(nextVal);
+                if (scannerFeedback) setScannerFeedback(undefined);
+              }}
+              insertMode="replace"
+              fieldType={searchScope === "barcode" ? "barcode" : searchScope === "code" ? "code" : "text"}
+              disabled={disabled || !canWrite || isScanning}
+              label="Dictar por voz"
+            />
+
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs font-semibold text-slate-700 transition hover:border-brand-500 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-50 shrink-0 shadow-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-brand-400 dark:hover:bg-brand-950/40 dark:hover:text-brand-300"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5 sm:px-3.5 sm:py-2 text-xs font-semibold text-slate-700 transition hover:border-brand-500 hover:bg-brand-50 hover:text-brand-700 disabled:opacity-50 shrink-0 shadow-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-brand-400 dark:hover:bg-brand-950/40 dark:hover:text-brand-300"
               onClick={() => setIsCameraOpen(true)}
               disabled={disabled || !canWrite || isScanning}
               title="Escanear con cámara del celular"
@@ -228,10 +294,10 @@ export const PurchaseProductSelectModal = ({
             </button>
           </div>
 
-          {/* Feedback de escaneo / notificación */}
-          {scannerFeedback ? (
+          {/* Feedback de escaneo (sólo si no es un error ya ilustrado en la tarjeta amarilla no encontrada) */}
+          {scannerFeedback && (scannerFeedback.type === "success" || filteredProducts.length > 0) ? (
             <div
-              className={`mt-2 flex items-center justify-between rounded-lg px-3 py-2 text-xs font-medium animate-fadeIn ${
+              className={`mt-2 flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium animate-fadeIn ${
                 scannerFeedback.type === "success"
                   ? "bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800/80 dark:text-emerald-300"
                   : "bg-red-50 text-red-700 border border-red-200 dark:bg-red-950/40 dark:border-red-800/80 dark:text-red-300"
@@ -239,9 +305,9 @@ export const PurchaseProductSelectModal = ({
             >
               <div className="flex items-center gap-2">
                 {scannerFeedback.type === "success" ? (
-                  <CheckCircle2 aria-hidden="true" className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                 ) : (
-                  <AlertTriangle aria-hidden="true" className="h-4 w-4 shrink-0 text-red-500 dark:text-red-400" />
+                  <AlertTriangle aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-red-500 dark:text-red-400" />
                 )}
                 <span>{scannerFeedback.message}</span>
               </div>
@@ -373,27 +439,27 @@ export const PurchaseProductSelectModal = ({
                 </div>
               </div>
             ) : (
-              /* NO ENCONTRADO (Con botón para dar de alta producto directamente) */
-              <div className="py-8 px-4 text-center rounded-xl border border-dashed border-amber-300 bg-amber-50/50 dark:border-amber-800/60 dark:bg-amber-950/20">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 mx-auto mb-3">
-                  <AlertTriangle className="h-6 w-6" />
+              /* NO ENCONTRADO COMPACTO PARA MÓVIL (Sin scroll interno) */
+              <div className="py-4 sm:py-7 px-3.5 sm:px-4 text-center rounded-xl border border-dashed border-amber-300 bg-amber-50/50 dark:border-amber-800/60 dark:bg-amber-950/20 my-auto">
+                <div className="flex h-9 w-9 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400 mx-auto mb-2 sm:mb-3">
+                  <AlertTriangle className="h-4.5 w-4.5 sm:h-6 sm:w-6" />
                 </div>
-                <h4 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
                   No se encontró ningún producto
                 </h4>
-                <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-                  No hay coincidencias en el catálogo para el código o nombre:
+                <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+                  No hay coincidencias en el catálogo {searchScope === "name" ? "por nombre" : searchScope === "code" ? "por código de producto" : searchScope === "barcode" ? "por código de barras" : "para el código o nombre"}:
                 </p>
-                <p className="mt-1.5 font-mono text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900/60 inline-block px-3 py-1 rounded-lg">
+                <p className="mt-1 sm:mt-1.5 font-mono text-xs sm:text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900/60 inline-block px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-lg max-w-full truncate">
                   "{search.trim()}"
                 </p>
-                <div className="mt-4">
+                <div className="mt-3 sm:mt-4">
                   <button
                     type="button"
                     onClick={() => {
                       onCreateNewProduct(search.trim());
                     }}
-                    className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-brand-700 transition active:scale-95"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-brand-700 transition active:scale-95 w-full sm:w-auto"
                   >
                     <Plus className="h-4 w-4" />
                     Crear producto nuevo "{search.trim()}"
@@ -402,23 +468,23 @@ export const PurchaseProductSelectModal = ({
               </div>
             )
           ) : (
-            /* ESPERANDO BÚSQUEDA (Sin lista masiva, estilo Consulta Rápida) */
-            <div className="py-10 flex flex-col items-center justify-center text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/40">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-brand-600 dark:bg-brand-950/60 dark:text-brand-400 mb-3">
-                <Barcode className="h-6 w-6" />
+            /* ESPERANDO BÚSQUEDA (Compacto) */
+            <div className="py-6 sm:py-10 flex flex-col items-center justify-center text-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 dark:border-slate-800 dark:bg-slate-900/40 my-auto">
+              <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl bg-brand-50 text-brand-600 dark:bg-brand-950/60 dark:text-brand-400 mb-2 sm:mb-3">
+                <Barcode className="h-5 w-5 sm:h-6 sm:w-6" />
               </div>
               <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                 Esperando producto para agregar
               </h4>
-              <p className="mt-1 max-w-sm text-xs text-slate-500 dark:text-slate-400">
-                Escribí el nombre o código para buscar en el catálogo, o escaneá un código de barras con tu lector o cámara.
+              <p className="mt-0.5 sm:mt-1 max-w-sm text-xs text-slate-500 dark:text-slate-400 px-2">
+                Escribí el nombre o código para buscar, o escaneá un código de barras.
               </p>
 
-              <div className="mt-4">
+              <div className="mt-3 sm:mt-4">
                 <button
                   type="button"
                   onClick={() => onCreateNewProduct("")}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Crear nuevo producto

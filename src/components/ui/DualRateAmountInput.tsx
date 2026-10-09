@@ -162,43 +162,45 @@ export const DualRateAmountInput: React.FC<DualRateAmountInputProps> = ({
         className
       )}
     >
-      {/* Selector toggle segmentado: % o $ */}
-      <div className="flex items-center rounded-md border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-800">
-        <button
-          type="button"
-          onClick={() => handleModeSwitch("percent")}
-          disabled={disabled}
+      {/* Botón selector general alternable: al tocar cambia entre % y $ */}
+      <button
+        type="button"
+        onClick={() => handleModeSwitch(mode === "percent" ? "amount" : "percent")}
+        disabled={disabled}
+        aria-label={`Alternar modo de ${label}. Actualmente en ${mode === "percent" ? "porcentaje" : "monto"}. Tocar para cambiar a ${mode === "percent" ? "monto" : "porcentaje"}.`}
+        title={`Tocar para alternar entre Porcentaje (%) y Monto ($). Modo actual: ${mode === "percent" ? "% (Porcentaje)" : "$ (Monto)"}`}
+        className={cn(
+          "flex items-center rounded-md border border-slate-300 bg-slate-100 p-0.5 transition-transform active:scale-95 hover:bg-slate-200/80 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700/80 cursor-pointer select-none touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed",
+          "focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+        )}
+      >
+        <span
           className={cn(
-            "rounded px-1 py-0.5 text-[9px] font-bold leading-none transition select-none disabled:opacity-50",
+            "rounded px-1.5 py-0.5 text-[10px] font-bold leading-none transition select-none pointer-events-none",
             mode === "percent"
               ? cn(
                   "bg-white shadow-xs dark:bg-slate-900",
                   accentColorStyles.activeTab
                 )
-              : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+              : "text-slate-400 dark:text-slate-500"
           )}
-          title="Ingresar como alícuota porcentual (%)"
         >
           %
-        </button>
-        <button
-          type="button"
-          onClick={() => handleModeSwitch("amount")}
-          disabled={disabled}
+        </span>
+        <span
           className={cn(
-            "rounded px-1 py-0.5 text-[9px] font-bold leading-none transition select-none disabled:opacity-50",
+            "rounded px-1.5 py-0.5 text-[10px] font-bold leading-none transition select-none pointer-events-none",
             mode === "amount"
               ? cn(
                   "bg-white shadow-xs dark:bg-slate-900",
                   accentColorStyles.activeTab
                 )
-              : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+              : "text-slate-400 dark:text-slate-500"
           )}
-          title="Ingresar como monto monetario fijo ($)"
         >
           $
-        </button>
-      </div>
+        </span>
+      </button>
 
       {/* Etiqueta del concepto */}
       <label

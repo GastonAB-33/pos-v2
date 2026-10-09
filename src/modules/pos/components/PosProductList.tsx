@@ -341,7 +341,11 @@ export const PosProductList = ({
           aria-label="Tipo de búsqueda"
         >
           {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
+            <option
+              key={opt.value}
+              value={opt.value}
+              className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+            >
               {opt.label}
             </option>
           ))}

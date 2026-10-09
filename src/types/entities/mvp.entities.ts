@@ -259,6 +259,7 @@ export interface Purchase extends TenantScopedEntity {
   total: number;
   returned_total?: number;
   notes: string | null;
+  invoice_photo_url?: string | null;
   created_by: string | null;
   items?: PurchaseItem[];
   supplier?: Supplier | null;
@@ -275,6 +276,8 @@ export interface PurchaseItem extends TenantScopedEntity {
   bonified_quantity?: number;
   returned_quantity?: number;
   line_total: number;
+  sale_price?: number;
+  product?: Product | null;
 }
 
 export type CurrentAccountMovementType = "debt" | "payment" | "adjustment";

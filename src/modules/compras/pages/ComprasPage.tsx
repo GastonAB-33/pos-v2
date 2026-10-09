@@ -150,6 +150,7 @@ export const ComprasPage = () => {
   }>({});
   const [preferredSupplierId, setPreferredSupplierId] = useState<string>();
   const [duplicateReview, setDuplicateReview] = useState<DuplicateReviewState | null>(null);
+  const [returnToProductSelectAfterCreate, setReturnToProductSelectAfterCreate] = useState(false);
   const [returnModalTarget, setReturnModalTarget] = useState<{
     purchase: Purchase;
     supplier: Supplier | null;
@@ -159,7 +160,8 @@ export const ComprasPage = () => {
   const [checkoutResetSignal, setCheckoutResetSignal] = useState(0);
 
   const {
-    products,
+    allProducts,
+    barcodesByProductId,
     suppliers,
     purchases,
     bankAccounts,
@@ -244,13 +246,14 @@ export const ComprasPage = () => {
     }
   };
 
-  const handleOpenCreateProduct = (query?: string) => {
+  const handleOpenCreateProduct = (query?: string, returnToSelect: boolean = true) => {
     const trimmed = query?.trim() ?? "";
     const isBarcodeLike = trimmed.length >= 6 && /^\d+$/.test(trimmed);
     setNewProductPrefill({
       initialBarcode: isBarcodeLike ? trimmed : null,
       initialName: !isBarcodeLike && trimmed ? trimmed : null,
     });
+    setReturnToProductSelectAfterCreate(returnToSelect);
     setIsSelectProductModalOpen(false);
     setIsProductModalOpen(true);
   };
@@ -269,6 +272,10 @@ export const ComprasPage = () => {
     if (created) {
       setIsProductModalOpen(false);
       setNewProductPrefill({});
+      if (returnToProductSelectAfterCreate) {
+        setSearch("");
+        setIsSelectProductModalOpen(true);
+      }
     }
   };
 
@@ -278,6 +285,10 @@ export const ComprasPage = () => {
     if (created) {
       setDuplicateReview(null);
       setNewProductPrefill({});
+      if (returnToProductSelectAfterCreate) {
+        setSearch("");
+        setIsSelectProductModalOpen(true);
+      }
     }
   };
 
@@ -370,6 +381,7 @@ export const ComprasPage = () => {
               ) : (
                 <PurchasesHistoryTable
                   rows={historyRows}
+                  products={allProducts}
                   canWrite={canWritePurchases}
                   disabled={isSubmitting}
                   onOpenReturnModal={(purchase, supplier) =>
@@ -384,38 +396,35 @@ export const ComprasPage = () => {
           /* VISTA: REGISTRAR NUEVA COMPRA (PANEL COMPLETO EN PANTALLA)                */
           /* ========================================================================= */
           <div className="space-y-3">
-            {/* 1. Panel de Registrar Nueva Compra (Barra superior compacta minimalista) */}
-            <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-center gap-3">
+            {/* 1. Barra superior: Nueva Compra (minimalista) */}
+            <section className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => setViewMode("history")}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 active:scale-95 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  title="Volver al historial de compras"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
-                  Volver al historial
+                  <span>Volver</span>
                 </button>
-                <div>
-                  <h1 className="text-base font-bold text-slate-900 dark:text-slate-100">Registrar nueva compra</h1>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Carga los datos del comprobante y los productos comprados
-                  </p>
-                </div>
+                <div className="h-4 w-px bg-slate-200 dark:bg-slate-800" />
+                <h1 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+                  Nueva compra
+                </h1>
               </div>
 
               {cart.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={clearCart}
-                    disabled={isSubmitting || !canWritePurchases}
-                    className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-900/60"
-                    title="Vaciar lista de productos"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Vaciar lista
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={clearCart}
+                  disabled={isSubmitting || !canWritePurchases}
+                  className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 transition active:scale-95 disabled:opacity-50 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-900/60"
+                  title="Vaciar lista de productos"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Vaciar lista</span>
+                </button>
               )}
             </section>
 
@@ -473,7 +482,8 @@ export const ComprasPage = () => {
       {/* Modal 1: Buscar / Escanear y Agregar Producto del Catálogo */}
       <PurchaseProductSelectModal
         open={isSelectProductModalOpen}
-        products={products}
+        products={allProducts}
+        barcodesByProductId={barcodesByProductId}
         cart={cart}
         search={search}
         onSearchChange={setSearch}
@@ -504,6 +514,9 @@ export const ComprasPage = () => {
         onClose={() => {
           setIsProductModalOpen(false);
           setNewProductPrefill({});
+          if (returnToProductSelectAfterCreate) {
+            setIsSelectProductModalOpen(true);
+          }
         }}
         onSubmit={handleNewProductSubmit}
       />
@@ -551,10 +564,19 @@ export const ComprasPage = () => {
           onUseExisting={(product) => {
             addProductToCart(product);
             setDuplicateReview(null);
+            if (returnToProductSelectAfterCreate) {
+              setSearch("");
+              setIsSelectProductModalOpen(true);
+            }
           }}
           onCreateAnyway={handleCreateDuplicateAnyway}
           onEditProduct={handleEditDuplicateReview}
-          onClose={() => setDuplicateReview(null)}
+          onClose={() => {
+            setDuplicateReview(null);
+            if (returnToProductSelectAfterCreate) {
+              setIsSelectProductModalOpen(true);
+            }
+          }}
         />
       ) : null}
 

@@ -2,13 +2,18 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import {
   Calendar,
+  Camera,
   Check,
   ChevronDown,
   FileText,
+  Maximize2,
   Plus,
   Search,
-  User,
   StickyNote,
+  Trash2,
+  Upload,
+  User,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Supplier } from "@/types/entities";
@@ -16,6 +21,7 @@ import {
   purchaseHeaderSchema,
   type PurchaseHeaderValues,
 } from "@/modules/compras/schemas/purchase-checkout.schema";
+import { compressImageFile } from "@/utils/image-compression";
 
 interface PurchaseCheckoutPanelProps {
   suppliers: Supplier[];
@@ -62,18 +68,24 @@ export const PurchaseCheckoutPanel = ({
       documentType: "FACTURA_A",
       documentNumber: "",
       issueDate: getTodayDate(),
-      vatPercent: vatPercent || 21,
-      iibbPercent: iibbPercent || 0,
-      iibbAmount: iibbAmount || 0,
+      vatPercent: vatPercent ?? 0,
+      iibbPercent: iibbPercent ?? 0,
+      iibbAmount: iibbAmount ?? 0,
       notes: "",
+      invoicePhotoUrl: "",
     },
   });
 
   const selectedSupplierId = watch("supplierId");
   const selectedDocumentType = watch("documentType");
+  const invoicePhotoUrl = watch("invoicePhotoUrl");
   const [supplierSearchText, setSupplierSearchText] = useState("");
   const [isSupplierDropdownOpen, setIsSupplierDropdownOpen] = useState(false);
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const supplierBoxRef = useRef<HTMLDivElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Encontrar el proveedor actualmente seleccionado en la lista real
   const currentSelectedSupplier = useMemo(
@@ -135,10 +147,7 @@ export const PurchaseCheckoutPanel = ({
   useEffect(() => {
     if (prevDocTypeRef.current !== selectedDocumentType) {
       prevDocTypeRef.current = selectedDocumentType;
-      if (selectedDocumentType === "FACTURA_A") {
-        setValue("vatPercent", 21);
-        onVatPercentChange(21);
-      } else if (
+      if (
         selectedDocumentType === "FACTURA_C" ||
         selectedDocumentType === "REMITO" ||
         selectedDocumentType === "PRESUPUESTO"
@@ -182,6 +191,30 @@ export const PurchaseCheckoutPanel = ({
     }
   };
 
+  const handlePhotoCapture = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsProcessingPhoto(true);
+      const compressedDataUrl = await compressImageFile(file, {
+        maxDimension: 1600,
+        quality: 0.75,
+      });
+      setValue("invoicePhotoUrl", compressedDataUrl, { shouldDirty: true });
+    } catch (err) {
+      console.error("Error al procesar foto de la factura:", err);
+      alert("No se pudo procesar la fotografía. Por favor intenta de nuevo.");
+    } finally {
+      setIsProcessingPhoto(false);
+      event.target.value = "";
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    setValue("invoicePhotoUrl", "", { shouldDirty: true });
+  };
+
   useEffect(() => {
     if (resetSignal) {
       reset({
@@ -189,13 +222,14 @@ export const PurchaseCheckoutPanel = ({
         documentType: "FACTURA_A",
         documentNumber: "",
         issueDate: getTodayDate(),
-        vatPercent: 21,
+        vatPercent: 0,
         iibbPercent: 0,
         iibbAmount: 0,
         notes: "",
+        invoicePhotoUrl: "",
       });
       setSupplierSearchText("");
-      onVatPercentChange(21);
+      onVatPercentChange(0);
     }
   }, [resetSignal, reset, onVatPercentChange]);
 
@@ -448,7 +482,145 @@ export const PurchaseCheckoutPanel = ({
             <p className="mt-0.5 text-[11px] text-red-600 dark:text-red-400">{errors.notes.message}</p>
           ) : null}
         </div>
+
+        {/* Fila: Fotografía de la factura física (minimalista) */}
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/60">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200">
+            <Camera className="h-3.5 w-3.5 text-brand-600 dark:text-brand-400" />
+            <span>Foto de factura</span>
+            <span className="text-[10px] font-normal text-slate-400 dark:text-slate-500">
+              (Opcional)
+            </span>
+          </div>
+
+          {/* Inputs de archivo ocultos */}
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handlePhotoCapture}
+            disabled={disabled || !canWrite || isProcessingPhoto}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoCapture}
+            disabled={disabled || !canWrite || isProcessingPhoto}
+          />
+
+          {invoicePhotoUrl ? (
+            /* Vista previa compacta */
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsLightboxOpen(true)}
+                className="group relative h-7 w-7 overflow-hidden rounded border border-slate-300 bg-slate-100 hover:ring-2 hover:ring-brand-500 transition dark:border-slate-600 dark:bg-slate-900"
+                title="Toca para ver la foto ampliada"
+              >
+                <img
+                  src={invoicePhotoUrl}
+                  alt="Factura adjunta"
+                  className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                />
+              </button>
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                <Check className="h-3 w-3" /> Adjunta
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsLightboxOpen(true)}
+                className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                title="Ver ampliada"
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={disabled || !canWrite || isProcessingPhoto}
+                className="rounded p-1 text-slate-500 hover:bg-slate-200 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                title="Tomar otra foto"
+              >
+                <Camera className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={handleRemovePhoto}
+                disabled={disabled || !canWrite || isProcessingPhoto}
+                className="rounded p-1 text-red-500 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/60"
+                title="Quitar foto"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            /* Botones compactos sin texto explicativo */
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={disabled || !canWrite || isProcessingPhoto}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition active:scale-95 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                title="Sacar foto con cámara"
+              >
+                <Camera className="h-3.5 w-3.5 text-brand-600 dark:text-brand-400" />
+                <span>{isProcessingPhoto ? "Cargando..." : "Cámara"}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={disabled || !canWrite || isProcessingPhoto}
+                className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition active:scale-95 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                title="Adjuntar archivo o imagen"
+              >
+                <Upload className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+                <span>Subir</span>
+              </button>
+            </div>
+          )}
+        </div>
       </form>
+
+      {/* Lightbox / Visor de foto ampliada */}
+      {isLightboxOpen && invoicePhotoUrl && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-6 animate-fadeIn"
+          onClick={() => setIsLightboxOpen(false)}
+        >
+          <div
+            className="relative flex max-h-[90vh] max-w-4xl flex-col items-center justify-center overflow-hidden rounded-2xl bg-slate-900 p-2 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex w-full items-center justify-between border-b border-slate-800 px-4 py-2 text-white">
+              <div className="flex items-center gap-2">
+                <Camera className="h-4 w-4 text-brand-400" />
+                <span className="text-xs font-bold">Fotografía de la factura física</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsLightboxOpen(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+                title="Cerrar visor"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex max-h-[calc(90vh-4rem)] w-full items-center justify-center overflow-auto p-2">
+              <img
+                src={invoicePhotoUrl}
+                alt="Factura original"
+                className="max-h-[75vh] w-auto max-w-full rounded-lg object-contain shadow-md"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 };
