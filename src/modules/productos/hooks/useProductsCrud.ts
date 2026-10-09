@@ -10,6 +10,7 @@ import { downloadXlsx, parseXlsxFile, type XlsxRow } from "@/utils/xlsx";
 import type { ProductFormValues } from "@/modules/productos/schemas/product-form.schema";
 import {
   computePricingForward,
+  computePricingReverse,
   DEFAULT_IVA_PERCENT,
   roundMoney,
   roundPercent,
@@ -370,23 +371,41 @@ const parseImportRow = (row: XlsxRow, rowNumber: number): ProductImportRowParseR
     return { ok: false, errors };
   }
 
-  const costPrice = costRaw.value ?? 0;
+  const rawCostPrice = costRaw.value;
   const stockCurrent = stockRaw.value ?? 0;
   const vatPercent = vatRaw.value ?? DEFAULT_IVA_PERCENT;
   const profitPercent = profitRaw.value ?? null;
   const priceFinal = priceFinalRaw.value;
   const priceWithoutVat = priceWithoutVatRaw.value;
 
-  const forwardFromCost = computePricingForward({
-    precioCosto: costPrice,
-    porcentajeGanancia: profitPercent ?? 0,
-    porcentajeIva: vatPercent,
-  });
+  // Si no se informó costo (o se dejó en 0) pero se informó precio final (o precio sin IVA) y porcentaje de ganancia,
+  // deducimos automáticamente el costo hacia atrás tal como en el formulario de productos.
+  let resolvedCostPrice = rawCostPrice ?? 0;
+  let resolvedPriceWithoutVat: number;
+  let resolvedPriceFinal: number;
 
-  const resolvedPriceWithoutVat = roundMoney(
-    priceWithoutVat ?? (priceFinal != null ? priceFinal / (1 + vatPercent / 100) : forwardFromCost.precioSinIva)
-  );
-  const resolvedPriceFinal = roundMoney(priceFinal ?? resolvedPriceWithoutVat * (1 + vatPercent / 100));
+  if ((rawCostPrice == null || rawCostPrice === 0) && (priceFinal != null || priceWithoutVat != null) && profitPercent != null) {
+    const baseFinal = priceFinal ?? (priceWithoutVat != null ? priceWithoutVat * (1 + vatPercent / 100) : 0);
+    const reverse = computePricingReverse({
+      precioFinal: baseFinal,
+      porcentajeGanancia: profitPercent,
+      porcentajeIva: vatPercent,
+    });
+    resolvedCostPrice = reverse.precioCosto;
+    resolvedPriceWithoutVat = priceWithoutVat != null ? roundMoney(priceWithoutVat) : reverse.precioSinIva;
+    resolvedPriceFinal = priceFinal != null ? roundMoney(priceFinal) : reverse.precioFinal;
+  } else {
+    const forwardFromCost = computePricingForward({
+      precioCosto: resolvedCostPrice,
+      porcentajeGanancia: profitPercent ?? 0,
+      porcentajeIva: vatPercent,
+    });
+
+    resolvedPriceWithoutVat = roundMoney(
+      priceWithoutVat ?? (priceFinal != null ? priceFinal / (1 + vatPercent / 100) : forwardFromCost.precioSinIva)
+    );
+    resolvedPriceFinal = roundMoney(priceFinal ?? resolvedPriceWithoutVat * (1 + vatPercent / 100));
+  }
 
   const parsedBoolean = parseBoolean(getRowValueByAlias(row, [...importFieldAliases.is_active]));
   const parsedFavorite = parseBoolean(getRowValueByAlias(row, [...importFieldAliases.is_favorite]));
@@ -400,9 +419,9 @@ const parseImportRow = (row: XlsxRow, rowNumber: number): ProductImportRowParseR
     sale_mode: parseSaleMode(getRowValueByAlias(row, [...importFieldAliases.sale_mode])),
     price_final: resolvedPriceFinal,
     price_without_vat: resolvedPriceWithoutVat,
-    cost_price: costPrice,
+    cost_price: resolvedCostPrice,
     profit_percent: roundPercent(
-      profitPercent ?? (costPrice > 0 ? ((resolvedPriceWithoutVat - costPrice) / costPrice) * 100 : 0)
+      profitPercent ?? (resolvedCostPrice > 0 ? ((resolvedPriceWithoutVat - resolvedCostPrice) / resolvedCostPrice) * 100 : 0)
     ),
     vat_percent: roundPercent(vatPercent),
     stock_current: stockCurrent,
