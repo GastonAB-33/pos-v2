@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, CircleEllipsis, LifeBuoy, Menu, Moon, MoonStar, Newspaper, RefreshCw, Search, Sun, Type, UserRound } from "lucide-react";
+import { Bell, CircleEllipsis, LifeBuoy, Menu, Moon, MoonStar, Newspaper, RefreshCw, Search, Sun, UserRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/useToast";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
@@ -167,8 +167,6 @@ export const Topbar = () => {
   const cycleTheme = useUiStore((state) => state.cycleTheme);
   const sidebarTheme = useUiStore((state) => state.sidebarTheme);
   const setSidebarTheme = useUiStore((state) => state.setSidebarTheme);
-  const fontSize = useUiStore((state) => state.fontSize);
-  const cycleFontSize = useUiStore((state) => state.cycleFontSize);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
 
   const [now, setNow] = useState(() => new Date());

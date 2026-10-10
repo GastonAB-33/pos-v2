@@ -21,7 +21,7 @@ export const QuickPriceGlobalModal = ({
   const { canWrite } = usePermissions();
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const { toastSuccess, toastError } = useToast();
+  const toast = useToast();
   const canWriteProductos = canWrite("productos");
 
   const products = useProducts(tenantId, user?.id ?? null);
@@ -44,10 +44,10 @@ export const QuickPriceGlobalModal = ({
       setBackgroundSavingText("Guardando cambios...");
       await products.updateProductPricing(productId, pricing);
       setBackgroundSavingText(null);
-      toastSuccess("Precio actualizado correctamente");
+      toast.success("Precio actualizado correctamente");
     } catch (err) {
       setBackgroundSavingText(null);
-      toastError(err instanceof Error ? err.message : "Error al actualizar precio");
+      toast.error(err instanceof Error ? err.message : "Error al actualizar precio");
       throw err;
     }
   };

@@ -203,7 +203,7 @@ export const ComprasPage = () => {
     purchaseIibbAmount,
     setPurchaseIibbAmount,
   } = usePurchasesModule(tenantId, user?.id ?? null);
-  const { toastSuccess, toastError } = useToast();
+  const toast = useToast();
   const [backgroundSavingProduct, setBackgroundSavingProduct] = useState<string | null>(null);
 
   const historyRows = purchases.map((purchase) => ({
@@ -261,7 +261,7 @@ export const ComprasPage = () => {
     setIsProductModalOpen(true);
   };
 
-  const handleNewProductSubmit = (values: ProductFormModalValues) => {
+  const handleNewProductSubmit = async (values: ProductFormModalValues): Promise<void> => {
     if (!canWritePurchases) return;
 
     const matches = findPotentialDuplicateProducts(values);
@@ -283,20 +283,20 @@ export const ComprasPage = () => {
     setBackgroundSavingProduct(`Guardando "${productName}" y agregando a la compra...`);
 
     // 2. Guardar en segundo plano de forma no bloqueante
-    createProductAndAddToCart(values)
+    void createProductAndAddToCart(values)
       .then((created) => {
         setBackgroundSavingProduct(null);
         if (created) {
-          toastSuccess(`Producto "${created.name}" creado y agregado a la compra`);
+          toast.success(`Producto "${created.name}" creado y agregado a la compra`);
         }
       })
       .catch((err) => {
         setBackgroundSavingProduct(null);
-        toastError(err instanceof Error ? err.message : "Error al crear el producto");
+        toast.error(err instanceof Error ? err.message : "Error al crear el producto");
       });
   };
 
-  const handleCreateDuplicateAnyway = () => {
+  const handleCreateDuplicateAnyway = async (): Promise<void> => {
     if (!duplicateReview) return;
     const values = duplicateReview.values;
     const productName = values.nombre?.trim() || "Producto";
@@ -311,16 +311,16 @@ export const ComprasPage = () => {
     setBackgroundSavingProduct(`Guardando "${productName}" y agregando a la compra...`);
 
     // 2. Guardar en segundo plano de forma no bloqueante
-    createProductAndAddToCart(values)
+    void createProductAndAddToCart(values)
       .then((created) => {
         setBackgroundSavingProduct(null);
         if (created) {
-          toastSuccess(`Producto "${created.name}" creado y agregado a la compra`);
+          toast.success(`Producto "${created.name}" creado y agregado a la compra`);
         }
       })
       .catch((err) => {
         setBackgroundSavingProduct(null);
-        toastError(err instanceof Error ? err.message : "Error al crear el producto");
+        toast.error(err instanceof Error ? err.message : "Error al crear el producto");
       });
   };
 
