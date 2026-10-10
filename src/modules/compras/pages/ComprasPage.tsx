@@ -365,7 +365,6 @@ export const ComprasPage = () => {
             <span>{backgroundSavingProduct}</span>
           </div>
         ) : null}
-
         {feedback ? (
           <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>
             {feedback.message}
