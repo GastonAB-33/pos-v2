@@ -14,6 +14,7 @@ import { PurchasePaymentModal } from "@/modules/compras/components/PurchasePayme
 import { usePurchasesModule } from "@/modules/compras/hooks/usePurchasesModule";
 import { ProductFormModal } from "@/modules/productos/components/ProductFormModal";
 import { SupplierForm } from "@/modules/proveedores/components/SupplierForm";
+import { useToast } from "@/components/ui/useToast";
 import type { ProductFormModalValues } from "@/modules/productos/types/product.types";
 import type {
   PurchaseHeaderValues,
@@ -202,6 +203,8 @@ export const ComprasPage = () => {
     purchaseIibbAmount,
     setPurchaseIibbAmount,
   } = usePurchasesModule(tenantId, user?.id ?? null);
+  const toast = useToast();
+  const [backgroundSavingProduct, setBackgroundSavingProduct] = useState<string | null>(null);
 
   const historyRows = purchases.map((purchase) => ({
     purchase,
@@ -258,7 +261,7 @@ export const ComprasPage = () => {
     setIsProductModalOpen(true);
   };
 
-  const handleNewProductSubmit = async (values: ProductFormModalValues) => {
+  const handleNewProductSubmit = async (values: ProductFormModalValues): Promise<void> => {
     if (!canWritePurchases) return;
 
     const matches = findPotentialDuplicateProducts(values);
@@ -268,28 +271,57 @@ export const ComprasPage = () => {
       return;
     }
 
-    const created = await createProductAndAddToCart(values);
-    if (created) {
-      setIsProductModalOpen(false);
-      setNewProductPrefill({});
-      if (returnToProductSelectAfterCreate) {
-        setSearch("");
-        setIsSelectProductModalOpen(true);
-      }
+    const productName = values.nombre?.trim() || "Producto";
+
+    // 1. Desbloquear de inmediato la interfaz y volver a la búsqueda para seguir agregando productos
+    setIsProductModalOpen(false);
+    setNewProductPrefill({});
+    if (returnToProductSelectAfterCreate) {
+      setSearch("");
+      setIsSelectProductModalOpen(true);
     }
+    setBackgroundSavingProduct(`Guardando "${productName}" y agregando a la compra...`);
+
+    // 2. Guardar en segundo plano de forma no bloqueante
+    void createProductAndAddToCart(values)
+      .then((created) => {
+        setBackgroundSavingProduct(null);
+        if (created) {
+          toast.success(`Producto "${created.name}" creado y agregado a la compra`);
+        }
+      })
+      .catch((err) => {
+        setBackgroundSavingProduct(null);
+        toast.error(err instanceof Error ? err.message : "Error al crear el producto");
+      });
   };
 
-  const handleCreateDuplicateAnyway = async () => {
+  const handleCreateDuplicateAnyway = async (): Promise<void> => {
     if (!duplicateReview) return;
-    const created = await createProductAndAddToCart(duplicateReview.values);
-    if (created) {
-      setDuplicateReview(null);
-      setNewProductPrefill({});
-      if (returnToProductSelectAfterCreate) {
-        setSearch("");
-        setIsSelectProductModalOpen(true);
-      }
+    const values = duplicateReview.values;
+    const productName = values.nombre?.trim() || "Producto";
+
+    // 1. Desbloquear de inmediato la interfaz y volver a la búsqueda
+    setDuplicateReview(null);
+    setNewProductPrefill({});
+    if (returnToProductSelectAfterCreate) {
+      setSearch("");
+      setIsSelectProductModalOpen(true);
     }
+    setBackgroundSavingProduct(`Guardando "${productName}" y agregando a la compra...`);
+
+    // 2. Guardar en segundo plano de forma no bloqueante
+    void createProductAndAddToCart(values)
+      .then((created) => {
+        setBackgroundSavingProduct(null);
+        if (created) {
+          toast.success(`Producto "${created.name}" creado y agregado a la compra`);
+        }
+      })
+      .catch((err) => {
+        setBackgroundSavingProduct(null);
+        toast.error(err instanceof Error ? err.message : "Error al crear el producto");
+      });
   };
 
   const handleEditDuplicateReview = () => {
@@ -327,6 +359,12 @@ export const ComprasPage = () => {
       description="Registro de compras con impacto en stock y caja diaria"
     >
       <div className="purchases-operational-page space-y-4 w-full max-w-full overflow-x-hidden">
+        {backgroundSavingProduct && !isSelectProductModalOpen ? (
+          <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50/90 px-3.5 py-2.5 text-xs font-semibold text-blue-800 shadow-xs animate-pulse dark:border-blue-800/80 dark:bg-blue-950/60 dark:text-blue-300">
+            <span className="h-2 w-2 rounded-full bg-blue-500 animate-ping shrink-0" />
+            <span>{backgroundSavingProduct}</span>
+          </div>
+        ) : null}
         {feedback ? (
           <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>
             {feedback.message}
@@ -495,6 +533,7 @@ export const ComprasPage = () => {
         }}
         onBarcodeScan={addProductByBarcode}
         onCreateNewProduct={handleOpenCreateProduct}
+        backgroundSavingText={backgroundSavingProduct}
         onClose={() => {
           setSearch("");
           setIsSelectProductModalOpen(false);

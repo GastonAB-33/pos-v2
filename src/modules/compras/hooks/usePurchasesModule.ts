@@ -1283,7 +1283,6 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
   ): Promise<Product | null> => {
     if (!tenantId) return null;
 
-    setIsSubmitting(true);
     try {
       let created = await productsService.create(tenantId, toProductCreateInput(values));
 
@@ -1323,15 +1322,13 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         },
       });
 
-      setFeedback({ type: "success", message: "Producto creado y agregado a la compra" });
+      setFeedback({ type: "success", message: `Producto "${created.name}" creado y agregado a la compra` });
       return created;
     } catch (error) {
       const message =
         error instanceof Error && error.message ? error.message : "No se pudo crear el producto";
       setFeedback({ type: "error", message });
-      return null;
-    } finally {
-      setIsSubmitting(false);
+      throw error;
     }
   };
 
