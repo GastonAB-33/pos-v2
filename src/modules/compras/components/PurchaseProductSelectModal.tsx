@@ -11,7 +11,6 @@ import {
   X,
 } from "lucide-react";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
-import { VoiceDictationButton } from "@/components/form/VoiceDictationButton";
 import { IconButton } from "@/components/ui/IconButton";
 import {
   matchesProductSearch,
@@ -43,6 +42,7 @@ interface PurchaseProductSelectModalProps {
     barcode: string
   ) => Promise<{ ok: boolean; product?: Product; error?: string }>;
   onCreateNewProduct: (searchQuery?: string) => void;
+  backgroundSavingText?: string | null;
   onClose: () => void;
 }
 
@@ -64,6 +64,7 @@ export const PurchaseProductSelectModal = ({
   onAddProduct,
   onBarcodeScan,
   onCreateNewProduct,
+  backgroundSavingText,
   onClose,
 }: PurchaseProductSelectModalProps) => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -184,9 +185,17 @@ export const PurchaseProductSelectModal = ({
               <ShoppingCart className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
               <span className="truncate">Seleccionar producto para la compra</span>
             </div>
-            <h2 className="text-sm sm:text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
-              Agregar producto a la compra
-            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-sm sm:text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
+                Agregar producto a la compra
+              </h2>
+              {backgroundSavingText && (
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-blue-100 px-2.5 py-0.5 text-[11px] font-semibold text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-300/40 dark:border-blue-700/60 shrink-0 animate-pulse">
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-ping shrink-0" />
+                  {backgroundSavingText}
+                </span>
+              )}
+            </div>
             <p className="hidden sm:block text-xs text-slate-500 dark:text-slate-400">
               Escaneá el código de barras o buscá por nombre o código interno.
             </p>
@@ -269,18 +278,6 @@ export const PurchaseProductSelectModal = ({
                 </option>
               ))}
             </select>
-
-            <VoiceDictationButton
-              value={search}
-              onValueChange={(nextVal: string) => {
-                onSearchChange(nextVal);
-                if (scannerFeedback) setScannerFeedback(undefined);
-              }}
-              insertMode="replace"
-              fieldType={searchScope === "barcode" ? "barcode" : searchScope === "code" ? "code" : "text"}
-              disabled={disabled || !canWrite || isScanning}
-              label="Dictar por voz"
-            />
 
             <button
               type="button"

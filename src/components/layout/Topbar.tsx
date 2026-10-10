@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, CircleEllipsis, LifeBuoy, Menu, Moon, MoonStar, Newspaper, RefreshCw, Sun, Type, UserRound } from "lucide-react";
+import { Bell, CircleEllipsis, LifeBuoy, Menu, Moon, MoonStar, Newspaper, RefreshCw, Search, Sun, Type, UserRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/useToast";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
@@ -13,6 +13,7 @@ import { supportCenterStorage, type SupportTicket } from "@/features/support/sup
 import { SupportReportModal } from "@/features/support/components/SupportReportModal";
 import { isSupportOperator } from "@/features/support/support-operator";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
+import { QuickPriceGlobalModal } from "@/modules/productos/components/QuickPriceGlobalModal";
 import { authService } from "@/services/auth.service";
 import { productsService } from "@/services/products.service";
 import { usersService } from "@/services/users.service";
@@ -180,6 +181,7 @@ export const Topbar = () => {
   const [presenceMap, setPresenceMap] = useState<PresenceMap>({});
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
+  const [isQuickPriceModalOpen, setIsQuickPriceModalOpen] = useState(false);
 
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
@@ -635,15 +637,17 @@ export const Topbar = () => {
 
         <button
           type="button"
-          className="ui-btn-ghost gap-1 px-2 text-xs font-semibold"
-          title={`Tamaño de interfaz: ${fontSize === "compact" ? "Compacto" : fontSize === "large" ? "Grande" : fontSize === "extra-large" ? "Muy grande" : "Normal"}. Clic para cambiar.`}
+          className="ui-btn-ghost gap-1.5 px-2 text-xs font-semibold text-slate-700 hover:text-brand-600 dark:text-slate-200 dark:hover:text-brand-400"
+          title="Consulta rápida de precios y stock (escanear o buscar)"
           onClick={(e) => {
             e.stopPropagation();
-            cycleFontSize();
+            setActivePanel(null);
+            setIsQuickPriceModalOpen(true);
           }}
         >
-          <Type aria-hidden="true" size={15} />
-          <span>{fontSize === "compact" ? "A-" : fontSize === "large" ? "A+" : fontSize === "extra-large" ? "A++" : "A"}</span>
+          <Search aria-hidden="true" size={15} className="text-brand-600 dark:text-brand-400" />
+          <span className="hidden sm:inline">Consulta</span>
+          <span className="sm:hidden font-bold text-[11px]">Consultar</span>
         </button>
 
         <button
@@ -1248,6 +1252,13 @@ export const Topbar = () => {
         onClose={() => setIsSupportReportModalOpen(false)}
         adminWhatsAppNumber={env.supportWhatsappPhone}
       />
+
+      {isQuickPriceModalOpen ? (
+        <QuickPriceGlobalModal
+          open={isQuickPriceModalOpen}
+          onClose={() => setIsQuickPriceModalOpen(false)}
+        />
+      ) : null}
     </header>
   );
 };

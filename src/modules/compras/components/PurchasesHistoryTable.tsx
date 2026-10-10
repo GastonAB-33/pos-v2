@@ -5,9 +5,10 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowLeftRight, Camera, Download, Eye, Gift, Maximize2, Search, X } from "lucide-react";
+import { ArrowLeftRight, Camera, ChevronLeft, ChevronRight, Download, Eye, Gift, Maximize2, Search, X } from "lucide-react";
 import type { Product, Purchase, Supplier } from "@/types/entities";
 import { IconButton } from "@/components/ui/IconButton";
+import { parseInvoicePhotos } from "@/modules/compras/utils/invoice-photos";
 
 interface PurchaseHistoryRow {
   purchase: Purchase;
@@ -89,7 +90,15 @@ export const PurchasesHistoryTable = ({
   const [selectedPurchase, setSelectedPurchase] = useState<PurchaseHistoryRow | null>(null);
   const [filterText, setFilterText] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [photoViewerUrl, setPhotoViewerUrl] = useState<string | null>(null);
+  const [photoViewerState, setPhotoViewerState] = useState<{ photos: string[]; index: number } | null>(null);
+
+  const openPhotoViewer = (photos: string[], initialIndex: number = 0) => {
+    if (!photos.length) return;
+    setPhotoViewerState({
+      photos,
+      index: Math.max(0, Math.min(initialIndex, photos.length - 1)),
+    });
+  };
 
   const productsById = useMemo(
     () => new Map((products ?? []).map((p) => [p.id, p])),
@@ -202,17 +211,21 @@ export const PurchasesHistoryTable = ({
 
         return (
           <div className="flex items-center gap-1.5">
-            {purchase.invoice_photo_url ? (
-              <button
-                type="button"
-                onClick={() => setPhotoViewerUrl(purchase.invoice_photo_url!)}
-                className="inline-flex items-center gap-1 rounded-md border border-brand-200 bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-300 dark:hover:bg-brand-900/60"
-                title="Ver fotografía de la factura física adjunta"
-              >
-                <Camera className="h-3.5 w-3.5" />
-                Factura
-              </button>
-            ) : null}
+            {(() => {
+              const photos = parseInvoicePhotos(purchase.invoice_photo_url);
+              if (!photos.length) return null;
+              return (
+                <button
+                  type="button"
+                  onClick={() => openPhotoViewer(photos, 0)}
+                  className="inline-flex items-center gap-1 rounded-md border border-brand-200 bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-300 dark:hover:bg-brand-900/60"
+                  title={`Ver fotografía de la factura física adjunta (${photos.length} ${photos.length === 1 ? "foto" : "fotos"})`}
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                  <span>Factura{photos.length > 1 ? ` (${photos.length})` : ""}</span>
+                </button>
+              );
+            })()}
 
             <button
               type="button"
@@ -404,17 +417,21 @@ export const PurchasesHistoryTable = ({
 
                   {/* Acciones para móvil con botones cómodos */}
                   <div className="flex flex-wrap items-center gap-2 pt-2.5">
-                    {purchase.invoice_photo_url ? (
-                      <button
-                        type="button"
-                        onClick={() => setPhotoViewerUrl(purchase.invoice_photo_url!)}
-                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 py-2 px-3 text-xs font-semibold text-brand-700 shadow-xs transition hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-300"
-                        title="Ver fotografía de la factura física adjunta"
-                      >
-                        <Camera className="h-4 w-4" />
-                        Factura
-                      </button>
-                    ) : null}
+                    {(() => {
+                      const photos = parseInvoicePhotos(purchase.invoice_photo_url);
+                      if (!photos.length) return null;
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => openPhotoViewer(photos, 0)}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 py-2 px-3 text-xs font-semibold text-brand-700 shadow-xs transition hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-300"
+                          title={`Ver ${photos.length > 1 ? `${photos.length} fotos` : "foto"} de la factura física adjunta`}
+                        >
+                          <Camera className="h-4 w-4" />
+                          <span>Factura{photos.length > 1 ? ` (${photos.length})` : ""}</span>
+                        </button>
+                      );
+                    })()}
 
                     <button
                       type="button"
@@ -491,17 +508,21 @@ export const PurchasesHistoryTable = ({
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                {selectedPurchase.purchase.invoice_photo_url ? (
-                  <button
-                    type="button"
-                    onClick={() => setPhotoViewerUrl(selectedPurchase.purchase.invoice_photo_url!)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-2.5 py-1.5 text-xs font-bold text-brand-700 shadow-xs hover:bg-brand-100 active:scale-95 transition dark:border-brand-700 dark:bg-brand-950/60 dark:text-brand-300 dark:hover:bg-brand-900/60"
-                    title="Ver fotografía de la factura física adjunta"
-                  >
-                    <Camera className="h-4 w-4 text-brand-600 dark:text-brand-400" />
-                    <span>Ver factura</span>
-                  </button>
-                ) : null}
+                {(() => {
+                  const photos = parseInvoicePhotos(selectedPurchase.purchase.invoice_photo_url);
+                  if (!photos.length) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => openPhotoViewer(photos, 0)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-2.5 py-1.5 text-xs font-bold text-brand-700 shadow-xs hover:bg-brand-100 active:scale-95 transition dark:border-brand-700 dark:bg-brand-950/60 dark:text-brand-300 dark:hover:bg-brand-900/60"
+                      title="Ver fotografía de la factura física adjunta"
+                    >
+                      <Camera className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+                      <span>Ver factura{photos.length > 1 ? ` (${photos.length})` : ""}</span>
+                    </button>
+                  );
+                })()}
                 <IconButton
                   icon={X}
                   label="Cerrar detalle"
@@ -540,39 +561,51 @@ export const PurchasesHistoryTable = ({
               </div>
 
               {/* Botón y banner destacado de factura física cargada si existe */}
-              {selectedPurchase.purchase.invoice_photo_url ? (
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50/70 p-2.5 sm:px-3.5 dark:border-brand-800/80 dark:bg-brand-950/40">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div
-                      className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-brand-300 bg-white cursor-pointer dark:border-brand-700 dark:bg-slate-900"
-                      onClick={() => setPhotoViewerUrl(selectedPurchase.purchase.invoice_photo_url!)}
-                      title="Toca para ampliar la foto de la factura"
+              {(() => {
+                const photos = parseInvoicePhotos(selectedPurchase.purchase.invoice_photo_url);
+                if (!photos.length) return null;
+                return (
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50/70 p-2.5 sm:px-3.5 dark:border-brand-800/80 dark:bg-brand-950/40">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex items-center -space-x-3 shrink-0">
+                        {photos.slice(0, 3).map((photo, i) => (
+                          <div
+                            key={i}
+                            className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg border-2 border-white shadow-xs bg-white cursor-pointer hover:z-10 transition dark:border-slate-900 dark:bg-slate-900"
+                            onClick={() => openPhotoViewer(photos, i)}
+                            title={`Toca para ampliar foto #${i + 1}`}
+                          >
+                            <img
+                              src={photo}
+                              alt={`Página ${i + 1}`}
+                              className="h-full w-full object-cover"
+                            />
+                            <span className="absolute bottom-0 right-0 bg-black/60 px-1 text-[9px] font-bold text-white leading-none py-0.5 rounded-tl">
+                              #{i + 1}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-brand-950 dark:text-brand-200 truncate">
+                          Factura física adjunta ({photos.length} {photos.length === 1 ? "foto" : "páginas/fotos"})
+                        </p>
+                        <p className="text-[11px] text-brand-700 dark:text-brand-400">
+                          Comprobante cargado en la compra
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openPhotoViewer(photos, 0)}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-brand-700 active:scale-95 transition dark:bg-brand-500"
                     >
-                      <img
-                        src={selectedPurchase.purchase.invoice_photo_url}
-                        alt="Factura"
-                        className="h-full w-full object-cover"
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-brand-950 dark:text-brand-200 truncate">
-                        Factura física adjunta
-                      </p>
-                      <p className="text-[11px] text-brand-700 dark:text-brand-400">
-                        Comprobante cargado en la compra
-                      </p>
-                    </div>
+                      <Eye className="h-3.5 w-3.5" />
+                      <span>Ver {photos.length > 1 ? "todas" : "foto"}</span>
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setPhotoViewerUrl(selectedPurchase.purchase.invoice_photo_url!)}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-brand-700 active:scale-95 transition dark:bg-brand-500"
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                    <span>Ver foto</span>
-                  </button>
-                </div>
-              ) : null}
+                );
+              })()}
 
               <div>
                 <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
@@ -633,40 +666,53 @@ export const PurchasesHistoryTable = ({
                 </div>
               ) : null}
 
-              {/* Fotografía de la factura física adjunta */}
-              {selectedPurchase.purchase.invoice_photo_url ? (
-                <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-3 dark:border-brand-800/80 dark:bg-brand-950/30">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <span className="flex items-center gap-1.5 text-xs font-bold text-brand-900 dark:text-brand-300">
-                      <Camera className="h-4 w-4 text-brand-600 dark:text-brand-400" />
-                      Fotografía de la factura física
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setPhotoViewerUrl(selectedPurchase.purchase.invoice_photo_url!)}
-                      className="inline-flex items-center gap-1 rounded-md bg-white border border-brand-300 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50 shadow-xs dark:bg-slate-800 dark:border-brand-700 dark:text-brand-300"
-                    >
-                      <Maximize2 className="h-3 w-3" /> Ver ampliada
-                    </button>
-                  </div>
-                  <div
-                    className="relative h-32 sm:h-44 w-full overflow-hidden rounded-lg border border-brand-200 bg-slate-100 cursor-pointer group dark:border-brand-800/60 dark:bg-slate-900"
-                    onClick={() => setPhotoViewerUrl(selectedPurchase.purchase.invoice_photo_url!)}
-                    title="Toca para ampliar el comprobante"
-                  >
-                    <img
-                      src={selectedPurchase.purchase.invoice_photo_url}
-                      alt="Factura física"
-                      className="h-full w-full object-contain transition-transform group-hover:scale-105"
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <span className="rounded-lg bg-black/60 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-xs flex items-center gap-1.5">
-                        <Maximize2 className="h-4 w-4" /> Ampliar comprobante
+              {/* Fotografías de la factura física adjunta */}
+              {(() => {
+                const photos = parseInvoicePhotos(selectedPurchase.purchase.invoice_photo_url);
+                if (!photos.length) return null;
+                return (
+                  <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-3 dark:border-brand-800/80 dark:bg-brand-950/30">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-brand-900 dark:text-brand-300">
+                        <Camera className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+                        Fotografías de factura física ({photos.length} {photos.length === 1 ? "página" : "páginas"})
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => openPhotoViewer(photos, 0)}
+                        className="inline-flex items-center gap-1 rounded-md bg-white border border-brand-300 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50 shadow-xs dark:bg-slate-800 dark:border-brand-700 dark:text-brand-300"
+                      >
+                        <Maximize2 className="h-3 w-3" /> Ver todas ampliadas
+                      </button>
+                    </div>
+
+                    <div className={`grid gap-2 ${photos.length === 1 ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3"}`}>
+                      {photos.map((photo, i) => (
+                        <div
+                          key={i}
+                          className="relative h-32 sm:h-36 overflow-hidden rounded-lg border border-brand-200 bg-slate-100 cursor-pointer group dark:border-brand-800/60 dark:bg-slate-900"
+                          onClick={() => openPhotoViewer(photos, i)}
+                          title={`Toca para ampliar página #${i + 1}`}
+                        >
+                          <img
+                            src={photo}
+                            alt={`Factura página ${i + 1}`}
+                            className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                          />
+                          <span className="absolute top-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-xs">
+                            Pág. {i + 1}
+                          </span>
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="rounded-lg bg-black/70 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-xs flex items-center gap-1">
+                              <Maximize2 className="h-3.5 w-3.5" /> Ampliar
+                            </span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
-              ) : null}
+                );
+              })()}
 
               <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700/80 dark:bg-slate-800/50">
                 <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
@@ -716,27 +762,33 @@ export const PurchasesHistoryTable = ({
         </section>
       ) : null}
 
-      {/* Lightbox / Visor de foto de factura a pantalla completa */}
-      {photoViewerUrl ? (
+      {/* Lightbox / Visor de foto(s) de factura a pantalla completa con navegación multipágina */}
+      {photoViewerState && photoViewerState.photos.length > 0 ? (
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-3 sm:p-6 animate-fadeIn"
-          onClick={() => setPhotoViewerUrl(null)}
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-2 sm:p-6 animate-fadeIn"
+          onClick={() => setPhotoViewerState(null)}
         >
           <div
-            className="relative flex max-h-[92vh] max-w-4xl flex-col items-center justify-center overflow-hidden rounded-2xl bg-slate-900 shadow-2xl"
+            className="relative flex max-h-[94vh] w-full max-w-4xl flex-col items-center justify-center overflow-hidden rounded-2xl bg-slate-900 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Header del Lightbox */}
             <div className="flex w-full items-center justify-between border-b border-slate-800 px-4 py-2.5 text-white">
               <div className="flex items-center gap-2">
                 <Camera className="h-4 w-4 text-brand-400" />
-                <span className="text-xs font-bold">Fotografía original de la factura</span>
+                <span className="text-xs sm:text-sm font-bold">
+                  Factura de compra
+                  {photoViewerState.photos.length > 1
+                    ? ` — Página ${photoViewerState.index + 1} de ${photoViewerState.photos.length}`
+                    : ""}
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <a
-                  href={photoViewerUrl}
-                  download="factura-compra.jpg"
+                  href={photoViewerState.photos[photoViewerState.index]}
+                  download={`factura-compra-pag-${photoViewerState.index + 1}.jpg`}
                   className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-700"
                   title="Descargar fotografía"
                 >
@@ -744,7 +796,7 @@ export const PurchasesHistoryTable = ({
                 </a>
                 <button
                   type="button"
-                  onClick={() => setPhotoViewerUrl(null)}
+                  onClick={() => setPhotoViewerState(null)}
                   className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
                   title="Cerrar visor"
                 >
@@ -752,13 +804,71 @@ export const PurchasesHistoryTable = ({
                 </button>
               </div>
             </div>
-            <div className="flex max-h-[calc(92vh-4rem)] w-full items-center justify-center overflow-auto p-2">
+
+            {/* Imagen Principal y Flechas de Navegación */}
+            <div className="relative flex max-h-[calc(90vh-7rem)] w-full items-center justify-center overflow-auto p-2 sm:p-4">
               <img
-                src={photoViewerUrl}
-                alt="Factura original"
-                className="max-h-[78vh] w-auto max-w-full rounded-lg object-contain shadow-md"
+                src={photoViewerState.photos[photoViewerState.index]}
+                alt={`Página ${photoViewerState.index + 1}`}
+                className="max-h-[70vh] w-auto max-w-full rounded-lg object-contain shadow-md"
               />
+
+              {photoViewerState.photos.length > 1 && photoViewerState.index > 0 ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPhotoViewerState((prev) =>
+                      prev ? { ...prev, index: prev.index - 1 } : null
+                    )
+                  }
+                  className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white hover:bg-black/90 transition shadow-lg"
+                  title="Página anterior"
+                >
+                  <ChevronLeft className="h-6 w-6" />
+                </button>
+              ) : null}
+
+              {photoViewerState.photos.length > 1 &&
+              photoViewerState.index < photoViewerState.photos.length - 1 ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPhotoViewerState((prev) =>
+                      prev ? { ...prev, index: prev.index + 1 } : null
+                    )
+                  }
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white hover:bg-black/90 transition shadow-lg"
+                  title="Página siguiente"
+                >
+                  <ChevronRight className="h-6 w-6" />
+                </button>
+              ) : null}
             </div>
+
+            {/* Selector de miniaturas en la parte inferior si hay 2 o más fotos */}
+            {photoViewerState.photos.length > 1 ? (
+              <div className="flex w-full items-center justify-center gap-2 border-t border-slate-800/80 bg-slate-950/60 p-2 overflow-x-auto">
+                {photoViewerState.photos.map((p, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() =>
+                      setPhotoViewerState((prev) => (prev ? { ...prev, index: i } : null))
+                    }
+                    className={`relative h-12 w-12 shrink-0 overflow-hidden rounded-md border-2 transition ${
+                      i === photoViewerState.index
+                        ? "border-brand-500 ring-2 ring-brand-500/50 scale-105"
+                        : "border-slate-700 opacity-60 hover:opacity-100"
+                    }`}
+                  >
+                    <img src={p} alt={`Página ${i + 1}`} className="h-full w-full object-cover" />
+                    <span className="absolute bottom-0 right-0 bg-black/70 px-1 text-[9px] font-bold text-white leading-tight">
+                      #{i + 1}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
