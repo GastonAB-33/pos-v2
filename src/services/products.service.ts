@@ -92,8 +92,45 @@ const extractStoragePathFromPublicUrl = (publicUrl: string): string | null => {
   return decodeURIComponent(path ?? "");
 };
 
+export const DELETED_PRODUCT_MARKER = "__ARCHIVED_DELETED__";
+
+export const isArchivedDeletedProduct = (product: Product | null | undefined): boolean => {
+  if (!product) return false;
+  if (product.code?.startsWith("__deleted_")) return true;
+  if (product.description?.includes(DELETED_PRODUCT_MARKER)) return true;
+  return false;
+};
+
+const isForeignKeyDeleteError = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as {
+    code?: unknown;
+    message?: unknown;
+    details?: unknown;
+    status?: unknown;
+  };
+  const code = typeof candidate.code === "string" ? candidate.code : "";
+  const status =
+    typeof candidate.status === "number"
+      ? candidate.status
+      : typeof candidate.status === "string"
+        ? Number(candidate.status)
+        : NaN;
+  const message =
+    `${typeof candidate.message === "string" ? candidate.message : ""} ${
+      typeof candidate.details === "string" ? candidate.details : ""
+    }`.toLowerCase();
+
+  if (status === 409) return true;
+  if (code === "23503") return true;
+  return message.includes("foreign key") || message.includes("update or delete on table");
+};
+
 export const productsService = {
-  getAllByTenant: (tenantId: string) => crud.getAllByTenant(tenantId),
+  getAllByTenant: async (tenantId: string): Promise<Product[]> => {
+    const all = await crud.getAllByTenant(tenantId);
+    return all.filter((p) => !isArchivedDeletedProduct(p));
+  },
   getById: (tenantId: string, id: string) => crud.getById(tenantId, id),
   create: async (tenantId: string, input: CreateProductInput) => {
     const rawCode = input.code?.trim();
@@ -101,7 +138,7 @@ export const productsService = {
       const normalizedCode = rawCode.toUpperCase();
       const existingByCode = await crud.query(tenantId, { eq: { code: rawCode } });
       const duplicateByCode = existingByCode.find(
-        (p) => p.code && p.code.trim().toUpperCase() === normalizedCode
+        (p) => !isArchivedDeletedProduct(p) && p.code && p.code.trim().toUpperCase() === normalizedCode
       );
       if (duplicateByCode) {
         throw new Error(`Ya existe un producto con el código "${rawCode}" ("${duplicateByCode.name}")`);
@@ -113,11 +150,12 @@ export const productsService = {
       );
       if (barcodeDuplicate) {
         const productWithBarcode = await crud.getById(tenantId, barcodeDuplicate.product_id);
-        if (productWithBarcode) {
+        if (productWithBarcode && !isArchivedDeletedProduct(productWithBarcode)) {
           throw new Error(
             `El código "${rawCode}" ya está asignado como código de barras en el producto "${productWithBarcode.name}"`
           );
         }
+        await barcodeCrud.delete(tenantId, barcodeDuplicate.id);
       }
     }
     return crud.create(tenantId, input);
@@ -128,7 +166,11 @@ export const productsService = {
       const normalizedCode = rawCode.toUpperCase();
       const existingByCode = await crud.query(tenantId, { eq: { code: rawCode } });
       const duplicateByCode = existingByCode.find(
-        (p) => p.id !== id && p.code && p.code.trim().toUpperCase() === normalizedCode
+        (p) =>
+          p.id !== id &&
+          !isArchivedDeletedProduct(p) &&
+          p.code &&
+          p.code.trim().toUpperCase() === normalizedCode
       );
       if (duplicateByCode) {
         throw new Error(`Ya existe un producto con el código "${rawCode}" ("${duplicateByCode.name}")`);
@@ -140,11 +182,12 @@ export const productsService = {
       );
       if (barcodeDuplicate) {
         const productWithBarcode = await crud.getById(tenantId, barcodeDuplicate.product_id);
-        if (productWithBarcode) {
+        if (productWithBarcode && !isArchivedDeletedProduct(productWithBarcode)) {
           throw new Error(
             `El código "${rawCode}" ya está asignado como código de barras en el producto "${productWithBarcode.name}"`
           );
         }
+        await barcodeCrud.delete(tenantId, barcodeDuplicate.id);
       }
     }
     return crud.update(tenantId, id, input);
@@ -154,14 +197,31 @@ export const productsService = {
       stock_current: stockCurrent,
       stock: stockCurrent,
     } as UpdateProductInput & { stock: number }),
-  delete: async (tenantId: string, id: string) => {
+  delete: async (tenantId: string, id: string): Promise<boolean> => {
+    // 1. Limpiar todos los códigos de barras asociados para liberarlos por completo
     try {
       const productBarcodes = await barcodeCrud.query(tenantId, { eq: { product_id: id } });
       await Promise.all(productBarcodes.map((row) => barcodeCrud.delete(tenantId, row.id)));
     } catch {
       // Silenciar errores de limpieza de códigos al borrar producto
     }
-    return crud.delete(tenantId, id);
+
+    // 2. Intentar eliminación física directa de la tabla products
+    try {
+      return await crud.delete(tenantId, id);
+    } catch (error) {
+      // 3. Si tiene historial (ventas, compras o movimientos), ocultarlo permanentemente y liberar su código interno
+      if (isForeignKeyDeleteError(error)) {
+        const archived = await crud.update(tenantId, id, {
+          is_active: false,
+          is_favorite: false,
+          code: `__deleted_${id.slice(0, 8)}_${Date.now()}`,
+          description: DELETED_PRODUCT_MARKER,
+        });
+        return Boolean(archived);
+      }
+      throw error;
+    }
   },
   getBarcodesByTenant: async (tenantId: string): Promise<ProductBarcode[]> => {
     const allBarcodes = await barcodeCrud.getAllByTenant(tenantId);
@@ -236,19 +296,20 @@ export const productsService = {
         continue;
       }
 
-      // Si es el primario activo, verificar que el producto exista
+      // Si es el primario activo, verificar que el producto exista y no esté eliminado
       const product = await crud.getById(tenantId, match.product_id);
-      if (product) {
+      if (product && !isArchivedDeletedProduct(product)) {
         return product;
       }
 
-      // Si el producto no existe, purgar código huérfano
+      // Si el producto no existe o fue eliminado, purgar código huérfano
       void barcodeCrud.delete(tenantId, match.id);
     }
 
     // Búsqueda por código de producto único
     const matchedProducts = await crud.query(tenantId, { eq: { code: barcode }, limit: 1 });
-    return matchedProducts[0] ?? null;
+    const validMatch = matchedProducts.find((p) => !isArchivedDeletedProduct(p));
+    return validMatch ?? null;
   },
 
   getPrimaryBarcodesMapByTenant: async (tenantId: string): Promise<Record<string, string>> => {
@@ -304,10 +365,10 @@ export const productsService = {
         continue;
       }
 
-      // Si es el código activo del otro producto, verificar si el otro producto existe
+      // Si es el código activo del otro producto, verificar si el otro producto existe y no fue eliminado
       const otherProduct = await crud.getById(tenantId, match.product_id);
-      if (!otherProduct) {
-        // Producto ya inexistente: purgar registro huérfano
+      if (!otherProduct || isArchivedDeletedProduct(otherProduct)) {
+        // Producto ya inexistente o eliminado: purgar registro huérfano
         await barcodeCrud.delete(tenantId, match.id);
         continue;
       }
@@ -317,7 +378,7 @@ export const productsService = {
     }
 
     // 1.1 Validar que el código de barras no esté asignado como código interno de OTRO producto
-    const allProducts = await crud.getAllByTenant(tenantId);
+    const allProducts = await productsService.getAllByTenant(tenantId);
     const productWithSameCode = allProducts.find(
       (p) => p.id !== productId && p.code && p.code.trim().toUpperCase() === barcode.toUpperCase()
     );
