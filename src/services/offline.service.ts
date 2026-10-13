@@ -1,4 +1,4 @@
-﻿import { auditService } from "@/services/audit.service";
+import { auditService } from "@/services/audit.service";
 import { cashService } from "@/services/cash.service";
 import { currentAccountsService } from "@/services/current-accounts.service";
 import { productsService } from "@/services/products.service";
@@ -351,7 +351,10 @@ const syncPendingSaleRecord = async (record: PendingSaleRecord): Promise<Sale> =
 
   for (const item of record.items) {
     const isManualSaleItem =
-      item.metadata?.is_manual_sale_item === true || item.product_id.startsWith("manual-");
+      item.metadata?.is_manual_sale_item === true ||
+      item.metadata?.is_debt_payment_item === true ||
+      item.product_id.startsWith("manual-") ||
+      item.product_id.startsWith("debt-");
 
     if (isManualSaleItem) {
       await salesService.createItem(record.tenant_id, {

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Coins,
   FileText,
@@ -91,6 +91,20 @@ export const PosSmartView = ({
   const [searchScope, setSearchScope] = useState<ProductSearchScope>("all");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const cartContainerRef = useRef<HTMLDivElement | null>(null);
+  const lastItemRef = useRef<HTMLElement | null>(null);
+  const prevItemsLengthRef = useRef(items.length);
+
+  // Último producto en la secuencia de carga del carrito
+  const lastAddedProductId = items.length > 0 ? items[items.length - 1].product_id : null;
+
+  useEffect(() => {
+    // Si se agregó un nuevo producto, hacemos scroll suave hacia la fila recién agregada
+    if (items.length > prevItemsLengthRef.current) {
+      lastItemRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    prevItemsLengthRef.current = items.length;
+  }, [items.length]);
 
   // Filtrado de productos para el buscador inteligente
   const searchResults = useMemo(() => {
@@ -279,7 +293,7 @@ export const PosSmartView = ({
           ) : null}
         </div>
 
-        {/* Lista de productos escaneados organizados en 2 columnas */}
+        {/* Lista de productos escaneados: 1 columna vertical continua y filas compactas estilizadas (Opción 1 + 3) */}
         {items.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-500 space-y-2">
             <ShoppingCart size={40} className="text-slate-400 dark:text-slate-600 opacity-60 mb-1" />
@@ -289,98 +303,136 @@ export const PosSmartView = ({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start flex-1 content-start">
-            {items.map((item) => (
-              <article
-                key={item.product_id}
-                className="rounded-xl border border-slate-200 dark:border-slate-800/90 bg-slate-50/70 dark:bg-[#0e172e] p-3 sm:p-3.5 flex flex-col justify-between gap-2.5 shadow-sm hover:border-slate-300 dark:hover:border-slate-700/80 transition"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
+          <div
+            ref={cartContainerRef}
+            className="flex flex-col gap-2.5 flex-1 overflow-y-auto max-h-[calc(100vh-280px)] min-h-[360px] pr-1"
+          >
+            {items.map((item, index) => {
+              const isLastItem = item.product_id === lastAddedProductId;
+              const itemSubtotal =
+                "line_total" in item && typeof (item as { line_total?: number }).line_total === "number"
+                  ? (item as { line_total: number }).line_total
+                  : item.unit_price * item.quantity;
+
+              return (
+                <article
+                  key={item.product_id}
+                  ref={isLastItem ? lastItemRef : undefined}
+                  className={cn(
+                    "group rounded-xl border p-2.5 sm:p-3 transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs",
+                    isLastItem
+                      ? "border-blue-400 dark:border-sky-500/80 bg-blue-50/50 dark:bg-sky-950/25 ring-1 ring-blue-400/30 dark:ring-sky-500/30"
+                      : "border-slate-200 dark:border-slate-800/90 bg-slate-50/70 dark:bg-[#0e172e] hover:border-slate-300 dark:hover:border-slate-700/80"
+                  )}
+                >
+                  {/* Información del producto (Nombre, orden, categoría y precio unitario) */}
+                  <div className="flex-1 min-w-0 pr-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 tabular-nums">
+                        #{index + 1}
+                      </span>
                       <h3
-                        className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 uppercase tracking-tight line-clamp-1"
+                        className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 uppercase tracking-tight truncate max-w-full"
                         title={item.name}
                       >
                         {item.name}
                       </h3>
+                      {isLastItem ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-blue-100 dark:bg-sky-900/60 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 dark:text-sky-300 border border-blue-200 dark:border-sky-700/60">
+                          Último agregado
+                        </span>
+                      ) : null}
                       {item.is_debt_payment_item ? (
-                        <span className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/60">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/60">
                           Cobro Cta. Cte.
                         </span>
                       ) : null}
                     </div>
-                    <span className="font-bold text-xs sm:text-sm text-blue-600 dark:text-sky-400 whitespace-nowrap">
-                      {currency.format(
-                        "line_total" in item && typeof (item as { line_total?: number }).line_total === "number"
-                          ? (item as { line_total: number }).line_total
-                          : item.unit_price * item.quantity
-                      )}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    {item.is_debt_payment_item ? (
-                      <span>Cancelación de saldo pendiente</span>
-                    ) : (
-                      <>
-                        {currency.format(item.unit_price)} /{" "}
-                        {item.sale_mode === "weight" ? "kg" : "u."}
-                      </>
-                    )}
-                  </p>
-                </div>
 
-                <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200 dark:border-slate-800/70">
-                  {item.is_debt_payment_item ? (
-                    <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                      Pago único
-                    </span>
-                  ) : (
+                    <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500 dark:text-slate-400 flex-wrap">
+                      {item.is_debt_payment_item ? (
+                        <span>Cancelación de saldo pendiente</span>
+                      ) : (
+                        <>
+                          <span className="font-medium text-slate-600 dark:text-slate-300">
+                            {currency.format(item.unit_price)} / {item.sale_mode === "weight" ? "kg" : "u."}
+                          </span>
+                          {item.category ? (
+                            <>
+                              <span className="text-slate-300 dark:text-slate-700">•</span>
+                              <span className="truncate max-w-[140px]">{item.category}</span>
+                            </>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Controles de cantidad táctiles compactos */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {item.is_debt_payment_item ? (
+                      <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800/50">
+                        Pago único
+                      </span>
+                    ) : (
+                      <div className="flex items-center rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-900/80 p-0.5 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => onDecrease(item.product_id)}
+                          disabled={disabled || !canWrite}
+                          className="w-7 h-7 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center text-xs font-bold transition disabled:opacity-40"
+                          title="Disminuir cantidad"
+                        >
+                          -
+                        </button>
+                        <span className="min-w-[44px] px-1 text-center font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 tabular-nums">
+                          {item.sale_mode === "weight" ? `${item.quantity} kg` : item.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onIncrease(item.product_id)}
+                          disabled={disabled || !canWrite}
+                          className="w-7 h-7 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center text-xs font-bold transition disabled:opacity-40"
+                          title="Aumentar cantidad"
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Subtotal destacado y botones de acción */}
+                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200 dark:border-slate-800/60">
+                    <div className="text-left sm:text-right min-w-[90px]">
+                      <span className="text-[10px] block text-slate-400 sm:hidden">Subtotal</span>
+                      <span className="font-extrabold text-sm sm:text-base text-blue-600 dark:text-sky-400 tracking-tight">
+                        {currency.format(itemSubtotal)}
+                      </span>
+                    </div>
+
                     <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => onDecrease(item.product_id)}
+                        onClick={() => onEdit(item)}
                         disabled={disabled || !canWrite}
-                        className="w-7 h-7 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 flex items-center justify-center text-xs font-bold transition disabled:opacity-40"
+                        className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 text-xs font-semibold transition disabled:opacity-40"
                       >
-                        -
+                        Editar
                       </button>
-                      <span className="min-w-[24px] text-center font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100">
-                        {item.sale_mode === "weight" ? `${item.quantity} kg` : item.quantity}
-                      </span>
                       <button
                         type="button"
-                        onClick={() => onIncrease(item.product_id)}
+                        onClick={() => onRemove(item.product_id)}
                         disabled={disabled || !canWrite}
-                        className="w-7 h-7 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 flex items-center justify-center text-xs font-bold transition disabled:opacity-40"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition disabled:opacity-40"
+                        title="Eliminar producto"
                       >
-                        +
+                        <Trash2 size={15} />
                       </button>
                     </div>
-                  )}
-
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => onEdit(item)}
-                      disabled={disabled || !canWrite}
-                      className="px-3 py-1 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 text-xs font-medium transition disabled:opacity-40"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onRemove(item.product_id)}
-                      disabled={disabled || !canWrite}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition disabled:opacity-40"
-                      title="Eliminar producto"
-                    >
-                      <Trash2 size={14} />
-                    </button>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         )}
       </section>

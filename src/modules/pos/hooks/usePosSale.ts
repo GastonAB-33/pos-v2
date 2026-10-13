@@ -2196,7 +2196,12 @@ export const usePosSale = (tenantId: string | null) => {
             },
           });
 
-          if (item.is_manual_item) {
+          if (
+            item.is_manual_item ||
+            item.product_id.startsWith("manual-") ||
+            item.is_debt_payment_item ||
+            item.product_id.startsWith("debt-")
+          ) {
             await itemPromise;
             return;
           }

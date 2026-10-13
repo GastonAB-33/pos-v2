@@ -1304,7 +1304,7 @@ export const PosCheckoutPanel = ({
                     <option value="">Seleccionar cuenta destino (opcional)</option>
                     {destinationBankAccounts.map((b) => (
                       <option key={b.id} value={b.id}>
-                        {b.bank_name} - {b.account_type}
+                        {b.bank_name} — {b.holder_name || b.account_type}{b.alias ? ` (${b.alias})` : ""}
                       </option>
                     ))}
                   </select>
@@ -1410,7 +1410,7 @@ export const PosCheckoutPanel = ({
                   <option value="">Cuenta destino (opcional)</option>
                   {destinationBankAccounts.map((b) => (
                     <option key={b.id} value={b.id}>
-                      {b.bank_name} - {b.account_type}
+                      {b.bank_name} — {b.holder_name || b.account_type}{b.alias ? ` (${b.alias})` : ""}
                     </option>
                   ))}
                 </select>

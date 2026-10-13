@@ -12,8 +12,6 @@ import {
   ArrowLeftRight,
   ListFilter,
   CheckCircle2,
-  Clock,
-  User as UserIcon,
 } from "lucide-react";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
@@ -81,6 +79,7 @@ export const CajaPage = () => {
   const [saleDocumentError, setSaleDocumentError] = useState<string | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [activeViewTab, setActiveViewTab] = useState<"shift" | "history">("shift");
 
   const {
     currentSession,
@@ -228,16 +227,16 @@ export const CajaPage = () => {
       title="Caja diaria"
       description="Control de efectivo, arqueos de turno y movimientos en mostrador"
     >
-      <div className="caja-daily-workspace space-y-3">
-        {/* Toolbar & Status Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200/80 shadow-xs">
-          <div className="flex items-center gap-2 min-w-0">
-            {/* Status Badge */}
+      <div className="caja-daily-workspace space-y-3.5">
+        {/* Barra Superior Compacta y Funcional */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-[#0b1325] px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800/90 shadow-sm">
+          {/* Lado Izquierdo: Estado de Caja + Información en 1 sola línea */}
+          <div className="flex flex-wrap items-center gap-2.5 min-w-0">
             <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border ${
                 currentSession
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200/60"
-                  : "bg-slate-100 text-slate-600 border-slate-200/70"
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800/80"
+                  : "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800/60 dark:text-slate-400 dark:border-slate-700/80"
               }`}
             >
               <span
@@ -247,17 +246,27 @@ export const CajaPage = () => {
               />
               {currentSession ? "Caja abierta" : "Sin caja abierta"}
             </span>
+
+            {dailySession && (
+              <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
+                <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
+                <span>Responsable: <strong className="text-slate-800 dark:text-slate-200 font-semibold">{dailySessionResponsible}</strong></span>
+                <span className="hidden md:inline text-slate-300 dark:text-slate-600">•</span>
+                <span className="hidden md:inline">Desde {formatDateTime(dailySession.opened_at)}</span>
+              </span>
+            )}
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          {/* Lado Derecho: Acciones principales */}
+          <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => setIsCurrentAccountModalOpen(true)}
               disabled={isSubmitting || !dailySession}
-              className="h-8 inline-flex items-center gap-1.5 px-3 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors shadow-xs disabled:opacity-50"
+              className="h-8.5 inline-flex items-center gap-1.5 px-3 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 border border-slate-300 dark:border-slate-700 rounded-xl transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
             >
-              <Users className="h-3.5 w-3.5 text-slate-400" />
-              Cuenta corriente
+              <Users className="h-3.5 w-3.5 text-slate-400 dark:text-slate-400" />
+              <span>Cta. Cte.</span>
             </button>
 
             <button
@@ -272,10 +281,10 @@ export const CajaPage = () => {
                 setManualMovementTab("income");
                 setIsManualMovementModalOpen(true);
               }}
-              className="h-8 inline-flex items-center gap-1.5 px-3 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors shadow-xs disabled:opacity-50"
+              className="h-8.5 inline-flex items-center gap-1.5 px-3.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-500 rounded-xl transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
             >
               <ArrowLeftRight className="h-3.5 w-3.5" />
-              Movimiento manual
+              <span>Movimiento manual</span>
             </button>
 
             {currentSession && canWriteCaja && (
@@ -283,10 +292,10 @@ export const CajaPage = () => {
                 type="button"
                 disabled={isSubmitting}
                 onClick={() => setIsCloseCashModalOpen(true)}
-                className="h-8 inline-flex items-center gap-1.5 px-3 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 rounded-lg transition-colors shadow-xs disabled:opacity-50"
+                className="h-8.5 inline-flex items-center gap-1.5 px-3 text-xs font-bold text-rose-700 dark:text-rose-300 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/70 rounded-xl transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
               >
                 <Lock className="h-3.5 w-3.5" />
-                Cerrar caja
+                <span>Cerrar caja</span>
               </button>
             )}
 
@@ -297,7 +306,7 @@ export const CajaPage = () => {
               }}
               disabled={isLoading || isSubmitting || isRefreshing}
               title="Recargar caja diaria"
-              className="h-8 w-8 inline-flex items-center justify-center text-slate-500 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors disabled:opacity-50"
+              className="h-8.5 w-8.5 inline-flex items-center justify-center text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700/80 border border-slate-300 dark:border-slate-700 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
             </button>
@@ -309,11 +318,11 @@ export const CajaPage = () => {
           <div className="flex items-center gap-1.5 text-xs px-1">
             {isRefreshing ? (
               <>
-                <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
-                <span className="text-slate-500">Actualizando datos de caja...</span>
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700 dark:border-slate-600 dark:border-t-slate-200" />
+                <span className="text-slate-500 dark:text-slate-400">Actualizando datos de caja...</span>
               </>
             ) : (
-              <span className={`inline-flex items-center gap-1 ${isRefreshConfirmed ? "text-emerald-600 font-medium" : "text-slate-400"}`}>
+              <span className={`inline-flex items-center gap-1 ${isRefreshConfirmed ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-slate-500"}`}>
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 {isRefreshConfirmed ? "Caja actualizada correctamente." : "Caja actualizada."}
                 {lastUpdatedAt ? ` ${new Date(lastUpdatedAt).toLocaleTimeString("es-AR")}` : ""}
@@ -324,10 +333,10 @@ export const CajaPage = () => {
 
         {feedback && (
           <div
-            className={`p-3 rounded-xl border text-xs font-medium ${
+            className={`p-3 rounded-xl border text-xs font-semibold ${
               feedback.type === "success"
-                ? "bg-emerald-50 text-emerald-800 border-emerald-200/80"
-                : "bg-rose-50 text-rose-800 border-rose-200/80"
+                ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/80"
+                : "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800/80"
             }`}
           >
             {feedback.message}
@@ -344,164 +353,188 @@ export const CajaPage = () => {
           />
         )}
 
-        {/* KPI Cards: Estilo idéntico a Caja General */}
+        {/* Panel Principal: Hero Saldo en Mano + Métricas Condensadas */}
         {dailySession ? (
-          <>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-              {/* Card 1: Saldo Esperado */}
-              <article className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-xs hover:border-slate-300 transition-colors">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
+            {/* Tarjeta Hero: Saldo Teórico en Mano (Col 1 a 5) */}
+            <article className="lg:col-span-5 rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-4 sm:p-5 shadow-sm flex flex-col justify-between">
+              <div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-                    Saldo Esperado
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Efectivo en Caja (Teórico)
                   </span>
-                  <div className="p-1 rounded-md bg-emerald-50 text-emerald-600">
+                  <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
                     <DollarSign className="h-4 w-4" />
                   </div>
                 </div>
-                <p className="mt-1 text-xl font-bold tracking-tight text-emerald-700">
+                <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-emerald-600 dark:text-emerald-400">
                   {formatMoney(dailySessionTotals.expectedBalance)}
                 </p>
-                <div className="flex items-center justify-between mt-0.5">
-                  <span className="text-[11px] text-slate-400">Efectivo teórico calculado</span>
-                  <button
-                    type="button"
-                    onClick={() => setOpenSummaryModal("total")}
-                    className="text-[11px] font-medium text-slate-500 hover:text-slate-900 underline underline-offset-2"
-                  >
-                    Ver fórmula
-                  </button>
-                </div>
-              </article>
-
-              {/* Card 2: Ingresos del turno */}
-              <article className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-xs hover:border-slate-300 transition-colors">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-                    Ingresos del Turno
-                  </span>
-                  <div className="p-1 rounded-md bg-blue-50 text-blue-600">
-                    <ArrowDownLeft className="h-4 w-4" />
-                  </div>
-                </div>
-                <p className="mt-1 text-xl font-bold tracking-tight text-slate-900">
-                  +{formatMoney(dailySessionTotals.incomes)}
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                  Monto que debe haber en el cajón de efectivo ahora mismo.
                 </p>
-                <div className="flex items-center justify-between mt-0.5">
-                  <span className="text-[11px] text-slate-400">Ventas + manuales</span>
-                  <button
-                    type="button"
-                    onClick={() => setOpenSummaryModal("incomes")}
-                    className="text-[11px] font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2"
-                  >
-                    Ver desglose
-                  </button>
-                </div>
-              </article>
-
-              {/* Card 3: Egresos del turno */}
-              <article className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-xs hover:border-slate-300 transition-colors">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-                    Egresos del Turno
-                  </span>
-                  <div className="p-1 rounded-md bg-rose-50 text-rose-600">
-                    <ArrowUpRight className="h-4 w-4" />
-                  </div>
-                </div>
-                <p className="mt-1 text-xl font-bold tracking-tight text-rose-700">
-                  -{formatMoney(dailySessionTotals.expenses)}
-                </p>
-                <div className="flex items-center justify-between mt-0.5">
-                  <span className="text-[11px] text-slate-400">Retiros, gastos y fletes</span>
-                  <button
-                    type="button"
-                    onClick={() => setOpenSummaryModal("expenses")}
-                    className="text-[11px] font-medium text-rose-600 hover:text-rose-800 underline underline-offset-2"
-                  >
-                    Ver desglose
-                  </button>
-                </div>
-              </article>
-
-              {/* Card 4: Fondo Inicial y Estado */}
-              <article className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-xs hover:border-slate-300 transition-colors">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-                    Fondo de Apertura
-                  </span>
-                  <div className="p-1 rounded-md bg-amber-50 text-amber-600">
-                    <CalendarClock className="h-4 w-4" />
-                  </div>
-                </div>
-                <p className="mt-1 text-xl font-bold tracking-tight text-slate-900">
-                  {formatMoney(dailySession.opening_amount)}
-                </p>
-                <p className="text-[11px] text-slate-400 mt-0.5 truncate">
-                  {dailySession.status === "open" ? "Turno en curso" : "Turno cerrado"} · {dailySessionResponsible}
-                </p>
-              </article>
-            </div>
-
-            {/* Barra de Auditoría de Sesión */}
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-white px-3.5 py-2.5 rounded-xl border border-slate-200/80 shadow-xs">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-                <div className="flex items-center gap-1.5 text-slate-700">
-                  <Clock className="h-3.5 w-3.5 text-slate-400" />
-                  <span className="text-slate-500">Apertura:</span>
-                  <span className="font-semibold text-slate-900">
-                    {formatDateTime(dailySession.opened_at)}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1.5 text-slate-700">
-                  <Clock className="h-3.5 w-3.5 text-slate-400" />
-                  <span className="text-slate-500">Cierre:</span>
-                  <span className="font-semibold text-slate-900">
-                    {dailySession.closed_at ? formatDateTime(dailySession.closed_at) : "En curso"}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1.5 text-slate-700">
-                  <UserIcon className="h-3.5 w-3.5 text-slate-400" />
-                  <span className="text-slate-500">Responsable:</span>
-                  <span className="font-semibold text-slate-900">{dailySessionResponsible}</span>
-                </div>
-
-                {dailySession.closing_amount != null && (
-                  <div className="flex items-center gap-1.5 text-slate-700">
-                    <span className="text-slate-500">Monto real arqueado:</span>
-                    <span className="font-bold text-slate-900">
-                      {formatMoney(dailySession.closing_amount)}
-                    </span>
-                  </div>
-                )}
               </div>
 
-              <button
-                type="button"
-                onClick={() => openDailyDetail(dailyDate)}
-                className="h-7 inline-flex items-center gap-1.5 px-3 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors shadow-xs"
-              >
-                <ListFilter className="h-3.5 w-3.5 text-slate-400" />
-                Ver movimientos del turno
-              </button>
+              <div className="pt-3 mt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setOpenSummaryModal("total")}
+                  className="text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition underline underline-offset-2 cursor-pointer"
+                >
+                  Ver fórmula de cálculo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openDailyDetail(dailyDate)}
+                  className="text-xs font-semibold text-blue-600 dark:text-sky-400 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <ListFilter size={13} />
+                  <span>Auditar movimientos</span>
+                </button>
+              </div>
+            </article>
+
+            {/* Tarjetas Secundarias Condensadas (Col 6 a 12: 3 columnas) */}
+            <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {/* Apertura */}
+              <article className="rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-3.5 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Apertura
+                    </span>
+                    <CalendarClock className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
+                  </div>
+                  <p className="mt-2 text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                    {formatMoney(dailySession.opening_amount)}
+                  </p>
+                </div>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 truncate">
+                  Fondo de inicio
+                </p>
+              </article>
+
+              {/* Ingresos */}
+              <article className="rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-3.5 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Ingresos
+                    </span>
+                    <ArrowDownLeft className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
+                  </div>
+                  <p className="mt-2 text-lg font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+                    +{formatMoney(dailySessionTotals.incomes)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOpenSummaryModal("incomes")}
+                  className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:underline text-left mt-2 cursor-pointer"
+                >
+                  Ver desglose →
+                </button>
+              </article>
+
+              {/* Egresos */}
+              <article className="rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-3.5 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Egresos
+                    </span>
+                    <ArrowUpRight className="h-3.5 w-3.5 text-rose-500 dark:text-rose-400" />
+                  </div>
+                  <p className="mt-2 text-lg font-bold tracking-tight text-rose-600 dark:text-rose-400">
+                    -{formatMoney(dailySessionTotals.expenses)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOpenSummaryModal("expenses")}
+                  className="text-[11px] font-semibold text-rose-700 dark:text-rose-400 hover:underline text-left mt-2 cursor-pointer"
+                >
+                  Ver desglose →
+                </button>
+              </article>
             </div>
-          </>
+          </div>
         ) : null}
 
-        {/* Tabla del Historial de Cajas Diarias */}
-        {isLoading ? (
-          <div className="p-8 text-center bg-white rounded-xl border border-slate-200/80 shadow-xs">
-            <RefreshCw className="h-6 w-6 text-slate-400 animate-spin mx-auto mb-2" />
-            <p className="text-xs font-medium text-slate-700">Cargando historial de cajas diarias...</p>
+        {/* Selector de Pestañas: "Turno Actual" vs "Historial de Jornadas" */}
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 pt-1">
+          <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800/80 p-1 border border-slate-200 dark:border-slate-700/80">
+            <button
+              type="button"
+              onClick={() => setActiveViewTab("shift")}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                activeViewTab === "shift"
+                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+              }`}
+            >
+              Movimientos del turno ({detailMovements.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveViewTab("history")}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                activeViewTab === "history"
+                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+              }`}
+            >
+              Historial de jornadas ({dailyTracking.length})
+            </button>
+          </div>
+
+          {activeViewTab === "shift" && (
+            <button
+              type="button"
+              onClick={() => openDailyDetail(dailyDate)}
+              className="text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white inline-flex items-center gap-1 cursor-pointer"
+            >
+              <ListFilter size={13} />
+              <span>Filtros y auditoría</span>
+            </button>
+          )}
+        </div>
+
+        {/* Vista Condicional: Tabla de Turno Actual vs Historial */}
+        {activeViewTab === "shift" ? (
+          <div className="bg-white dark:bg-[#0b1325] rounded-2xl border border-slate-200 dark:border-slate-800/90 shadow-sm p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                  Movimientos en Curso
+                </h3>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                  Operaciones registradas durante este turno de caja
+                </p>
+              </div>
+            </div>
+
+            <CashMovementsTable
+              movements={detailMovements}
+              usersById={usersById}
+              saleNumbersById={saleNumbersById}
+              onViewSaleDocument={handleViewSaleDocument}
+            />
           </div>
         ) : (
-          <CashDailyTrackingTable
-            rows={dailyTracking}
-            onViewDetail={(date) => {
-              openDailyDetail(date);
-            }}
-          />
+          isLoading ? (
+            <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+              <RefreshCw className="h-6 w-6 text-slate-400 animate-spin mx-auto mb-2" />
+              <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Cargando historial de cajas diarias...</p>
+            </div>
+          ) : (
+            <CashDailyTrackingTable
+              rows={dailyTracking}
+              onViewDetail={(date) => {
+                openDailyDetail(date);
+              }}
+            />
+          )
         )}
       </div>
 

@@ -4,6 +4,7 @@ import {
   type CreateEntityInput,
   type UpdateEntityInput,
 } from "@/services/base/tenant-crud.service";
+import { productsService } from "@/services/products.service";
 import type { Sale, SaleItem, SalePayment } from "@/types/entities";
 
 const salesCrud = new TenantCrudService<Sale>(dbTables.sales);
@@ -21,12 +22,35 @@ export const salesService = {
   create: (tenantId: string, input: CreateSaleInput) => salesCrud.create(tenantId, input),
   update: (tenantId: string, id: string, input: UpdateSaleInput) => salesCrud.update(tenantId, id, input),
   delete: (tenantId: string, id: string) => salesCrud.delete(tenantId, id),
-  createItem: (tenantId: string, input: CreateSaleItemInput) => {
+  createItem: async (tenantId: string, input: CreateSaleItemInput) => {
+    let resolvedProductId = input.product_id;
+
+    if (resolvedProductId.startsWith("manual-")) {
+      const manualProduct = await productsService.ensureSpecialProduct(
+        tenantId,
+        "SISTEMA_VENTA_MANUAL",
+        "Venta Manual / Producto Temporal"
+      );
+      resolvedProductId = manualProduct.id;
+    } else if (resolvedProductId.startsWith("debt-")) {
+      const debtProduct = await productsService.ensureSpecialProduct(
+        tenantId,
+        "SISTEMA_COBRO_CTA_CTE",
+        "Cobro Cuenta Corriente"
+      );
+      resolvedProductId = debtProduct.id;
+    }
+
     // Compatibilidad con esquemas legacy que todavia exigen columnas `price` y `subtotal`.
     const payload = {
       ...input,
+      product_id: resolvedProductId,
       price: input.unit_price,
       subtotal: input.line_total,
+      metadata: {
+        ...(input.metadata ?? {}),
+        original_product_id: input.product_id,
+      },
     };
     return saleItemsCrud.create(tenantId, payload);
   },

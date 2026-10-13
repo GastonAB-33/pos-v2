@@ -213,10 +213,10 @@ export const CashMovementsTable = ({
 
   if (!movements.length) {
     return (
-      <div className="p-8 text-center bg-slate-50/50 rounded-xl border border-slate-200/80">
-        <ReceiptIcon className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-        <p className="text-xs font-medium text-slate-700">No hay movimientos registrados</p>
-        <p className="text-[11px] text-slate-400 mt-0.5">
+      <div className="p-8 text-center bg-slate-50/70 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800">
+        <ReceiptIcon className="h-8 w-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+        <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">No hay movimientos registrados</p>
+        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
           Los cobros de ventas e ingresos/egresos del turno aparecerán aquí.
         </p>
       </div>
@@ -224,13 +224,13 @@ export const CashMovementsTable = ({
   }
 
   return (
-    <div className="max-h-[55vh] overflow-auto rounded-xl border border-slate-200/80 shadow-xs">
+    <div className="max-h-[55vh] overflow-auto rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
       <table className="w-full text-left text-xs">
-        <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100">
+        <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
-                <th key={header.id} className="py-2 px-3">
+                <th key={header.id} className="py-2.5 px-3">
                   {header.isPlaceholder
                     ? null
                     : flexRender(header.column.columnDef.header, header.getContext())}
@@ -239,11 +239,11 @@ export const CashMovementsTable = ({
             </tr>
           ))}
         </thead>
-        <tbody className="divide-y divide-slate-100/80 bg-white">
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 bg-white dark:bg-slate-900/60">
           {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} className="hover:bg-slate-50/70 transition-colors">
+            <tr key={row.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors">
               {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} className="py-2 px-3">
+                <td key={cell.id} className="py-2.5 px-3">
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}
