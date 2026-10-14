@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditService } from "@/services/audit.service";
+import { bankAccountsService } from "@/services/bank-accounts.service";
 import { cashService } from "@/services/cash.service";
 import { generalCashService } from "@/services/general-cash.service";
 import { currentAccountsService } from "@/services/current-accounts.service";
@@ -9,6 +10,7 @@ import { salesService } from "@/services/sales.service";
 import { settingsService } from "@/services/settings.service";
 import { usersService } from "@/services/users.service";
 import type {
+  BankAccount,
   CashMovement,
   CashSession,
   CashSettings,
@@ -16,6 +18,7 @@ import type {
   Customer,
   PaymentMethod,
   Sale,
+  SalePayment,
 } from "@/types/entities";
 import type {
   CashMovementValues,
@@ -156,6 +159,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
   const [customersById, setCustomersById] = useState<Record<string, Customer>>({});
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [paymentMethodsByCode, setPaymentMethodsByCode] = useState<Record<string, string>>({});
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [salePayments, setSalePayments] = useState<SalePayment[]>([]);
   const [salesById, setSalesById] = useState<Record<string, Sale>>({});
   const [usersById, setUsersById] = useState<Record<string, string>>({});
   const [cashSettings, setCashSettings] = useState<CashSettings>(defaultCashSettings);
@@ -177,6 +182,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       setCustomersById({});
       setPaymentMethods([]);
       setPaymentMethodsByCode({});
+      setBankAccounts([]);
+      setSalePayments([]);
       setSalesById({});
       setUsersById({});
       setCashSettings(defaultCashSettings);
@@ -195,6 +202,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         allCurrentAccountMovements,
         allCustomers,
         allSales,
+        allBankAccounts,
+        allSalePayments,
       ] = await Promise.all([
         cashService.getAllByTenant(tenantId),
         cashService.getAllMovementsByTenant(tenantId),
@@ -204,10 +213,14 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         currentAccountsService.getAllByTenant(tenantId),
         customersService.getAllByTenant(tenantId),
         salesService.getAllByTenant(tenantId),
+        bankAccountsService.getActiveByTenant(tenantId).catch(() => []),
+        salesService.getAllPaymentsByTenant(tenantId).catch(() => []),
       ]);
 
       setSessions(allSessions.sort((a, b) => b.opened_at.localeCompare(a.opened_at)));
       setMovements(allMovements.sort((a, b) => b.created_at.localeCompare(a.created_at)));
+      setBankAccounts(allBankAccounts);
+      setSalePayments(allSalePayments);
       setCurrentAccountMovements(
         allCurrentAccountMovements.sort((a, b) => b.created_at.localeCompare(a.created_at))
       );
@@ -561,6 +574,19 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       let incomesTotal = 0;
       let expensesTotal = 0;
 
+      // Mapa de cuenta bancaria destino por venta para cobros con transferencia
+      const destinationAccountBySaleAndMethod = new Map<string, string>();
+      for (const p of salePayments) {
+        const meta = p.metadata as { payment_details?: { destination_account_id?: string } } | null;
+        const destAccId = meta?.payment_details?.destination_account_id;
+        if (destAccId) {
+          destinationAccountBySaleAndMethod.set(
+            `${p.sale_id}_${normalizeKey(p.payment_method_code)}`,
+            destAccId
+          );
+        }
+      }
+
       const addBreakdown = (
         target: Map<string, CashBreakdownItem>,
         code: string,
@@ -588,11 +614,30 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
         if (movement.movement_type === "sale_payment") {
           const methodCode = referenceKey || "sale_payment";
-          const label =
+          const normMethod = normalizeKey(methodCode);
+
+          let targetCode = methodCode;
+          let targetLabel =
             paymentMethodsByCode[methodCode] ??
             defaultPaymentMethodLabels[methodCode] ??
             toTitleCaseFromCode(methodCode);
-          addBreakdown(incomesByCode, methodCode, label, amount);
+
+          // Si es transferencia y tiene cuenta bancaria asignada
+          if (normMethod === "transfer" && movement.reference_id) {
+            const destAccountId = destinationAccountBySaleAndMethod.get(
+              `${movement.reference_id}_transfer`
+            );
+            const bankAcc = destAccountId
+              ? bankAccounts.find((b) => b.id === destAccountId)
+              : null;
+            if (bankAcc) {
+              targetCode = `bank_acc_${bankAcc.id}`;
+              const holderPart = bankAcc.holder_name ? ` (${bankAcc.holder_name})` : "";
+              targetLabel = `Transferencia ${bankAcc.bank_name}${holderPart}`;
+            }
+          }
+
+          addBreakdown(incomesByCode, targetCode, targetLabel, amount);
           incomesTotal = roundAmount(incomesTotal + amount);
           continue;
         }
@@ -625,24 +670,161 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         }
       }
 
-      const configuredPaymentMethodItems = Object.entries(paymentMethodsByCode)
-        .map<CashBreakdownItem>(([code, label]) => {
-          const existing = incomesByCode.get(code);
-          if (existing) {
-            incomesByCode.delete(code);
-            return existing;
-          }
+      // Cuentas de banco activas y habilitadas para POS (idéntico al modal del POS)
+      const posBankAccounts = bankAccounts.filter(
+        (b) => b.is_active && b.is_pos_available !== false
+      );
 
-          return {
-            code,
-            label,
-            amount: 0,
-            movementsCount: 0,
-          };
-        })
-        .sort((a, b) => a.label.localeCompare(b.label));
+      const dynamicBaseItems: CashBreakdownItem[] = [];
+      const configuredCodes = Object.keys(paymentMethodsByCode);
+
+      // 1. Efectivo
+      if (configuredCodes.some((c) => normalizeKey(c) === "cash")) {
+        const existing = incomesByCode.get("cash");
+        if (existing) incomesByCode.delete("cash");
+        dynamicBaseItems.push({
+          code: "cash",
+          label: paymentMethodsByCode["cash"] || "Efectivo",
+          amount: existing?.amount ?? 0,
+          movementsCount: existing?.movementsCount ?? 0,
+        });
+      }
+
+      // 2. Transferencias Bancarias (Desglose por bancos habilitados en POS)
+      const hasTransferMethod = configuredCodes.some((c) => normalizeKey(c) === "transfer");
+      if (hasTransferMethod) {
+        if (posBankAccounts.length > 0) {
+          for (const acc of posBankAccounts) {
+            const code = `bank_acc_${acc.id}`;
+            const holderPart = acc.holder_name ? ` (${acc.holder_name})` : "";
+            const label = `Transferencia ${acc.bank_name}${holderPart}`;
+            const existing = incomesByCode.get(code);
+            if (existing) incomesByCode.delete(code);
+            dynamicBaseItems.push({
+              code,
+              label,
+              amount: existing?.amount ?? 0,
+              movementsCount: existing?.movementsCount ?? 0,
+            });
+          }
+        } else {
+          const existing = incomesByCode.get("transfer");
+          if (existing) incomesByCode.delete("transfer");
+          dynamicBaseItems.push({
+            code: "transfer",
+            label: paymentMethodsByCode["transfer"] || "Transferencia bancaria",
+            amount: existing?.amount ?? 0,
+            movementsCount: existing?.movementsCount ?? 0,
+          });
+        }
+      }
+
+      // 3. Tarjeta de débito
+      if (configuredCodes.some((c) => normalizeKey(c) === "card_debit")) {
+        const existing = incomesByCode.get("card_debit");
+        if (existing) incomesByCode.delete("card_debit");
+        dynamicBaseItems.push({
+          code: "card_debit",
+          label: paymentMethodsByCode["card_debit"] || "Tarjeta de debito",
+          amount: existing?.amount ?? 0,
+          movementsCount: existing?.movementsCount ?? 0,
+        });
+      }
+
+      // 4. Tarjeta de crédito
+      if (configuredCodes.some((c) => normalizeKey(c) === "card_credit")) {
+        const existing = incomesByCode.get("card_credit");
+        if (existing) incomesByCode.delete("card_credit");
+        dynamicBaseItems.push({
+          code: "card_credit",
+          label: paymentMethodsByCode["card_credit"] || "Tarjeta de credito",
+          amount: existing?.amount ?? 0,
+          movementsCount: existing?.movementsCount ?? 0,
+        });
+      }
+
+      // 5. Mercado Pago
+      if (configuredCodes.some((c) => normalizeKey(c) === "mercado_pago")) {
+        const existing = incomesByCode.get("mercado_pago");
+        if (existing) incomesByCode.delete("mercado_pago");
+        dynamicBaseItems.push({
+          code: "mercado_pago",
+          label: paymentMethodsByCode["mercado_pago"] || "Mercado Pago",
+          amount: existing?.amount ?? 0,
+          movementsCount: existing?.movementsCount ?? 0,
+        });
+      }
+
+      // 6. Cuenta Corriente
+      if (configuredCodes.some((c) => normalizeKey(c) === "current_account")) {
+        const existing = incomesByCode.get("current_account");
+        if (existing) incomesByCode.delete("current_account");
+        dynamicBaseItems.push({
+          code: "current_account",
+          label: paymentMethodsByCode["current_account"] || "Cuenta corriente",
+          amount: existing?.amount ?? 0,
+          movementsCount: existing?.movementsCount ?? 0,
+        });
+      }
+
+      // 7. Otros métodos configurados (que no sean cheque)
+      for (const [code, label] of Object.entries(paymentMethodsByCode)) {
+        const norm = normalizeKey(code);
+        if (
+          norm === "cash" ||
+          norm === "transfer" ||
+          norm === "card_debit" ||
+          norm === "card_credit" ||
+          norm === "mercado_pago" ||
+          norm === "current_account" ||
+          norm === "cheque"
+        ) {
+          continue;
+        }
+        const existing = incomesByCode.get(code);
+        if (existing) incomesByCode.delete(code);
+        dynamicBaseItems.push({
+          code,
+          label,
+          amount: existing?.amount ?? 0,
+          movementsCount: existing?.movementsCount ?? 0,
+        });
+      }
+
+      // 8. Cheque (al final de los métodos de pago)
+      if (configuredCodes.some((c) => normalizeKey(c) === "cheque")) {
+        const existing = incomesByCode.get("cheque");
+        if (existing) incomesByCode.delete("cheque");
+        dynamicBaseItems.push({
+          code: "cheque",
+          label: paymentMethodsByCode["cheque"] || "Cheque",
+          amount: existing?.amount ?? 0,
+          movementsCount: existing?.movementsCount ?? 0,
+        });
+      }
+
+      // Ingresos extras / ajustes no clasificados
       const extraIncomeItems = [...incomesByCode.values()].sort((a, b) => b.amount - a.amount);
-      const incomesItems = [...configuredPaymentMethodItems, ...extraIncomeItems];
+
+      const getIncomeItemPriority = (code: string): number => {
+        const norm = normalizeKey(code);
+        if (norm === "cash") return 1;
+        if (norm.startsWith("bank_acc_") || norm === "transfer") return 2;
+        if (norm === "card_debit") return 3;
+        if (norm === "card_credit") return 4;
+        if (norm === "mercado_pago") return 5;
+        if (norm === "current_account") return 6;
+        if (norm === "cheque") return 999; // Cheque SIEMPRE al final
+        return 50; // Ajustes u otros ingresos
+      };
+
+      const incomesItems = [...dynamicBaseItems, ...extraIncomeItems].sort((a, b) => {
+        const pA = getIncomeItemPriority(a.code);
+        const pB = getIncomeItemPriority(b.code);
+        if (pA !== pB) return pA - pB;
+        return a.label.localeCompare(b.label);
+      });
+
       const expensesItems = [...expensesByCode.values()].sort((a, b) => b.amount - a.amount);
       const expectedBalance = roundAmount(session.opening_amount + incomesTotal - expensesTotal);
 
@@ -664,7 +846,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         },
       };
     },
-    [movements, paymentMethodsByCode, sessions]
+    [bankAccounts, movements, paymentMethodsByCode, salePayments, sessions]
   );
 
   const getCurrentAccountDailySummary = useCallback(

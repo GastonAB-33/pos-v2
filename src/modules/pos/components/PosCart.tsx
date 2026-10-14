@@ -368,7 +368,7 @@ export const PosCart = ({
                             event.currentTarget.blur();
                           }
                         }}
-                        className="h-6 w-14 rounded-lg border border-slate-300 bg-white text-center text-xs font-bold text-slate-900 focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        className="h-7 w-14 rounded-lg border border-slate-300 bg-white text-center text-xs font-bold text-slate-900 focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         disabled={disabled || !canWrite}
                       />
                       <button

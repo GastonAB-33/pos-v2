@@ -65,6 +65,7 @@ interface PosCustomerModalState {
   mode: "create" | "edit";
   customer: Customer | null;
   initialValues: PosCustomerModalValues;
+  defaultTab?: "personal" | "fiscal" | "account";
 }
 
 interface PosCurrentAccountSnapshot {
@@ -159,6 +160,7 @@ export const PosPage = () => {
     createProductFromPosAndAddToCart,
     addProductByBarcode,
     setSelectedCustomer,
+    upsertCustomer,
     setCartItemQuantity,
     updateCartItem,
     increaseQuantity,
@@ -854,13 +856,14 @@ export const PosPage = () => {
   );
 
   const openCustomerModal = useCallback(
-    (customer: Customer | null) => {
+    (customer: Customer | null, defaultTab?: "personal" | "fiscal" | "account") => {
       if (!canWriteCustomers) return;
 
       setCustomerModalState({
         mode: customer ? "edit" : "create",
         customer,
         initialValues: buildCustomerModalInitialValues(customer),
+        defaultTab,
       });
     },
     [buildCustomerModalInitialValues, canWriteCustomers]
@@ -950,6 +953,7 @@ export const PosPage = () => {
             },
           });
 
+          upsertCustomer(created);
           await reload();
           setSelectedCustomer(created.id);
           toastSuccess("Cliente creado y seleccionado");
@@ -960,7 +964,7 @@ export const PosPage = () => {
         const existing = customerModalState.customer;
         if (!existing) return;
 
-        await customersService.update(tenantId, existing.id, {
+        const updated = await customersService.update(tenantId, existing.id, {
           code: existing.code,
           full_name: fullName,
           document_type: documentType,
@@ -978,6 +982,10 @@ export const PosPage = () => {
           current_account_limit: currentAccountLimit,
           is_active: existing.is_active,
         });
+
+        if (updated) {
+          upsertCustomer(updated);
+        }
 
         posCustomerProfilesService.saveProfile(tenantId, existing.id, {
           enabled: values.currentAccountEnabled,
@@ -1686,65 +1694,63 @@ export const PosPage = () => {
               }, 0);
             }}
           />
-          <div className="relative z-10 w-full max-w-2xl rounded-2xl bg-white p-5 shadow-panel">
-            <div className="max-h-[88vh] overflow-auto pr-1">
-              <PosCheckoutPanel
-                panelId={checkoutPanelId}
-                formId={checkoutFormId}
-                layout="modal"
-                customers={customers}
-                paymentMethods={paymentMethods}
-                bankAccounts={bankAccounts}
-                originBanks={originBanks}
-                installmentPlans={installmentPlans}
-                selectedCustomerId={selectedCustomerId}
-                selectedPaymentMethodId={selectedPaymentMethodId}
-                isOnline={isOnline}
-                checkoutTotal={checkoutSummary.total}
-                rawCheckoutTotal={checkoutSummary.rawTotal}
-                roundingAdjustment={checkoutSummary.roundingAdjustment}
-                mercadoPagoIntent={mercadoPagoIntent}
-                mercadoPagoSettings={mercadoPagoSettings}
-                mercadoPagoStatus={mercadoPagoStatus}
-                isMercadoPagoLoading={isMercadoPagoLoading}
-                canWrite={canWritePos}
-                canManageCustomers={canWriteCustomers}
-                currentAccountSnapshot={currentAccountSnapshot}
-                disabled={isSubmitting || isCashGateBlocking}
-                onCustomerChange={setSelectedCustomer}
-                onPaymentMethodChange={setSelectedPaymentMethodId}
-                onCreateOriginBank={handleCreateOriginBank}
-                onOpenCustomerModal={openCustomerModal}
-                onStartMercadoPago={() => {
-                  void startMercadoPagoPayment({
-                    paymentMethodId: selectedPaymentMethodId,
-                    amount: checkoutSummary.total,
-                    currencyCode: "ARS",
-                    customerId: selectedCustomerId || null,
-                  });
-                }}
-                onRefreshMercadoPago={() => {
-                  void refreshMercadoPagoPayment();
-                }}
-                onApproveMercadoPago={() => {
-                  void approveMercadoPagoPayment();
-                }}
-                onRejectMercadoPago={() => {
-                  void rejectMercadoPagoPayment();
-                }}
-                onCancelMercadoPago={() => {
-                  void cancelMercadoPagoPayment();
-                }}
-                onClose={() => {
-                  setIsCheckoutModalOpen(false);
-                  window.setTimeout(() => {
-                    focusScannerCapture();
-                  }, 0);
-                }}
-                hasDebtPaymentInCart={Boolean(existingDebtItem)}
-                onSubmit={handleConfirmSale}
-              />
-            </div>
+          <div className="relative z-10 w-full max-w-2xl">
+            <PosCheckoutPanel
+              panelId={checkoutPanelId}
+              formId={checkoutFormId}
+              layout="modal"
+              customers={customers}
+              paymentMethods={paymentMethods}
+              bankAccounts={bankAccounts}
+              originBanks={originBanks}
+              installmentPlans={installmentPlans}
+              selectedCustomerId={selectedCustomerId}
+              selectedPaymentMethodId={selectedPaymentMethodId}
+              isOnline={isOnline}
+              checkoutTotal={checkoutSummary.total}
+              rawCheckoutTotal={checkoutSummary.rawTotal}
+              roundingAdjustment={checkoutSummary.roundingAdjustment}
+              mercadoPagoIntent={mercadoPagoIntent}
+              mercadoPagoSettings={mercadoPagoSettings}
+              mercadoPagoStatus={mercadoPagoStatus}
+              isMercadoPagoLoading={isMercadoPagoLoading}
+              canWrite={canWritePos}
+              canManageCustomers={canWriteCustomers}
+              currentAccountSnapshot={currentAccountSnapshot}
+              disabled={isSubmitting || isCashGateBlocking}
+              onCustomerChange={setSelectedCustomer}
+              onPaymentMethodChange={setSelectedPaymentMethodId}
+              onCreateOriginBank={handleCreateOriginBank}
+              onOpenCustomerModal={openCustomerModal}
+              onStartMercadoPago={() => {
+                void startMercadoPagoPayment({
+                  paymentMethodId: selectedPaymentMethodId,
+                  amount: checkoutSummary.total,
+                  currencyCode: "ARS",
+                  customerId: selectedCustomerId || null,
+                });
+              }}
+              onRefreshMercadoPago={() => {
+                void refreshMercadoPagoPayment();
+              }}
+              onApproveMercadoPago={() => {
+                void approveMercadoPagoPayment();
+              }}
+              onRejectMercadoPago={() => {
+                void rejectMercadoPagoPayment();
+              }}
+              onCancelMercadoPago={() => {
+                void cancelMercadoPagoPayment();
+              }}
+              onClose={() => {
+                setIsCheckoutModalOpen(false);
+                window.setTimeout(() => {
+                  focusScannerCapture();
+                }, 0);
+              }}
+              hasDebtPaymentInCart={Boolean(existingDebtItem)}
+              onSubmit={handleConfirmSale}
+            />
           </div>
         </section>
       ) : null}
@@ -2064,6 +2070,7 @@ export const PosPage = () => {
       {customerModalState ? (
         <PosCustomerModal
           mode={customerModalState.mode}
+          defaultTab={customerModalState.defaultTab}
           initialValues={customerModalState.initialValues}
           currentBalance={customerModalState.customer?.current_balance ?? 0}
           disabled={isCustomerModalSubmitting}

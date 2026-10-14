@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Plus, Search, UserCheck, X } from "lucide-react";
+import { Check, Edit2, Plus, Search, UserCheck, X } from "lucide-react";
 import type { Customer } from "@/types/entities";
 import { formatCustomerDocument } from "@/modules/configuracion/hooks/useEntityRequirements";
 
@@ -10,6 +10,7 @@ interface PosCustomerSelectModalProps {
   onClose: () => void;
   onSelect: (customer: Customer) => void;
   onOpenCreateCustomer: (initialName?: string) => void;
+  onEditCustomer?: (customer: Customer, defaultTab?: "personal" | "fiscal" | "account") => void;
 }
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -25,6 +26,7 @@ export const PosCustomerSelectModal = ({
   onClose,
   onSelect,
   onOpenCreateCustomer,
+  onEditCustomer,
 }: PosCustomerSelectModalProps) => {
   const [query, setQuery] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -276,9 +278,26 @@ export const PosCustomerSelectModal = ({
                         </p>
                       </div>
                     ) : (
-                      <span className="inline-block rounded-md bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/70 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
-                        Cta. Cte. Inactiva
-                      </span>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="inline-block rounded-md bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/70 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                          Cta. Cte. Inactiva
+                        </span>
+                        {onEditCustomer ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onClose();
+                              onEditCustomer(customer, "account");
+                            }}
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                            title="Editar cliente para asignarle una cuenta corriente"
+                          >
+                            <Edit2 size={11} />
+                            Habilitar Cta. Cte.
+                          </button>
+                        ) : null}
+                      </div>
                     )}
                   </div>
                 </div>

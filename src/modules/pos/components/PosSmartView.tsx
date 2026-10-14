@@ -6,7 +6,9 @@ import {
   Moon,
   MoonStar,
   Plus,
+  PlusCircle,
   RefreshCw,
+  Scale,
   Search,
   ShoppingCart,
   Sun,
@@ -243,7 +245,7 @@ export const PosSmartView = ({
           isHighlighted && "ring-2 ring-emerald-500/60 border-emerald-500/80"
         )}
       >
-        {/* Encabezado: Carrito (N ítems) + Botón Vaciar */}
+        {/* Encabezado: Carrito (N ítems) + Botones de acción unificados */}
         <div className="flex items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2.5">
             <ShoppingCart className="text-blue-600 dark:text-sky-400" size={20} />
@@ -252,16 +254,68 @@ export const PosSmartView = ({
             </h2>
           </div>
 
-          {items.length > 0 ? (
-            <button
-              type="button"
-              onClick={onClearCart}
-              disabled={disabled || !canWrite}
-              className="rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-800/50 px-3.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/70 hover:text-slate-900 dark:hover:text-white transition disabled:opacity-50"
-            >
-              Vaciar
-            </button>
-          ) : null}
+          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+            {onToggleDiscounts ? (
+              <button
+                type="button"
+                onClick={onToggleDiscounts}
+                disabled={disabled || !canWrite}
+                title={
+                  discountsEnabled
+                    ? "Descuentos activados (clic para desactivar)"
+                    : "Descuentos desactivados (clic para activar)"
+                }
+                aria-label={discountsEnabled ? "Desactivar descuentos" : "Activar descuentos"}
+                className={cn(
+                  "h-8 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition shadow-2xs cursor-pointer disabled:opacity-40 whitespace-nowrap shrink-0",
+                  discountsEnabled
+                    ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
+                    : "border-rose-300 dark:border-rose-800/80 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60"
+                )}
+              >
+                {discountsEnabled ? (
+                  <BadgePercent size={14} />
+                ) : (
+                  <span className="relative flex items-center justify-center">
+                    <BadgePercent size={14} className="opacity-50" />
+                    <span className="absolute h-0.5 w-3.5 bg-rose-500 rotate-45 rounded-full" />
+                  </span>
+                )}
+                <span>{discountsEnabled ? "Desc. ON" : "Desc. OFF"}</span>
+              </button>
+            ) : null}
+
+            {onOpenDebtPaymentModal ? (
+              <button
+                type="button"
+                onClick={onOpenDebtPaymentModal}
+                disabled={disabled || !canWrite}
+                className={cn(
+                  "h-8 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition shadow-2xs disabled:opacity-50 whitespace-nowrap shrink-0",
+                  hasDebtPaymentInCart
+                    ? "border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-600/80 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/60"
+                    : "border-indigo-200 bg-indigo-50/80 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-700/70 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-900/60"
+                )}
+                title={hasDebtPaymentInCart ? "Modificar cobro de cuenta corriente" : "Agregar cobro de deuda de cuenta corriente al carrito"}
+              >
+                <Coins size={14} className={hasDebtPaymentInCart ? "text-amber-600 dark:text-amber-400" : "text-indigo-600 dark:text-indigo-400"} />
+                <span>{hasDebtPaymentInCart ? "Editar deuda" : "Cobrar deuda"}</span>
+              </button>
+            ) : null}
+
+            {items.length > 0 ? (
+              <button
+                type="button"
+                onClick={onClearCart}
+                disabled={disabled || !canWrite}
+                className="h-8 px-2.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 dark:hover:border-rose-800/80 transition disabled:opacity-50 whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 shadow-2xs"
+                title="Vaciar todos los productos del carrito"
+              >
+                <Trash2 size={13} className="text-slate-400 group-hover:text-rose-500" />
+                <span>Vaciar</span>
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {/* Buscador general con filtro desplegable de categoría */}
@@ -351,9 +405,17 @@ export const PosSmartView = ({
                     className="flex items-center justify-between gap-3 p-2.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/70 cursor-pointer transition"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                        {prod.name}
-                      </p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                          {prod.name}
+                        </p>
+                        {prod.sale_mode === "weight" && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60">
+                            <Scale size={10} className="shrink-0" />
+                            <span>Pesable</span>
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
                         {prod.category} {barcode ? `| Barcode: ${barcode}` : ""}
                       </p>
@@ -361,6 +423,9 @@ export const PosSmartView = ({
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-xs sm:text-sm font-bold text-blue-600 dark:text-sky-400">
                         {currency.format(prod.price)}
+                        <span className="text-[10px] font-medium text-slate-400 ml-0.5">
+                          / {prod.sale_mode === "weight" ? "kg" : "u."}
+                        </span>
                       </span>
                       <button
                         type="button"
@@ -497,111 +562,127 @@ export const PosSmartView = ({
                   {/* Controles de cantidad táctiles interactivos */}
                   <div className="flex flex-col items-center sm:items-end gap-1 shrink-0">
                     {item.is_debt_payment_item ? (
-                      <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800/50">
+                      <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60">
                         Pago único
                       </span>
                     ) : (
-                      <div className="flex items-center rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-900/90 p-0.5 shadow-2xs">
-                        <button
-                          type="button"
-                          onClick={() => onDecrease(item.product_id)}
-                          disabled={disabled || !canWrite}
-                          className="w-7 h-7 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center text-xs font-bold transition disabled:opacity-40"
-                          title={item.sale_mode === "weight" ? "Disminuir 50g" : "Disminuir cantidad"}
-                        >
-                          -
-                        </button>
-                        <div className="flex items-center px-1">
-                          <input
-                            type="number"
-                            step="any"
-                            min={0}
-                            placeholder="0"
-                            value={
-                              quantityDrafts[item.product_id] ??
-                              (item.sale_mode === "weight"
-                                ? String(kgToGrams(item.quantity))
-                                : String(item.quantity))
-                            }
-                            onFocus={(event) =>
-                              handleNumericInputFocus(event, {
-                                isNew: true,
-                                onClear: () =>
-                                  setQuantityDrafts((current) => ({
-                                    ...current,
-                                    [item.product_id]: "",
-                                  })),
-                              })
-                            }
-                            onChange={(event) => {
-                              const nextValue = event.target.value;
-                              setQuantityDrafts((current) => ({
-                                ...current,
-                                ...{ [item.product_id]: nextValue },
-                              }));
-                              const parsedInput = Number(nextValue);
-                              if (nextValue.trim() && Number.isFinite(parsedInput) && parsedInput >= 0 && onSetQuantity) {
-                                onSetQuantity(
-                                  item.product_id,
-                                  item.sale_mode === "weight" ? gramsToKg(parsedInput) : parsedInput
-                                );
+                      <div className="flex flex-col items-center sm:items-end gap-1">
+                        <div className="flex items-center h-8 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-2xs overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => onDecrease(item.product_id)}
+                            disabled={disabled || !canWrite}
+                            className="h-full w-7 sm:w-8 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-40 select-none shrink-0"
+                            title={item.sale_mode === "weight" ? "Disminuir 50g" : "Disminuir cantidad"}
+                          >
+                            -
+                          </button>
+                          <div className="flex items-center justify-center px-1 h-full">
+                            <input
+                              type="number"
+                              step="any"
+                              min={0}
+                              placeholder="0"
+                              value={
+                                quantityDrafts[item.product_id] ??
+                                (item.sale_mode === "weight"
+                                  ? String(kgToGrams(item.quantity))
+                                  : String(item.quantity))
                               }
-                            }}
-                            onBlur={(event) => {
-                              handleNumericInputBlur(event, "0", () => {
+                              onFocus={(event) =>
+                                handleNumericInputFocus(event, {
+                                  isNew: true,
+                                  onClear: () =>
+                                    setQuantityDrafts((current) => ({
+                                      ...current,
+                                      [item.product_id]: "",
+                                    })),
+                                })
+                              }
+                              onChange={(event) => {
+                                const nextValue = event.target.value;
                                 setQuantityDrafts((current) => ({
                                   ...current,
-                                  ...{ [item.product_id]: "0" },
+                                  ...{ [item.product_id]: nextValue },
                                 }));
-                                onSetQuantity?.(item.product_id, 0);
-                              });
-                              const rawValue = quantityDrafts[item.product_id];
-                              if (rawValue != null && onSetQuantity) {
-                                const parsedInput = Number(rawValue);
-                                if (Number.isFinite(parsedInput) && parsedInput >= 0) {
+                                const parsedInput = Number(nextValue);
+                                if (nextValue.trim() && Number.isFinite(parsedInput) && parsedInput >= 0 && onSetQuantity) {
                                   onSetQuantity(
                                     item.product_id,
                                     item.sale_mode === "weight" ? gramsToKg(parsedInput) : parsedInput
                                   );
                                 }
+                              }}
+                              onBlur={(event) => {
+                                handleNumericInputBlur(event, "0", () => {
+                                  setQuantityDrafts((current) => ({
+                                    ...current,
+                                    ...{ [item.product_id]: "0" },
+                                  }));
+                                  onSetQuantity?.(item.product_id, 0);
+                                });
+                                const rawValue = quantityDrafts[item.product_id];
+                                if (rawValue != null && onSetQuantity) {
+                                  const parsedInput = Number(rawValue);
+                                  if (Number.isFinite(parsedInput) && parsedInput >= 0) {
+                                    onSetQuantity(
+                                      item.product_id,
+                                      item.sale_mode === "weight" ? gramsToKg(parsedInput) : parsedInput
+                                    );
+                                  }
+                                }
+                                setQuantityDrafts((current) => {
+                                  const { [item.product_id]: _discard, ...next } = current;
+                                  return next;
+                                });
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.currentTarget.blur();
+                                }
+                              }}
+                              style={{
+                                backgroundColor: "transparent",
+                                border: "none",
+                                outline: "none",
+                                boxShadow: "none",
+                                padding: 0,
+                              }}
+                              className={cn(
+                                "h-full !bg-transparent !border-0 !outline-none !shadow-none !p-0 !min-h-0 font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+                                item.sale_mode === "weight" ? "w-12 text-right pr-1" : "w-10 text-center"
+                              )}
+                              title={
+                                item.sale_mode === "weight"
+                                  ? "Tipeá los gramos libremente (ej: 260)"
+                                  : "Cantidad en unidades"
                               }
-                              setQuantityDrafts((current) => {
-                                const { [item.product_id]: _discard, ...next } = current;
-                                return next;
-                              });
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                event.currentTarget.blur();
-                              }
-                            }}
-                            className="w-14 sm:w-16 h-7 bg-transparent text-center font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none tabular-nums"
-                            title={
-                              item.sale_mode === "weight"
-                                ? "Tipeá los gramos libremente (ej: 260)"
-                                : "Cantidad en unidades"
-                            }
+                              disabled={disabled || !canWrite}
+                            />
+                            <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 select-none shrink-0 pr-0.5">
+                              {item.sale_mode === "weight" ? "g" : "u."}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onIncrease(item.product_id)}
                             disabled={disabled || !canWrite}
-                          />
-                          <span className="text-[10px] font-semibold text-slate-400 select-none">
-                            {item.sale_mode === "weight" ? "g" : "u."}
-                          </span>
+                            className="h-full w-7 sm:w-8 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-40 select-none shrink-0"
+                            title={item.sale_mode === "weight" ? "Aumentar 50g" : "Aumentar cantidad"}
+                          >
+                            +
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => onIncrease(item.product_id)}
-                          disabled={disabled || !canWrite}
-                          className="w-7 h-7 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center text-xs font-bold transition disabled:opacity-40"
-                          title={item.sale_mode === "weight" ? "Aumentar 50g" : "Aumentar cantidad"}
-                        >
-                          +
-                        </button>
+
+                        {item.sale_mode === "weight" && (
+                          <div className="flex items-center gap-1">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-[10px] font-bold text-amber-700 dark:text-amber-400 tabular-nums">
+                              <Scale size={11} className="shrink-0 text-amber-600 dark:text-amber-400" />
+                              <span>{Number(item.quantity.toFixed(3))} kg</span>
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                    {item.sale_mode === "weight" && (
-                      <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 tabular-nums">
-                        = {Number(item.quantity.toFixed(3))} kg
-                      </span>
                     )}
                   </div>
 
@@ -647,70 +728,74 @@ export const PosSmartView = ({
       <aside className="lg:col-span-4 flex flex-col gap-3.5">
         {/* Panel Superior Derecho: Botones y funciones */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-3.5 sm:p-4 space-y-3 shadow-sm">
+          {/* Fila 1: Operador y Tema */}
           <div className="flex items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={onRefreshCatalog}
-              disabled={isRefreshingCatalog || disabled}
-              className="flex items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition disabled:opacity-50"
-            >
-              <RefreshCw
-                size={14}
-                className={isRefreshingCatalog ? "animate-spin text-blue-600 dark:text-sky-400" : ""}
-              />
-              <span>Actualizar productos</span>
-            </button>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={cycleTheme}
-                className="flex items-center gap-1 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-2.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition shadow-2xs"
-                title={`Tema actual: ${theme === "midnight" ? "Azul Medianoche" : theme === "dark" ? "Oscuro" : "Claro"}. Clic para cambiar.`}
-              >
-                {theme === "midnight" ? (
-                  <MoonStar size={14} className="text-indigo-400" />
-                ) : theme === "dark" ? (
-                  <Moon size={14} className="text-amber-300" />
-                ) : (
-                  <Sun size={14} className="text-amber-500" />
-                )}
-                <span className="text-[11px] font-bold">
-                  {theme === "midnight" ? "Azul" : theme === "dark" ? "Oscuro" : "Claro"}
-                </span>
-              </button>
-
-              <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800/90 bg-slate-50 dark:bg-slate-900/80 px-2.5 py-1.5">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-fuchsia-600 text-xs font-bold text-white shadow-sm">
-                  {operatorInitials}
-                </span>
-                <div className="leading-tight">
-                  <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate max-w-[100px]">
-                    {userName}
-                  </p>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Operador</p>
-                </div>
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800/90 bg-slate-50 dark:bg-slate-900/80 px-2.5 py-1.5 h-8">
+              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-fuchsia-600 text-[10px] font-bold text-white shadow-sm shrink-0">
+                {operatorInitials}
+              </span>
+              <div className="leading-tight flex items-baseline gap-1.5 min-w-0">
+                <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate max-w-[110px]">
+                  {userName}
+                </p>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 shrink-0">Operador</span>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={cycleTheme}
+              className="h-8 flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-2.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition shadow-2xs whitespace-nowrap shrink-0"
+              title={`Tema actual: ${theme === "midnight" ? "Azul Medianoche" : theme === "dark" ? "Oscuro" : "Claro"}. Clic para cambiar.`}
+            >
+              {theme === "midnight" ? (
+                <MoonStar size={14} className="text-indigo-400" />
+              ) : theme === "dark" ? (
+                <Moon size={14} className="text-amber-300" />
+              ) : (
+                <Sun size={14} className="text-amber-500" />
+              )}
+              <span className="text-xs font-semibold">
+                {theme === "midnight" ? "Azul" : theme === "dark" ? "Oscuro" : "Claro"}
+              </span>
+            </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Fila 2: Acciones operativas (Comprobantes, Producto rápido, Actualizar) */}
+          <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
               onClick={onOpenReceipts}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition"
+              className="h-8 flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition shadow-2xs whitespace-nowrap min-w-0"
+              title="Ver comprobantes y ventas emitidas"
             >
-              <FileText size={14} />
-              <span>Comprobantes</span>
+              <FileText size={14} className="shrink-0" />
+              <span className="truncate">Comprobantes</span>
             </button>
 
             <button
               type="button"
               onClick={onOpenQuickProduct}
               disabled={disabled || !canWrite}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition disabled:opacity-50"
+              className="h-8 flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition shadow-2xs disabled:opacity-50 whitespace-nowrap min-w-0"
+              title="Crear o vender producto rápido no registrado"
             >
-              <span>Producto rápido</span>
+              <PlusCircle size={14} className="shrink-0" />
+              <span className="truncate">Prod. rápido</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onRefreshCatalog}
+              disabled={isRefreshingCatalog || disabled}
+              className="h-8 flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition shadow-2xs disabled:opacity-50 whitespace-nowrap min-w-0"
+              title="Actualizar catálogo de productos"
+            >
+              <RefreshCw
+                size={14}
+                className={cn("shrink-0", isRefreshingCatalog ? "animate-spin text-blue-600 dark:text-sky-400" : "")}
+              />
+              <span className="truncate">Actualizar</span>
             </button>
           </div>
         </div>
@@ -718,13 +803,13 @@ export const PosSmartView = ({
         {/* Panel Inferior Derecho: Detalle de total y confirmación de cobro */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-4 sm:p-5 space-y-4 shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800/80 pb-3">
-            <div className="flex items-center gap-2">
-              <ShoppingCart size={18} className="text-blue-600 dark:text-sky-400" />
-              <span className="font-bold text-sm text-slate-900 dark:text-slate-100">
+            <div className="flex items-center gap-2 min-w-0">
+              <ShoppingCart size={18} className="text-blue-600 dark:text-sky-400 shrink-0" />
+              <span className="font-bold text-sm text-slate-900 dark:text-slate-100 truncate">
                 Carrito ({items.length} {items.length === 1 ? "ítem" : "ítems"})
               </span>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 shrink-0">
               {onToggleDiscounts ? (
                 <button
                   type="button"
@@ -737,20 +822,21 @@ export const PosSmartView = ({
                   }
                   aria-label={discountsEnabled ? "Desactivar descuentos" : "Activar descuentos"}
                   className={cn(
-                    "h-7 w-7 rounded-lg border flex items-center justify-center transition shadow-2xs cursor-pointer disabled:opacity-40",
+                    "h-8 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition shadow-2xs cursor-pointer disabled:opacity-40 whitespace-nowrap shrink-0",
                     discountsEnabled
-                      ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
-                      : "border-rose-300 dark:border-rose-800/80 bg-rose-50 dark:bg-rose-950/40 text-rose-500 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60"
+                      ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
+                      : "border-rose-300 dark:border-rose-800/80 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60"
                   )}
                 >
                   {discountsEnabled ? (
-                    <BadgePercent size={15} />
+                    <BadgePercent size={14} />
                   ) : (
                     <span className="relative flex items-center justify-center">
-                      <BadgePercent size={15} className="opacity-50" />
-                      <span className="absolute h-0.5 w-4 bg-rose-500 rotate-45 rounded-full" />
+                      <BadgePercent size={14} className="opacity-50" />
+                      <span className="absolute h-0.5 w-3.5 bg-rose-500 rotate-45 rounded-full" />
                     </span>
                   )}
+                  <span className="hidden sm:inline">{discountsEnabled ? "Desc. ON" : "Desc. OFF"}</span>
                 </button>
               ) : null}
 
@@ -760,14 +846,14 @@ export const PosSmartView = ({
                   onClick={onOpenDebtPaymentModal}
                   disabled={disabled || !canWrite}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition shadow-2xs disabled:opacity-50",
+                    "h-8 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition shadow-2xs disabled:opacity-50 whitespace-nowrap shrink-0",
                     hasDebtPaymentInCart
                       ? "border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-600/80 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/60"
                       : "border-indigo-200 bg-indigo-50/80 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-700/70 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-900/60"
                   )}
                   title={hasDebtPaymentInCart ? "Modificar cobro de cuenta corriente" : "Agregar cobro de deuda de cuenta corriente al carrito"}
                 >
-                  <Coins size={13} className={hasDebtPaymentInCart ? "text-amber-600 dark:text-amber-400" : "text-indigo-600 dark:text-indigo-400"} />
+                  <Coins size={14} className={hasDebtPaymentInCart ? "text-amber-600 dark:text-amber-400" : "text-indigo-600 dark:text-indigo-400"} />
                   <span>{hasDebtPaymentInCart ? "Editar deuda" : "Cobrar deuda"}</span>
                 </button>
               ) : null}
@@ -777,9 +863,11 @@ export const PosSmartView = ({
                   type="button"
                   onClick={onClearCart}
                   disabled={disabled || !canWrite}
-                  className="rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-800/40 px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700/60 transition disabled:opacity-50"
+                  className="h-8 px-2.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 dark:hover:border-rose-800/80 transition disabled:opacity-50 whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 shadow-2xs"
+                  title="Vaciar todos los productos del carrito"
                 >
-                  Vaciar
+                  <Trash2 size={13} className="text-slate-400 group-hover:text-rose-500" />
+                  <span>Vaciar</span>
                 </button>
               ) : null}
             </div>

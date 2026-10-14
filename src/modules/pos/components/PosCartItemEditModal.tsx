@@ -280,14 +280,29 @@ export const PosCartItemEditModal = ({
                 onBlur={(e) =>
                   handleNumericInputBlur(e, saleMode === "weight" ? "0" : "1", (val) => setQuantity(val))
                 }
-                className="ui-input"
+                className="ui-input border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90"
                 placeholder={saleMode === "weight" ? "Ej: 260" : "Ej: 1"}
               />
-              {saleMode === "weight" && (
-                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                  Ingresá los gramos exactos de forma libre (ej: 260 g = 0.260 kg).
-                </p>
-              )}
+              {saleMode === "weight" ? (
+                <div className="space-y-1.5 mt-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Atajos rápidos:</span>
+                    {[100, 250, 500, 1000].map((presetGrams) => (
+                      <button
+                        key={presetGrams}
+                        type="button"
+                        onClick={() => setQuantity(String(presetGrams))}
+                        className="px-2 py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-200 hover:bg-amber-50 hover:border-amber-300 dark:hover:bg-amber-950/40 dark:hover:border-amber-700 transition"
+                      >
+                        {presetGrams < 1000 ? `${presetGrams}g` : "1kg"}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Ingresá los gramos exactos de forma libre (ej: 260 g = 0.260 kg).
+                  </p>
+                </div>
+              ) : null}
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">

@@ -1773,6 +1773,16 @@ export const usePosSale = (tenantId: string | null) => {
     );
   }, [activeTabId]);
 
+  const upsertCustomer = useCallback((customer: Customer) => {
+    setCustomers((prev) => {
+      const exists = prev.some((c) => c.id === customer.id);
+      if (exists) {
+        return prev.map((c) => (c.id === customer.id ? customer : c));
+      }
+      return [customer, ...prev];
+    });
+  }, []);
+
   const createOriginBank = useCallback(
     async (name: string) => {
       if (!tenantId) return null;
@@ -3183,6 +3193,7 @@ export const usePosSale = (tenantId: string | null) => {
     createProductFromPosAndAddToCart,
     addProductByBarcode,
     setSelectedCustomer,
+    upsertCustomer,
     setCartItemQuantity,
     updateCartItem,
     increaseQuantity,
