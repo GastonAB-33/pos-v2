@@ -59,7 +59,6 @@ export const PosQuickProductModal = ({
   const [stock, setStock] = useState("");
   const [code, setCode] = useState("");
   const [barcode, setBarcode] = useState(initialBarcode ?? "");
-  const [favorite, setFavorite] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -76,7 +75,6 @@ export const PosQuickProductModal = ({
     setStock("");
     setCode("");
     setBarcode(cleanInitialBarcode);
-    setFavorite(true);
     setIsSubmitting(false);
     setErrorMessage(null);
   }, [categories, initialBarcode, initialName, open]);
@@ -105,7 +103,7 @@ export const PosQuickProductModal = ({
       stock: stockValue,
       code,
       barcode,
-      favorite,
+      favorite: false,
     };
   };
 
@@ -358,11 +356,6 @@ export const PosQuickProductModal = ({
                     className="ui-input"
                   />
                 </div>
-
-                <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                  <input type="checkbox" checked={favorite} onChange={(event) => setFavorite(event.target.checked)} />
-                  Mostrar en favoritos del POS
-                </label>
               </>
             ) : null}
           </div>

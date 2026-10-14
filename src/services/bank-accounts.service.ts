@@ -19,6 +19,11 @@ export const bankAccountsService = {
     return rows.filter((row) => row.is_active);
   },
 
+  getPosAvailableByTenant: async (tenantId: string) => {
+    const rows = await crud.getAllByTenant(tenantId);
+    return rows.filter((row) => row.is_active && row.is_pos_available !== false);
+  },
+
   getById: (tenantId: string, id: string) => crud.getById(tenantId, id),
   create: (tenantId: string, input: CreateBankAccountInput) => crud.create(tenantId, input),
   update: (tenantId: string, id: string, input: UpdateBankAccountInput) =>
@@ -29,6 +34,13 @@ export const bankAccountsService = {
     const row = await crud.getById(tenantId, id);
     if (!row) return null;
     return crud.update(tenantId, id, { is_active: !row.is_active });
+  },
+
+  togglePosAvailable: async (tenantId: string, id: string) => {
+    const row = await crud.getById(tenantId, id);
+    if (!row) return null;
+    const nextVal = row.is_pos_available === false ? true : false;
+    return crud.update(tenantId, id, { is_pos_available: nextVal });
   },
 };
 

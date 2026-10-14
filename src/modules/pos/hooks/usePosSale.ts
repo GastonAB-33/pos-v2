@@ -214,7 +214,8 @@ const defaultArcaSettings: ArcaSettings = {
 const calculateSummaryByMethod = (
   subtotal: number,
   paymentMethod: PaymentMethod | null,
-  posSettings?: PosSettings | null
+  posSettings?: PosSettings | null,
+  discountsEnabled: boolean = true
 ): PosCheckoutSummary => {
   if (!paymentMethod) {
     const rounding = calculatePosRounding(subtotal, {
@@ -237,7 +238,9 @@ const calculateSummaryByMethod = (
   }
 
   const surchargeTotal = roundAmount(subtotal * (paymentMethod.surcharge_percent / 100));
-  const discountTotal = roundAmount(subtotal * (paymentMethod.discount_percent / 100));
+  const discountTotal = discountsEnabled
+    ? roundAmount(subtotal * (paymentMethod.discount_percent / 100))
+    : 0;
   const paymentAdjustment = roundAmount(surchargeTotal - discountTotal);
   const rawTotal = roundAmount(subtotal + paymentAdjustment);
 
@@ -298,6 +301,7 @@ export const usePosSale = (tenantId: string | null) => {
     useState<InvoiceDocumentType>("B");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [cartState, setCartState] = useState<PosCartItem[]>([]);
+  const [discountsEnabled, setDiscountsEnabled] = useState(true);
   const [saleTabs, setSaleTabs] = useState<PosSaleTab[]>([
     { id: "sale-1", label: "Venta 1", cart: [], selectedCustomerId: "" },
   ]);
@@ -310,6 +314,10 @@ export const usePosSale = (tenantId: string | null) => {
   const [generatedInvoice, setGeneratedInvoice] = useState<Invoice | null>(null);
   const [mercadoPagoIntent, setMercadoPagoIntent] = useState<MercadoPagoPaymentIntent | null>(null);
   const cartRef = useRef<PosCartItem[]>([]);
+
+  const toggleDiscounts = useCallback(() => {
+    setDiscountsEnabled((prev) => !prev);
+  }, []);
 
   useEffect(() => {
     cartRef.current = cartState;
@@ -824,8 +832,32 @@ export const usePosSale = (tenantId: string | null) => {
   }, [recalculateCartPricesForCustomer, selectedCustomerId]);
 
   const promotionsResolution = useMemo(
-    () =>
-      promotionsService.resolveApplicablePromotions(
+    () => {
+      if (!discountsEnabled) {
+        const eligibleItems = cartState.filter((item) => !item.is_debt_payment_item);
+        const subtotal = roundAmount(
+          eligibleItems.reduce((acc, item) => acc + item.quantity * item.unit_price, 0)
+        );
+        return {
+          items: eligibleItems.map((item) => ({
+            product_id: item.product_id,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            line_subtotal: roundAmount(item.quantity * item.unit_price),
+            line_total: roundAmount(item.quantity * item.unit_price),
+            discount_total: 0,
+            applied_promotion: null,
+          })),
+          product_discount_total: 0,
+          cart_discount_total: 0,
+          total_discount: 0,
+          subtotal_before_promotions: subtotal,
+          subtotal_after_promotions: subtotal,
+          applied_cart_promotion: null,
+        };
+      }
+
+      return promotionsService.resolveApplicablePromotions(
         cartState
           .filter((item) => !item.is_debt_payment_item)
           .map((item) => ({
@@ -835,8 +867,9 @@ export const usePosSale = (tenantId: string | null) => {
           })),
         new Date(),
         promotions
-      ),
-    [cartState, promotions]
+      );
+    },
+    [cartState, discountsEnabled, promotions]
   );
 
   const cart = useMemo<PosCartItemComputed[]>(() => {
@@ -1722,7 +1755,10 @@ export const usePosSale = (tenantId: string | null) => {
     setCartState((prev) => prev.filter((item) => item.product_id !== productId));
   };
 
-  const clearCart = () => setCartState([]);
+  const clearCart = () => {
+    setCartState([]);
+    setDiscountsEnabled(true);
+  };
 
   const setSelectedCustomer = useCallback((customerId: string) => {
     const normalized = customerId.trim();
@@ -1760,8 +1796,13 @@ export const usePosSale = (tenantId: string | null) => {
 
   const getCheckoutSummary = useCallback(
     (paymentMethodId: string | null | undefined): PosCheckoutSummary =>
-      calculateSummaryByMethod(subtotal, getPaymentMethodById(paymentMethodId), posSettings),
-    [getPaymentMethodById, posSettings, subtotal]
+      calculateSummaryByMethod(
+        subtotal,
+        getPaymentMethodById(paymentMethodId),
+        posSettings,
+        discountsEnabled
+      ),
+    [discountsEnabled, getPaymentMethodById, posSettings, subtotal]
   );
 
   const selectedCustomer = useMemo(
@@ -3119,6 +3160,9 @@ export const usePosSale = (tenantId: string | null) => {
     subtotalBeforePromotions,
     promotionDiscountTotal,
     cartPromotionDiscountTotal,
+    discountsEnabled,
+    setDiscountsEnabled,
+    toggleDiscounts,
     isLoading,
     isSubmitting,
     isMercadoPagoLoading,

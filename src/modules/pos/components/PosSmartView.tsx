@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  BadgePercent,
   Coins,
   FileText,
   Moon,
@@ -60,6 +61,9 @@ export interface PosSmartViewProps {
   subtotal: number;
   total: number;
   roundingAdjustment?: number;
+  discountsEnabled?: boolean;
+  onToggleDiscounts?: () => void;
+  promotionDiscountTotal?: number;
   onCheckout: () => void;
 
   // Panel de funciones superior derecho
@@ -93,6 +97,9 @@ export const PosSmartView = ({
   subtotal,
   total,
   roundingAdjustment = 0,
+  discountsEnabled = true,
+  onToggleDiscounts,
+  promotionDiscountTotal = 0,
   onCheckout,
   userName,
   operatorInitials,
@@ -119,10 +126,28 @@ export const PosSmartView = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchScope, setSearchScope] = useState<ProductSearchScope>("all");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const cartContainerRef = useRef<HTMLDivElement | null>(null);
   const lastItemRef = useRef<HTMLElement | null>(null);
   const prevItemsLengthRef = useRef(items.length);
+
+  // Cerrar el menú de búsqueda al hacer clic en cualquier otra parte del sistema
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(event.target as Node)
+      ) {
+        setIsSearchOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Último producto en la secuencia de carga del carrito
   const lastAddedProductId = items.length > 0 ? items[items.length - 1].product_id : null;
@@ -229,8 +254,16 @@ export const PosSmartView = ({
         </div>
 
         {/* Buscador general con filtro desplegable de categoría */}
-        <div className="relative mb-5 z-20">
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-[#0f1a33] px-3.5 py-2.5 focus-within:border-blue-500 dark:focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:focus-within:ring-sky-500/20 transition-all shadow-inner">
+        <div ref={searchContainerRef} className="relative mb-5 z-20">
+          <div
+            className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-[#0f1a33] px-3.5 py-2.5 focus-within:border-blue-500 dark:focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:focus-within:ring-sky-500/20 transition-all shadow-inner cursor-text"
+            onClick={() => {
+              if (searchQuery.trim()) {
+                setIsSearchOpen(true);
+              }
+              searchInputRef.current?.focus();
+            }}
+          >
             <Search size={18} className="text-slate-400 shrink-0" />
             <input
               ref={searchInputRef}
@@ -241,6 +274,10 @@ export const PosSmartView = ({
                 setIsSearchOpen(true);
               }}
               onFocus={() => {
+                if (searchQuery.trim()) setIsSearchOpen(true);
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
                 if (searchQuery.trim()) setIsSearchOpen(true);
               }}
               onKeyDown={handleSearchKeyDown}
@@ -254,11 +291,14 @@ export const PosSmartView = ({
             {searchQuery ? (
               <button
                 type="button"
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setSearchQuery("");
                   setIsSearchOpen(false);
+                  searchInputRef.current?.focus();
                 }}
                 className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+                title="Limpiar búsqueda"
               >
                 <X size={14} />
               </button>
@@ -268,7 +308,11 @@ export const PosSmartView = ({
 
             <select
               value={searchScope}
-              onChange={(e) => setSearchScope(e.target.value as ProductSearchScope)}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                setSearchScope(e.target.value as ProductSearchScope);
+                if (searchQuery.trim()) setIsSearchOpen(true);
+              }}
               className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer py-0.5 px-1 shrink-0 max-w-[150px] truncate"
               aria-label="Filtro de búsqueda"
             >
@@ -670,6 +714,35 @@ export const PosSmartView = ({
               </span>
             </div>
             <div className="flex items-center gap-1.5">
+              {onToggleDiscounts ? (
+                <button
+                  type="button"
+                  onClick={onToggleDiscounts}
+                  disabled={disabled || !canWrite}
+                  title={
+                    discountsEnabled
+                      ? "Descuentos activados (clic para desactivar)"
+                      : "Descuentos desactivados (clic para activar)"
+                  }
+                  aria-label={discountsEnabled ? "Desactivar descuentos" : "Activar descuentos"}
+                  className={cn(
+                    "h-7 w-7 rounded-lg border flex items-center justify-center transition shadow-2xs cursor-pointer disabled:opacity-40",
+                    discountsEnabled
+                      ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
+                      : "border-rose-300 dark:border-rose-800/80 bg-rose-50 dark:bg-rose-950/40 text-rose-500 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60"
+                  )}
+                >
+                  {discountsEnabled ? (
+                    <BadgePercent size={15} />
+                  ) : (
+                    <span className="relative flex items-center justify-center">
+                      <BadgePercent size={15} className="opacity-50" />
+                      <span className="absolute h-0.5 w-4 bg-rose-500 rotate-45 rounded-full" />
+                    </span>
+                  )}
+                </button>
+              ) : null}
+
               {onOpenDebtPaymentModal ? (
                 <button
                   type="button"
@@ -708,6 +781,20 @@ export const PosSmartView = ({
                 {currency.format(subtotal)}
               </span>
             </div>
+
+            {discountsEnabled && promotionDiscountTotal > 0 ? (
+              <div className="flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                <span>Desc. promociones</span>
+                <span className="font-semibold">-{currency.format(promotionDiscountTotal)}</span>
+              </div>
+            ) : !discountsEnabled ? (
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                <span className="text-rose-500 dark:text-rose-400">Descuentos</span>
+                <span className="text-[11px] font-semibold text-rose-500 dark:text-rose-400">
+                  Desactivados
+                </span>
+              </div>
+            ) : null}
 
             {hasDebtPaymentInCart && debtPaymentAmount > 0 ? (
               <div className="flex items-center justify-between text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 rounded-lg border border-amber-200 dark:border-amber-900/60">

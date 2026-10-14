@@ -142,6 +142,8 @@ export const PosPage = () => {
     subtotalBeforePromotions,
     promotionDiscountTotal,
     cartPromotionDiscountTotal,
+    discountsEnabled,
+    toggleDiscounts,
     isLoading,
     isSubmitting,
     isMercadoPagoLoading,
@@ -1375,6 +1377,9 @@ export const PosPage = () => {
           subtotal={checkoutSummary.subtotal}
           total={checkoutSummary.total}
           roundingAdjustment={checkoutSummary.roundingAdjustment}
+          discountsEnabled={discountsEnabled}
+          onToggleDiscounts={toggleDiscounts}
+          promotionDiscountTotal={promotionDiscountTotal}
           onCheckout={() => setIsCheckoutModalOpen(true)}
           userName={user?.fullName ?? "Operador"}
           operatorInitials={operatorInitials}
@@ -1597,6 +1602,8 @@ export const PosPage = () => {
                   paymentDiscountTotal={0}
                   roundingAdjustment={checkoutSummary.roundingAdjustment}
                   total={checkoutSummary.total}
+                  discountsEnabled={discountsEnabled}
+                  onToggleDiscounts={toggleDiscounts}
                   canWrite={canWritePos}
                   disabled={isSubmitting || isCashGateBlocking}
                   onBarcodeChange={setVisibleBarcodeValue}

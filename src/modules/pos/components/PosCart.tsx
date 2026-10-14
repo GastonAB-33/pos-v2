@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Barcode, ShoppingCart, Trash2 } from "lucide-react";
+import { BadgePercent, Barcode, ShoppingCart, Trash2 } from "lucide-react";
 import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
+import { cn } from "@/utils/cn";
 
 interface PosCartItemView {
   product_id: string;
@@ -33,6 +34,8 @@ interface PosCartProps {
   paymentDiscountTotal: number;
   roundingAdjustment?: number;
   total: number;
+  discountsEnabled?: boolean;
+  onToggleDiscounts?: () => void;
   canWrite: boolean;
   disabled?: boolean;
   onBarcodeChange: (value: string) => void;
@@ -77,6 +80,8 @@ export const PosCart = ({
   paymentDiscountTotal,
   roundingAdjustment = 0,
   total,
+  discountsEnabled = true,
+  onToggleDiscounts,
   canWrite,
   disabled,
   onBarcodeChange,
@@ -155,20 +160,51 @@ export const PosCart = ({
             )}
           </h2>
         </div>
-        {items.length > 0 && onClearCart ? (
-          <button
-            type="button"
-            className="ui-btn-ghost px-2 py-0.5 text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50"
-            onClick={() => {
-              const ok = window.confirm("¿Vaciar todo el carrito?");
-              if (ok) onClearCart();
-            }}
-            disabled={disabled || !canWrite}
-            title="Vaciar todos los productos del carrito"
-          >
-            Vaciar
-          </button>
-        ) : null}
+        <div className="flex items-center gap-1.5">
+          {onToggleDiscounts ? (
+            <button
+              type="button"
+              onClick={onToggleDiscounts}
+              disabled={disabled || !canWrite}
+              title={
+                discountsEnabled
+                  ? "Descuentos activados (clic para desactivar)"
+                  : "Descuentos desactivados (clic para activar)"
+              }
+              aria-label={discountsEnabled ? "Desactivar descuentos" : "Activar descuentos"}
+              className={cn(
+                "h-6 w-6 rounded-lg border flex items-center justify-center transition shadow-2xs cursor-pointer disabled:opacity-40",
+                discountsEnabled
+                  ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
+                  : "border-rose-300 dark:border-rose-800/80 bg-rose-50 dark:bg-rose-950/40 text-rose-500 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60"
+              )}
+            >
+              {discountsEnabled ? (
+                <BadgePercent size={13} />
+              ) : (
+                <span className="relative flex items-center justify-center">
+                  <BadgePercent size={13} className="opacity-50" />
+                  <span className="absolute h-0.5 w-3.5 bg-rose-500 rotate-45 rounded-full" />
+                </span>
+              )}
+            </button>
+          ) : null}
+
+          {items.length > 0 && onClearCart ? (
+            <button
+              type="button"
+              className="ui-btn-ghost px-2 py-0.5 text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50"
+              onClick={() => {
+                const ok = window.confirm("¿Vaciar todo el carrito?");
+                if (ok) onClearCart();
+              }}
+              disabled={disabled || !canWrite}
+              title="Vaciar todos los productos del carrito"
+            >
+              Vaciar
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {/* Input de Código de Barras compacto */}
@@ -401,6 +437,13 @@ export const PosCart = ({
               </span>
             </div>
           )}
+
+          {!discountsEnabled ? (
+            <div className="mt-0.5 flex items-center justify-between text-[11px] text-rose-500 dark:text-rose-400">
+              <span>Descuentos</span>
+              <span className="font-semibold text-[10px] uppercase">Desactivados</span>
+            </div>
+          ) : null}
 
           {hasProductPromotions ? (
             <div className="mt-0.5 flex items-center justify-between text-[11px] text-emerald-700 dark:text-emerald-400">
