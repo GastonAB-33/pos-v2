@@ -33,6 +33,13 @@ import { settingsService } from "@/services/settings.service";
 import { stockService } from "@/services/stock.service";
 import type { ArcaSettings, BankAccount, BarcodeScaleSettings, Customer, InstallmentPlan, Invoice, InvoiceDocumentType, MercadoPagoSettings, OriginBank, PaymentMethod, PaymentMethodType, PosSettings, PriceList, Product, ProductBarcode, Receipt, Sale } from "@/types/entities";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
+import {
+  parseReturnableConfig,
+  parseCustomerPackageDebts,
+  serializeCustomerPackageDebts,
+  type ReturnableConfig,
+  type ReturnableCartStatus,
+} from "@/utils/returnable-packages";
 
 export interface PosCartItem {
   product_id: string;
@@ -54,6 +61,8 @@ export interface PosCartItem {
   is_debt_payment_item?: boolean;
   debt_customer_id?: string | null;
   debt_customer_name?: string | null;
+  returnable_config?: ReturnableConfig | null;
+  returnable_status?: ReturnableCartStatus;
 }
 
 export interface PosCartItemComputed extends PosCartItem {
@@ -66,12 +75,16 @@ export interface PosCartItemComputed extends PosCartItem {
   applied_promotion_snapshot: Record<string, unknown> | null;
 }
 
+import { calculatePosRounding } from "@/utils/pos-rounding";
+
 interface PosCheckoutSummary {
   subtotal: number;
   surchargeTotal: number;
   discountTotal: number;
   paymentAdjustment: number;
   total: number;
+  rawTotal: number;
+  roundingAdjustment: number;
 }
 
 type FeedbackType = "success" | "error";
@@ -198,29 +211,51 @@ const defaultArcaSettings: ArcaSettings = {
 
 const calculateSummaryByMethod = (
   subtotal: number,
-  paymentMethod: PaymentMethod | null
+  paymentMethod: PaymentMethod | null,
+  posSettings?: PosSettings | null
 ): PosCheckoutSummary => {
   if (!paymentMethod) {
+    const rounding = calculatePosRounding(subtotal, {
+      enabled: posSettings?.rounding_enabled,
+      rule: posSettings?.rounding_rule,
+      mode: posSettings?.rounding_mode,
+      target: posSettings?.rounding_target,
+      isCashPayment: true,
+    });
+
     return {
       subtotal,
       surchargeTotal: 0,
       discountTotal: 0,
       paymentAdjustment: 0,
-      total: subtotal,
+      rawTotal: subtotal,
+      roundingAdjustment: rounding.adjustmentAmount,
+      total: rounding.roundedAmount,
     };
   }
 
   const surchargeTotal = roundAmount(subtotal * (paymentMethod.surcharge_percent / 100));
   const discountTotal = roundAmount(subtotal * (paymentMethod.discount_percent / 100));
   const paymentAdjustment = roundAmount(surchargeTotal - discountTotal);
-  const total = roundAmount(subtotal + paymentAdjustment);
+  const rawTotal = roundAmount(subtotal + paymentAdjustment);
+
+  const isCash = normalizePaymentMethodCode(paymentMethod.code) === "cash";
+  const rounding = calculatePosRounding(rawTotal, {
+    enabled: posSettings?.rounding_enabled,
+    rule: posSettings?.rounding_rule,
+    mode: posSettings?.rounding_mode,
+    target: posSettings?.rounding_target,
+    isCashPayment: isCash,
+  });
 
   return {
     subtotal,
     surchargeTotal,
     discountTotal,
     paymentAdjustment,
-    total,
+    rawTotal,
+    roundingAdjustment: rounding.adjustmentAmount,
+    total: rounding.roundedAmount,
   };
 };
 
@@ -237,17 +272,6 @@ const paymentMethodPriority = (method: PaymentMethod): number => {
 };
 
 const normalizeBarcodeValue = (value: string): string => value.trim().replace(/\s+/g, "");
-const buildQuickProductCode = (name: string): string => {
-  const base = name
-    .toUpperCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^A-Z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 28);
-
-  return `${base || "POS"}-${Date.now().toString().slice(-6)}`;
-};
 
 export const usePosSale = (tenantId: string | null) => {
   const { isOnline, refreshPending } = useOffline();
@@ -819,13 +843,21 @@ export const usePosSale = (tenantId: string | null) => {
       }
 
       const resolved = resolutionByProductId.get(item.product_id);
+      const returnableSurcharge =
+        item.returnable_status === "charge" && item.returnable_config
+          ? roundAmount(item.returnable_config.packagePrice * item.quantity)
+          : 0;
+
+      const baseSubtotal = resolved?.line_subtotal ?? roundAmount(item.quantity * item.unit_price);
+      const baseLineTotal = resolved?.line_total ?? roundAmount(item.quantity * item.unit_price);
+
       return {
         ...item,
-        line_subtotal: resolved?.line_subtotal ?? roundAmount(item.quantity * item.unit_price),
+        line_subtotal: roundAmount(baseSubtotal + returnableSurcharge),
         promotion_discount_total: resolved?.discount_total ?? 0,
         product_promotion_discount_total: resolved?.discount_total ?? 0,
         cart_promotion_discount_total: 0,
-        line_total: resolved?.line_total ?? roundAmount(item.quantity * item.unit_price),
+        line_total: roundAmount(baseLineTotal + returnableSurcharge),
         applied_promotion_name: resolved?.applied_promotion?.name ?? null,
         applied_promotion_snapshot: resolved?.applied_promotion
           ? ({ ...resolved.applied_promotion } as Record<string, unknown>)
@@ -970,10 +1002,14 @@ export const usePosSale = (tenantId: string | null) => {
                     : item.scale_total_price,
                 scale_barcode: options?.parsedScale?.raw ?? item.scale_barcode,
                 is_manual_item: item.is_manual_item,
+                returnable_config: item.returnable_config ?? parseReturnableConfig(product.description),
+                returnable_status: item.returnable_status ?? "exchange",
               }
             : item
         );
       }
+
+      const returnableConfig = parseReturnableConfig(product.description);
 
       return [
         ...prev,
@@ -994,6 +1030,8 @@ export const usePosSale = (tenantId: string | null) => {
           scale_total_price: options?.parsedScale?.totalPrice ?? null,
           scale_barcode: options?.parsedScale?.raw ?? null,
           is_manual_item: false,
+          returnable_config: returnableConfig,
+          returnable_status: "exchange",
         },
       ];
     });
@@ -1110,6 +1148,44 @@ export const usePosSale = (tenantId: string | null) => {
     setCartState((prev) => prev.filter((i) => !i.is_debt_payment_item));
   }, []);
 
+  const cycleReturnableStatus = useCallback(
+    (productId: string) => {
+      setCartState((prev) =>
+        prev.map((item) => {
+          if (item.product_id !== productId || !item.returnable_config?.enabled) {
+            return item;
+          }
+
+          const currentStatus = item.returnable_status ?? "exchange";
+          let nextStatus: ReturnableCartStatus = "exchange";
+
+          if (currentStatus === "exchange") {
+            nextStatus = "charge";
+          } else if (currentStatus === "charge") {
+            if (!selectedCustomerId) {
+              setFeedback({
+                type: "error",
+                message:
+                  "Para anotar el envase en cuenta corriente, selecciona primero al cliente en la venta.",
+              });
+              nextStatus = "exchange";
+            } else {
+              nextStatus = "owe";
+            }
+          } else {
+            nextStatus = "exchange";
+          }
+
+          return {
+            ...item,
+            returnable_status: nextStatus,
+          };
+        })
+      );
+    },
+    [selectedCustomerId]
+  );
+
   const createProductFromPosAndAddToCart = useCallback(
     async (input: PosQuickProductInput): Promise<boolean> => {
       if (!tenantId) return false;
@@ -1117,95 +1193,175 @@ export const usePosSale = (tenantId: string | null) => {
       const quantity = roundQty(input.quantity);
       const unitPrice = roundAmount(input.unitPrice);
       const name = input.name.trim();
-      const category = input.category.trim() || "General";
+      const category = input.category.trim();
       const stock = roundQty(Math.max(input.stock, quantity));
 
-      if (!name || quantity <= 0 || unitPrice <= 0) {
-        setFeedback({ type: "error", message: "Completa nombre, cantidad y precio" });
+      if (!name || !category || quantity <= 0 || unitPrice <= 0) {
+        setFeedback({
+          type: "error",
+          message: !category
+            ? "Debes establecer una categoría para el producto"
+            : "Completa nombre, cantidad y precio",
+        });
         return false;
       }
 
-      setIsSubmitting(true);
-      try {
-        const priceWithoutVat = roundAmount(unitPrice / 1.21);
-        const created = await productsService.create(tenantId, {
-          code: input.code.trim() || buildQuickProductCode(name),
-          name,
-          image_url: null,
-          brand: null,
-          supplier: null,
-          is_favorite: input.favorite,
-          description: null,
-          price: unitPrice,
-          cost_price: roundAmount(input.costPrice),
-          stock_current: stock,
-          stock_min: null,
-          stock_max: null,
-          category,
-          subcategory: null,
-          sale_mode: input.saleMode,
-          currency_code: "ARS",
-          price_without_vat: priceWithoutVat,
-          vat_percent: 21,
-          profit_percent:
-            input.costPrice > 0
-              ? roundAmount(((priceWithoutVat - input.costPrice) / input.costPrice) * 100)
-              : 0,
-          is_active: true,
-        });
+      const priceWithoutVat = roundAmount(unitPrice / 1.21);
+      const profitPercent =
+        input.costPrice > 0
+          ? roundAmount(((priceWithoutVat - input.costPrice) / input.costPrice) * 100)
+          : 0;
 
-        if (input.barcode.trim()) {
-          await productsService.setPrimaryBarcode(tenantId, created.id, input.barcode.trim());
-        }
+      // 1. CREACIÓN OPTIMISTA INMEDIATA (0ms de espera)
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const barcodeClean = input.barcode.trim();
+      const code = input.code.trim() || null;
 
-        setProducts((current) =>
-          [...current.filter((product) => product.id !== created.id), created].sort((a, b) =>
-            a.name.localeCompare(b.name)
-          )
-        );
-        useProductsStore.getState().upsertProduct(created);
+      const optimisticProduct: Product = {
+        id: tempId,
+        tenant_id: tenantId,
+        code,
+        name,
+        image_url: null,
+        brand: null,
+        supplier: null,
+        is_favorite: input.favorite,
+        description: null,
+        price: unitPrice,
+        cost_price: roundAmount(input.costPrice),
+        stock_current: stock,
+        stock_min: null,
+        stock_max: null,
+        category,
+        subcategory: null,
+        sale_mode: input.saleMode,
+        currency_code: "ARS",
+        price_without_vat: priceWithoutVat,
+        vat_percent: 21,
+        profit_percent: profitPercent,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
 
-        if (input.barcode.trim()) {
-          const barcodeClean = input.barcode.trim();
-          setPrimaryBarcodes((current) => ({ ...current, [created.id]: barcodeClean }));
-          setProductBarcodes((current) => [
-            ...current.filter((barcode) => barcode.product_id !== created.id),
-            {
-              id: `local-barcode-${created.id}`,
-              tenant_id: tenantId,
-              product_id: created.id,
-              barcode: barcodeClean,
-              is_primary: true,
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            },
-          ]);
-          useProductsStore.getState().patchPrimaryBarcode(created.id, barcodeClean);
-        }
+      // Impacto instantáneo en memoria local y carrito
+      setProducts((current) =>
+        [...current.filter((p) => p.id !== tempId), optimisticProduct].sort((a, b) =>
+          a.name.localeCompare(b.name)
+        )
+      );
+      useProductsStore.getState().upsertProduct(optimisticProduct);
 
-        await auditService.createSafe(tenantId, {
-          user_id: null,
-          module: "pos",
-          action: "quick_product_create",
-          entity_type: "product",
-          entity_id: created.id,
-          description: `Producto creado desde POS: ${created.name}`,
-          metadata: {
-            code: created.code,
-            category: created.category,
-            price: created.price,
-            stock_current: created.stock_current,
+      if (barcodeClean) {
+        setPrimaryBarcodes((current) => ({ ...current, [tempId]: barcodeClean }));
+        setProductBarcodes((current) => [
+          ...current.filter((b) => b.product_id !== tempId),
+          {
+            id: `local-barcode-${tempId}`,
+            tenant_id: tenantId,
+            product_id: tempId,
+            barcode: barcodeClean,
+            is_primary: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
           },
-        });
-
-        return addProductToCart(created, quantity);
-      } catch (error) {
-        const message = error instanceof Error && error.message ? error.message : "No se pudo crear el producto";
-        setFeedback({ type: "error", message });
-        return false;
-      } finally {
-        setIsSubmitting(false);
+        ]);
+        useProductsStore.getState().patchPrimaryBarcode(tempId, barcodeClean);
       }
+
+      // Sumar al carrito en el acto (el modal se cierra inmediatamente)
+      void addProductToCart(optimisticProduct, quantity);
+
+      // 2. PERSISTENCIA EN SUPABASE EN SEGUNDO PLANO (Background Sync)
+      void (async () => {
+        try {
+          const created = await productsService.create(tenantId, {
+            code,
+            name,
+            image_url: null,
+            brand: null,
+            supplier: null,
+            is_favorite: input.favorite,
+            description: null,
+            price: unitPrice,
+            cost_price: roundAmount(input.costPrice),
+            stock_current: stock,
+            stock_min: null,
+            stock_max: null,
+            category,
+            subcategory: null,
+            sale_mode: input.saleMode,
+            currency_code: "ARS",
+            price_without_vat: priceWithoutVat,
+            vat_percent: 21,
+            profit_percent: profitPercent,
+            is_active: true,
+          });
+
+          if (barcodeClean) {
+            await productsService.setPrimaryBarcode(tenantId, created.id, barcodeClean);
+          }
+
+          // Reemplazar tempId por created.id en memoria y en el carrito sin molestar al usuario
+          setProducts((current) =>
+            [...current.filter((p) => p.id !== tempId && p.id !== created.id), created].sort((a, b) =>
+              a.name.localeCompare(b.name)
+            )
+          );
+          useProductsStore.getState().upsertProduct(created);
+
+          // Actualizar ID en el carrito si aún está cargado
+          setCartState((prev) =>
+            prev.map((item) =>
+              item.product_id === tempId ? { ...item, product_id: created.id } : item
+            )
+          );
+
+          if (barcodeClean) {
+            setPrimaryBarcodes((current) => {
+              const next = { ...current, [created.id]: barcodeClean };
+              delete next[tempId];
+              return next;
+            });
+            setProductBarcodes((current) => [
+              ...current.filter((b) => b.product_id !== tempId && b.product_id !== created.id),
+              {
+                id: `barcode-${created.id}`,
+                tenant_id: tenantId,
+                product_id: created.id,
+                barcode: barcodeClean,
+                is_primary: true,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              },
+            ]);
+            useProductsStore.getState().patchPrimaryBarcode(created.id, barcodeClean);
+          }
+
+          void auditService.createSafe(tenantId, {
+            user_id: null,
+            module: "pos",
+            action: "quick_product_create",
+            entity_type: "product",
+            entity_id: created.id,
+            description: `Producto creado desde POS: ${created.name}`,
+            metadata: {
+              code: created.code,
+              category: created.category,
+              price: created.price,
+              stock_current: created.stock_current,
+            },
+          });
+        } catch (error) {
+          const message =
+            error instanceof Error && error.message
+              ? error.message
+              : "No se pudo sincronizar el nuevo producto con el servidor";
+          setFeedback({ type: "error", message });
+        }
+      })();
+
+      return true;
     },
     [addProductToCart, tenantId]
   );
@@ -1581,8 +1737,8 @@ export const usePosSale = (tenantId: string | null) => {
 
   const getCheckoutSummary = useCallback(
     (paymentMethodId: string | null | undefined): PosCheckoutSummary =>
-      calculateSummaryByMethod(subtotal, getPaymentMethodById(paymentMethodId)),
-    [getPaymentMethodById, subtotal]
+      calculateSummaryByMethod(subtotal, getPaymentMethodById(paymentMethodId), posSettings),
+    [getPaymentMethodById, posSettings, subtotal]
   );
 
   const selectedCustomer = useMemo(
@@ -2110,7 +2266,7 @@ export const usePosSale = (tenantId: string | null) => {
           buildOfflineReceipt(saleNumber, paymentMethod, values, summary, resolvedCreatedBy)
         );
 
-        await auditService.createSafe(tenantId, {
+        void auditService.createSafe(tenantId, {
           user_id: resolvedCreatedBy,
           module: "pos",
           action: "sale_pending_sync",
@@ -2166,9 +2322,24 @@ export const usePosSale = (tenantId: string | null) => {
         mercado_pago_preference_id:
           isMercadoPagoMethod ? (mercadoPagoIntent?.reference ?? null) : null,
       });
-      const updatedStockByProductId = new Map<string, number>();
 
-      await Promise.all(
+      const updatedStockByProductId = new Map<string, number>();
+      for (const item of cart) {
+        if (
+          !item.is_manual_item &&
+          !item.product_id.startsWith("manual-") &&
+          !item.is_debt_payment_item &&
+          !item.product_id.startsWith("debt-")
+        ) {
+          const nextStock = posSettings.allow_negative_stock
+            ? roundQty(item.stock_available - item.quantity)
+            : roundQty(Math.max(0, item.stock_available - item.quantity));
+          updatedStockByProductId.set(item.product_id, nextStock);
+        }
+      }
+
+      // 1. Ítems de la venta y movimientos de stock (en paralelo)
+      const itemsAndStockPromise = Promise.all(
         cart.map(async (item) => {
           const itemPromise = salesService.createItem(tenantId, {
             sale_id: sale.id,
@@ -2193,12 +2364,23 @@ export const usePosSale = (tenantId: string | null) => {
               is_manual_sale_item: item.is_manual_item,
               is_debt_payment_item: item.is_debt_payment_item ?? false,
               debt_customer_id: item.debt_customer_id ?? null,
+              returnable: item.returnable_config
+                ? {
+                    package_name: item.returnable_config.packageName,
+                    package_price: item.returnable_config.packagePrice,
+                    status: item.returnable_status ?? "exchange",
+                  }
+                : null,
             },
           });
 
-          if (item.is_manual_item) {
-            await itemPromise;
-            return;
+          if (
+            item.is_manual_item ||
+            item.product_id.startsWith("manual-") ||
+            item.is_debt_payment_item ||
+            item.product_id.startsWith("debt-")
+          ) {
+            return itemPromise;
           }
 
           const stockPromise = stockService.create(tenantId, {
@@ -2211,318 +2393,372 @@ export const usePosSale = (tenantId: string | null) => {
             created_by: resolvedCreatedBy,
           });
 
-          const nextStock = posSettings.allow_negative_stock
-            ? roundQty(item.stock_available - item.quantity)
-            : roundQty(Math.max(0, item.stock_available - item.quantity));
-          updatedStockByProductId.set(item.product_id, nextStock);
-
+          const nextStock = updatedStockByProductId.get(item.product_id) ?? item.stock_available;
           const updateStockPromise = productsService.updateStock(tenantId, item.product_id, nextStock);
 
-          await Promise.all([itemPromise, stockPromise, updateStockPromise]);
+          return Promise.all([itemPromise, stockPromise, updateStockPromise]);
         })
       );
 
+      // 2. Envases adeudados ("owe")
+      const returnablesPromise = (async () => {
+        const oweReturnableItems = cart.filter(
+          (i) => i.returnable_config?.enabled && i.returnable_status === "owe"
+        );
+
+        if (oweReturnableItems.length > 0 && selectedCustomer) {
+          try {
+            const currentDebts = parseCustomerPackageDebts(selectedCustomer.observations);
+            for (const item of oweReturnableItems) {
+              const pkgName = item.returnable_config!.packageName;
+              currentDebts[pkgName] = (currentDebts[pkgName] ?? 0) + item.quantity;
+            }
+            const updatedObservations = serializeCustomerPackageDebts(
+              selectedCustomer.observations,
+              currentDebts
+            );
+            await customersService.update(tenantId, selectedCustomer.id, {
+              observations: updatedObservations,
+            });
+            setCustomers((prevCustomers) =>
+              prevCustomers.map((c) =>
+                c.id === selectedCustomer.id
+                  ? { ...c, observations: updatedObservations }
+                  : c
+              )
+            );
+          } catch (err) {
+            console.error("Error al registrar deuda de envases en cliente", err);
+          }
+        }
+      })();
+
+      // 3. Pagos y movimientos financieros (efectivo / bancos / cuenta corriente)
       const paymentCapturedAt = new Date().toISOString();
       const manualMercadoPagoOperationId =
         isMercadoPagoManual && typeof paymentDetails?.operation_id === "string"
           ? paymentDetails.operation_id.trim() || null
           : null;
 
-      if (isSplit) {
-        for (const p of splitPayments) {
-          const pMethod = getPaymentMethodById(p.paymentMethodId)!;
-          const pCode = normalizePaymentMethodCode(pMethod.code);
-          const pDetails =
-            p.paymentDetails && typeof p.paymentDetails === "object"
-              ? (p.paymentDetails as Record<string, unknown>)
-              : null;
-          const pIsCurrentAccount = pCode === "current_account";
-
-          await salesService.createPayment(tenantId, {
-            sale_id: sale.id,
-            payment_method_code: pMethod.code,
-            provider: pCode === "mercado_pago" ? "mercado_pago" : "internal",
-            provider_code: pCode === "mercado_pago" ? "mercado_pago_manual" : "internal",
-            amount: p.amount,
-            currency_code: "ARS",
-            status: pIsCurrentAccount ? "pending" : "approved",
-            provider_status: pIsCurrentAccount ? "pending" : "approved",
-            provider_reference: null,
-            provider_metadata: null,
-            external_reference: null,
-            metadata: {
-              payment_method_snapshot: {
-                id: pMethod.id,
-                name: pMethod.name,
-                code: pMethod.code,
-                type: pCode as PaymentMethodType,
-                affects_cash: pMethod.affects_cash,
-                surcharge_percent: pMethod.surcharge_percent,
-                discount_percent: pMethod.discount_percent,
-              },
-              payment_details: pDetails,
-              payment_captured_at: paymentCapturedAt,
-            },
-          });
-
-          if (pIsCurrentAccount && values.customerId) {
-            await currentAccountsService.createMovement(tenantId, {
-              customer_id: values.customerId,
-              sale_id: sale.id,
-              type: "debt",
-              amount: p.amount,
-              notes: `Venta ${sale.sale_number} (Parcial cta. cte.)`,
-              created_by: resolvedCreatedBy,
-            });
-          }
-
-          if ((pMethod.affects_cash || pCode === "cash") && openSession) {
-            await cashService.createMovement(tenantId, {
-              cash_session_id: openSession.id,
-              movement_type: "sale_payment",
-              amount: p.amount,
-              currency_code: "ARS",
-              reference_type: pMethod.code,
-              reference_id: sale.id,
-              notes: `Cobro venta ${sale.sale_number} - ${pMethod.name} (Parcial: $${p.amount.toFixed(2)})`,
-              created_by: resolvedCreatedBy,
-            });
-          }
-
-          const destAccountId =
-            typeof pDetails?.destination_account_id === "string" && pDetails.destination_account_id
-              ? pDetails.destination_account_id
-              : null;
-          if (destAccountId) {
-            try {
-              await bankAccountMovementsService.createMovement(tenantId, {
-                bank_account_id: destAccountId,
-                type: "income",
-                origin_type: "pos_sale",
-                concept: `Cobro Venta #${sale.sale_number} - ${pMethod.name}`,
-                amount: p.amount,
-                reference_id: sale.id,
-                voucher_number:
-                  (typeof pDetails?.voucher_number === "string" && pDetails.voucher_number) ||
-                  (typeof pDetails?.operation_id === "string" && pDetails.operation_id) ||
-                  null,
-                notes: `Cobro POS en ${pMethod.name}`,
-                created_by: resolvedCreatedBy,
-              });
-            } catch (bankErr) {
-              console.error("Error al registrar ingreso en cuenta bancaria:", bankErr);
-            }
-          }
-        }
-
-        await auditService.createSafe(tenantId, {
-          user_id: resolvedCreatedBy,
-          module: "pos",
-          action: "sale_payment_split",
-          entity_type: "sale_payment",
-          entity_id: sale.id,
-          description: `Pago combinado registrado (${splitPayments.length} métodos) en venta ${sale.sale_number}`,
-          metadata: {
-            sale_id: sale.id,
-            split_payments: splitPayments,
-            captured_at: paymentCapturedAt,
-          },
-        });
-      } else {
-        await salesService.createPayment(tenantId, {
-          sale_id: sale.id,
-          payment_method_code: paymentMethod.code,
-          provider: isMercadoPagoMethod ? "mercado_pago" : "internal",
-          provider_code:
-            isMercadoPagoMethod
-              ? isMercadoPagoManual
-                ? "mercado_pago_manual"
-                : "mercado_pago"
-              : "internal",
-          amount: summary.total,
-          currency_code: "ARS",
-          status: isCurrentAccountMethod ? "pending" : "approved",
-          provider_status:
-            isMercadoPagoMethod
-              ? isMercadoPagoManual
-                ? "approved"
-                : (mercadoPagoIntent?.status ?? "pending")
-              : isCurrentAccountMethod
-                ? "pending"
-                : "approved",
-          provider_reference:
-            isMercadoPagoMethod
-              ? isMercadoPagoManual
-                ? manualMercadoPagoOperationId
-                : (mercadoPagoIntent?.reference ?? null)
-              : null,
-          provider_metadata:
-            isMercadoPagoMethod
-              ? isMercadoPagoManual
-                ? ({
-                    operation_id: manualMercadoPagoOperationId,
-                    mode: "manual",
-                  } as Record<string, unknown>)
-                : ({
-                    payment_intent_id: mercadoPagoIntent?.id ?? null,
-                    status: mercadoPagoIntent?.status ?? "pending",
-                    expires_at: mercadoPagoIntent?.expires_at ?? null,
-                    mode: mercadoPagoStatus.mode,
-                  } as Record<string, unknown>)
-              : null,
-          external_reference:
-            isMercadoPagoMethod
-              ? isMercadoPagoManual
-                ? manualMercadoPagoOperationId
-                : (mercadoPagoIntent?.reference ?? null)
-              : null,
-          metadata: {
-            payment_method_snapshot: {
-              id: paymentMethod.id,
-              name: paymentMethod.name,
-              code: paymentMethod.code,
-              type: paymentMethodCode as PaymentMethodType,
-              affects_cash: paymentMethod.affects_cash,
-              surcharge_percent: paymentMethod.surcharge_percent,
-              discount_percent: paymentMethod.discount_percent,
-            },
-            totals_snapshot: {
-              subtotal_before_promotions: subtotalBeforePromotions,
-              promotion_discount_total: promotionDiscountTotal,
-              cart_promotion_discount_total: cartPromotionDiscountTotal,
-              subtotal_after_promotions: summary.subtotal,
-              surcharge_total: summary.surchargeTotal,
-              payment_discount_total: summary.discountTotal,
-              payment_adjustment: summary.paymentAdjustment,
-              total: summary.total,
-            },
-            payment_details: paymentDetails,
-            payment_captured_at: paymentCapturedAt,
-            provider_snapshot:
-              isMercadoPagoMethod
-                ? isMercadoPagoManual
-                  ? {
-                      provider: "mercado_pago_manual",
-                      operation_id: manualMercadoPagoOperationId,
-                      provider_reference: manualMercadoPagoOperationId,
-                      provider_status: "approved",
-                      mode: "manual",
-                    }
-                  : {
-                      provider: "mercado_pago",
-                      payment_intent_id: mercadoPagoIntent?.id ?? null,
-                      provider_reference: mercadoPagoIntent?.reference ?? null,
-                      provider_status: mercadoPagoIntent?.status ?? "pending",
-                      mode: mercadoPagoStatus.mode,
-                    }
-                : null,
-            cart_promotion_snapshot: promotionsResolution.applied_cart_promotion
-              ? ({ ...promotionsResolution.applied_cart_promotion } as Record<string, unknown>)
-              : null,
-          },
-        });
-
-        const singleDestAccountId =
-          typeof paymentDetails?.destination_account_id === "string" && paymentDetails.destination_account_id
-            ? paymentDetails.destination_account_id
-            : null;
-        if (singleDestAccountId) {
-          try {
-            await bankAccountMovementsService.createMovement(tenantId, {
-              bank_account_id: singleDestAccountId,
-              type: "income",
-              origin_type: "pos_sale",
-              concept: `Cobro Venta #${sale.sale_number} - ${paymentMethod.name}`,
-              amount: summary.total,
-              reference_id: sale.id,
-              voucher_number:
-                (typeof paymentDetails?.voucher_number === "string" && paymentDetails.voucher_number) ||
-                (typeof paymentDetails?.operation_id === "string" && paymentDetails.operation_id) ||
-                null,
-              notes: `Cobro POS en ${paymentMethod.name}`,
-              created_by: resolvedCreatedBy,
-            });
-          } catch (bankErr) {
-            console.error("Error al registrar ingreso en cuenta bancaria:", bankErr);
-          }
-        }
-
-        const paymentAuditAction =
-          paymentMethod.code === "card_credit"
-            ? "sale_payment_credit_card"
-            : paymentMethod.code === "card_debit"
-              ? "sale_payment_debit_card"
-              : paymentMethod.code === "transfer"
-                ? "sale_payment_transfer"
-                : paymentMethod.code === "cheque"
-                  ? "sale_payment_cheque"
-                : isMercadoPagoManual
-                  ? "sale_payment_mercado_pago_manual"
+      const paymentsPromise = (async () => {
+        if (isSplit) {
+          await Promise.all(
+            splitPayments.map(async (p) => {
+              const pMethod = getPaymentMethodById(p.paymentMethodId)!;
+              const pCode = normalizePaymentMethodCode(pMethod.code);
+              const pDetails =
+                p.paymentDetails && typeof p.paymentDetails === "object"
+                  ? (p.paymentDetails as Record<string, unknown>)
                   : null;
+              const pIsCurrentAccount = pCode === "current_account";
 
-        if (paymentAuditAction) {
-          await auditService.createSafe(tenantId, {
+              const paymentPromise = salesService.createPayment(tenantId, {
+                sale_id: sale.id,
+                payment_method_code: pMethod.code,
+                provider: pCode === "mercado_pago" ? "mercado_pago" : "internal",
+                provider_code: pCode === "mercado_pago" ? "mercado_pago_manual" : "internal",
+                amount: p.amount,
+                currency_code: "ARS",
+                status: pIsCurrentAccount ? "pending" : "approved",
+                provider_status: pIsCurrentAccount ? "pending" : "approved",
+                provider_reference: null,
+                provider_metadata: null,
+                external_reference: null,
+                metadata: {
+                  payment_method_snapshot: {
+                    id: pMethod.id,
+                    name: pMethod.name,
+                    code: pMethod.code,
+                    type: pCode as PaymentMethodType,
+                    affects_cash: pMethod.affects_cash,
+                    surcharge_percent: pMethod.surcharge_percent,
+                    discount_percent: pMethod.discount_percent,
+                  },
+                  payment_details: pDetails,
+                  payment_captured_at: paymentCapturedAt,
+                },
+              });
+
+              const currentAccountPromise =
+                pIsCurrentAccount && values.customerId
+                  ? currentAccountsService.createMovement(tenantId, {
+                      customer_id: values.customerId,
+                      sale_id: sale.id,
+                      type: "debt",
+                      amount: p.amount,
+                      notes: `Venta ${sale.sale_number} (Parcial cta. cte.)`,
+                      created_by: resolvedCreatedBy,
+                    })
+                  : Promise.resolve();
+
+              const cashMovementPromise =
+                (pMethod.affects_cash || pCode === "cash") && openSession
+                  ? cashService.createMovement(tenantId, {
+                      cash_session_id: openSession.id,
+                      movement_type: "sale_payment",
+                      amount: p.amount,
+                      currency_code: "ARS",
+                      reference_type: pMethod.code,
+                      reference_id: sale.id,
+                      notes: `Cobro venta ${sale.sale_number} - ${pMethod.name} (Parcial: $${p.amount.toFixed(2)})`,
+                      created_by: resolvedCreatedBy,
+                    })
+                  : Promise.resolve();
+
+              const destAccountId =
+                typeof pDetails?.destination_account_id === "string" && pDetails.destination_account_id
+                  ? pDetails.destination_account_id
+                  : null;
+              const bankMovementPromise = destAccountId
+                ? bankAccountMovementsService
+                    .createMovement(tenantId, {
+                      bank_account_id: destAccountId,
+                      type: "income",
+                      origin_type: "pos_sale",
+                      concept: `Cobro Venta #${sale.sale_number} - ${pMethod.name}`,
+                      amount: p.amount,
+                      reference_id: sale.id,
+                      voucher_number:
+                        (typeof pDetails?.voucher_number === "string" && pDetails.voucher_number) ||
+                        (typeof pDetails?.operation_id === "string" && pDetails.operation_id) ||
+                        null,
+                      notes: `Cobro POS en ${pMethod.name}`,
+                      created_by: resolvedCreatedBy,
+                    })
+                    .catch((bankErr) => {
+                      console.error("Error al registrar ingreso en cuenta bancaria:", bankErr);
+                    })
+                : Promise.resolve();
+
+              return Promise.all([
+                paymentPromise,
+                currentAccountPromise,
+                cashMovementPromise,
+                bankMovementPromise,
+              ]);
+            })
+          );
+
+          void auditService.createSafe(tenantId, {
             user_id: resolvedCreatedBy,
             module: "pos",
-            action: paymentAuditAction,
+            action: "sale_payment_split",
             entity_type: "sale_payment",
             entity_id: sale.id,
-            description: `Pago registrado (${paymentMethod.name}) en venta ${sale.sale_number}`,
+            description: `Pago combinado registrado (${splitPayments.length} métodos) en venta ${sale.sale_number}`,
             metadata: {
               sale_id: sale.id,
-              payment_method_code: paymentMethod.code,
-              payment_details: paymentDetails,
+              split_payments: splitPayments,
               captured_at: paymentCapturedAt,
             },
           });
-        }
-
-        if (isCurrentAccountMethod) {
-          await currentAccountsService.createMovement(tenantId, {
-            customer_id: values.customerId!,
+        } else {
+          const singlePaymentPromise = salesService.createPayment(tenantId, {
             sale_id: sale.id,
-            type: "debt",
-            amount: summary.total,
-            notes: `Venta ${sale.sale_number}`,
-            created_by: resolvedCreatedBy,
-          });
-        }
-
-        if (requiresCashMovementRegistration && openSession) {
-          await cashService.createMovement(tenantId, {
-            cash_session_id: openSession.id,
-            movement_type: "sale_payment",
+            payment_method_code: paymentMethod.code,
+            provider: isMercadoPagoMethod ? "mercado_pago" : "internal",
+            provider_code:
+              isMercadoPagoMethod
+                ? isMercadoPagoManual
+                  ? "mercado_pago_manual"
+                  : "mercado_pago"
+                : "internal",
             amount: summary.total,
             currency_code: "ARS",
-            reference_type: paymentMethod.code,
-            reference_id: sale.id,
-            notes: `Cobro venta ${sale.sale_number} - ${paymentMethod.name}`,
-            created_by: resolvedCreatedBy,
+            status: isCurrentAccountMethod ? "pending" : "approved",
+            provider_status:
+              isMercadoPagoMethod
+                ? isMercadoPagoManual
+                  ? "approved"
+                  : (mercadoPagoIntent?.status ?? "pending")
+                : isCurrentAccountMethod
+                  ? "pending"
+                  : "approved",
+            provider_reference:
+              isMercadoPagoMethod
+                ? isMercadoPagoManual
+                  ? manualMercadoPagoOperationId
+                  : (mercadoPagoIntent?.reference ?? null)
+                : null,
+            provider_metadata:
+              isMercadoPagoMethod
+                ? isMercadoPagoManual
+                  ? ({
+                      operation_id: manualMercadoPagoOperationId,
+                      mode: "manual",
+                    } as Record<string, unknown>)
+                  : ({
+                      payment_intent_id: mercadoPagoIntent?.id ?? null,
+                      status: mercadoPagoIntent?.status ?? "pending",
+                      expires_at: mercadoPagoIntent?.expires_at ?? null,
+                      mode: mercadoPagoStatus.mode,
+                    } as Record<string, unknown>)
+                : null,
+            external_reference:
+              isMercadoPagoMethod
+                ? isMercadoPagoManual
+                  ? manualMercadoPagoOperationId
+                  : (mercadoPagoIntent?.reference ?? null)
+                : null,
+            metadata: {
+              payment_method_snapshot: {
+                id: paymentMethod.id,
+                name: paymentMethod.name,
+                code: paymentMethod.code,
+                type: paymentMethodCode as PaymentMethodType,
+                affects_cash: paymentMethod.affects_cash,
+                surcharge_percent: paymentMethod.surcharge_percent,
+                discount_percent: paymentMethod.discount_percent,
+              },
+              totals_snapshot: {
+                subtotal_before_promotions: subtotalBeforePromotions,
+                promotion_discount_total: promotionDiscountTotal,
+                cart_promotion_discount_total: cartPromotionDiscountTotal,
+                subtotal_after_promotions: summary.subtotal,
+                surcharge_total: summary.surchargeTotal,
+                payment_discount_total: summary.discountTotal,
+                payment_adjustment: summary.paymentAdjustment,
+                total: summary.total,
+              },
+              payment_details: paymentDetails,
+              payment_captured_at: paymentCapturedAt,
+              provider_snapshot:
+                isMercadoPagoMethod
+                  ? isMercadoPagoManual
+                    ? {
+                        provider: "mercado_pago_manual",
+                        operation_id: manualMercadoPagoOperationId,
+                        provider_reference: manualMercadoPagoOperationId,
+                        provider_status: "approved",
+                        mode: "manual",
+                      }
+                    : {
+                        provider: "mercado_pago",
+                        payment_intent_id: mercadoPagoIntent?.id ?? null,
+                        provider_reference: mercadoPagoIntent?.reference ?? null,
+                        provider_status: mercadoPagoIntent?.status ?? "pending",
+                        mode: mercadoPagoStatus.mode,
+                      }
+                  : null,
+              cart_promotion_snapshot: promotionsResolution.applied_cart_promotion
+                ? ({ ...promotionsResolution.applied_cart_promotion } as Record<string, unknown>)
+                : null,
+            },
           });
-        }
-      }
 
-      // Registrar cancelación/pago de deuda en cuenta corriente si el carrito incluye cobro de deuda
-      const debtPaymentItems = cart.filter((item) => item.is_debt_payment_item);
-      for (const debtItem of debtPaymentItems) {
-        const targetCustomerId = debtItem.debt_customer_id || values.customerId;
-        if (targetCustomerId) {
-          try {
-            await currentAccountsService.createMovement(tenantId, {
-              customer_id: targetCustomerId,
-              sale_id: sale.id,
-              type: "payment",
-              amount: roundAmount(debtItem.line_total),
-              notes: `Cancelación de deuda en Venta #${sale.sale_number} (${debtItem.name})`,
-              created_by: resolvedCreatedBy,
+          const singleDestAccountId =
+            typeof paymentDetails?.destination_account_id === "string" && paymentDetails.destination_account_id
+              ? paymentDetails.destination_account_id
+              : null;
+          const singleBankMovementPromise = singleDestAccountId
+            ? bankAccountMovementsService
+                .createMovement(tenantId, {
+                  bank_account_id: singleDestAccountId,
+                  type: "income",
+                  origin_type: "pos_sale",
+                  concept: `Cobro Venta #${sale.sale_number} - ${paymentMethod.name}`,
+                  amount: summary.total,
+                  reference_id: sale.id,
+                  voucher_number:
+                    (typeof paymentDetails?.voucher_number === "string" && paymentDetails.voucher_number) ||
+                    (typeof paymentDetails?.operation_id === "string" && paymentDetails.operation_id) ||
+                    null,
+                  notes: `Cobro POS en ${paymentMethod.name}`,
+                  created_by: resolvedCreatedBy,
+                })
+                .catch((bankErr) => {
+                  console.error("Error al registrar ingreso en cuenta bancaria:", bankErr);
+                })
+            : Promise.resolve();
+
+          const paymentAuditAction =
+            paymentMethod.code === "card_credit"
+              ? "sale_payment_credit_card"
+              : paymentMethod.code === "card_debit"
+                ? "sale_payment_debit_card"
+                : paymentMethod.code === "transfer"
+                  ? "sale_payment_transfer"
+                  : paymentMethod.code === "cheque"
+                    ? "sale_payment_cheque"
+                  : isMercadoPagoManual
+                    ? "sale_payment_mercado_pago_manual"
+                    : null;
+
+          if (paymentAuditAction) {
+            void auditService.createSafe(tenantId, {
+              user_id: resolvedCreatedBy,
+              module: "pos",
+              action: paymentAuditAction,
+              entity_type: "sale_payment",
+              entity_id: sale.id,
+              description: `Pago registrado (${paymentMethod.name}) en venta ${sale.sale_number}`,
+              metadata: {
+                sale_id: sale.id,
+                payment_method_code: paymentMethod.code,
+                payment_details: paymentDetails,
+                captured_at: paymentCapturedAt,
+              },
             });
-          } catch (debtErr) {
-            console.error("Error al registrar cancelación de deuda en cuenta corriente:", debtErr);
           }
-        }
-      }
 
-      const receipt = await receiptsService.create(tenantId, {
+          const singleCurrentAccountPromise = isCurrentAccountMethod
+            ? currentAccountsService.createMovement(tenantId, {
+                customer_id: values.customerId!,
+                sale_id: sale.id,
+                type: "debt",
+                amount: summary.total,
+                notes: `Venta ${sale.sale_number}`,
+                created_by: resolvedCreatedBy,
+              })
+            : Promise.resolve();
+
+          const singleCashMovementPromise =
+            requiresCashMovementRegistration && openSession
+              ? cashService.createMovement(tenantId, {
+                  cash_session_id: openSession.id,
+                  movement_type: "sale_payment",
+                  amount: summary.total,
+                  currency_code: "ARS",
+                  reference_type: paymentMethod.code,
+                  reference_id: sale.id,
+                  notes: `Cobro venta ${sale.sale_number} - ${paymentMethod.name}`,
+                  created_by: resolvedCreatedBy,
+                })
+              : Promise.resolve();
+
+          await Promise.all([
+            singlePaymentPromise,
+            singleBankMovementPromise,
+            singleCurrentAccountPromise,
+            singleCashMovementPromise,
+          ]);
+        }
+      })();
+
+      // 4. Cancelación de deudas en cuenta corriente (en paralelo)
+      const debtPaymentItems = cart.filter((item) => item.is_debt_payment_item);
+      const debtItemsPromise = Promise.all(
+        debtPaymentItems.map(async (debtItem) => {
+          const targetCustomerId = debtItem.debt_customer_id || values.customerId;
+          if (targetCustomerId) {
+            try {
+              await currentAccountsService.createMovement(tenantId, {
+                customer_id: targetCustomerId,
+                sale_id: sale.id,
+                type: "payment",
+                amount: roundAmount(debtItem.line_total),
+                notes: `Cancelación de deuda en Venta #${sale.sale_number} (${debtItem.name})`,
+                created_by: resolvedCreatedBy,
+              });
+            } catch (debtErr) {
+              console.error("Error al registrar cancelación de deuda en cuenta corriente:", debtErr);
+            }
+          }
+        })
+      );
+
+      // 5. Creación del comprobante / ticket
+      const receiptPayload = {
         sale_id: sale.id,
         sale_number: sale.sale_number,
         receipt_number: `TCK-${Date.now()}`,
@@ -2536,21 +2772,44 @@ export const usePosSale = (tenantId: string | null) => {
           subtotal: item.line_total,
         })),
         total: summary.total,
-        notes: isSplit
-          ? [
-              `Pago combinado: ${splitPayments
+        notes: [
+          isSplit
+            ? `Pago combinado: ${splitPayments
                 .map((p) => {
                   const m = getPaymentMethodById(p.paymentMethodId);
                   return `${m?.name || "Medio"}: $${p.amount.toFixed(2)}`;
                 })
-                .join(" + ")}`,
-              values.notes?.trim(),
-            ]
-              .filter(Boolean)
-              .join(" | ")
-          : values.notes?.trim() || null,
+                .join(" + ")}`
+            : null,
+          summary.roundingAdjustment !== 0
+            ? `Redondeo comercial: ${summary.roundingAdjustment > 0 ? "+" : ""}$${summary.roundingAdjustment.toFixed(2)}`
+            : null,
+          values.notes?.trim() || null,
+        ]
+          .filter(Boolean)
+          .join(" | ") || null,
         created_by: resolvedCreatedBy,
+      };
+
+      const receiptPromise = receiptsService.create(tenantId, receiptPayload).catch((err) => {
+        console.error("Error al persistir recibo en base de datos:", err);
+        return {
+          id: `rcpt-${Date.now()}`,
+          tenant_id: tenantId,
+          ...receiptPayload,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        } as Receipt;
       });
+
+      // Ejecutar todas las mutaciones secundarias en paralelo
+      const [, , , , receipt] = await Promise.all([
+        itemsAndStockPromise,
+        returnablesPromise,
+        paymentsPromise,
+        debtItemsPromise,
+        receiptPromise,
+      ]);
 
       let generatedInvoiceFromSale: Invoice | null = null;
       const postSaleMessages: string[] = [];
@@ -2721,7 +2980,7 @@ export const usePosSale = (tenantId: string | null) => {
 
       setGeneratedReceipt(receipt);
       setGeneratedInvoice(generatedInvoiceFromSale);
-      await auditService.createSafe(tenantId, {
+      void auditService.createSafe(tenantId, {
         user_id: resolvedCreatedBy,
         module: "pos",
         action: "sale_confirmed",
@@ -2857,6 +3116,7 @@ export const usePosSale = (tenantId: string | null) => {
     decreaseQuantity,
     removeFromCart,
     clearCart,
+    cycleReturnableStatus,
     createOriginBank,
     mercadoPagoIntent,
     startMercadoPagoPayment,

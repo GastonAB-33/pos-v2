@@ -17,6 +17,7 @@ import {
   type ProductFormValues,
 } from "@/modules/productos/schemas/product-form.schema";
 import type { ProductFormModalValues, ProductViewModel } from "@/modules/productos/types/product.types";
+import { parseReturnableConfig, COMMON_RETURNABLE_PACKAGES } from "@/utils/returnable-packages";
 import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
 import { useProductsStore } from "@/features/products/store/products.store";
 import { cn } from "@/utils/cn";
@@ -57,6 +58,9 @@ const createBaseDefaults = (): ProductFormValues => ({
   porcentajeIva: DEFAULT_IVA_PERCENT,
   precioFinal: 0,
   imagenUrl: "",
+  isReturnable: false,
+  returnablePackageName: "",
+  returnablePackagePrice: 0,
 });
 
 const createDefaults = (): ProductFormModalValues => ({
@@ -228,9 +232,11 @@ export const ProductFormModal = ({
     if (!product) {
       reset({
         ...createDefaults(),
-        codigoBarras: initialBarcode ? initialBarcode.trim() : "",
-        nombre: initialName ? initialName.trim() : "",
         ...(initialValues ?? {}),
+        codigoBarras: initialBarcode ? initialBarcode.trim() : (initialValues?.codigoBarras ?? ""),
+        nombre: initialName ? initialName.trim() : (initialValues?.nombre ?? ""),
+        categoria: "",
+        subcategoria: "",
       });
       setCalcMode("forward");
       setPhotoError(null);
@@ -240,6 +246,8 @@ export const ProductFormModal = ({
       setLocalPreviewUrl(null);
       return;
     }
+
+    const returnableConfig = parseReturnableConfig(product.entity?.description);
 
     reset({
       nombre: product.nombre,
@@ -259,6 +267,9 @@ export const ProductFormModal = ({
       imagenUrl: product.imagenUrl,
       imagenFile: null,
       imagenEliminada: false,
+      isReturnable: returnableConfig?.enabled ?? false,
+      returnablePackageName: returnableConfig?.packageName ?? "",
+      returnablePackagePrice: returnableConfig?.packagePrice ?? 0,
     });
     setCalcMode("forward");
     setPhotoError(null);
@@ -280,6 +291,7 @@ export const ProductFormModal = ({
   const porcentajeGanancia = watch("porcentajeGanancia");
   const porcentajeIva = watch("porcentajeIva");
   const precioFinal = watch("precioFinal");
+  const isReturnable = watch("isReturnable");
 
   const imagenPreview = useMemo(() => {
     if (localPreviewUrl) return localPreviewUrl;
@@ -779,7 +791,9 @@ export const ProductFormModal = ({
 
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">Categoría</label>
+                    <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                      Categoría <span className="text-red-500">*</span>
+                    </label>
                     <input
                       list="categorias-productos"
                       {...register("categoria", {
@@ -787,8 +801,12 @@ export const ProductFormModal = ({
                       })}
                       className="ui-input w-full"
                       disabled={disabled}
-                      placeholder="Buscar o escribir categoría"
+                      placeholder="Seleccionar o escribir categoría..."
                       autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-lpignore="true"
                     />
                     <datalist id="categorias-productos">
                       {localCategories.map((item) => (
@@ -812,7 +830,7 @@ export const ProductFormModal = ({
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-700">Subcategoría</label>
+                    <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Subcategoría</label>
                     <input
                       list="subcategorias-productos"
                       {...register("subcategoria", {
@@ -820,8 +838,12 @@ export const ProductFormModal = ({
                       })}
                       className="ui-input w-full"
                       disabled={disabled}
-                      placeholder="Buscar o escribir subcategoría"
+                      placeholder="Seleccionar o escribir subcategoría..."
                       autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-lpignore="true"
                     />
                     <datalist id="subcategorias-productos">
                       {localSubcategories.map((item) => (
@@ -1066,6 +1088,67 @@ export const ProductFormModal = ({
                 ? "En productos pesables, costo, precio sin IVA y precio final se interpretan por kg."
                 : "El cálculo se actualiza automáticamente al escribir y al salir de cada campo."}
             </p>
+          </div>
+
+          {/* Envase retornable */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5 dark:border-slate-800 dark:bg-slate-900/60">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  Envase retornable
+                </h4>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                  Activa si este producto requiere un envase físico (garrafa, bidón, cajón, botella de vidrio).
+                </p>
+              </div>
+              <label className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  className="peer sr-only"
+                  {...register("isReturnable")}
+                  disabled={disabled}
+                />
+                <span className="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-brand-600 peer-disabled:opacity-50 dark:bg-slate-700" />
+                <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+              </label>
+            </div>
+
+            {isReturnable && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                    Tipo de envase
+                  </label>
+                  <input
+                    list="package-name-suggestions-modal"
+                    type="text"
+                    {...register("returnablePackageName")}
+                    placeholder="Ej. Garrafa 10kg, Bidón 20L..."
+                    className="ui-input w-full text-xs"
+                    disabled={disabled}
+                  />
+                  <datalist id="package-name-suggestions-modal">
+                    {COMMON_RETURNABLE_PACKAGES.map((pkg) => (
+                      <option key={pkg.name} value={pkg.name} />
+                    ))}
+                  </datalist>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                    Precio del envase (si no trae el vacío)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    {...register("returnablePackagePrice", { valueAsNumber: true })}
+                    placeholder="0"
+                    className="ui-input w-full text-xs"
+                    disabled={disabled}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5">

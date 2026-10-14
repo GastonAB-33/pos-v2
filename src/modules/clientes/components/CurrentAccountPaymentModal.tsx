@@ -809,7 +809,7 @@ export const CurrentAccountPaymentModal = ({
                     <option value="">Cuenta bancaria destino</option>
                     {destinationBankAccounts.map((account) => (
                       <option key={account.id} value={account.id}>
-                        {account.bank_name} | {account.alias || account.holder_name}
+                        {account.bank_name} — {account.holder_name}{account.alias ? ` (${account.alias})` : ""}
                       </option>
                     ))}
                   </select>

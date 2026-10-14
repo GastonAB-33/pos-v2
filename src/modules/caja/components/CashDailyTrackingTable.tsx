@@ -23,38 +23,41 @@ const currency = new Intl.NumberFormat("es-AR", {
 export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTrackingTableProps) => {
   const columns = [
     columnHelper.accessor("date", {
-      header: "Fecha",
-      cell: (info) => (
-        <div className="flex items-center gap-1.5 whitespace-nowrap font-medium text-slate-800">
-          <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-          <span>{new Date(`${info.getValue()}T00:00:00`).toLocaleDateString("es-AR")}</span>
-        </div>
-      ),
-    }),
-    columnHelper.accessor("sessionsCount", {
-      header: "Estado",
+      header: "Fecha y Estado",
       cell: (info) => {
         const row = info.row.original;
         const isOpen = Boolean(row.openSessionsCount);
+        const formattedDate = new Date(`${info.getValue()}T00:00:00`).toLocaleDateString("es-AR", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        });
+
         return (
-          <div className="flex flex-wrap items-center gap-1">
-            <span
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border ${
-                isOpen
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-200/60"
-                  : "bg-slate-100 text-slate-600 border-slate-200/60"
-              }`}
-            >
+          <div className="flex flex-col gap-0.5 py-0.5">
+            <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+              <Calendar className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+              <span>{formattedDate}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[11px]">
               <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  isOpen ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+                className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-semibold border ${
+                  isOpen
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800/80"
+                    : "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800/60 dark:text-slate-400 dark:border-slate-700/80"
                 }`}
-              />
-              {isOpen ? `${row.openSessionsCount} abierta` : "Cerrada"}
-            </span>
-            <span className="text-[11px] text-slate-400">
-              ({info.getValue()} turno{info.getValue() > 1 ? "s" : ""})
-            </span>
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    isOpen ? "bg-emerald-500 animate-pulse" : "bg-slate-400 dark:bg-slate-500"
+                  }`}
+                />
+                {isOpen ? "En curso" : "Cerrada"}
+              </span>
+              <span className="text-slate-400 dark:text-slate-500">
+                {info.row.original.sessionsCount} {info.row.original.sessionsCount === 1 ? "turno" : "turnos"}
+              </span>
+            </div>
           </div>
         );
       },
@@ -62,7 +65,7 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
     columnHelper.accessor("openingAmount", {
       header: () => <div className="text-right">Apertura</div>,
       cell: (info) => (
-        <div className="text-right font-medium text-slate-700 whitespace-nowrap">
+        <div className="text-right text-xs font-medium text-slate-600 dark:text-slate-400 whitespace-nowrap">
           {currency.format(info.getValue())}
         </div>
       ),
@@ -70,7 +73,7 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
     columnHelper.accessor("incomes", {
       header: () => <div className="text-right">Ingresos</div>,
       cell: (info) => (
-        <div className="text-right font-semibold text-emerald-600 whitespace-nowrap">
+        <div className="text-right font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
           +{currency.format(info.getValue())}
         </div>
       ),
@@ -78,7 +81,7 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
     columnHelper.accessor("expenses", {
       header: () => <div className="text-right">Egresos</div>,
       cell: (info) => (
-        <div className="text-right font-semibold text-rose-600 whitespace-nowrap">
+        <div className="text-right font-semibold text-rose-600 dark:text-rose-400 whitespace-nowrap">
           -{currency.format(info.getValue())}
         </div>
       ),
@@ -88,10 +91,14 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
       cell: (info) => {
         const row = info.row.original;
         if (row.openSessionsCount && !info.getValue()) {
-          return <div className="text-right text-[11px] text-amber-600 font-medium whitespace-nowrap">En curso</div>;
+          return (
+            <div className="text-right text-[11px] text-amber-600 dark:text-amber-400 font-semibold whitespace-nowrap">
+              En curso
+            </div>
+          );
         }
         return (
-          <div className="text-right font-bold text-slate-900 whitespace-nowrap">
+          <div className="text-right font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
             {currency.format(info.getValue())}
           </div>
         );
@@ -102,12 +109,12 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
       cell: (info) => {
         const value = info.getValue();
         if (value === 0) {
-          return <div className="text-right text-[11px] font-medium text-slate-500 whitespace-nowrap">$ 0,00</div>;
+          return <div className="text-right text-slate-400 dark:text-slate-600 font-normal">-</div>;
         }
         return (
           <div
             className={`text-right font-semibold whitespace-nowrap ${
-              value > 0 ? "text-emerald-700" : "text-rose-700"
+              value > 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400"
             }`}
           >
             {value > 0 ? `+${currency.format(value)}` : currency.format(value)}
@@ -120,13 +127,12 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
       header: "Movimientos",
       cell: (info) => {
         const row = info.row.original;
+        const total = (row.saleMovementsCount ?? 0) + (row.manualMovementsCount ?? 0);
         return (
-          <div className="flex flex-wrap items-center gap-1 whitespace-nowrap">
-            <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-50 text-blue-700 border border-blue-200/50">
-              {row.saleMovementsCount} ventas
-            </span>
-            <span className="inline-flex px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-100 text-slate-600 border border-slate-200/50">
-              {row.manualMovementsCount} manual
+          <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 whitespace-nowrap">
+            <span className="font-semibold text-slate-900 dark:text-slate-200">{total}</span>
+            <span className="text-[11px] text-slate-400 dark:text-slate-500">
+              ({row.saleMovementsCount}v · {row.manualMovementsCount}m)
             </span>
           </div>
         );
@@ -142,10 +148,10 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
           <div className="text-right">
             <button
               type="button"
-              className="h-7 inline-flex items-center gap-1 px-2.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition-colors shadow-xs"
+              className="h-7 inline-flex items-center gap-1 px-2.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-300 dark:border-slate-700 rounded-lg transition-colors shadow-2xs cursor-pointer"
               onClick={() => onViewDetail(row.date)}
             >
-              <Eye className="h-3 w-3 text-slate-400" />
+              <Eye className="h-3 w-3 text-slate-400 dark:text-slate-400" />
               Detalle
             </button>
           </div>
@@ -162,10 +168,10 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
 
   if (!rows.length) {
     return (
-      <div className="p-8 text-center bg-white rounded-xl border border-slate-200/80 shadow-xs">
-        <Calendar className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-        <p className="text-xs font-medium text-slate-700">No hay datos de jornadas de caja</p>
-        <p className="text-[11px] text-slate-400 mt-0.5">
+      <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+        <Calendar className="h-8 w-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+        <p className="text-xs font-medium text-slate-700 dark:text-slate-300">No hay datos de jornadas de caja</p>
+        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
           Las sesiones diarias registradas se listarán en este historial.
         </p>
       </div>
@@ -173,13 +179,13 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
   }
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs overflow-hidden">
-      <header className="px-3.5 py-2.5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+    <div className="bg-white dark:bg-[#0b1325] rounded-2xl border border-slate-200 dark:border-slate-800/90 shadow-sm overflow-hidden">
+      <header className="px-4 py-3 border-b border-slate-100 dark:border-slate-800/80 flex justify-between items-center bg-slate-50/60 dark:bg-slate-900/40">
         <div>
-          <h3 className="text-xs font-semibold text-slate-800">
-            Historial de Jornadas de Caja Diaria
+          <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+            Historial de Jornadas
           </h3>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-slate-400 dark:text-slate-500">
             {rows.length} {rows.length === 1 ? "jornada registrada" : "jornadas registradas"}
           </p>
         </div>
@@ -187,11 +193,11 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
 
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
-          <thead className="bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100">
+          <thead className="bg-slate-50/80 dark:bg-slate-900/60 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800/80">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="py-2.5 px-3">
+                  <th key={header.id} className="py-2.5 px-3.5">
                     {header.isPlaceholder
                       ? null
                       : flexRender(header.column.columnDef.header, header.getContext())}
@@ -200,11 +206,11 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
               </tr>
             ))}
           </thead>
-          <tbody className="divide-y divide-slate-100/80">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
             {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="hover:bg-slate-50/70 transition-colors">
+              <tr key={row.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="py-2.5 px-3">
+                  <td key={cell.id} className="py-2.5 px-3.5">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}

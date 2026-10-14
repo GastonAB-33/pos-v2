@@ -126,10 +126,16 @@ const isForeignKeyDeleteError = (error: unknown): boolean => {
   return message.includes("foreign key") || message.includes("update or delete on table");
 };
 
+export const isSystemProduct = (product: Product | null | undefined): boolean => {
+  if (!product) return false;
+  if (product.code?.startsWith("SISTEMA_")) return true;
+  return false;
+};
+
 export const productsService = {
   getAllByTenant: async (tenantId: string): Promise<Product[]> => {
     const all = await crud.getAllByTenant(tenantId);
-    return all.filter((p) => !isArchivedDeletedProduct(p));
+    return all.filter((p) => !isArchivedDeletedProduct(p) && !isSystemProduct(p));
   },
   getById: (tenantId: string, id: string) => crud.getById(tenantId, id),
   create: async (tenantId: string, input: CreateProductInput) => {
@@ -459,5 +465,42 @@ export const productsService = {
     if (error) {
       throw new Error(`No se pudo eliminar la imagen anterior: ${error.message}`);
     }
+  },
+
+  ensureSpecialProduct: async (
+    tenantId: string,
+    specialCode: "SISTEMA_VENTA_MANUAL" | "SISTEMA_COBRO_CTA_CTE",
+    defaultName: string
+  ): Promise<Product> => {
+    // 1. Buscar si ya existe este producto del sistema para el tenant
+    const existingList = await crud.query(tenantId, {
+      eq: { code: specialCode },
+    });
+    const found = existingList.find((p) => p.code === specialCode);
+    if (found) return found;
+
+    // 2. Si no existe, crearlo con is_active: false para que no aparezca en catálogo pero satisfaga FKs
+    return crud.create(tenantId, {
+      code: specialCode,
+      name: defaultName,
+      image_url: null,
+      brand: null,
+      supplier: null,
+      is_favorite: false,
+      description: "Producto de sistema para operaciones transitorias",
+      price: 0,
+      cost_price: 0,
+      stock_current: 0,
+      stock_min: null,
+      stock_max: null,
+      category: "Sistema",
+      subcategory: null,
+      sale_mode: "unit",
+      currency_code: "ARS",
+      price_without_vat: 0,
+      vat_percent: 21,
+      profit_percent: 0,
+      is_active: false,
+    });
   },
 };

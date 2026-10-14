@@ -31,6 +31,7 @@ interface PosCartProps {
   subtotal: number;
   surchargeTotal: number;
   paymentDiscountTotal: number;
+  roundingAdjustment?: number;
   total: number;
   canWrite: boolean;
   disabled?: boolean;
@@ -74,6 +75,7 @@ export const PosCart = ({
   subtotal,
   surchargeTotal,
   paymentDiscountTotal,
+  roundingAdjustment = 0,
   total,
   canWrite,
   disabled,
@@ -420,6 +422,15 @@ export const PosCart = ({
             <div className="mt-0.5 flex items-center justify-between text-[11px] text-emerald-700 dark:text-emerald-400">
               <span>Desc. medio pago</span>
               <span className="font-semibold">-{currency.format(paymentDiscountTotal)}</span>
+            </div>
+          ) : null}
+
+          {roundingAdjustment !== 0 ? (
+            <div className="mt-0.5 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
+              <span>Redondeo comercial</span>
+              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                {roundingAdjustment > 0 ? `+${currency.format(roundingAdjustment)}` : currency.format(roundingAdjustment)}
+              </span>
             </div>
           ) : null}
 

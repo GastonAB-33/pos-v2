@@ -15,6 +15,7 @@ import {
   roundMoney,
   roundPercent,
 } from "@/modules/productos/utils/product-pricing";
+import { serializeReturnableConfig } from "@/utils/returnable-packages";
 
 type FeedbackType = "success" | "error";
 
@@ -108,7 +109,16 @@ const toServiceInput = (
     brand: options?.existingBrand ?? null,
     supplier: options?.existingSupplier ?? null,
     is_favorite: options?.isFavorite ?? false,
-    description: options?.existingDescription ?? null,
+    description: serializeReturnableConfig(
+      options?.existingDescription,
+      values.isReturnable
+        ? {
+            enabled: true,
+            packageName: values.returnablePackageName?.trim() || "Envase Retornable",
+            packagePrice: values.returnablePackagePrice ?? 0,
+          }
+        : null
+    ),
     price: roundMoney(values.precioFinal),
     cost_price: roundMoney(values.precioCosto),
     stock_current: values.stock,

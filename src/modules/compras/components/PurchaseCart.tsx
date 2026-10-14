@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, Gift, Package, PackagePlus, Percent, Plus, ShoppingBag, Tag, Trash2 } from "lucide-react";
 import { handleNumericInputFocus } from "@/utils/input-helpers";
-import { computeRealCost } from "@/modules/compras/hooks/usePurchasesModule";
 import { DualRateAmountInput, type RateAmountMode } from "@/components/ui/DualRateAmountInput";
 
 export interface PurchaseCartItemView {
@@ -320,14 +319,16 @@ export const PurchaseCart = ({
       ) : (
         <div className="space-y-3">
           {items.map((item) => {
-            const realCost = computeRealCost(item.unit_cost, item.discount_percent || 0);
-            const unitSavings = roundAmount(realCost - item.unit_cost);
-            const lineTotal = roundAmount(item.quantity * item.unit_cost);
+            const grossLineTotal = roundAmount(item.quantity * item.unit_cost);
+            const discountPct = Math.max(0, Math.min(100, item.discount_percent || 0));
+            const lineSavings = roundAmount(grossLineTotal * (discountPct / 100));
+            const lineTotal = roundAmount(grossLineTotal - lineSavings);
+            const effectiveUnitCost = item.quantity > 0 ? roundAmount(lineTotal / item.quantity) : item.unit_cost;
             const totalStockIn = item.quantity + (item.bonified_quantity || 0);
 
-            // Variación de costo real
+            // Variación de costo
             const prevCost = item.previous_cost || 0;
-            const unitCostDiff = realCost - prevCost;
+            const unitCostDiff = item.unit_cost - prevCost;
             const hasCostDiff = Math.abs(unitCostDiff) > 0.001 && prevCost > 0;
             const costPctDiff = prevCost > 0 ? (unitCostDiff / prevCost) * 100 : 0;
 
@@ -538,7 +539,7 @@ export const PurchaseCart = ({
                       onBlur={() => commitDiscount(item)}
                       className="w-full min-w-0 rounded-md border border-brand-300 bg-brand-50/40 px-2 py-1.5 text-xs font-bold text-brand-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-brand-700/60 dark:bg-brand-950/40 dark:text-brand-200 dark:focus:border-brand-400"
                       disabled={disabled || !canWrite}
-                      title="Descuento del proveedor: por ingeniería inversa se calcula el costo de lista real sin descuento para asignar ganancia e IVA"
+                      title="Descuento aplicado por el proveedor: se descuenta directamente sobre el total a pagar de este producto"
                       autoComplete="off"
                       autoCorrect="off"
                       autoCapitalize="off"
@@ -660,10 +661,10 @@ export const PurchaseCart = ({
                   {/* Subtotal y Costo antes */}
                   <div className="flex flex-wrap items-center gap-2 text-slate-600 dark:text-slate-400 min-w-0">
                     <span>
-                      Subtotal: <strong className="text-slate-800 dark:text-slate-200">{currency.format(lineTotal)}</strong>
+                      Subtotal: <strong className="text-slate-800 dark:text-slate-200">{currency.format(grossLineTotal)}</strong>
                     </span>
 
-                    {/* Costo antes con variación: solo si hubo cambio de costo real */}
+                    {/* Costo antes con variación: solo si hubo cambio de costo de lista */}
                     {hasCostDiff ? (
                       <>
                         <span>•</span>
@@ -673,7 +674,7 @@ export const PurchaseCart = ({
                               ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-300"
                               : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/50 dark:text-emerald-300"
                           }`}
-                          title={`Costo real anterior: ${currency.format(prevCost)} | Diferencia: ${currency.format(unitCostDiff)}`}
+                          title={`Costo anterior: ${currency.format(prevCost)} | Diferencia: ${currency.format(unitCostDiff)}`}
                         >
                           <span>Costo antes: {currency.format(prevCost)}</span>
                           <span>
@@ -727,14 +728,14 @@ export const PurchaseCart = ({
                     {item.discount_percent > 0 && (
                       <span
                         className="inline-flex flex-wrap items-center gap-1 rounded bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-300 max-w-full break-words leading-tight"
-                        title={`Descuento del proveedor: -${currency.format(unitSavings * item.quantity)}. Pagás al proveedor ${currency.format(item.unit_cost)}/u. Costo de lista real asignado al producto: ${currency.format(realCost)}/u. Ahorro retenido para el local: +${currency.format(unitSavings * item.quantity)}`}
+                        title={`Descuento del proveedor: -${currency.format(lineSavings)}. Costo unitario neto a pagar: ${currency.format(effectiveUnitCost)}/u. Ahorro para el comercio: +${currency.format(lineSavings)}`}
                       >
-                        <span>🏷️ Desc. {item.discount_percent}% (Costo real: {currency.format(realCost)})</span>
-                        <span>• Ahorro: +{currency.format(unitSavings * item.quantity)}</span>
+                        <span>🏷️ Desc. {item.discount_percent}% (-{currency.format(lineSavings)})</span>
+                        <span>• Neto: {currency.format(effectiveUnitCost)}/u</span>
                       </span>
                     )}
                     <div className="flex items-center justify-between sm:justify-end gap-1.5 font-bold text-slate-900 dark:text-slate-100 w-full xs:w-auto shrink-0">
-                      <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">Total general:</span>
+                      <span className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">Total a pagar:</span>
                       <span className="text-base sm:text-lg font-black text-brand-700 dark:text-brand-400">
                         {currency.format(lineTotal)}
                       </span>

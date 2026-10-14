@@ -3,6 +3,7 @@ import type { PropsWithChildren } from "react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { settingsService } from "@/services/settings.service";
 import { useUiStore, type UiFontSize } from "@/store/ui.store";
+import { storageKeys } from "@/utils/local-storage";
 
 const hexToSoftRgba = (hex: string): string => {
   const normalized = hex.trim();
@@ -51,7 +52,12 @@ export const ThemeProvider = ({ children }: PropsWithChildren) => {
         const tenantSettings = await settingsService.getByTenant(tenantId);
         if (!active) return;
 
-        setTheme(tenantSettings.apariencia.default_theme);
+        // Si el usuario no tiene un tema explícitamente guardado en su navegador, usar el default_theme del tenant
+        const hasUserThemeStored = Boolean(localStorage.getItem(storageKeys.ui));
+        if (!hasUserThemeStored && tenantSettings.apariencia.default_theme) {
+          setTheme(tenantSettings.apariencia.default_theme);
+        }
+
         if (tenantSettings.apariencia.sidebar_theme) {
           setSidebarTheme(tenantSettings.apariencia.sidebar_theme);
         }

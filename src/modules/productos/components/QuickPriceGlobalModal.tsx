@@ -117,6 +117,7 @@ export const QuickPriceGlobalModal = ({
       />
 
       <ProductFormModal
+        key={`${formModal?.mode ?? "create"}-${formModal?.product?.entity.id ?? "new"}-${formModal?.initialBarcode ?? ""}`}
         open={Boolean(formModal)}
         mode={formModal?.mode ?? "create"}
         product={formModal?.product ?? null}

@@ -19,6 +19,7 @@ import {
   derivePricingFromStoredProduct,
 } from "@/modules/productos/utils/product-pricing";
 import { handleNumericInputFocus, handleNumericInputBlur, parseNumericField } from "@/utils/input-helpers";
+import { parseReturnableConfig, COMMON_RETURNABLE_PACKAGES } from "@/utils/returnable-packages";
 
 interface ProductFormProps {
   mode: "create" | "edit";
@@ -45,6 +46,9 @@ const defaultValues: ProductFormValues = {
   precioSinIva: 0,
   porcentajeIva: DEFAULT_IVA_PERCENT,
   precioFinal: 0,
+  isReturnable: false,
+  returnablePackageName: "",
+  returnablePackagePrice: 0,
 };
 
 export const ProductForm = ({
@@ -90,6 +94,8 @@ export const ProductForm = ({
       precioSinIva: product.price_without_vat,
     });
 
+    const returnableConfig = parseReturnableConfig(product.description);
+
     reset({
       nombre: product.name,
       saleMode: product.sale_mode,
@@ -103,6 +109,9 @@ export const ProductForm = ({
       precioSinIva: derivedPricing.precioSinIva,
       porcentajeIva: derivedPricing.porcentajeIva,
       precioFinal: product.price,
+      isReturnable: returnableConfig?.enabled ?? false,
+      returnablePackageName: returnableConfig?.packageName ?? "",
+      returnablePackagePrice: returnableConfig?.packagePrice ?? 0,
     });
     setCalcMode("forward");
   }, [prefillValues, primaryBarcode, product, reset]);
@@ -281,9 +290,17 @@ export const ProductForm = ({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Categoria</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Categoría <span className="text-red-500">*</span>
+          </label>
           <input
             {...register("categoria")}
+            placeholder="Seleccionar o escribir categoría..."
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
@@ -293,9 +310,15 @@ export const ProductForm = ({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Subcategoria</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Subcategoría</label>
           <input
             {...register("subcategoria")}
+            placeholder="Seleccionar o escribir subcategoría..."
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
@@ -460,6 +483,63 @@ export const ProductForm = ({
         Si modificas costo, ganancia o IVA se recalculan precio sin IVA y precio final. Si editas precio final manualmente,
         se recalcula la ganancia en forma inversa respetando el IVA.
       </p>
+
+      {/* Sección: Envase Retornable */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/40 p-3.5 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <label className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                {...register("isReturnable")}
+                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                disabled={disabled}
+              />
+              <span>¿Requiere envase retornable?</span>
+            </label>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Para gaseosas, cervezas, bidones de agua o garrafas de gas con seña o canje.
+            </p>
+          </div>
+        </div>
+
+        {watch("isReturnable") && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2.5 border-t border-slate-200 dark:border-slate-700/60">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Tipo o nombre del envase
+              </label>
+              <input
+                type="text"
+                list="common-packages"
+                placeholder="Ej: Garrafa 10kg, Bidón 20L..."
+                {...register("returnablePackageName")}
+                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
+                disabled={disabled}
+              />
+              <datalist id="common-packages">
+                {COMMON_RETURNABLE_PACKAGES.map((pkg) => (
+                  <option key={pkg.name} value={pkg.name} />
+                ))}
+              </datalist>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                Precio si no trae envase ($ seña / depósito)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                {...register("returnablePackagePrice", { setValueAs: parseNumericField })}
+                className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
+                disabled={disabled}
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
       <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4">
         <button

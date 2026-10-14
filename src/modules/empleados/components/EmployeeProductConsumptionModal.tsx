@@ -31,17 +31,6 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
-const buildQuickProductCode = (name: string): string => {
-  const base = name
-    .toUpperCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^A-Z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 24);
-  return `${base || "EMP"}-${Date.now().toString().slice(-6)}`;
-};
-
 export const EmployeeProductConsumptionModal = ({
   open,
   tenantId,
@@ -202,7 +191,7 @@ export const EmployeeProductConsumptionModal = ({
 
     try {
       const priceWithoutVat = Number((input.unitPrice / 1.21).toFixed(2));
-      const code = input.code.trim() || buildQuickProductCode(name);
+      const code = input.code.trim() || null;
       const created = await productsService.create(tenantId, {
         code,
         name,

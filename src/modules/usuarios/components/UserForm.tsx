@@ -62,44 +62,67 @@ export const UserForm = ({
   }, [profiles, reset, user]);
 
   return (
-    <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
+    <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)} autoComplete="off">
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">Nombre completo</label>
+        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+          Nombre completo
+        </label>
         <input
           {...register("fullName")}
           className="ui-input"
           disabled={disabled}
           placeholder="Ej: Juan Perez"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          data-lpignore="true"
         />
-        {errors.fullName ? <p className="mt-1 text-xs text-red-600">{errors.fullName.message}</p> : null}
+        {errors.fullName ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.fullName.message}</p> : null}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Nombre de perfil</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+            Nombre de perfil
+          </label>
           <input
             {...register("username")}
             className="ui-input"
             disabled={disabled}
             placeholder="Ej: juan.perez"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
           />
-          {errors.username ? <p className="mt-1 text-xs text-red-600">{errors.username.message}</p> : null}
+          {errors.username ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.username.message}</p> : null}
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Correo electronico</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+            Correo electrónico
+          </label>
           <input
             type="email"
             {...register("email")}
             className="ui-input"
             disabled={disabled}
             placeholder="correo@empresa.com"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
           />
-          {errors.email ? <p className="mt-1 text-xs text-red-600">{errors.email.message}</p> : null}
+          {errors.email ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.email.message}</p> : null}
         </div>
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">Nivel de permisos</label>
+        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+          Nivel de permisos
+        </label>
         <select
           {...register("permissionProfileId")}
           className="ui-input"
@@ -113,42 +136,56 @@ export const UserForm = ({
           ))}
         </select>
         {errors.permissionProfileId ? (
-          <p className="mt-1 text-xs text-red-600">{errors.permissionProfileId.message}</p>
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.permissionProfileId.message}</p>
         ) : null}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Contrasena</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+            Contraseña
+          </label>
           <input
             type="password"
             {...register("password")}
             className="ui-input"
             disabled={disabled}
-            placeholder={mode === "create" ? "Minimo 8 caracteres" : "Dejar vacio para mantener"}
+            placeholder={mode === "create" ? "Mínimo 8 caracteres" : "Dejar vacío para mantener"}
+            autoComplete="new-password"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
           />
-          {errors.password ? <p className="mt-1 text-xs text-red-600">{errors.password.message}</p> : null}
+          {errors.password ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.password.message}</p> : null}
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Repetir contrasena</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+            Repetir contraseña
+          </label>
           <input
             type="password"
             {...register("confirmPassword")}
             className="ui-input"
             disabled={disabled}
-            placeholder={mode === "create" ? "Repetir contrasena" : "Repetir nueva contrasena"}
+            placeholder={mode === "create" ? "Repetir contraseña" : "Repetir nueva contraseña"}
+            autoComplete="new-password"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
           />
           {errors.confirmPassword ? (
-            <p className="mt-1 text-xs text-red-600">{errors.confirmPassword.message}</p>
+            <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.confirmPassword.message}</p>
           ) : null}
         </div>
       </div>
 
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-slate-500 dark:text-slate-400">
         Debe existir al menos un perfil activo para asignar nivel de acceso al usuario.
       </p>
 
-      <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4">
+      <div className="flex items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
         <button type="button" className="ui-btn-ghost" onClick={onCancel} disabled={disabled}>
           Cancelar
         </button>

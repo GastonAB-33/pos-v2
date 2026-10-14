@@ -536,8 +536,13 @@ export const PurchasePaymentModal = ({
                                     <span className="font-bold text-slate-900 dark:text-slate-100">
                                       {account.bank_name}
                                     </span>
+                                    {account.holder_name ? (
+                                      <span className="ml-1.5 text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                                        — {account.holder_name}
+                                      </span>
+                                    ) : null}
                                     <span className="ml-1.5 text-[10px] text-slate-500 dark:text-slate-400">
-                                      ({getAccountTypeLabel(account.account_type)})
+                                      ({account.alias || getAccountTypeLabel(account.account_type)})
                                     </span>
                                   </div>
                                 </div>
@@ -764,7 +769,7 @@ export const PurchasePaymentModal = ({
                         >
                           {activeBankAccounts.map((acc) => (
                             <option key={acc.id} value={acc.id}>
-                              {acc.bank_name} ({acc.currency_code})
+                              {acc.bank_name} — {acc.holder_name || acc.currency_code}{acc.alias ? ` (${acc.alias})` : ""}
                             </option>
                           ))}
                         </select>
