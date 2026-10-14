@@ -177,16 +177,8 @@ export const PosCustomerSelectModal = ({
               autoCapitalize="off"
               spellCheck={false}
               data-lpignore="true"
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 py-2.5 pl-10 pr-24 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent font-medium"
+              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 py-2.5 pl-10 pr-4 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent font-medium"
             />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-slate-400 font-mono">
-              <kbd className="rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-1 py-0.5">
-                ↓↑ Mover
-              </kbd>
-              <kbd className="rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-1 py-0.5">
-                ↵ Elegir
-              </kbd>
-            </div>
           </div>
         </div>
 
@@ -306,7 +298,7 @@ export const PosCustomerSelectModal = ({
           )}
         </div>
 
-        {/* Footer con atajos y botón rápido de alta */}
+        {/* Footer con botón rápido de alta */}
         <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800 px-4 py-3 bg-slate-50 dark:bg-slate-850 text-xs">
           <button
             type="button"
@@ -317,15 +309,8 @@ export const PosCustomerSelectModal = ({
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
           >
             <Plus size={14} className="text-indigo-600 dark:text-indigo-400" />
-            + Crear nuevo cliente
+            Crear nuevo cliente
           </button>
-
-          <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-[11px]">
-            <span>Seleccioná con</span>
-            <kbd className="rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 px-1.5 py-0.5 font-mono font-bold text-slate-700 dark:text-slate-200">
-              Enter ↵
-            </kbd>
-          </div>
         </div>
       </div>
     </div>

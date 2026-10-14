@@ -246,7 +246,7 @@ export const PosSmartView = ({
         )}
       >
         {/* Encabezado: Carrito (N ítems) + Botones de acción unificados */}
-        <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-4">
           <div className="flex items-center gap-2.5">
             <ShoppingCart className="text-blue-600 dark:text-sky-400" size={20} />
             <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
@@ -254,7 +254,7 @@ export const PosSmartView = ({
             </h2>
           </div>
 
-          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {onToggleDiscounts ? (
               <button
                 type="button"
@@ -791,14 +791,14 @@ export const PosSmartView = ({
 
         {/* Panel Inferior Derecho: Detalle de total y confirmación de cobro */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-4 sm:p-5 space-y-4 shadow-sm">
-          <div className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800/80 pb-3">
-            <div className="flex items-center gap-2 min-w-0">
+          <div className="flex flex-col gap-2.5 border-b border-slate-200 dark:border-slate-800/80 pb-3">
+            <div className="flex items-center gap-2">
               <ShoppingCart size={18} className="text-blue-600 dark:text-sky-400 shrink-0" />
-              <span className="font-bold text-sm text-slate-900 dark:text-slate-100 truncate">
+              <span className="font-bold text-sm text-slate-900 dark:text-slate-100">
                 Carrito ({items.length} {items.length === 1 ? "ítem" : "ítems"})
               </span>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
               {onToggleDiscounts ? (
                 <button
                   type="button"
@@ -825,7 +825,7 @@ export const PosSmartView = ({
                       <span className="absolute h-0.5 w-3.5 bg-rose-500 rotate-45 rounded-full" />
                     </span>
                   )}
-                  <span className="hidden sm:inline">{discountsEnabled ? "Desc. ON" : "Desc. OFF"}</span>
+                  <span>{discountsEnabled ? "Desc. ON" : "Desc. OFF"}</span>
                 </button>
               ) : null}
 

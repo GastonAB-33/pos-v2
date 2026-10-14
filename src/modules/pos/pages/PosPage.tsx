@@ -73,6 +73,44 @@ interface PosReceiptModalState {
   autoPrint: boolean;
 }
 
+export const formatFriendlyReceiptNumber = (
+  saleNumber?: string | null,
+  receiptNumber?: string | null,
+  invoice?: Invoice | null
+): { display: string; fullNumber: string } => {
+  if (invoice?.document_number) {
+    return {
+      display: `Factura ${invoice.document_type || "B"} Nº ${invoice.document_number}`,
+      fullNumber: invoice.document_number,
+    };
+  }
+
+  const raw = receiptNumber || saleNumber || "Comprobante";
+
+  // Formato tipo VTA-1791997874121-4626 (extraer el sufijo legible de 4 dígitos)
+  const vtaMatch = (saleNumber || raw).match(/VTA-\d+-(\d+)/i);
+  if (vtaMatch) {
+    return {
+      display: `Ticket #${vtaMatch[1]}`,
+      fullNumber: saleNumber || raw,
+    };
+  }
+
+  // Formato tipo TCK-1791997874131 o TCK-OFF-1791997874131
+  const tckMatch = raw.match(/TCK(?:-OFF)?-\d*(\d{4})/i);
+  if (tckMatch) {
+    return {
+      display: `Ticket #${tckMatch[1]}`,
+      fullNumber: raw,
+    };
+  }
+
+  return {
+    display: raw,
+    fullNumber: raw,
+  };
+};
+
 interface PosCustomerModalState {
   mode: "create" | "edit";
   customer: Customer | null;
@@ -2163,194 +2201,203 @@ export const PosPage = () => {
                 <div className="space-y-2.5">
                   {filteredReceipts.map((item) => {
                     const { receipt, invoice, payments = [] } = item;
+                    const friendlyNumber = formatFriendlyReceiptNumber(
+                      receipt.sale_number,
+                      receipt.receipt_number,
+                      invoice
+                    );
+
                     return (
                       <article
                         key={receipt.id}
-                        className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-3.5 transition-colors hover:border-slate-300 dark:border-slate-800 dark:bg-slate-800/40 dark:hover:border-slate-700"
+                        className="rounded-xl border border-slate-200/90 bg-white p-2.5 sm:p-3 transition-colors hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900/70 dark:hover:border-slate-700 shadow-xs"
                       >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                                {receipt.sale_number || receipt.receipt_number}
-                              </p>
-                              {receipt.receipt_number && receipt.receipt_number !== receipt.sale_number ? (
-                                <span className="font-mono text-[11px] text-slate-400 dark:text-slate-500">
-                                  ({receipt.receipt_number})
-                                </span>
-                              ) : null}
-                            </div>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                              {new Date(receipt.issued_at).toLocaleString("es-AR")}
-                            </p>
-                            <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
-                              Cliente:{" "}
-                              <span className="text-slate-900 dark:text-slate-100 font-semibold">
+                        {/* FILA 1: Identificador amigable + Fecha + Cliente (Izq) y Total + Tipo (Der) */}
+                        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                            <span
+                              className="font-mono font-bold text-slate-900 dark:text-slate-100"
+                              title={friendlyNumber.fullNumber}
+                            >
+                              {friendlyNumber.display}
+                            </span>
+                            <span className="text-slate-300 dark:text-slate-600">•</span>
+                            <span className="text-slate-500 dark:text-slate-400">
+                              {new Date(receipt.issued_at).toLocaleString("es-AR", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                            <span className="text-slate-300 dark:text-slate-600">•</span>
+                            <span className="text-slate-600 dark:text-slate-300">
+                              <span className="text-slate-400 dark:text-slate-500">Cliente: </span>
+                              <strong className="font-semibold text-slate-900 dark:text-slate-100">
                                 {receipt.customer_name ?? "Consumidor final"}
-                              </span>
-                            </p>
+                              </strong>
+                            </span>
                           </div>
 
-                          <div className="text-right">
-                            <p className="font-kpi text-base font-bold text-slate-900 dark:text-slate-100">
+                          <div className="flex items-center gap-2 shrink-0 ml-auto">
+                            <span className="font-kpi text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
                               {currency.format(receipt.total)}
-                            </p>
-                            <div className="mt-1 flex items-center justify-end gap-1.5">
-                              <span className="inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700 dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-300">
+                            </span>
+                            {invoice ? (
+                              <span className="inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 dark:border-emerald-800/70 dark:bg-emerald-950/50 dark:text-emerald-300">
+                                Factura {invoice.document_type}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center rounded-md border border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:border-sky-800/70 dark:bg-sky-950/50 dark:text-sky-300">
                                 Ticket
                               </span>
-                              {invoice ? (
-                                <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-300">
-                                  Factura {invoice.document_type}
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400">
-                                  Sin factura
-                                </span>
-                              )}
-                            </div>
+                            )}
                           </div>
                         </div>
 
-                        {/* RESUMEN PREVIO: METODO DE PAGO Y CUENTA DE BANCO */}
-                        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2.5 dark:border-slate-800/80">
-                          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-1">
-                            Pago:
-                          </span>
-                          {payments.map((p, idx) => {
-                            const isTransfer =
-                              p.methodCode === "transfer" ||
-                              p.methodCode === "bank_transfer" ||
-                              p.methodName.toLowerCase().includes("transferencia") ||
-                              Boolean(p.bankName);
-                            const isCash =
-                              p.methodCode === "cash" || p.methodName.toLowerCase().includes("efectivo");
-                            const isCurrentAccount =
-                              p.methodCode === "current_account" ||
-                              p.methodName.toLowerCase().includes("corriente");
-                            const isCard =
-                              p.methodCode.includes("card") ||
-                              p.methodCode.includes("debit") ||
-                              p.methodCode.includes("credit") ||
-                              p.methodName.toLowerCase().includes("tarjeta");
-                            const isMp =
-                              p.methodCode === "mercado_pago" ||
-                              p.methodName.toLowerCase().includes("mercado pago");
+                        {/* FILA 2: Medio de pago (Izq) y Botones de acción (Der) en una sola línea compacta */}
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 dark:border-slate-800/70">
+                          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                            <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                              Pago:
+                            </span>
+                            {payments.map((p, idx) => {
+                              const isTransfer =
+                                p.methodCode === "transfer" ||
+                                p.methodCode === "bank_transfer" ||
+                                p.methodName.toLowerCase().includes("transferencia") ||
+                                Boolean(p.bankName);
+                              const isCash =
+                                p.methodCode === "cash" || p.methodName.toLowerCase().includes("efectivo");
+                              const isCurrentAccount =
+                                p.methodCode === "current_account" ||
+                                p.methodName.toLowerCase().includes("corriente");
+                              const isCard =
+                                p.methodCode.includes("card") ||
+                                p.methodCode.includes("debit") ||
+                                p.methodCode.includes("credit") ||
+                                p.methodName.toLowerCase().includes("tarjeta");
+                              const isMp =
+                                p.methodCode === "mercado_pago" ||
+                                p.methodName.toLowerCase().includes("mercado pago");
 
-                            let badgeClasses =
-                              "border border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200";
-                            if (isTransfer) {
-                              badgeClasses =
-                                "border border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-700/80 dark:bg-sky-950/60 dark:text-sky-200 font-semibold";
-                            } else if (isCash) {
-                              badgeClasses =
-                                "border border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700/80 dark:bg-emerald-950/60 dark:text-emerald-200";
-                            } else if (isCurrentAccount) {
-                              badgeClasses =
-                                "border border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700/80 dark:bg-amber-950/60 dark:text-amber-200";
-                            } else if (isCard) {
-                              badgeClasses =
-                                "border border-purple-300 bg-purple-50 text-purple-800 dark:border-purple-700/80 dark:bg-purple-950/60 dark:text-purple-200";
-                            } else if (isMp) {
-                              badgeClasses =
-                                "border border-cyan-300 bg-cyan-50 text-cyan-800 dark:border-cyan-700/80 dark:bg-cyan-950/60 dark:text-cyan-200";
-                            }
-
-                            const hasBankInfo = isTransfer && (p.bankName || p.holderName);
-                            const bankDisplay = hasBankInfo
-                              ? `${p.bankName || "Banco"}${p.holderName ? ` (${p.holderName})` : ""}`
-                              : null;
-
-                            return (
-                              <span
-                                key={idx}
-                                className={cn(
-                                  "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs shadow-sm",
-                                  badgeClasses
-                                )}
-                              >
-                                {isTransfer ? (
-                                  <Landmark size={13} className="shrink-0 text-sky-600 dark:text-sky-400" />
-                                ) : isCash ? (
-                                  <Banknote size={13} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
-                                ) : isCurrentAccount ? (
-                                  <UserIcon size={13} className="shrink-0 text-amber-600 dark:text-amber-400" />
-                                ) : isCard ? (
-                                  <CreditCard size={13} className="shrink-0 text-purple-600 dark:text-purple-400" />
-                                ) : (
-                                  <FileText size={13} className="shrink-0 text-slate-500" />
-                                )}
-                                <span>
-                                  {isTransfer ? (
-                                    <>
-                                      <span>Transferencia</span>
-                                      {bankDisplay ? (
-                                        <span className="font-bold text-sky-900 dark:text-sky-100">
-                                          {" "}→ {bankDisplay}
-                                        </span>
-                                      ) : null}
-                                    </>
-                                  ) : (
-                                    <span>{p.methodName}</span>
-                                  )}
-                                  {payments.length > 1 ? (
-                                    <span className="ml-1 font-mono font-bold">({currency.format(p.amount)})</span>
-                                  ) : null}
-                                </span>
-                              </span>
-                            );
-                          })}
-                        </div>
-
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            className="ui-btn-ghost px-2.5 py-1.5 text-xs font-semibold"
-                            onClick={() => openReceiptModal(item, "ticket")}
-                          >
-                            Ver ticket
-                          </button>
-                          {invoice ? (
-                            <button
-                              type="button"
-                              className="ui-btn-ghost px-2.5 py-1.5 text-xs font-semibold"
-                              onClick={() => openReceiptModal(item, "invoice")}
-                            >
-                              Ver factura
-                            </button>
-                          ) : null}
-                          <div className="relative" data-print-menu="true">
-                            <button
-                              type="button"
-                              className="ui-btn-ghost px-2.5 py-1.5 text-xs font-semibold"
-                              onClick={() =>
-                                setPrintMenuReceiptId((current) =>
-                                  current === receipt.id ? null : receipt.id
-                                )
+                              let badgeClasses =
+                                "border border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200";
+                              if (isTransfer) {
+                                badgeClasses =
+                                  "border border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-700/80 dark:bg-sky-950/60 dark:text-sky-200 font-semibold";
+                              } else if (isCash) {
+                                badgeClasses =
+                                  "border border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700/80 dark:bg-emerald-950/60 dark:text-emerald-200";
+                              } else if (isCurrentAccount) {
+                                badgeClasses =
+                                  "border border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700/80 dark:bg-amber-950/60 dark:text-amber-200";
+                              } else if (isCard) {
+                                badgeClasses =
+                                  "border border-purple-300 bg-purple-50 text-purple-800 dark:border-purple-700/80 dark:bg-purple-950/60 dark:text-purple-200";
+                              } else if (isMp) {
+                                badgeClasses =
+                                  "border border-cyan-300 bg-cyan-50 text-cyan-800 dark:border-cyan-700/80 dark:bg-cyan-950/60 dark:text-cyan-200";
                               }
-                            >
-                              Imprimir
-                            </button>
-                            {printMenuReceiptId === receipt.id ? (
-                              <div className="absolute right-0 z-10 mt-1 min-w-[164px] rounded-lg border border-slate-200 bg-white p-1.5 shadow-panel dark:border-slate-800 dark:bg-slate-900">
-                                <button
-                                  type="button"
-                                  className="ui-btn-ghost w-full justify-start px-2 py-1.5 text-xs"
-                                  onClick={() => openReceiptModal(item, "ticket", true)}
+
+                              const hasBankInfo = isTransfer && (p.bankName || p.holderName);
+                              const bankDisplay = hasBankInfo
+                                ? `${p.bankName || "Banco"}${p.holderName ? ` (${p.holderName})` : ""}`
+                                : null;
+
+                              return (
+                                <span
+                                  key={idx}
+                                  className={cn(
+                                    "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] shadow-xs",
+                                    badgeClasses
+                                  )}
                                 >
-                                  Imprimir ticket
-                                </button>
-                                {invoice ? (
+                                  {isTransfer ? (
+                                    <Landmark size={12} className="shrink-0 text-sky-600 dark:text-sky-400" />
+                                  ) : isCash ? (
+                                    <Banknote size={12} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                  ) : isCurrentAccount ? (
+                                    <UserIcon size={12} className="shrink-0 text-amber-600 dark:text-amber-400" />
+                                  ) : isCard ? (
+                                    <CreditCard size={12} className="shrink-0 text-purple-600 dark:text-purple-400" />
+                                  ) : (
+                                    <FileText size={12} className="shrink-0 text-slate-500" />
+                                  )}
+                                  <span>
+                                    {isTransfer ? (
+                                      <>
+                                        <span>Transferencia</span>
+                                        {bankDisplay ? (
+                                          <span className="font-bold text-sky-900 dark:text-sky-100">
+                                            {" "}→ {bankDisplay}
+                                          </span>
+                                        ) : null}
+                                      </>
+                                    ) : (
+                                      <span>{p.methodName}</span>
+                                    )}
+                                    {payments.length > 1 ? (
+                                      <span className="ml-1 font-mono font-bold">({currency.format(p.amount)})</span>
+                                    ) : null}
+                                  </span>
+                                </span>
+                              );
+                            })}
+                          </div>
+
+                          {/* Acciones */}
+                          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                            <button
+                              type="button"
+                              className="ui-btn-ghost px-2.5 py-1 text-xs font-semibold"
+                              onClick={() => openReceiptModal(item, "ticket")}
+                            >
+                              Ver ticket
+                            </button>
+                            {invoice ? (
+                              <button
+                                type="button"
+                                className="ui-btn-ghost px-2.5 py-1 text-xs font-semibold"
+                                onClick={() => openReceiptModal(item, "invoice")}
+                              >
+                                Ver factura
+                              </button>
+                            ) : null}
+                            <div className="relative" data-print-menu="true">
+                              <button
+                                type="button"
+                                className="ui-btn-ghost px-2.5 py-1 text-xs font-semibold"
+                                onClick={() =>
+                                  setPrintMenuReceiptId((current) =>
+                                    current === receipt.id ? null : receipt.id
+                                  )
+                                }
+                              >
+                                Imprimir
+                              </button>
+                              {printMenuReceiptId === receipt.id ? (
+                                <div className="absolute right-0 z-20 mt-1 min-w-[164px] rounded-lg border border-slate-200 bg-white p-1.5 shadow-panel dark:border-slate-800 dark:bg-slate-900">
                                   <button
                                     type="button"
                                     className="ui-btn-ghost w-full justify-start px-2 py-1.5 text-xs"
-                                    onClick={() => openReceiptModal(item, "invoice", true)}
+                                    onClick={() => openReceiptModal(item, "ticket", true)}
                                   >
-                                    Imprimir factura
+                                    Imprimir ticket
                                   </button>
-                                ) : null}
-                              </div>
-                            ) : null}
+                                  {invoice ? (
+                                    <button
+                                      type="button"
+                                      className="ui-btn-ghost w-full justify-start px-2 py-1.5 text-xs"
+                                      onClick={() => openReceiptModal(item, "invoice", true)}
+                                    >
+                                      Imprimir factura
+                                    </button>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
                       </article>
