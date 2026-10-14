@@ -96,8 +96,16 @@ export const useProductsStore = create<ProductsCatalogState>()(
 
       for (const barcode of barcodes) {
         if (!barcode.barcode || !barcode.product_id) continue;
-        barcodeMap[barcode.product_id] = barcode.barcode;
+        if (barcode.is_primary || !barcodeMap[barcode.product_id]) {
+          barcodeMap[barcode.product_id] = barcode.barcode;
+        }
         activeBarcodes.push(barcode);
+      }
+
+      for (const product of list) {
+        if (!barcodeMap[product.id] && product.code) {
+          barcodeMap[product.id] = product.code;
+        }
       }
 
       set({

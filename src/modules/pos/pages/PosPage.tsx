@@ -4,7 +4,7 @@ import { cn } from "@/utils/cn";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
-import { Camera, FileText, Moon, MoonStar, RefreshCw, ShoppingCart, Sun, X } from "lucide-react";
+import { Banknote, Camera, CreditCard, FileText, Landmark, Moon, MoonStar, RefreshCw, Search, ShoppingCart, Sun, User as UserIcon, X } from "lucide-react";
 import { useToast } from "@/components/ui/useToast";
 import { routePaths } from "@/config/routes";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -32,6 +32,7 @@ import { useProductsStore } from "@/features/products/store/products.store";
 import type { OpenCashValues } from "@/modules/caja/schemas/cash.schemas";
 import { computePricingBackward, roundMoney } from "@/modules/productos/utils/product-pricing";
 import { auditService } from "@/services/audit.service";
+import { bankAccountsService } from "@/services/bank-accounts.service";
 import { cashService } from "@/services/cash.service";
 import { customersService } from "@/services/customers.service";
 import { productsService } from "@/services/products.service";
@@ -39,9 +40,10 @@ import { invoicesService } from "@/services/invoices.service";
 import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
 import { posCustomerProfilesService } from "@/services/pos-customer-profiles.service";
 import { receiptsService } from "@/services/receipts.service";
+import { salesService } from "@/services/sales.service";
 import { settingsService } from "@/services/settings.service";
 import { usersService } from "@/services/users.service";
-import type { Customer, Invoice, OriginBank, Receipt } from "@/types/entities";
+import type { BankAccount, Customer, Invoice, OriginBank, PaymentMethodType, Receipt, SaleItem } from "@/types/entities";
 
 const currency = new Intl.NumberFormat("es-AR", {
   style: "currency",
@@ -49,9 +51,19 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
+export interface PosReceiptPaymentSummary {
+  methodCode: string;
+  methodName: string;
+  amount: number;
+  bankAccountId?: string | null;
+  bankName?: string | null;
+  holderName?: string | null;
+}
+
 interface PosRecentReceiptItem {
   receipt: Receipt;
   invoice: Invoice | null;
+  payments?: PosReceiptPaymentSummary[];
 }
 
 interface PosReceiptModalState {
@@ -187,6 +199,7 @@ export const PosPage = () => {
   const [visibleBarcodeValue, setVisibleBarcodeValue] = useState("");
   const [isReceiptsListModalOpen, setIsReceiptsListModalOpen] = useState(false);
   const [recentReceipts, setRecentReceipts] = useState<PosRecentReceiptItem[]>([]);
+  const [receiptsSearchTerm, setReceiptsSearchTerm] = useState("");
   const [isLoadingReceipts, setIsLoadingReceipts] = useState(false);
   const [receiptModal, setReceiptModal] = useState<PosReceiptModalState | null>(null);
   const [printMenuReceiptId, setPrintMenuReceiptId] = useState<string | null>(null);
@@ -355,14 +368,99 @@ export const PosPage = () => {
 
     setIsLoadingReceipts(true);
     try {
-      const [receiptRows, invoiceRows] = await Promise.all([
+      const [receiptsRes, invoicesRes, salesRes, paymentsRes, banksRes] = await Promise.allSettled([
         receiptsService.getAllByTenant(tenantId),
         invoicesService.getAllByTenant(tenantId),
+        salesService.getAllByTenant(tenantId),
+        salesService.getAllPaymentsByTenant(tenantId),
+        bankAccountsService.getAllByTenant(tenantId),
       ]);
 
-      const receiptList = [...receiptRows]
-        .sort((a, b) => b.issued_at.localeCompare(a.issued_at))
-        .slice(0, 30);
+      const receiptRows = receiptsRes.status === "fulfilled" ? receiptsRes.value : [];
+      const invoiceRows = invoicesRes.status === "fulfilled" ? invoicesRes.value : [];
+      const salesRows = salesRes.status === "fulfilled" ? salesRes.value : [];
+      const paymentRows = paymentsRes.status === "fulfilled" ? paymentsRes.value : [];
+      const allBanks = banksRes.status === "fulfilled" ? banksRes.value : bankAccounts;
+
+      const bankMap = new Map<string, BankAccount>();
+      for (const b of allBanks) {
+        bankMap.set(b.id, b);
+      }
+      for (const b of bankAccounts) {
+        if (!bankMap.has(b.id)) bankMap.set(b.id, b);
+      }
+
+      const paymentsBySaleId = new Map<string, PosReceiptPaymentSummary[]>();
+      for (const p of paymentRows) {
+        if (!p.sale_id) continue;
+        const meta = (p.metadata ?? {}) as Record<string, unknown>;
+        const methodSnapshot = meta.payment_method_snapshot as Record<string, unknown> | undefined;
+        const paymentDetails = (meta.payment_details ?? {}) as Record<string, unknown>;
+        const destAccountId =
+          (typeof paymentDetails.destination_account_id === "string" && paymentDetails.destination_account_id) || null;
+        const bank = destAccountId ? bankMap.get(destAccountId) : null;
+
+        const methodCode = p.payment_method_code;
+        let methodName = (typeof methodSnapshot?.name === "string" && methodSnapshot.name) || "";
+        if (!methodName) {
+          if (methodCode === "cash") methodName = "Efectivo";
+          else if (methodCode === "transfer" || methodCode === "bank_transfer") methodName = "Transferencia bancaria";
+          else if (methodCode === "card" || methodCode === "debit" || methodCode === "credit") methodName = "Tarjeta";
+          else if (methodCode === "current_account") methodName = "Cuenta Corriente";
+          else if (methodCode === "mercado_pago") methodName = "Mercado Pago";
+          else methodName = methodCode;
+        }
+
+        const bankName = bank ? bank.bank_name : (typeof paymentDetails.bank_name === "string" ? paymentDetails.bank_name : null);
+        const holderName = bank ? bank.holder_name : (typeof paymentDetails.holder_name === "string" ? paymentDetails.holder_name : null);
+
+        const currentList = paymentsBySaleId.get(p.sale_id) ?? [];
+        currentList.push({
+          methodCode,
+          methodName,
+          amount: p.amount,
+          bankAccountId: destAccountId,
+          bankName,
+          holderName,
+        });
+        paymentsBySaleId.set(p.sale_id, currentList);
+      }
+
+      const receiptSaleIds = new Set<string>();
+      for (const r of receiptRows) {
+        if (r.sale_id) receiptSaleIds.add(r.sale_id);
+      }
+
+      const syntheticReceipts: Receipt[] = [];
+      for (const sale of salesRows) {
+        if (!sale.id || receiptSaleIds.has(sale.id)) continue;
+        if (sale.status === "cancelled") continue;
+        syntheticReceipts.push({
+          id: `synth-${sale.id}`,
+          tenant_id: tenantId,
+          sale_id: sale.id,
+          sale_number: sale.sale_number,
+          receipt_number: `TCK-${sale.sale_number}`,
+          issued_at: sale.created_at || new Date().toISOString(),
+          customer_name: sale.customer ? (sale.customer.full_name || "") : null,
+          payment_method: "cash" as PaymentMethodType,
+          items: (sale.items ?? []).map((it: SaleItem) => ({
+            name: it.product_name_snapshot || "Producto",
+            quantity: it.quantity,
+            unit_price: it.unit_price,
+            subtotal: it.line_total ?? it.unit_price * it.quantity,
+          })),
+          total: sale.total,
+          notes: sale.notes,
+          created_by: null,
+          created_at: sale.created_at || new Date().toISOString(),
+          updated_at: sale.updated_at || new Date().toISOString(),
+        });
+      }
+
+      const allCombinedReceipts = [...receiptRows, ...syntheticReceipts]
+        .sort((a, b) => (b.issued_at || "").localeCompare(a.issued_at || ""))
+        .slice(0, 100);
 
       const invoiceBySaleId = new Map<string, Invoice>();
       [...invoiceRows]
@@ -373,10 +471,48 @@ export const PosPage = () => {
           invoiceBySaleId.set(invoice.sale_id, invoice);
         });
 
-      const merged = receiptList.map((receipt) => ({
-        receipt,
-        invoice: invoiceBySaleId.get(receipt.sale_id) ?? null,
-      }));
+      const merged: PosRecentReceiptItem[] = allCombinedReceipts.map((receipt) => {
+        let payments = paymentsBySaleId.get(receipt.sale_id);
+        if (!payments || payments.length === 0) {
+          const rawMethod = String(receipt.payment_method || "").toLowerCase();
+          let methodName = "Efectivo";
+          let bankName: string | null = null;
+          let holderName: string | null = null;
+
+          if (rawMethod.includes("transfer")) {
+            methodName = "Transferencia bancaria";
+            for (const b of allBanks) {
+              if (receipt.notes && receipt.notes.toLowerCase().includes(b.bank_name.toLowerCase())) {
+                bankName = b.bank_name;
+                holderName = b.holder_name;
+                break;
+              }
+            }
+          } else if (rawMethod.includes("card") || rawMethod.includes("debit") || rawMethod.includes("credit")) {
+            methodName = "Tarjeta";
+          } else if (rawMethod.includes("current_account")) {
+            methodName = "Cuenta Corriente";
+          } else if (rawMethod.includes("mercado_pago")) {
+            methodName = "Mercado Pago";
+          }
+
+          payments = [
+            {
+              methodCode: receipt.payment_method || "cash",
+              methodName,
+              amount: receipt.total,
+              bankName,
+              holderName,
+            },
+          ];
+        }
+
+        return {
+          receipt,
+          invoice: invoiceBySaleId.get(receipt.sale_id) ?? null,
+          payments,
+        };
+      });
 
       setRecentReceipts(merged);
     } catch {
@@ -384,7 +520,38 @@ export const PosPage = () => {
     } finally {
       setIsLoadingReceipts(false);
     }
-  }, [tenantId, toastError]);
+  }, [bankAccounts, tenantId, toastError]);
+
+  const filteredReceipts = useMemo(() => {
+    const query = receiptsSearchTerm.trim().toLowerCase();
+    if (!query) return recentReceipts;
+
+    return recentReceipts.filter((item) => {
+      const saleNum = (item.receipt.sale_number || "").toLowerCase();
+      const rcptNum = (item.receipt.receipt_number || "").toLowerCase();
+      const custName = (item.receipt.customer_name || "").toLowerCase();
+      const notes = (item.receipt.notes || "").toLowerCase();
+      const totalStr = item.receipt.total.toString();
+      const invNum = (item.invoice?.document_number || "").toLowerCase();
+
+      const matchesPayments = (item.payments ?? []).some((p) => {
+        const mName = p.methodName.toLowerCase();
+        const bName = (p.bankName || "").toLowerCase();
+        const hName = (p.holderName || "").toLowerCase();
+        return mName.includes(query) || bName.includes(query) || hName.includes(query);
+      });
+
+      return (
+        saleNum.includes(query) ||
+        rcptNum.includes(query) ||
+        custName.includes(query) ||
+        notes.includes(query) ||
+        totalStr.includes(query) ||
+        invNum.includes(query) ||
+        matchesPayments
+      );
+    });
+  }, [recentReceipts, receiptsSearchTerm]);
 
   const loadCashSessionGate = useCallback(async () => {
     if (!tenantId) {
@@ -792,16 +959,17 @@ export const PosPage = () => {
       };
 
       const deduped = previous.filter((item) => item.receipt.id !== generatedReceipt.id);
-      return [nextItem, ...deduped].slice(0, 30);
+      return [nextItem, ...deduped].slice(0, 100);
     });
 
     clearGeneratedReceipt();
+    void loadRecentReceipts();
     if (!isCashGateBlocking) {
       window.setTimeout(() => {
         focusScannerCapture();
       }, 0);
     }
-  }, [clearGeneratedReceipt, focusScannerCapture, generatedInvoice, generatedReceipt, isCashGateBlocking]);
+  }, [clearGeneratedReceipt, focusScannerCapture, generatedInvoice, generatedReceipt, isCashGateBlocking, loadRecentReceipts]);
 
   const closeReceiptModal = useCallback(() => {
     setReceiptModal(null);
@@ -1839,11 +2007,18 @@ export const PosPage = () => {
                 });
 
                 const updated = await productsService.update(tenantId, values.productId, {
+                  name: values.name,
+                  category: values.category,
                   price: roundMoney(values.unitPrice),
                   price_without_vat: computed.precioSinIva,
                   profit_percent: computed.porcentajeGanancia,
+                  code: values.code?.trim() || undefined,
                   ...(values.saleMode ? { sale_mode: values.saleMode } : {}),
                 });
+
+                if (values.barcode !== undefined) {
+                  await productsService.setPrimaryBarcode(tenantId, values.productId, values.barcode.trim());
+                }
 
                 if (updated) {
                   useProductsStore.getState().upsertProduct(updated);
@@ -1904,13 +2079,20 @@ export const PosPage = () => {
               }, 0);
             }}
           />
-          <div className="relative z-10 w-full max-w-2xl space-y-4 rounded-2xl bg-white p-5 shadow-panel dark:bg-slate-900">
+          <div className="relative z-10 w-full max-w-2xl space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-panel dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
               <div className="flex items-center gap-2">
                 <FileText className="text-blue-600 dark:text-blue-400" size={20} />
-                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                  Comprobantes recientes
-                </h2>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    Comprobantes recientes
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {filteredReceipts.length === recentReceipts.length
+                      ? `Mostrando ${recentReceipts.length} comprobantes`
+                      : `Mostrando ${filteredReceipts.length} de ${recentReceipts.length} comprobantes`}
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <IconButton
@@ -1927,6 +2109,7 @@ export const PosPage = () => {
                   className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:text-slate-400"
                   onClick={() => {
                     setIsReceiptsListModalOpen(false);
+                    setReceiptsSearchTerm("");
                     window.setTimeout(() => {
                       focusScannerCapture();
                     }, 0);
@@ -1937,47 +2120,192 @@ export const PosPage = () => {
               </div>
             </div>
 
-            <div className="max-h-[70vh] overflow-y-auto pr-1">
+            {/* Buscador de comprobantes */}
+            <div className="relative">
+              <Search
+                size={16}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+              <input
+                type="text"
+                value={receiptsSearchTerm}
+                onChange={(e) => setReceiptsSearchTerm(e.target.value)}
+                placeholder="Buscar por Nº venta, cliente, banco (Patagonia, etc.) o medio de pago..."
+                className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-8 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder:text-slate-500"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-lpignore="true"
+              />
+              {receiptsSearchTerm ? (
+                <button
+                  type="button"
+                  onClick={() => setReceiptsSearchTerm("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  aria-label="Limpiar búsqueda"
+                >
+                  <X size={14} />
+                </button>
+              ) : null}
+            </div>
+
+            <div className="max-h-[65vh] space-y-3 overflow-y-auto pr-1">
               {isLoadingReceipts ? (
                 <div className="ui-loading py-8">Cargando comprobantes...</div>
-              ) : !recentReceipts.length ? (
-                <div className="ui-empty-state py-8">Todavía no hay comprobantes recientes.</div>
+              ) : !filteredReceipts.length ? (
+                <div className="ui-empty-state py-8">
+                  {receiptsSearchTerm
+                    ? "No se encontraron comprobantes que coincidan con la búsqueda."
+                    : "Todavía no hay comprobantes recientes."}
+                </div>
               ) : (
-                <div className="pos-receipts-list divide-y divide-slate-100 dark:divide-slate-800">
-                  {recentReceipts.map((item) => {
-                    const { receipt, invoice } = item;
+                <div className="space-y-2.5">
+                  {filteredReceipts.map((item) => {
+                    const { receipt, invoice, payments = [] } = item;
                     return (
-                      <article key={receipt.id} className="pos-receipt-item py-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                            {receipt.sale_number || receipt.receipt_number}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {new Date(receipt.issued_at).toLocaleString("es-AR")}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            Cliente: {receipt.customer_name ?? "Consumidor final"}
-                          </p>
-                        </div>
+                      <article
+                        key={receipt.id}
+                        className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-3.5 transition-colors hover:border-slate-300 dark:border-slate-800 dark:bg-slate-800/40 dark:hover:border-slate-700"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                                {receipt.sale_number || receipt.receipt_number}
+                              </p>
+                              {receipt.receipt_number && receipt.receipt_number !== receipt.sale_number ? (
+                                <span className="font-mono text-[11px] text-slate-400 dark:text-slate-500">
+                                  ({receipt.receipt_number})
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              {new Date(receipt.issued_at).toLocaleString("es-AR")}
+                            </p>
+                            <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                              Cliente:{" "}
+                              <span className="text-slate-900 dark:text-slate-100 font-semibold">
+                                {receipt.customer_name ?? "Consumidor final"}
+                              </span>
+                            </p>
+                          </div>
 
-                        <div className="text-right">
-                          <p className="font-kpi text-sm font-semibold text-slate-900 dark:text-slate-100">
-                            {currency.format(receipt.total)}
-                          </p>
-                          <div className="mt-1 flex items-center justify-end gap-1">
-                            <span className="ui-badge ui-badge--info">Ticket disponible</span>
-                            {invoice ? (
-                              <span className="ui-badge ui-badge--success">Factura disponible</span>
-                            ) : (
-                              <span className="ui-badge ui-badge--warn">Sin factura</span>
-                            )}
+                          <div className="text-right">
+                            <p className="font-kpi text-base font-bold text-slate-900 dark:text-slate-100">
+                              {currency.format(receipt.total)}
+                            </p>
+                            <div className="mt-1 flex items-center justify-end gap-1.5">
+                              <span className="inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700 dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-300">
+                                Ticket
+                              </span>
+                              {invoice ? (
+                                <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:border-emerald-800/60 dark:bg-emerald-950/40 dark:text-emerald-300">
+                                  Factura {invoice.document_type}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-400">
+                                  Sin factura
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
 
-                        <div className="col-span-2 flex flex-wrap items-center gap-2 mt-2">
+                        {/* RESUMEN PREVIO: METODO DE PAGO Y CUENTA DE BANCO */}
+                        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2.5 dark:border-slate-800/80">
+                          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-1">
+                            Pago:
+                          </span>
+                          {payments.map((p, idx) => {
+                            const isTransfer =
+                              p.methodCode === "transfer" ||
+                              p.methodCode === "bank_transfer" ||
+                              p.methodName.toLowerCase().includes("transferencia") ||
+                              Boolean(p.bankName);
+                            const isCash =
+                              p.methodCode === "cash" || p.methodName.toLowerCase().includes("efectivo");
+                            const isCurrentAccount =
+                              p.methodCode === "current_account" ||
+                              p.methodName.toLowerCase().includes("corriente");
+                            const isCard =
+                              p.methodCode.includes("card") ||
+                              p.methodCode.includes("debit") ||
+                              p.methodCode.includes("credit") ||
+                              p.methodName.toLowerCase().includes("tarjeta");
+                            const isMp =
+                              p.methodCode === "mercado_pago" ||
+                              p.methodName.toLowerCase().includes("mercado pago");
+
+                            let badgeClasses =
+                              "border border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200";
+                            if (isTransfer) {
+                              badgeClasses =
+                                "border border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-700/80 dark:bg-sky-950/60 dark:text-sky-200 font-semibold";
+                            } else if (isCash) {
+                              badgeClasses =
+                                "border border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700/80 dark:bg-emerald-950/60 dark:text-emerald-200";
+                            } else if (isCurrentAccount) {
+                              badgeClasses =
+                                "border border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700/80 dark:bg-amber-950/60 dark:text-amber-200";
+                            } else if (isCard) {
+                              badgeClasses =
+                                "border border-purple-300 bg-purple-50 text-purple-800 dark:border-purple-700/80 dark:bg-purple-950/60 dark:text-purple-200";
+                            } else if (isMp) {
+                              badgeClasses =
+                                "border border-cyan-300 bg-cyan-50 text-cyan-800 dark:border-cyan-700/80 dark:bg-cyan-950/60 dark:text-cyan-200";
+                            }
+
+                            const hasBankInfo = isTransfer && (p.bankName || p.holderName);
+                            const bankDisplay = hasBankInfo
+                              ? `${p.bankName || "Banco"}${p.holderName ? ` (${p.holderName})` : ""}`
+                              : null;
+
+                            return (
+                              <span
+                                key={idx}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs shadow-sm",
+                                  badgeClasses
+                                )}
+                              >
+                                {isTransfer ? (
+                                  <Landmark size={13} className="shrink-0 text-sky-600 dark:text-sky-400" />
+                                ) : isCash ? (
+                                  <Banknote size={13} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                ) : isCurrentAccount ? (
+                                  <UserIcon size={13} className="shrink-0 text-amber-600 dark:text-amber-400" />
+                                ) : isCard ? (
+                                  <CreditCard size={13} className="shrink-0 text-purple-600 dark:text-purple-400" />
+                                ) : (
+                                  <FileText size={13} className="shrink-0 text-slate-500" />
+                                )}
+                                <span>
+                                  {isTransfer ? (
+                                    <>
+                                      <span>Transferencia</span>
+                                      {bankDisplay ? (
+                                        <span className="font-bold text-sky-900 dark:text-sky-100">
+                                          {" "}→ {bankDisplay}
+                                        </span>
+                                      ) : null}
+                                    </>
+                                  ) : (
+                                    <span>{p.methodName}</span>
+                                  )}
+                                  {payments.length > 1 ? (
+                                    <span className="ml-1 font-mono font-bold">({currency.format(p.amount)})</span>
+                                  ) : null}
+                                </span>
+                              </span>
+                            );
+                          })}
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
                           <button
                             type="button"
-                            className="ui-btn-ghost px-2.5 py-1.5 text-xs"
+                            className="ui-btn-ghost px-2.5 py-1.5 text-xs font-semibold"
                             onClick={() => openReceiptModal(item, "ticket")}
                           >
                             Ver ticket
@@ -1985,7 +2313,7 @@ export const PosPage = () => {
                           {invoice ? (
                             <button
                               type="button"
-                              className="ui-btn-ghost px-2.5 py-1.5 text-xs"
+                              className="ui-btn-ghost px-2.5 py-1.5 text-xs font-semibold"
                               onClick={() => openReceiptModal(item, "invoice")}
                             >
                               Ver factura
@@ -1994,7 +2322,7 @@ export const PosPage = () => {
                           <div className="relative" data-print-menu="true">
                             <button
                               type="button"
-                              className="ui-btn-ghost px-2.5 py-1.5 text-xs"
+                              className="ui-btn-ghost px-2.5 py-1.5 text-xs font-semibold"
                               onClick={() =>
                                 setPrintMenuReceiptId((current) =>
                                   current === receipt.id ? null : receipt.id

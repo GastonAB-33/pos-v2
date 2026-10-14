@@ -64,6 +64,8 @@ export interface PosCartItem {
   debt_customer_name?: string | null;
   returnable_config?: ReturnableConfig | null;
   returnable_status?: ReturnableCartStatus;
+  code?: string | null;
+  barcode?: string | null;
 }
 
 export interface PosCartItemComputed extends PosCartItem {
@@ -124,6 +126,8 @@ export interface PosCartItemEditInput {
   quantity: number;
   unitPrice: number;
   saleMode?: "unit" | "weight";
+  code?: string;
+  barcode?: string;
 }
 
 export interface PosSaleTab {
@@ -610,21 +614,28 @@ export const usePosSale = (tenantId: string | null) => {
         };
 
         const activeProducts = allProducts.filter((product) => product.is_active !== false);
-        const activeProductBarcodes = allProductBarcodes.filter((row) => row.is_primary);
-        const primaryBarcodeMap = activeProductBarcodes.reduce<Record<string, string>>((acc, row) => {
-          acc[row.product_id] = row.barcode;
-          return acc;
-        }, {});
+        const validProductBarcodes = allProductBarcodes.filter((row) => Boolean(row.barcode && row.product_id));
+        const primaryBarcodeMap: Record<string, string> = {};
+        for (const row of validProductBarcodes) {
+          if (row.is_primary || !primaryBarcodeMap[row.product_id]) {
+            primaryBarcodeMap[row.product_id] = row.barcode;
+          }
+        }
+        for (const product of activeProducts) {
+          if (!primaryBarcodeMap[product.id] && product.code) {
+            primaryBarcodeMap[product.id] = product.code;
+          }
+        }
 
         setProducts(activeProducts);
-        setProductBarcodes(activeProductBarcodes);
+        setProductBarcodes(validProductBarcodes);
         setPrimaryBarcodes(primaryBarcodeMap);
         setPriceLists(allPriceLists);
 
         if (allProducts.length > 0 && shouldFetchCatalog) {
           useProductsStore.setState({
             products: allProducts,
-            allBarcodes: activeProductBarcodes,
+            allBarcodes: validProductBarcodes,
             primaryBarcodes: primaryBarcodeMap,
             priceLists: allPriceLists,
             loadedTenantId: tenantId,
@@ -1504,26 +1515,56 @@ export const usePosSale = (tenantId: string | null) => {
     (barcode: string): Product | null => {
       const normalizedBarcode = normalizeBarcodeValue(barcode);
       if (!normalizedBarcode) return null;
+      const strippedBarcode = normalizedBarcode.replace(/^0+/, "");
 
-      const barcodeRow =
+      // 1. Coincidencia directa en productBarcodes (con o sin is_primary)
+      let barcodeRow =
         productBarcodes.find(
           (row) => normalizeBarcodeValue(row.barcode) === normalizedBarcode && row.is_primary
-        ) ?? null;
+        ) ??
+        productBarcodes.find(
+          (row) => normalizeBarcodeValue(row.barcode) === normalizedBarcode
+        ) ??
+        null;
+
+      // Si no coincide directo, intentar quitando ceros a la izquierda (ej: EAN-13 / UPC discrepancias)
+      if (!barcodeRow && strippedBarcode) {
+        barcodeRow =
+          productBarcodes.find(
+            (row) => normalizeBarcodeValue(row.barcode).replace(/^0+/, "") === strippedBarcode
+          ) ?? null;
+      }
 
       if (barcodeRow) {
         const candidate = products.find((product) => product.id === barcodeRow.product_id);
         if (candidate) return candidate;
       }
 
-      // Fallback: coincidencia por código de producto directo
+      // 2. Coincidencia por mapa de primaryBarcodes
+      for (const [productId, pBarcode] of Object.entries(primaryBarcodes)) {
+        if (!pBarcode) continue;
+        const normPBarcode = normalizeBarcodeValue(pBarcode);
+        if (
+          normPBarcode === normalizedBarcode ||
+          (strippedBarcode && normPBarcode.replace(/^0+/, "") === strippedBarcode)
+        ) {
+          const candidate = products.find((p) => p.id === productId);
+          if (candidate) return candidate;
+        }
+      }
+
+      // 3. Fallback: coincidencia por código de producto directo (exacto o quitando ceros a la izquierda)
       return (
-        products.find(
-          (product) =>
-            Boolean(product.code) && normalizeBarcodeValue(product.code as string) === normalizedBarcode
-        ) ?? null
+        products.find((product) => {
+          if (!product.code) return false;
+          const normCode = normalizeBarcodeValue(product.code as string);
+          if (normCode === normalizedBarcode) return true;
+          if (strippedBarcode && normCode.replace(/^0+/, "") === strippedBarcode) return true;
+          return false;
+        }) ?? null
       );
     },
-    [productBarcodes, products]
+    [productBarcodes, primaryBarcodes, products]
   );
 
   const addProductByBarcode = useCallback(
@@ -1581,6 +1622,22 @@ export const usePosSale = (tenantId: string | null) => {
         let product = findProductByUnitBarcode(barcode);
         if (!product && isOnline) {
           product = await productsService.getByBarcode(tenantId, barcode);
+        }
+
+        // Respaldo de seguridad en memoria antes de rechazar
+        if (!product) {
+          const stripped = barcode.replace(/^0+/, "");
+          product =
+            products.find((p) => {
+              if (p.is_active === false) return false;
+              const pCode = p.code ? normalizeBarcodeValue(p.code) : "";
+              const pPrimary = primaryBarcodes[p.id] ? normalizeBarcodeValue(primaryBarcodes[p.id]) : "";
+              return (
+                pCode === barcode ||
+                pPrimary === barcode ||
+                (stripped && (pCode.replace(/^0+/, "") === stripped || pPrimary.replace(/^0+/, "") === stripped))
+              );
+            }) ?? null;
         }
 
         if (!product || !product.is_active) {
@@ -1725,10 +1782,19 @@ export const usePosSale = (tenantId: string | null) => {
               base_unit_price: item.is_manual_item ? normalizedPrice : item.base_unit_price,
               is_price_overridden: true,
               sale_mode: input.saleMode ?? target.sale_mode,
+              ...(input.code !== undefined ? { code: input.code } : {}),
+              ...(input.barcode !== undefined ? { barcode: input.barcode } : {}),
             }
           : item
       );
     });
+
+    if (input.barcode !== undefined) {
+      setPrimaryBarcodes((prev) => ({
+        ...prev,
+        [input.productId]: input.barcode || "",
+      }));
+    }
   };
 
   const increaseQuantity = (productId: string) => {

@@ -34,6 +34,7 @@ const buildPlainTextTicket = (receipt: Receipt): string => {
     `Venta: ${receipt.sale_number}`,
     `Cliente: ${receipt.customer_name ?? "Consumidor final"}`,
     `Medio de pago: ${getPaymentMethodLabel(receipt.payment_method)}`,
+    ...(receipt.notes ? [`Detalle pago: ${receipt.notes}`] : []),
     "",
     "Items:",
     ...receipt.items.map(
@@ -136,6 +137,14 @@ export const ReceiptTicketPanel = ({
               <span className="text-slate-500 dark:text-slate-400">Pago</span>
               <span className="font-medium text-slate-900 dark:text-slate-100">{getPaymentMethodLabel(receipt.payment_method)}</span>
             </p>
+            {receipt.notes ? (
+              <p className="flex items-start justify-between text-xs">
+                <span className="text-slate-500 dark:text-slate-400">Detalle</span>
+                <span className="font-medium text-right text-slate-800 dark:text-slate-200 max-w-[280px]">
+                  {receipt.notes}
+                </span>
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-2 py-3 text-sm">

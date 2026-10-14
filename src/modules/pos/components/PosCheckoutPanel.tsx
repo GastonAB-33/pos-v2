@@ -3,6 +3,7 @@ import {
   AlertCircle,
   Banknote,
   Check,
+  Copy,
   CreditCard,
   Edit2,
   FileText,
@@ -10,7 +11,6 @@ import {
   QrCode,
   Receipt,
   UserCheck,
-  UserPlus,
   Wallet,
   X,
 } from "lucide-react";
@@ -499,6 +499,15 @@ export const PosCheckoutPanel = ({
     totalPending,
   ]);
 
+  const [copiedField, setCopiedField] = useState<"total" | "pending" | null>(null);
+
+  const handleCopyAmount = useCallback((amount: number, field: "total" | "pending") => {
+    const text = amount.toFixed(2);
+    void navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    window.setTimeout(() => setCopiedField(null), 1500);
+  }, []);
+
   const panelRef = useRef<HTMLElement | null>(null);
 
   // Autofocus del panel al montarse
@@ -506,7 +515,7 @@ export const PosCheckoutPanel = ({
     panelRef.current?.focus();
   }, []);
 
-  // Seleccionar un método de pago y asignar el total si es pago simple
+  // Seleccionar un método de pago y asignar el total si se hace clic
   const selectOption = useCallback(
     (targetIndex: number) => {
       if (paymentOptions.length === 0) return;
@@ -516,20 +525,13 @@ export const PosCheckoutPanel = ({
 
       setHighlightedIndex(clampedIndex);
       onPaymentMethodChange(targetOption.paymentMethodId);
-
-      setAllocatedAmounts((curr) => {
-        const activeKeys = Object.keys(curr).filter((k) => (curr[k] || 0) > 0);
-        if (activeKeys.length <= 1) {
-          setAmountInputs({ [targetOption.id]: checkoutTotal.toFixed(2) });
-          return { [targetOption.id]: checkoutTotal };
-        }
-        return curr;
-      });
+      setAllocatedAmounts({ [targetOption.id]: checkoutTotal });
+      setAmountInputs({ [targetOption.id]: checkoutTotal.toFixed(2) });
     },
     [checkoutTotal, onPaymentMethodChange, paymentOptions]
   );
 
-  // Listener global de teclado para asegurar navegación fluida con flechas y Enter
+  // Listener global de teclado para asegurar navegación fluida con flechas y flujo de Enter en 2 pasos
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       // Si el modal de búsqueda de clientes está abierto, ignorar teclado global
@@ -540,48 +542,23 @@ export const PosCheckoutPanel = ({
         (targetTag === "input" && (e.target as HTMLInputElement).type !== "button") ||
         targetTag === "textarea";
 
+      // Flecha abajo: solo mueve el foco/resaltado (no asigna el monto hasta que se presione Enter)
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setHighlightedIndex((prev) => {
-          const next = paymentOptions.length > 0 ? (prev + 1) % paymentOptions.length : 0;
-          const targetOption = paymentOptions[next];
-          if (targetOption) {
-            onPaymentMethodChange(targetOption.paymentMethodId);
-            setAllocatedAmounts((curr) => {
-              const activeKeys = Object.keys(curr).filter((k) => (curr[k] || 0) > 0);
-              if (activeKeys.length <= 1) {
-                setAmountInputs({ [targetOption.id]: checkoutTotal.toFixed(2) });
-                return { [targetOption.id]: checkoutTotal };
-              }
-              return curr;
-            });
-          }
-          return next;
-        });
+        setHighlightedIndex((prev) =>
+          paymentOptions.length > 0 ? (prev + 1) % paymentOptions.length : 0
+        );
         return;
       }
 
+      // Flecha arriba: solo mueve el foco/resaltado
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        setHighlightedIndex((prev) => {
-          const next =
-            paymentOptions.length > 0
-              ? (prev - 1 + paymentOptions.length) % paymentOptions.length
-              : 0;
-          const targetOption = paymentOptions[next];
-          if (targetOption) {
-            onPaymentMethodChange(targetOption.paymentMethodId);
-            setAllocatedAmounts((curr) => {
-              const activeKeys = Object.keys(curr).filter((k) => (curr[k] || 0) > 0);
-              if (activeKeys.length <= 1) {
-                setAmountInputs({ [targetOption.id]: checkoutTotal.toFixed(2) });
-                return { [targetOption.id]: checkoutTotal };
-              }
-              return curr;
-            });
-          }
-          return next;
-        });
+        setHighlightedIndex((prev) =>
+          paymentOptions.length > 0
+            ? (prev - 1 + paymentOptions.length) % paymentOptions.length
+            : 0
+        );
         return;
       }
 
@@ -596,17 +573,22 @@ export const PosCheckoutPanel = ({
           return;
         }
 
-        // Si el total está 100% asignado, confirmar venta
-        if (isFullyAssigned) {
+        const activeAmount = allocatedAmounts[activeOption.id] || 0;
+
+        // PASO 1: Si este método aún no tiene el monto asignado (o hay monto pendiente),
+        // este primer Enter lo selecciona y le asigna el total o restante
+        if (activeAmount < checkoutTotal || totalPending > 0) {
           e.preventDefault();
-          void handleFinalSubmit();
+          onPaymentMethodChange(activeOption.paymentMethodId);
+          assignPendingToOption(activeOption.id);
           return;
         }
 
-        // Si falta cubrir monto, asignar remanente a este método
-        if (totalPending > 0) {
+        // PASO 2: Si este método ya tiene el monto asignado y el total está 100% cubierto,
+        // el segundo Enter confirma y cierra la venta
+        if (isFullyAssigned) {
           e.preventDefault();
-          assignPendingToOption(activeOption.id);
+          void handleFinalSubmit();
           return;
         }
       }
@@ -633,6 +615,7 @@ export const PosCheckoutPanel = ({
     paymentOptions,
     selectedCustomer,
     totalPending,
+    allocatedAmounts,
   ]);
 
   const isMpHighlighted = paymentOptions[highlightedIndex]?.code === "mercado_pago";
@@ -641,27 +624,30 @@ export const PosCheckoutPanel = ({
     <section
       ref={panelRef}
       id={formId}
-      className="flex flex-col overflow-hidden rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-300 dark:border-slate-700 outline-none"
+      className="flex flex-col rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-300 dark:border-slate-700 outline-none p-4 sm:p-5 gap-3 max-h-[92vh] overflow-y-auto"
       tabIndex={-1}
     >
-      {/* Línea de acento superior estilo fintech */}
-      <div className="h-1.5 w-full bg-gradient-to-r from-emerald-400 via-blue-500 to-indigo-600" />
-
-      {/* Top Meta Bar */}
-      <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 px-4 py-2 text-[11px]">
-        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-semibold">
-          <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="uppercase tracking-wider">Modo Ágil POS</span>
-          <span className="text-slate-300 dark:text-slate-600">•</span>
-          <span className="rounded-md bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700">
-            PAGO DIRECTO & COMBINADO
+      {/* Cabecera minimalista con título y botón cerrar */}
+      <div className="flex items-center justify-between pb-1">
+        <div className="flex items-center gap-2">
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Cobro de Venta</h3>
+          <span className="rounded-md bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 font-mono">
+            ARS
           </span>
+          {roundingAdjustment !== 0 && (
+            <span
+              className="rounded bg-blue-100 dark:bg-blue-950/80 px-1.5 py-0.5 font-mono text-[9px] font-bold text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+              title={`Subtotal original: ${currency.format(rawCheckoutTotal ?? (checkoutTotal - roundingAdjustment))}`}
+            >
+              Redondeo {roundingAdjustment > 0 ? `+${currency.format(roundingAdjustment)}` : currency.format(roundingAdjustment)}
+            </span>
+          )}
         </div>
 
         {onClose && (
           <button
             type="button"
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition"
+            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition"
             onClick={onClose}
             title="Cerrar ventana"
           >
@@ -672,7 +658,7 @@ export const PosCheckoutPanel = ({
 
       {/* Banner de integración Mercado Pago si está seleccionado */}
       {isMpHighlighted && mercadoPagoSettings.enabled && (
-        <div className="mx-4 mt-2.5 rounded-xl border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 p-2.5 text-xs flex flex-wrap items-center justify-between gap-2">
+        <div className="rounded-xl border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 p-2.5 text-xs flex flex-wrap items-center justify-between gap-2">
           <div>
             <span className="font-bold text-sky-900 dark:text-sky-200 block">Terminal Mercado Pago Point</span>
             <span className="text-[11px] text-sky-700 dark:text-sky-300">
@@ -704,78 +690,136 @@ export const PosCheckoutPanel = ({
         </div>
       )}
 
-      {/* 2 PANELES SUPERIORES PARA SEGUIMIENTO RÁPIDO */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/90">
+      {/* 2 PANELES SUPERIORES MINIMALISTAS (CLIC PARA COPIAR MONTO) */}
+      <div className="grid grid-cols-2 gap-3">
         {/* PANEL 1: TOTAL A PAGAR */}
-        <div className="flex items-center justify-between rounded-xl bg-white dark:bg-slate-950 p-2.5 sm:p-3 border border-slate-300 dark:border-slate-700 shadow-xs">
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Total a Pagar
-              </span>
-              <span className="rounded bg-emerald-100 dark:bg-emerald-950/80 px-1.5 py-0.2 font-mono text-[9px] font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                ARS
-              </span>
-              {roundingAdjustment !== 0 && (
-                <span
-                  className="rounded bg-blue-100 dark:bg-blue-950/80 px-1.5 py-0.2 font-mono text-[9px] font-bold text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
-                  title={`Subtotal original: ${currency.format(rawCheckoutTotal ?? (checkoutTotal - roundingAdjustment))}`}
-                >
-                  Redondeo {roundingAdjustment > 0 ? `+${currency.format(roundingAdjustment)}` : currency.format(roundingAdjustment)}
-                </span>
-              )}
-            </div>
-            <span className="block mt-0.5 text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight font-mono">
-              {currency.format(checkoutTotal)}
+        <div
+          onClick={() => handleCopyAmount(checkoutTotal, "total")}
+          title="Clic para copiar monto a pagar"
+          className="group relative flex flex-col justify-between rounded-xl p-3 border border-slate-300 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50 hover:border-indigo-400 dark:hover:border-indigo-500 cursor-pointer transition active:scale-[0.99]"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Total a Pagar
             </span>
+            {copiedField === "total" ? (
+              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 animate-in fade-in">
+                ¡Copiado!
+              </span>
+            ) : (
+              <Copy size={12} className="text-slate-400 opacity-0 group-hover:opacity-100 transition" />
+            )}
           </div>
-
-          <div className="hidden sm:flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-            <Receipt size={17} />
-          </div>
+          <span className="block mt-1 text-2xl font-black text-slate-900 dark:text-white tracking-tight font-mono">
+            {currency.format(checkoutTotal)}
+          </span>
         </div>
 
         {/* PANEL 2: TOTAL PENDIENTE / RESTA CUBRIR */}
         <div
-          className={`flex items-center justify-between rounded-xl p-2.5 sm:p-3 border shadow-xs transition ${
+          onClick={() => handleCopyAmount(totalPending, "pending")}
+          title="Clic para copiar monto pendiente"
+          className={`group relative flex flex-col justify-between rounded-xl p-3 border cursor-pointer transition active:scale-[0.99] ${
             isFullyAssigned
-              ? "bg-emerald-50 dark:bg-emerald-950/50 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200"
+              ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50/50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200"
               : isOverpaid
-              ? "bg-rose-50 dark:bg-rose-950/50 border-rose-300 dark:border-rose-700 text-rose-900 dark:text-rose-200"
-              : "bg-amber-50 dark:bg-amber-950/50 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200"
+              ? "border-rose-300 dark:border-rose-700/80 bg-rose-50/50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200"
+              : "border-amber-300 dark:border-amber-700/80 bg-amber-50/50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200"
           }`}
         >
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-black uppercase tracking-wider">
-                {isFullyAssigned
-                  ? "Cobro Cubierto al 100%"
-                  : isOverpaid
-                  ? "Monto Excedido"
-                  : "Total Pendiente"}
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-wider">
+              {isFullyAssigned ? "Cubierto al 100%" : isOverpaid ? "Monto Excedido" : "Total Pendiente"}
+            </span>
+            {copiedField === "pending" ? (
+              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 animate-in fade-in">
+                ¡Copiado!
               </span>
-              {isFullyAssigned && <Check size={14} className="stroke-[3] text-emerald-600 dark:text-emerald-400" />}
-            </div>
-            <span className="block mt-0.5 text-xl sm:text-2xl font-black tracking-tight font-mono">
-              {currency.format(totalPending)}
-            </span>
+            ) : (
+              <Copy size={12} className="opacity-0 group-hover:opacity-100 transition" />
+            )}
           </div>
-
-          <div className="text-right">
-            <span className="text-[11px] font-bold block">
-              Asignado: {currency.format(totalAssigned)}
-            </span>
-            <span className="text-[10px] opacity-80 font-mono">
-              {isFullyAssigned
-                ? "Listo para confirmar"
-                : `Faltan ${currency.format(totalPending)}`}
-            </span>
-          </div>
+          <span className="block mt-1 text-2xl font-black tracking-tight font-mono">
+            {currency.format(totalPending)}
+          </span>
         </div>
       </div>
 
-      {/* LISTA DE MEDIOS DE PAGO EN MODO ÁGIL */}
-      <div className="p-3 flex-1 overflow-y-auto space-y-1.5">
+      {/* PANEL UNIFICADO DE CLIENTE Y FACTURA AFIP (ENTRE TARJETAS Y MEDIOS DE PAGO) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-bold text-slate-700 dark:text-slate-200">Cliente:</span>
+          {selectedCustomer ? (
+            <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-0.5 shadow-2xs">
+              <span className="font-bold text-slate-900 dark:text-slate-100">
+                {selectedCustomer.full_name}
+              </span>
+              <span className="rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1.5 py-0.2 text-[10px] font-mono text-slate-700 dark:text-slate-300">
+                {formatCustomerDocument(selectedCustomer.document_type, selectedCustomer.document_number)}
+              </span>
+              {currentAccountSnapshot?.available != null && (
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold" title="Disponible en Cuenta Corriente">
+                  (Disp: {currency.format(currentAccountSnapshot.available)})
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => onCustomerChange("")}
+                className="inline-flex items-center gap-0.5 rounded bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900/60 px-1.5 py-0.5 text-[11px] font-bold text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/80 transition ml-1 cursor-pointer"
+                title="Quitar cliente (volver a Consumidor Final)"
+              >
+                <X size={12} strokeWidth={2.5} />
+                Quitar
+              </button>
+            </div>
+          ) : (
+            <span className="text-slate-500 dark:text-slate-400 font-medium">
+              Consumidor Final (Venta mostrador)
+            </span>
+          )}
+          {selectedCustomer ? (
+            <button
+              type="button"
+              onClick={() => onOpenCustomerModal(selectedCustomer, "account")}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer"
+              title="Editar cliente para asignarle una cuenta corriente"
+            >
+              <Edit2 size={12} />
+              Editar
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setIsCustomerModalOpen(true)}
+            className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1 text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition cursor-pointer"
+          >
+            {selectedCustomer ? "Cambiar" : "Asignar"}
+          </button>
+        </div>
+
+        {/* Factura AFIP switch */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 text-xs">
+            <FileText size={14} className="text-blue-600 dark:text-blue-400" />
+            <span className="font-bold text-slate-800 dark:text-slate-200">Factura AFIP:</span>
+          </div>
+          <label className="pos-switch relative inline-flex shrink-0 cursor-pointer items-center">
+            <input
+              type="checkbox"
+              checked={issueInvoice}
+              onChange={(e) => setIssueInvoice(e.target.checked)}
+              className="peer sr-only"
+              disabled={disabled || !canWrite || !isOnline}
+            />
+            <span className="pos-switch-track">
+              <span className="pos-switch-thumb" />
+            </span>
+          </label>
+        </div>
+      </div>
+
+      {/* LISTA DE MEDIOS DE PAGO */}
+      <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs px-1 text-slate-500 dark:text-slate-400 font-semibold mb-0.5">
           <span>Medio de Pago / Cuenta</span>
           <span className="font-mono">Importe Asignado ($)</span>
@@ -830,79 +874,12 @@ export const PosCheckoutPanel = ({
                 </div>
               </div>
 
-              {/* Lado derecho: Casillas de importe y acciones */}
+              {/* Lado derecho: Casilla de Importe y botón limpiar */}
               <div
                 className="flex items-center gap-2 shrink-0"
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* Si es cuenta corriente: Mostrar casilla de selección de cliente */}
-                {option.isCurrentAccount && (
-                  <div className="flex items-center gap-1.5">
-                    {selectedCustomer ? (
-                      <div className="flex items-center gap-1 flex-wrap">
-                        {currentAccountSnapshot?.enabled ? (
-                          <button
-                            type="button"
-                            onClick={() => setIsCustomerModalOpen(true)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 dark:border-emerald-700/80 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-1 text-xs font-semibold text-emerald-900 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900 transition"
-                            title="Cambiar cliente asociado"
-                          >
-                            <UserCheck size={13} className="text-emerald-600 dark:text-emerald-400" />
-                            <span className="max-w-[120px] truncate">{selectedCustomer.full_name}</span>
-                            {currentAccountSnapshot?.available != null && (
-                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold">
-                                (${Math.round(currentAccountSnapshot.available / 1000)}k)
-                              </span>
-                            )}
-                          </button>
-                        ) : (
-                          <div className="inline-flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setIsCustomerModalOpen(true)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-amber-300 dark:border-amber-700/80 bg-amber-50 dark:bg-amber-950/60 px-2 py-1 text-xs font-semibold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900 transition"
-                              title="Cambiar cliente"
-                            >
-                              <UserCheck size={13} className="text-amber-600 dark:text-amber-400" />
-                              <span className="max-w-[100px] truncate">{selectedCustomer.full_name}</span>
-                              <span className="text-[9px] font-bold text-amber-800 dark:text-amber-300 bg-amber-200/70 dark:bg-amber-900/70 px-1 py-0.2 rounded">
-                                Sin Cta. Cte.
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onOpenCustomerModal(selectedCustomer, "account")}
-                              className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900 px-2 py-1 text-xs font-bold text-indigo-700 dark:text-indigo-300 transition shadow-2xs cursor-pointer"
-                              title="Editar cliente para asignarle una cuenta corriente"
-                            >
-                              <Edit2 size={12} />
-                              Habilitar Cta. Cte.
-                            </button>
-                          </div>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => onCustomerChange("")}
-                          className="rounded-lg p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition border border-transparent hover:border-rose-200 dark:hover:border-rose-800"
-                          title="Quitar cliente asignado"
-                        >
-                          <X size={13} />
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setIsCustomerModalOpen(true)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/60 px-2.5 py-1 text-xs font-bold text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900 transition"
-                      >
-                        <UserPlus size={13} />
-                        Elegir Cliente
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* Casilla de Importe */}
+                {/* Casilla de Importe con autoselección total al hacer clic / focus */}
                 <div className="relative w-32">
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">
                     $
@@ -914,9 +891,13 @@ export const PosCheckoutPanel = ({
                     placeholder="0.00"
                     value={amountInputs[option.id] ?? ""}
                     onChange={(e) => updateOptionAmount(option.id, e.target.value)}
-                    onFocus={() => {
+                    onFocus={(e) => {
+                      e.target.select();
                       setHighlightedIndex(idx);
                       onPaymentMethodChange(option.paymentMethodId);
+                    }}
+                    onClick={(e) => {
+                      (e.target as HTMLInputElement).select();
                     }}
                     autoComplete="off"
                     autoCorrect="off"
@@ -930,18 +911,6 @@ export const PosCheckoutPanel = ({
                     }`}
                   />
                 </div>
-
-                {/* Botón rápido para asignar lo que resta */}
-                {totalPending > 0 && assignedVal < checkoutTotal && (
-                  <button
-                    type="button"
-                    onClick={() => assignPendingToOption(option.id)}
-                    className="rounded-lg bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 px-2 py-1 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 text-[11px] font-semibold transition"
-                    title="Asignar el total pendiente restante a este método"
-                  >
-                    + Restante
-                  </button>
-                )}
 
                 {hasAmount && (
                   <button
@@ -959,89 +928,20 @@ export const PosCheckoutPanel = ({
         })}
       </div>
 
-      {/* SECCIÓN FACTURA ELECTRÓNICA & CLIENTE GENERAL */}
-      <div className="border-t border-slate-200 dark:border-slate-800 px-4 py-2 bg-slate-50 dark:bg-slate-800/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-        {/* Cliente actual de la venta */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-semibold text-slate-700 dark:text-slate-200">Cliente venta:</span>
-          {selectedCustomer ? (
-            <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-0.5 shadow-2xs">
-              <span className="font-bold text-slate-900 dark:text-slate-100">
-                {selectedCustomer.full_name}
-              </span>
-              <span className="rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1.5 py-0.2 text-[10px] font-mono text-slate-700 dark:text-slate-300">
-                {formatCustomerDocument(selectedCustomer.document_type, selectedCustomer.document_number)}
-              </span>
-              <button
-                type="button"
-                onClick={() => onCustomerChange("")}
-                className="inline-flex items-center gap-0.5 rounded bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900/60 px-1.5 py-0.5 text-[11px] font-bold text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/80 transition ml-1 cursor-pointer"
-                title="Quitar cliente asignado (volver a Consumidor Final)"
-              >
-                <X size={12} strokeWidth={2.5} />
-                Quitar
-              </button>
-            </div>
-          ) : (
-            <span className="text-slate-500 dark:text-slate-400 font-medium">
-              Consumidor Final (Venta mostrador)
-            </span>
-          )}
-          {selectedCustomer ? (
-            <button
-              type="button"
-              onClick={() => onOpenCustomerModal(selectedCustomer, "account")}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer"
-              title="Editar cliente para asignarle una cuenta corriente"
-            >
-              <Edit2 size={12} />
-              Editar
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => setIsCustomerModalOpen(true)}
-            className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1 text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition cursor-pointer"
-          >
-            {selectedCustomer ? "Cambiar" : "Asignar"}
-          </button>
-        </div>
-
-        {/* Factura AFIP switch */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5">
-            <FileText size={15} className="text-blue-600 dark:text-blue-400" />
-            <span className="font-bold text-slate-800 dark:text-slate-200">Factura AFIP:</span>
-          </div>
-          <label className="pos-switch relative inline-flex shrink-0 cursor-pointer items-center">
-            <input
-              type="checkbox"
-              checked={issueInvoice}
-              onChange={(e) => setIssueInvoice(e.target.checked)}
-              className="peer sr-only"
-              disabled={disabled || !canWrite || !isOnline}
-            />
-            <span className="pos-switch-track">
-              <span className="pos-switch-thumb" />
-            </span>
-          </label>
-        </div>
-      </div>
-
       {submitError && (
-        <div className="mx-4 my-2 flex items-center gap-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 p-2 text-xs font-semibold text-rose-700 dark:text-rose-300">
+        <div className="flex items-center gap-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 p-2.5 text-xs font-semibold text-rose-700 dark:text-rose-300">
           <AlertCircle size={15} className="shrink-0" />
           <span>{submitError}</span>
         </div>
       )}
 
-      {/* FOOTER: Botones Cancelar y Confirmar Venta sin atajos de desplazamiento */}
-      <div className="p-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 bg-white dark:bg-slate-900">
+      {/* FOOTER: Botones Cancelar y Confirmar Venta */}
+      <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
         {onClose ? (
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            className="rounded-xl border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
           >
             Cancelar
           </button>

@@ -40,6 +40,8 @@ export const PosCartItemEditModal = ({
 }: PosCartItemEditModalProps) => {
   useBodyScrollLock(Boolean(item));
   const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [barcode, setBarcode] = useState("");
   const [category, setCategory] = useState("");
   const [saleMode, setSaleMode] = useState<"unit" | "weight">("unit");
   const [quantity, setQuantity] = useState("");
@@ -50,6 +52,8 @@ export const PosCartItemEditModal = ({
   useEffect(() => {
     if (!item) return;
     setName(item.name);
+    setCode(item.code || "");
+    setBarcode(item.barcode || "");
     setCategory(item.category);
     setSaleMode(item.sale_mode);
     setQuantity(String(item.sale_mode === "weight" ? kgToGrams(item.quantity) : item.quantity));
@@ -91,6 +95,8 @@ export const PosCartItemEditModal = ({
           saleMode,
           quantity: saleMode === "weight" ? gramsToKg(parsedQuantity) : parsedQuantity,
           unitPrice: parsePositive(unitPrice),
+          code: code.trim(),
+          barcode: barcode.trim(),
         },
         finalScope
       );
@@ -113,29 +119,10 @@ export const PosCartItemEditModal = ({
           <div>
             <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Editar producto del carrito</h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Modificá modalidad de venta, precio o cantidad y elegí el alcance del cambio.
+              Modificá modalidad de venta, precio, códigos o cantidad y elegí el alcance del cambio.
             </p>
           </div>
           <ModalCloseButton label="Cerrar edición" onClick={onClose} disabled={isSubmitting} />
-        </div>
-
-        {/* Códigos de producto y barras del ítem */}
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/90 bg-slate-50/80 px-3 py-2 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-300">
-          <div className="flex items-center gap-1.5 font-medium">
-            <Hash size={14} className="text-slate-400 dark:text-slate-500" />
-            <span className="text-slate-500 dark:text-slate-400">Código:</span>
-            <span className="font-mono font-semibold text-slate-800 dark:text-slate-100">
-              {item.code?.trim() ? item.code : "Sin código"}
-            </span>
-          </div>
-          <span className="text-slate-300 dark:text-slate-600">|</span>
-          <div className="flex items-center gap-1.5 font-medium">
-            <Barcode size={14} className="text-slate-400 dark:text-slate-500" />
-            <span className="text-slate-500 dark:text-slate-400">Código de barras:</span>
-            <span className="font-mono font-semibold text-slate-800 dark:text-slate-100">
-              {item.barcode?.trim() ? item.barcode : "Sin código de barras"}
-            </span>
-          </div>
         </div>
 
         <div className="space-y-4">
@@ -232,7 +219,7 @@ export const PosCartItemEditModal = ({
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                className="ui-input"
+                className="ui-input border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90"
                 autoFocus
                 autoComplete="off"
                 autoCorrect="off"
@@ -241,12 +228,17 @@ export const PosCartItemEditModal = ({
                 data-lpignore="true"
               />
             </div>
+
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Categoría</label>
+              <label className="mb-1 flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+                <Hash size={14} className="text-slate-400 dark:text-slate-500" />
+                <span>Código interno</span>
+              </label>
               <input
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-                className="ui-input"
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                className="ui-input border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 font-mono text-xs uppercase"
+                placeholder="Sin código"
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
@@ -254,10 +246,66 @@ export const PosCartItemEditModal = ({
                 data-lpignore="true"
               />
             </div>
+
             <div>
+              <label className="mb-1 flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+                <Barcode size={14} className="text-slate-400 dark:text-slate-500" />
+                <span>Código de barras</span>
+              </label>
+              <input
+                value={barcode}
+                onChange={(event) => setBarcode(event.target.value)}
+                className="ui-input border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 font-mono text-xs"
+                placeholder="Sin código de barras"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-lpignore="true"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Categoría</label>
+              <input
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+                className="ui-input border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-lpignore="true"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                {saleMode === "weight" ? "Precio venta (por kg)" : "Precio venta (por unidad)"}
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={unitPrice}
+                onChange={(event) => setUnitPrice(event.target.value)}
+                onFocus={(e) =>
+                  handleNumericInputFocus(e, {
+                    isNew: unitPrice === "0" || unitPrice === "0.00" || unitPrice === "0,00",
+                    onClear: () => setUnitPrice(""),
+                  })
+                }
+                onBlur={(e) =>
+                  handleNumericInputBlur(e, "0", (val) => setUnitPrice(val))
+                }
+                className="ui-input border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
               <div className="mb-1 flex items-center justify-between">
                 <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                  {saleMode === "weight" ? "Cantidad (gramos)" : "Cantidad (unidades)"}
+                  {saleMode === "weight" ? "Cantidad en gramos" : "Cantidad en unidades"}
                 </label>
                 {currentGramsEquivalent !== null && (
                   <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">
@@ -282,48 +330,6 @@ export const PosCartItemEditModal = ({
                 }
                 className="ui-input border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90"
                 placeholder={saleMode === "weight" ? "Ej: 260" : "Ej: 1"}
-              />
-              {saleMode === "weight" ? (
-                <div className="space-y-1.5 mt-1.5">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">Atajos rápidos:</span>
-                    {[100, 250, 500, 1000].map((presetGrams) => (
-                      <button
-                        key={presetGrams}
-                        type="button"
-                        onClick={() => setQuantity(String(presetGrams))}
-                        className="px-2 py-0.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-200 hover:bg-amber-50 hover:border-amber-300 dark:hover:bg-amber-950/40 dark:hover:border-amber-700 transition"
-                      >
-                        {presetGrams < 1000 ? `${presetGrams}g` : "1kg"}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Ingresá los gramos exactos de forma libre (ej: 260 g = 0.260 kg).
-                  </p>
-                </div>
-              ) : null}
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                {saleMode === "weight" ? "Precio venta (por kg)" : "Precio venta (por unidad)"}
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={unitPrice}
-                onChange={(event) => setUnitPrice(event.target.value)}
-                onFocus={(e) =>
-                  handleNumericInputFocus(e, {
-                    isNew: unitPrice === "0" || unitPrice === "0.00" || unitPrice === "0,00",
-                    onClear: () => setUnitPrice(""),
-                  })
-                }
-                onBlur={(e) =>
-                  handleNumericInputBlur(e, "0", (val) => setUnitPrice(val))
-                }
-                className="ui-input"
               />
             </div>
           </div>
