@@ -64,6 +64,7 @@ export interface PosSmartViewProps {
   discountsEnabled?: boolean;
   onToggleDiscounts?: () => void;
   promotionDiscountTotal?: number;
+  lastAddedProductId?: string | null;
   onCheckout: () => void;
 
   // Panel de funciones superior derecho
@@ -100,6 +101,7 @@ export const PosSmartView = ({
   discountsEnabled = true,
   onToggleDiscounts,
   promotionDiscountTotal = 0,
+  lastAddedProductId,
   onCheckout,
   userName,
   operatorInitials,
@@ -149,13 +151,22 @@ export const PosSmartView = ({
     };
   }, []);
 
-  // Último producto en la secuencia de carga del carrito
-  const lastAddedProductId = items.length > 0 ? items[items.length - 1].product_id : null;
+  // Último producto en la secuencia de carga del carrito (al principio de la lista arriba)
+  const effectiveLastAddedId =
+    lastAddedProductId !== undefined
+      ? lastAddedProductId
+      : items.length > 0
+      ? items[0].product_id
+      : null;
 
   useEffect(() => {
-    // Si se agregó un nuevo producto, hacemos scroll suave hacia la fila recién agregada
+    // Si se agregó un nuevo producto, hacemos scroll suave hacia la fila recién agregada en la parte superior
     if (items.length > prevItemsLengthRef.current) {
-      lastItemRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      if (cartContainerRef.current) {
+        cartContainerRef.current.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        lastItemRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
     }
     prevItemsLengthRef.current = items.length;
   }, [items.length]);
@@ -381,7 +392,7 @@ export const PosSmartView = ({
             className="flex flex-col gap-2.5 flex-1 overflow-y-auto max-h-[calc(100vh-280px)] min-h-[360px] pr-1"
           >
             {items.map((item, index) => {
-              const isLastItem = item.product_id === lastAddedProductId;
+              const isLastItem = item.product_id === effectiveLastAddedId;
               const itemSubtotal =
                 "line_total" in item && typeof (item as { line_total?: number }).line_total === "number"
                   ? (item as { line_total: number }).line_total

@@ -302,6 +302,7 @@ export const usePosSale = (tenantId: string | null) => {
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [cartState, setCartState] = useState<PosCartItem[]>([]);
   const [discountsEnabled, setDiscountsEnabled] = useState(true);
+  const [lastAddedProductId, setLastAddedProductId] = useState<string | null>(null);
   const [saleTabs, setSaleTabs] = useState<PosSaleTab[]>([
     { id: "sale-1", label: "Venta 1", cart: [], selectedCustomerId: "" },
   ]);
@@ -1018,6 +1019,7 @@ export const usePosSale = (tenantId: string | null) => {
         ? roundAmount(options.overrideUnitPrice)
         : null;
 
+    setLastAddedProductId(product.id);
     setCartState((prev) => {
       const existing = prev.find((item) => item.product_id === product.id);
 
@@ -1032,40 +1034,38 @@ export const usePosSale = (tenantId: string | null) => {
             ? existing.unit_price
             : pricing.unitPrice;
 
-        return prev.map((item) =>
-          item.product_id === product.id
-            ? {
-                ...item,
-                quantity: nextQty,
-                unit_price: nextUnitPrice,
-                is_price_overridden: isPriceOverridden || forcedUnitPrice != null,
-                base_unit_price: roundAmount(product.price),
-                stock_available: product.stock_current,
-                price_list_id: pricing.priceListId,
-                price_list_name: pricing.priceListName,
-                price_list_is_active: pricing.priceListIsActive,
-                is_scale_item: item.is_scale_item || Boolean(options?.parsedScale),
-                scale_weight:
-                  options?.parsedScale?.weight != null
-                    ? roundQty((item.scale_weight ?? 0) + options.parsedScale.weight)
-                    : item.scale_weight,
-                scale_total_price:
-                  options?.parsedScale?.totalPrice != null
-                    ? roundAmount((item.scale_total_price ?? 0) + options.parsedScale.totalPrice)
-                    : item.scale_total_price,
-                scale_barcode: options?.parsedScale?.raw ?? item.scale_barcode,
-                is_manual_item: item.is_manual_item,
-                returnable_config: item.returnable_config ?? parseReturnableConfig(product.description),
-                returnable_status: item.returnable_status ?? "exchange",
-              }
-            : item
-        );
+        const updatedItem = {
+          ...existing,
+          quantity: nextQty,
+          unit_price: nextUnitPrice,
+          is_price_overridden: isPriceOverridden || forcedUnitPrice != null,
+          base_unit_price: roundAmount(product.price),
+          stock_available: product.stock_current,
+          price_list_id: pricing.priceListId,
+          price_list_name: pricing.priceListName,
+          price_list_is_active: pricing.priceListIsActive,
+          is_scale_item: existing.is_scale_item || Boolean(options?.parsedScale),
+          scale_weight:
+            options?.parsedScale?.weight != null
+              ? roundQty((existing.scale_weight ?? 0) + options.parsedScale.weight)
+              : existing.scale_weight,
+          scale_total_price:
+            options?.parsedScale?.totalPrice != null
+              ? roundAmount((existing.scale_total_price ?? 0) + options.parsedScale.totalPrice)
+              : existing.scale_total_price,
+          scale_barcode: options?.parsedScale?.raw ?? existing.scale_barcode,
+          is_manual_item: existing.is_manual_item,
+          returnable_config: existing.returnable_config ?? parseReturnableConfig(product.description),
+          returnable_status: existing.returnable_status ?? "exchange",
+        };
+
+        // El producto recién escaneado se mueve arriba de todo para visibilidad inmediata
+        return [updatedItem, ...prev.filter((item) => item.product_id !== product.id)];
       }
 
       const returnableConfig = parseReturnableConfig(product.description);
 
       return [
-        ...prev,
         {
           product_id: product.id,
           name: product.name,
@@ -1087,6 +1087,7 @@ export const usePosSale = (tenantId: string | null) => {
           returnable_config: returnableConfig,
           returnable_status: "exchange",
         },
+        ...prev,
       ];
     });
 
@@ -1115,8 +1116,8 @@ export const usePosSale = (tenantId: string | null) => {
     }
 
     const manualId = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setLastAddedProductId(manualId);
     setCartState((prev) => [
-      ...prev,
       {
         product_id: manualId,
         name,
@@ -1135,6 +1136,7 @@ export const usePosSale = (tenantId: string | null) => {
         scale_barcode: null,
         is_manual_item: true,
       },
+      ...prev,
     ]);
 
     return true;
@@ -1184,9 +1186,10 @@ export const usePosSale = (tenantId: string | null) => {
         setSelectedCustomerId(customer.id);
       }
 
+      setLastAddedProductId(debtItem.product_id);
       setCartState((prev) => [
-        ...prev.filter((i) => !i.is_debt_payment_item),
         debtItem,
+        ...prev.filter((i) => !i.is_debt_payment_item),
       ]);
 
       setFeedback({
@@ -1753,11 +1756,13 @@ export const usePosSale = (tenantId: string | null) => {
 
   const removeFromCart = (productId: string) => {
     setCartState((prev) => prev.filter((item) => item.product_id !== productId));
+    setLastAddedProductId((prev) => (prev === productId ? null : prev));
   };
 
   const clearCart = () => {
     setCartState([]);
     setDiscountsEnabled(true);
+    setLastAddedProductId(null);
   };
 
   const setSelectedCustomer = useCallback((customerId: string) => {
@@ -3163,6 +3168,7 @@ export const usePosSale = (tenantId: string | null) => {
     discountsEnabled,
     setDiscountsEnabled,
     toggleDiscounts,
+    lastAddedProductId,
     isLoading,
     isSubmitting,
     isMercadoPagoLoading,

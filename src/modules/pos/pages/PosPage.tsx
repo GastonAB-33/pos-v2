@@ -144,6 +144,7 @@ export const PosPage = () => {
     cartPromotionDiscountTotal,
     discountsEnabled,
     toggleDiscounts,
+    lastAddedProductId,
     isLoading,
     isSubmitting,
     isMercadoPagoLoading,
@@ -1380,6 +1381,7 @@ export const PosPage = () => {
           discountsEnabled={discountsEnabled}
           onToggleDiscounts={toggleDiscounts}
           promotionDiscountTotal={promotionDiscountTotal}
+          lastAddedProductId={lastAddedProductId}
           onCheckout={() => setIsCheckoutModalOpen(true)}
           userName={user?.fullName ?? "Operador"}
           operatorInitials={operatorInitials}
