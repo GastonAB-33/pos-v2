@@ -9,9 +9,10 @@ import { posCustomerProfilesService } from "@/services/pos-customer-profiles.ser
 import { auditService } from "@/services/audit.service";
 import { useToast } from "@/components/ui/useToast";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, DollarSign, Pencil, PlusCircle, RefreshCw } from "lucide-react";
+import { ArrowLeft, DollarSign, Package, Pencil, PlusCircle, RefreshCw } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { formatCustomerDocument } from "@/modules/configuracion/hooks/useEntityRequirements";
+import { parseCustomerPackageDebts, serializeCustomerPackageDebts } from "@/utils/returnable-packages";
 import type { Customer } from "@/types/entities";
 
 interface CustomerCurrentAccountPanelProps {
@@ -211,6 +212,69 @@ export const CustomerCurrentAccountPanel = ({
     return true;
   };
 
+  const packageDebts = useMemo(() => {
+    return parseCustomerPackageDebts(currentCustomer.observations);
+  }, [currentCustomer.observations]);
+
+  const handleReturnPackage = async (packageName: string, returnQty: number = 1) => {
+    if (!tenantId) return;
+    const currentDebts = { ...packageDebts };
+    const currentQty = currentDebts[packageName] || 0;
+    const newQty = Math.max(0, currentQty - returnQty);
+
+    if (newQty <= 0) {
+      delete currentDebts[packageName];
+    } else {
+      currentDebts[packageName] = newQty;
+    }
+
+    const updatedObservations = serializeCustomerPackageDebts(currentCustomer.observations, currentDebts);
+    try {
+      const updated = await customersService.update(tenantId, currentCustomer.id, {
+        code: currentCustomer.code,
+        full_name: currentCustomer.full_name,
+        document_type: currentCustomer.document_type,
+        document_number: currentCustomer.document_number,
+        fiscal_business_name: currentCustomer.fiscal_business_name,
+        fiscal_address: currentCustomer.fiscal_address,
+        fiscal_condition: currentCustomer.fiscal_condition,
+        price_list_id: currentCustomer.price_list_id,
+        email: currentCustomer.email,
+        phone: currentCustomer.phone,
+        address: currentCustomer.address,
+        observations: updatedObservations,
+        current_balance: currentCustomer.current_balance,
+        current_account_enabled: currentCustomer.current_account_enabled,
+        current_account_limit: currentCustomer.current_account_limit,
+        is_active: currentCustomer.is_active,
+      });
+
+      await auditService.createSafe(tenantId, {
+        user_id: userId,
+        module: "clientes",
+        action: "update",
+        entity_type: "customer",
+        entity_id: currentCustomer.id,
+        description: `Devolución de envase registrada: ${packageName} (${returnQty} u.)`,
+        metadata: {
+          returned_package: packageName,
+          returned_quantity: returnQty,
+          remaining_debts: currentDebts,
+        },
+      });
+
+      if (updated) {
+        setCurrentCustomer(updated);
+      } else {
+        setCurrentCustomer((prev) => ({ ...prev, observations: updatedObservations }));
+      }
+      toast.success(`Se registró la devolución de ${packageName}`);
+      onBalanceUpdated();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al registrar la devolución del envase");
+    }
+  };
+
   const canRegisterPayment = canWrite && Boolean(userId) && hasOpenCashSession;
   const canUpdatePricingRule = canWrite && Boolean(userId);
 
@@ -339,6 +403,52 @@ export const CustomerCurrentAccountPanel = ({
           </span>
         </article>
       </div>
+
+      {/* Envases retornables adeudados */}
+      {Object.keys(packageDebts).length > 0 && (
+        <div className="rounded-xl border border-amber-300 dark:border-amber-800/80 bg-amber-50/70 dark:bg-amber-950/30 p-3.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Package className="h-4 w-4 text-amber-700 dark:text-amber-400" />
+              <span className="text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-200">
+                Envases retornables pendientes
+              </span>
+            </div>
+            <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">
+              Control de envases físicos
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-1">
+            {Object.entries(packageDebts).map(([packageName, qty]) => (
+              <div
+                key={packageName}
+                className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 dark:border-slate-700 bg-white dark:bg-slate-900/90 p-2.5 shadow-xs"
+              >
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                    {packageName}
+                  </div>
+                  <div className="text-[11px] text-amber-700 dark:text-amber-400 font-bold">
+                    Adeuda: {qty} {qty === 1 ? "unidad" : "unidades"}
+                  </div>
+                </div>
+
+                {canWrite && (
+                  <button
+                    type="button"
+                    onClick={() => void handleReturnPackage(packageName, 1)}
+                    title={`Registrar devolución de 1 ${packageName}`}
+                    className="shrink-0 inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-xs transition hover:bg-emerald-700 active:scale-95 dark:bg-emerald-700 dark:hover:bg-emerald-600"
+                  >
+                    <span>✓ Recibir 1</span>
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {feedback ? <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>{feedback.message}</div> : null}
       {canWrite && !userId ? (

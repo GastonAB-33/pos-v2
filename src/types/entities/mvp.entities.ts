@@ -477,6 +477,10 @@ export interface BusinessSettings {
 
 export type PosCartBehavior = "merge_same_product" | "separate_lines";
 
+export type PosRoundingRule = "none" | "integer" | "10" | "50" | "100" | "500" | "1000";
+export type PosRoundingMode = "nearest" | "up" | "down";
+export type PosRoundingTarget = "cash_only" | "all_methods";
+
 export interface PosSettings {
   default_customer_id: string | null;
   default_payment_method_id: string | null;
@@ -485,6 +489,10 @@ export interface PosSettings {
   allow_negative_stock: boolean;
   barcode_scan_quantity: number;
   cart_behavior: PosCartBehavior;
+  rounding_enabled?: boolean;
+  rounding_rule?: PosRoundingRule;
+  rounding_mode?: PosRoundingMode;
+  rounding_target?: PosRoundingTarget;
 }
 
 export interface StockSettings {

@@ -4,7 +4,7 @@ import { cn } from "@/utils/cn";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
-import { Camera, FileText, RefreshCw, ShoppingCart, X } from "lucide-react";
+import { Camera, FileText, Moon, MoonStar, RefreshCw, ShoppingCart, Sun, X } from "lucide-react";
 import { useToast } from "@/components/ui/useToast";
 import { routePaths } from "@/config/routes";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -161,6 +161,7 @@ export const PosPage = () => {
     increaseQuantity,
     decreaseQuantity,
     removeFromCart,
+    cycleReturnableStatus,
     createOriginBank,
     mercadoPagoIntent,
     startMercadoPagoPayment,
@@ -190,6 +191,8 @@ export const PosPage = () => {
   const [isQuickProductModalOpen, setIsQuickProductModalOpen] = useState(false);
   const [lastNotFoundBarcode, setLastNotFoundBarcode] = useState<string>("");
   const posWindowMode = useUiStore((state) => state.posWindowMode);
+  const theme = useUiStore((state) => state.theme);
+  const cycleTheme = useUiStore((state) => state.cycleTheme);
   const isSmartPos = posWindowMode === "smart_pos";
   const [editingCartItemId, setEditingCartItemId] = useState<string | null>(null);
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
@@ -239,28 +242,30 @@ export const PosPage = () => {
   const shouldShowCashOpeningModal =
     canWritePos && !isCashGateResolving && !isOpeningCashSession && !openCashSessionId;
 
-  useEffect(() => {
-    if (!paymentMethods.length) {
-      setSelectedPaymentMethodId("");
-      return;
+  // Resuelve el ID del medio de pago predeterminado según la configuración
+  const getEffectiveDefaultPaymentMethodId = useCallback(() => {
+    if (!paymentMethods.length) return "";
+    const defaultId = posSettings.default_payment_method_id;
+    if (defaultId && paymentMethods.some((method) => method.id === defaultId)) {
+      return defaultId;
     }
-
-    setSelectedPaymentMethodId((current) => {
-      if (current && paymentMethods.some((method) => method.id === current)) {
-        return current;
-      }
-
-      const defaultPaymentMethodId = posSettings.default_payment_method_id;
-      if (
-        defaultPaymentMethodId &&
-        paymentMethods.some((method) => method.id === defaultPaymentMethodId)
-      ) {
-        return defaultPaymentMethodId;
-      }
-
-      return paymentMethods[0].id;
-    });
+    // Si no está configurado o no existe, priorizar Efectivo si existe, sino el primero
+    const cashMethod = paymentMethods.find(
+      (m) => normalizePaymentMethodCode(m.code) === "cash"
+    );
+    return cashMethod?.id ?? paymentMethods[0].id;
   }, [paymentMethods, posSettings.default_payment_method_id]);
+
+  useEffect(() => {
+    setSelectedPaymentMethodId(getEffectiveDefaultPaymentMethodId());
+  }, [getEffectiveDefaultPaymentMethodId]);
+
+  // Al abrir el modal de cobro, resetear al medio de pago predeterminado
+  useEffect(() => {
+    if (isCheckoutModalOpen) {
+      setSelectedPaymentMethodId(getEffectiveDefaultPaymentMethodId());
+    }
+  }, [isCheckoutModalOpen, getEffectiveDefaultPaymentMethodId]);
 
   useEffect(() => {
     const selectedMethod =
@@ -1338,6 +1343,7 @@ export const PosPage = () => {
           }}
           onRemove={removeFromCart}
           onClearCart={clearCart}
+          onCycleReturnableStatus={cycleReturnableStatus}
           onOpenDebtPaymentModal={() => setIsDebtPaymentModalOpen(true)}
           hasDebtPaymentInCart={Boolean(existingDebtItem)}
           debtPaymentAmount={debtPaymentTotal}
@@ -1358,7 +1364,8 @@ export const PosPage = () => {
           }}
           onScanBarcode={handleBarcodeScan}
           subtotal={checkoutSummary.subtotal}
-          total={checkoutSummary.subtotal}
+          total={checkoutSummary.total}
+          roundingAdjustment={checkoutSummary.roundingAdjustment}
           onCheckout={() => setIsCheckoutModalOpen(true)}
           userName={user?.fullName ?? "Operador"}
           operatorInitials={operatorInitials}
@@ -1421,6 +1428,23 @@ export const PosPage = () => {
                     Volver al panel
                   </button>
                 ) : null}
+                <button
+                  type="button"
+                  onClick={cycleTheme}
+                  className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
+                  title={`Tema: ${theme === "midnight" ? "Azul Medianoche" : theme === "dark" ? "Oscuro" : "Claro"}. Clic para cambiar.`}
+                >
+                  {theme === "midnight" ? (
+                    <MoonStar size={14} className="text-indigo-400" />
+                  ) : theme === "dark" ? (
+                    <Moon size={14} className="text-amber-300" />
+                  ) : (
+                    <Sun size={14} className="text-amber-500" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {theme === "midnight" ? "Azul" : theme === "dark" ? "Oscuro" : "Claro"}
+                  </span>
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -1562,7 +1586,8 @@ export const PosPage = () => {
                   subtotal={checkoutSummary.subtotal}
                   surchargeTotal={0}
                   paymentDiscountTotal={0}
-                  total={checkoutSummary.subtotal}
+                  roundingAdjustment={checkoutSummary.roundingAdjustment}
+                  total={checkoutSummary.total}
                   canWrite={canWritePos}
                   disabled={isSubmitting || isCashGateBlocking}
                   onBarcodeChange={setVisibleBarcodeValue}
@@ -1585,7 +1610,7 @@ export const PosPage = () => {
               <div>
                 <p className="text-xs uppercase tracking-[0.12em] text-slate-500">Carrito</p>
                 <p className="text-sm font-semibold text-slate-900">
-                  {cart.length} items | {currency.format(checkoutSummary.subtotal)}
+                  {cart.length} items | {currency.format(checkoutSummary.total)}
                 </p>
               </div>
               <button
@@ -1658,6 +1683,8 @@ export const PosPage = () => {
                 selectedPaymentMethodId={selectedPaymentMethodId}
                 isOnline={isOnline}
                 checkoutTotal={checkoutSummary.total}
+                rawCheckoutTotal={checkoutSummary.rawTotal}
+                roundingAdjustment={checkoutSummary.roundingAdjustment}
                 mercadoPagoIntent={mercadoPagoIntent}
                 mercadoPagoSettings={mercadoPagoSettings}
                 mercadoPagoStatus={mercadoPagoStatus}
@@ -1770,52 +1797,55 @@ export const PosPage = () => {
             focusScannerCapture();
           }, 0);
         }}
-        onSubmit={async (values, scope) => {
-          if (scope === "system_and_sale" && tenantId && !values.productId.startsWith("manual-")) {
-            try {
-              const existingProduct = products.find((p) => p.id === values.productId);
-              const costPrice = existingProduct?.cost_price ?? 0;
-              const vatPercent = existingProduct?.vat_percent ?? 21;
-              const computed = computePricingBackward({
-                precioCosto: costPrice,
-                precioFinal: values.unitPrice,
-                porcentajeIva: vatPercent,
-              });
-
-              const updated = await productsService.update(tenantId, values.productId, {
-                price: roundMoney(values.unitPrice),
-                price_without_vat: computed.precioSinIva,
-                profit_percent: computed.porcentajeGanancia,
-              });
-
-              if (updated) {
-                useProductsStore.getState().upsertProduct(updated);
-              }
-              void reload();
-
-              if (user?.id) {
-                void auditService.createSafe(tenantId, {
-                  user_id: user.id,
-                  module: "pos",
-                  action: "update_product_price",
-                  entity_type: "product",
-                  entity_id: values.productId,
-                  description: `Precio de venta actualizado desde POS para ${existingProduct?.name ?? values.name}: $${values.unitPrice}`,
-                  metadata: {
-                    previous_price: existingProduct?.price,
-                    next_price: values.unitPrice,
-                  },
-                });
-              }
-
-              toastSuccess("Precio de venta actualizado en el sistema y en la venta");
-            } catch (error) {
-              console.error("Error al actualizar precio en el sistema:", error);
-              toastError("No se pudo actualizar el precio en el catálogo, pero se aplicó a la venta");
-            }
-          }
-
+        onSubmit={(values, scope) => {
+          // 1. IMPACTO INMEDIATO EN EL CARRITO (0ms)
           updateCartItem(values);
+
+          // 2. Si se eligió guardar en catálogo, ejecutar en segundo plano sin frenar la terminal
+          if (scope === "system_and_sale" && tenantId && !values.productId.startsWith("manual-")) {
+            void (async () => {
+              try {
+                const existingProduct = products.find((p) => p.id === values.productId);
+                const costPrice = existingProduct?.cost_price ?? 0;
+                const vatPercent = existingProduct?.vat_percent ?? 21;
+                const computed = computePricingBackward({
+                  precioCosto: costPrice,
+                  precioFinal: values.unitPrice,
+                  porcentajeIva: vatPercent,
+                });
+
+                const updated = await productsService.update(tenantId, values.productId, {
+                  price: roundMoney(values.unitPrice),
+                  price_without_vat: computed.precioSinIva,
+                  profit_percent: computed.porcentajeGanancia,
+                });
+
+                if (updated) {
+                  useProductsStore.getState().upsertProduct(updated);
+                }
+
+                if (user?.id) {
+                  void auditService.createSafe(tenantId, {
+                    user_id: user.id,
+                    module: "pos",
+                    action: "update_product_price",
+                    entity_type: "product",
+                    entity_id: values.productId,
+                    description: `Precio de venta actualizado desde POS para ${existingProduct?.name ?? values.name}: $${values.unitPrice}`,
+                    metadata: {
+                      previous_price: existingProduct?.price,
+                      next_price: values.unitPrice,
+                    },
+                  });
+                }
+
+                toastSuccess("Precio actualizado en el sistema y en la venta");
+              } catch (error) {
+                console.error("Error al actualizar precio en el sistema:", error);
+                toastError("No se pudo sincronizar el precio con el catálogo");
+              }
+            })();
+          }
         }}
       />
 

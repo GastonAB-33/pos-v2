@@ -57,6 +57,8 @@ interface PosCheckoutPanelProps {
   selectedPaymentMethodId: string;
   isOnline: boolean;
   checkoutTotal: number;
+  rawCheckoutTotal?: number;
+  roundingAdjustment?: number;
   mercadoPagoIntent: MercadoPagoPaymentIntent | null;
   mercadoPagoSettings: MercadoPagoSettings;
   mercadoPagoStatus: MercadoPagoOperationalStatus;
@@ -169,6 +171,8 @@ export const PosCheckoutPanel = ({
   selectedPaymentMethodId,
   isOnline,
   checkoutTotal,
+  rawCheckoutTotal,
+  roundingAdjustment = 0,
   mercadoPagoIntent,
   mercadoPagoSettings,
   mercadoPagoStatus,
@@ -845,6 +849,14 @@ export const PosCheckoutPanel = ({
             <span className="rounded bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.2 font-mono text-[9px] font-bold text-emerald-800 dark:text-emerald-300">
               ARS
             </span>
+            {roundingAdjustment !== 0 && (
+              <span
+                className="rounded bg-blue-100 dark:bg-blue-950/80 px-1.5 py-0.2 font-mono text-[9px] font-bold text-blue-800 dark:text-blue-300"
+                title={`Subtotal original: ${currency.format(rawCheckoutTotal ?? (checkoutTotal - roundingAdjustment))}`}
+              >
+                Redondeo {roundingAdjustment > 0 ? `+${currency.format(roundingAdjustment)}` : currency.format(roundingAdjustment)}
+              </span>
+            )}
           </div>
           <span className="mt-0.5 text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight font-mono">
             {currency.format(checkoutTotal)}

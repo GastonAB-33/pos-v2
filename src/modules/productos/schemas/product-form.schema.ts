@@ -25,6 +25,9 @@ export const productFormSchema = z.object({
     .max(2_000_000, "La imagen es demasiado grande")
     .optional()
     .or(z.literal("")),
+  isReturnable: z.boolean().default(false),
+  returnablePackageName: z.string().optional().or(z.literal("")),
+  returnablePackagePrice: z.coerce.number().min(0).optional(),
 });
 
 export type ProductFormValues = z.infer<typeof productFormSchema>;

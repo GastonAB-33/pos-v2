@@ -65,6 +65,10 @@ const createDefaultPosSettings = (): PosSettings => ({
   allow_negative_stock: false,
   barcode_scan_quantity: 1,
   cart_behavior: "merge_same_product",
+  rounding_enabled: false,
+  rounding_rule: "none",
+  rounding_mode: "nearest",
+  rounding_target: "cash_only",
 });
 
 const createDefaultStockSettings = (): StockSettings => ({
@@ -183,6 +187,10 @@ const normalizeTenantSettings = (input: TenantSettings): TenantSettings => ({
     cart_behavior: "merge_same_product",
     barcode_scan_quantity: 1,
     allow_sale_without_customer: true,
+    rounding_enabled: input.pos?.rounding_enabled ?? false,
+    rounding_rule: input.pos?.rounding_rule ?? "none",
+    rounding_mode: input.pos?.rounding_mode ?? "nearest",
+    rounding_target: input.pos?.rounding_target ?? "cash_only",
   },
   stock: {
     ...createDefaultStockSettings(),

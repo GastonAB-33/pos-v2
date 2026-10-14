@@ -69,9 +69,9 @@ const similarityScore = (left: string, right: string): number => {
 };
 
 export const computeRealCost = (unitCost: number, discountPercent: number): number => {
-  const discount = Math.max(0, Math.min(99.99, discountPercent || 0));
+  const discount = Math.max(0, Math.min(100, discountPercent || 0));
   if (discount <= 0) return roundAmount(unitCost);
-  return roundAmount(unitCost / (1 - discount / 100));
+  return roundAmount(unitCost * (1 - discount / 100));
 };
 
 const toProductCreateInput = (values: ProductFormModalValues) => ({
@@ -305,11 +305,9 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         return 0;
       })();
 
-      const realCost = computeRealCost(costPrice, discountPct);
-
-      // Precio de venta calculado con % de ganancia e IVA aplicado sobre el precio real
+      // Precio de venta calculado con % de ganancia e IVA aplicado sobre el costo unitario base
       const calculatedNewSale = computePricingForward({
-        precioCosto: realCost,
+        precioCosto: costPrice,
         porcentajeGanancia: effectiveProfit,
         porcentajeIva: vatPercent,
       }).precioFinal;
@@ -337,22 +335,16 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
   };
 
   const setItemDiscountPercent = (productId: string, discountPercent: number) => {
-    const normalized = Math.max(0, Math.min(99.99, roundAmount(discountPercent)));
+    const normalized = Math.max(0, Math.min(100, roundAmount(discountPercent)));
     if (!Number.isFinite(normalized)) return;
 
     setCart((prev) =>
       prev.map((item) => {
         if (item.product_id !== productId) return item;
-        const realCost = computeRealCost(item.unit_cost, normalized);
-        const forward = computePricingForward({
-          precioCosto: realCost,
-          porcentajeGanancia: item.profit_percent,
-          porcentajeIva: item.vat_percent || 0,
-        });
+        // El descuento de proveedor se aplica directamente sobre el total a pagar del producto, no sobre el precio de venta al público
         return {
           ...item,
           discount_percent: normalized,
-          new_sale_price: forward.precioFinal,
         };
       })
     );
@@ -374,9 +366,8 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     setCart((prev) =>
       prev.map((item) => {
         if (item.product_id !== productId) return item;
-        const realCost = computeRealCost(normalized, item.discount_percent || 0);
         const forward = computePricingForward({
-          precioCosto: realCost,
+          precioCosto: normalized,
           porcentajeGanancia: item.profit_percent,
           porcentajeIva: item.vat_percent || 0,
         });
@@ -396,9 +387,8 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     setCart((prev) =>
       prev.map((item) => {
         if (item.product_id !== productId) return item;
-        const realCost = computeRealCost(item.unit_cost, item.discount_percent || 0);
         const forward = computePricingForward({
-          precioCosto: realCost,
+          precioCosto: item.unit_cost,
           porcentajeGanancia: normalized,
           porcentajeIva: item.vat_percent || 0,
         });
@@ -419,9 +409,8 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     setCart((prev) =>
       prev.map((item) => {
         if (item.product_id !== productId) return item;
-        const realCost = computeRealCost(item.unit_cost, item.discount_percent || 0);
         const backward = computePricingBackward({
-          precioCosto: realCost,
+          precioCosto: item.unit_cost,
           precioFinal: normalized,
           porcentajeIva: item.vat_percent || 0,
         });
@@ -442,9 +431,8 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     setCart((prev) =>
       prev.map((item) => {
         if (item.product_id !== productId) return item;
-        const realCost = computeRealCost(item.unit_cost, item.discount_percent || 0);
         const forward = computePricingForward({
-          precioCosto: realCost,
+          precioCosto: item.unit_cost,
           porcentajeGanancia: item.profit_percent,
           porcentajeIva: normalized || 0,
         });
@@ -498,12 +486,12 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     let totalDiscountAmount = 0;
 
     for (const item of cart) {
-      const realCost = computeRealCost(item.unit_cost, item.discount_percent || 0);
-      const unitSavings = roundAmount(realCost - item.unit_cost);
-      const lineTotal = roundAmount(item.quantity * item.unit_cost);
-      const lineSavings = roundAmount(item.quantity * unitSavings);
+      const grossLineTotal = roundAmount(item.quantity * item.unit_cost);
+      const discountPct = Math.max(0, Math.min(100, item.discount_percent || 0));
+      const lineSavings = roundAmount(grossLineTotal * (discountPct / 100));
+      const netLineTotal = roundAmount(grossLineTotal - lineSavings);
 
-      subtotal += lineTotal;
+      subtotal += netLineTotal;
       totalDiscountAmount += lineSavings;
       totalUnits += item.quantity + (item.bonified_quantity || 0);
     }
@@ -754,8 +742,10 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       });
 
       for (const item of cart) {
-        const realCost = computeRealCost(item.unit_cost, item.discount_percent || 0);
-        const lineTotal = roundAmount(item.quantity * item.unit_cost);
+        const grossLineTotal = roundAmount(item.quantity * item.unit_cost);
+        const discountPct = Math.max(0, Math.min(100, item.discount_percent || 0));
+        const lineSavings = roundAmount(grossLineTotal * (discountPct / 100));
+        const lineTotal = roundAmount(grossLineTotal - lineSavings);
         const totalIncomingQty = roundQty(item.quantity + (item.bonified_quantity || 0));
 
         await purchasesService.createItem(tenantId, {
@@ -787,23 +777,23 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         const newStock = roundQty(currentStock + totalIncomingQty);
 
         const forward = computePricingForward({
-          precioCosto: realCost,
+          precioCosto: item.unit_cost,
           porcentajeGanancia: item.profit_percent,
           porcentajeIva: item.vat_percent || 0,
         });
 
         const productUpdatePayload: Partial<Product> = {
           stock_current: newStock,
-          cost_price: realCost > 0 ? realCost : currentProduct?.cost_price,
+          cost_price: item.unit_cost > 0 ? item.unit_cost : currentProduct?.cost_price,
           vat_percent: item.vat_percent,
           profit_percent: item.profit_percent,
-          price: item.new_sale_price || forward.precioFinal,
+          price: item.update_sale_price ? (item.new_sale_price || forward.precioFinal) : (currentProduct?.price ?? item.current_sale_price),
           price_without_vat: forward.precioSinIva,
         };
 
         if (!item.update_sale_price && (currentProduct?.price || item.current_sale_price)) {
           const backward = computePricingBackward({
-            precioCosto: realCost,
+            precioCosto: item.unit_cost,
             precioFinal: currentProduct?.price ?? item.current_sale_price,
             porcentajeIva: item.vat_percent || 0,
           });

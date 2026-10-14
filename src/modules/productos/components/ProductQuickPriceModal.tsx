@@ -95,6 +95,14 @@ export const ProductQuickPriceModal = ({
   const [notFoundCode, setNotFoundCode] = useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
 
+  const handleOpenScanner = () => {
+    if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    searchInputRef.current?.blur();
+    setScannerOpen(true);
+  };
+
   // Campos de precios editables
   const [costPrice, setCostPrice] = useState<number>(0);
   const [profitPercent, setProfitPercent] = useState<number>(0);
@@ -172,9 +180,14 @@ export const ProductQuickPriceModal = ({
           setSearchQuery("");
         }
       } else if (!selectedProduct) {
-        setTimeout(() => {
-          searchInputRef.current?.focus();
-        }, 100);
+        const isMobile =
+          typeof window !== "undefined" &&
+          (window.innerWidth < 768 || window.matchMedia("(max-width: 768px)").matches);
+        if (!isMobile) {
+          setTimeout(() => {
+            searchInputRef.current?.focus();
+          }, 100);
+        }
       }
     } else {
       lastAppliedInitialQueryRef.current = null;
@@ -220,6 +233,11 @@ export const ProductQuickPriceModal = ({
         (window.innerWidth < 768 || window.matchMedia("(max-width: 768px)").matches);
       if (!isMobile) {
         searchInputRef.current?.focus({ preventScroll: true });
+      } else {
+        if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
+        searchInputRef.current?.blur();
       }
     }, 100);
   };
@@ -374,9 +392,19 @@ export const ProductQuickPriceModal = ({
         setSelectedProduct(null);
         setNotFoundCode(clean);
         setSearchQuery("");
-        setTimeout(() => {
-          searchInputRef.current?.focus();
-        }, 50);
+        const isMobile =
+          typeof window !== "undefined" &&
+          (window.innerWidth < 768 || window.matchMedia("(max-width: 768px)").matches);
+        if (!isMobile) {
+          setTimeout(() => {
+            searchInputRef.current?.focus();
+          }, 50);
+        } else {
+          if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+          }
+          searchInputRef.current?.blur();
+        }
       }
     }
   };
@@ -702,9 +730,19 @@ export const ProductQuickPriceModal = ({
     setAddedStock("");
     setFieldErrors({});
     setFlashStatus(null);
-    setTimeout(() => {
-      searchInputRef.current?.focus();
-    }, 50);
+    const isMobile =
+      typeof window !== "undefined" &&
+      (window.innerWidth < 768 || window.matchMedia("(max-width: 768px)").matches);
+    if (!isMobile) {
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 50);
+    } else {
+      if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+      searchInputRef.current?.blur();
+    }
   };
 
   if (!open) return null;
@@ -795,7 +833,7 @@ export const ProductQuickPriceModal = ({
             {/* Botón de cámara destacado con icono nítido y fácil de pulsar en móvil */}
             <button
               type="button"
-              onClick={() => setScannerOpen(true)}
+              onClick={handleOpenScanner}
               title="Abrir lector de cámara"
               aria-label="Escanear con cámara"
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 transition hover:border-emerald-500 hover:bg-emerald-50 hover:text-emerald-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-emerald-500/60 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400 shadow-xs"
@@ -838,19 +876,33 @@ export const ProductQuickPriceModal = ({
                     )}
                   </div>
 
-                  {onEditProduct && (
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    {/* Botón rápido para escanear siguiente con cámara sin teclado */}
                     <button
                       type="button"
-                      onClick={handleOpenEditProduct}
-                      disabled={!canWrite}
-                      title="Editar ficha completa (nombre, categoría, códigos, etc.)"
-                      aria-label="Editar ficha completa del producto"
-                      className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 shadow-2xs transition hover:border-brand-500 hover:bg-slate-100 hover:text-brand-600 active:scale-95 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-brand-400 dark:hover:bg-slate-700 dark:hover:text-brand-300"
+                      onClick={handleOpenScanner}
+                      title="Escanear el siguiente producto con la cámara"
+                      aria-label="Escanear siguiente producto con cámara"
+                      className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 shadow-2xs transition hover:border-emerald-500 hover:bg-emerald-100 active:scale-95 dark:border-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
                     >
-                      <Pencil className="h-3 w-3 text-slate-500 dark:text-slate-400" />
-                      <span className="text-[11px]">Editar ficha</span>
+                      <Camera className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-[11px]">Escanear otro</span>
                     </button>
-                  )}
+
+                    {onEditProduct && (
+                      <button
+                        type="button"
+                        onClick={handleOpenEditProduct}
+                        disabled={!canWrite}
+                        title="Editar ficha completa (nombre, categoría, códigos, etc.)"
+                        aria-label="Editar ficha completa del producto"
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 shadow-2xs transition hover:border-brand-500 hover:bg-slate-100 hover:text-brand-600 active:scale-95 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-brand-400 dark:hover:bg-slate-700 dark:hover:text-brand-300"
+                      >
+                        <Pencil className="h-3 w-3 text-slate-500 dark:text-slate-400" />
+                        <span className="text-[11px]">Editar ficha</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Título completo del producto: sin corte, con ancho total y salto de línea */}
@@ -1131,16 +1183,29 @@ export const ProductQuickPriceModal = ({
                 )}
 
                 {/* Botones de acción */}
-                <div className="flex items-center justify-between gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={handleResetForNextProduct}
-                    className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
-                    disabled={isSaving}
-                  >
-                    <RotateCcw size={14} />
-                    Consultar otro producto
-                  </button>
+                <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleResetForNextProduct}
+                      className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
+                      disabled={isSaving}
+                    >
+                      <RotateCcw size={14} />
+                      Consultar otro
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleOpenScanner}
+                      className="ui-btn-secondary text-xs inline-flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/40 hover:bg-emerald-100"
+                      disabled={isSaving}
+                      title="Abrir cámara para escanear el próximo producto"
+                    >
+                      <Camera size={14} className="text-emerald-600 dark:text-emerald-400" />
+                      Escanear próximo
+                    </button>
+                  </div>
 
                   <div className="flex items-center gap-2">
                     <button
@@ -1266,18 +1331,26 @@ export const ProductQuickPriceModal = ({
               <p className="mt-1.5 font-mono text-xs sm:text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900/60 inline-block px-3 py-1 rounded-lg max-w-full truncate">
                 "{notFoundCode}"
               </p>
-              {onCreateNewProduct && (
-                <div className="mt-3.5 sm:mt-5">
+              <div className="mt-3.5 sm:mt-5 flex flex-wrap items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenScanner}
+                  className="ui-btn-secondary inline-flex items-center justify-center gap-2 text-xs sm:text-sm py-2 px-3.5 font-semibold rounded-xl text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 bg-emerald-50/70 dark:bg-emerald-950/40"
+                >
+                  <Camera size={16} />
+                  Escanear otro con cámara
+                </button>
+                {onCreateNewProduct && (
                   <button
                     type="button"
                     onClick={() => attemptCreateNew(notFoundCode)}
-                    className="ui-btn-primary inline-flex items-center justify-center gap-2 text-xs sm:text-sm py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-md transition-transform active:scale-95 w-full sm:w-auto"
+                    className="ui-btn-primary inline-flex items-center justify-center gap-2 text-xs sm:text-sm py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-md transition-transform active:scale-95"
                   >
                     <Plus size={18} />
                     Crear producto nuevo con este código
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           ) : (
             /* Estado vacío: esperando búsqueda o escaneo */
@@ -1289,18 +1362,28 @@ export const ProductQuickPriceModal = ({
                 Esperando producto para consultar
               </h4>
               <p className="mt-1 max-w-sm text-xs text-slate-500 dark:text-slate-400">
-                Escaneá con la pistola de código de barras o buscá arriba para consultar el precio actual y modificarlo al instante.
+                Escaneá con la cámara del celular o pistola de código de barras para consultar el precio actual y modificarlo al instante.
               </p>
-              {onCreateNewProduct && (
+              <div className="mt-3.5 sm:mt-4 flex flex-wrap items-center justify-center gap-2">
                 <button
                   type="button"
-                  onClick={() => attemptCreateNew()}
-                  className="mt-3.5 sm:mt-4 ui-btn-secondary inline-flex items-center gap-1.5 text-xs py-1.5 px-3 font-semibold"
+                  onClick={handleOpenScanner}
+                  className="ui-btn-primary inline-flex items-center gap-2 text-xs py-2 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-xs"
                 >
-                  <Plus size={14} />
-                  Crear un producto nuevo
+                  <Camera size={16} />
+                  Escanear con cámara
                 </button>
-              )}
+                {onCreateNewProduct && (
+                  <button
+                    type="button"
+                    onClick={() => attemptCreateNew()}
+                    className="ui-btn-secondary inline-flex items-center gap-1.5 text-xs py-2 px-3 font-semibold"
+                  >
+                    <Plus size={14} />
+                    Crear un producto nuevo
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1378,8 +1461,18 @@ export const ProductQuickPriceModal = ({
         open={scannerOpen}
         title="Escanear código de producto"
         description="Apuntá la cámara al código de barras para consultarlo de inmediato."
-        onClose={() => setScannerOpen(false)}
+        onClose={() => {
+          if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+          }
+          searchInputRef.current?.blur();
+          setScannerOpen(false);
+        }}
         onDetected={(scannedBarcode) => {
+          if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+          }
+          searchInputRef.current?.blur();
           setScannerOpen(false);
           handleScannedBarcode(scannedBarcode);
         }}

@@ -57,10 +57,11 @@ export const PosQuickProductModal = ({
   const [unitPrice, setUnitPrice] = useState("");
   const [costPrice, setCostPrice] = useState("");
   const [stock, setStock] = useState("");
-  const [code, setCode] = useState(initialBarcode ?? "");
+  const [code, setCode] = useState("");
   const [barcode, setBarcode] = useState(initialBarcode ?? "");
   const [favorite, setFavorite] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -68,15 +69,16 @@ export const PosQuickProductModal = ({
     setSaveMode("catalog");
     setSaleMode("unit");
     setName(initialName ?? "");
-    setCategory(categories[0] ?? "General");
+    setCategory("");
     setQuantity("1");
     setUnitPrice("");
     setCostPrice("");
     setStock("");
-    setCode(cleanInitialBarcode);
+    setCode("");
     setBarcode(cleanInitialBarcode);
     setFavorite(true);
     setIsSubmitting(false);
+    setErrorMessage(null);
   }, [categories, initialBarcode, initialName, open]);
 
   const quantityLabel = saleMode === "weight" ? "Cantidad a vender (gramos)" : "Cantidad a vender";
@@ -110,7 +112,18 @@ export const PosQuickProductModal = ({
   const submit = async () => {
     if (isSubmitting || disabled) return;
 
+    if (!name.trim()) {
+      setErrorMessage("Por favor ingresa el nombre del producto.");
+      return;
+    }
+
+    if (saveMode === "catalog" && !category.trim()) {
+      setErrorMessage("Debes establecer una categoría para guardar el producto en el catálogo.");
+      return;
+    }
+
     setIsSubmitting(true);
+    setErrorMessage(null);
     try {
       const values = buildInput();
       const ok =
@@ -139,6 +152,12 @@ export const PosQuickProductModal = ({
           </div>
           <ModalCloseButton label="Cerrar producto rápido" onClick={onClose} disabled={isSubmitting} />
         </div>
+
+        {errorMessage && (
+          <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-semibold text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+            {errorMessage}
+          </div>
+        )}
 
         <div className="space-y-4">
           <div className="grid gap-2 sm:grid-cols-2">
@@ -184,13 +203,23 @@ export const PosQuickProductModal = ({
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Categoria</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                Categoría {saveMode === "catalog" ? <span className="text-red-500">*</span> : ""}
+              </label>
               <input
                 list="pos-quick-product-categories"
                 value={category}
-                onChange={(event) => setCategory(event.target.value)}
+                onChange={(event) => {
+                  setCategory(event.target.value);
+                  setErrorMessage(null);
+                }}
+                placeholder="Seleccionar o escribir categoría..."
                 className="ui-input"
                 autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-lpignore="true"
               />
               <datalist id="pos-quick-product-categories">
                 {categories.map((item) => (
@@ -312,7 +341,9 @@ export const PosQuickProductModal = ({
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Codigo interno</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Código interno <span className="text-xs text-slate-400 font-normal">(opcional)</span>
+                  </label>
                   <input
                     type="text"
                     autoComplete="off"
@@ -322,6 +353,7 @@ export const PosQuickProductModal = ({
                     data-lpignore="true"
                     data-form-type="other"
                     value={code}
+                    placeholder="Opcional"
                     onChange={(event) => setCode(event.target.value)}
                     className="ui-input"
                   />

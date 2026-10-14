@@ -2,13 +2,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Coins,
   FileText,
+  Moon,
+  MoonStar,
   Plus,
   RefreshCw,
   Search,
   ShoppingCart,
+  Sun,
   Trash2,
   X,
 } from "lucide-react";
+import { useUiStore } from "@/store/ui.store";
 import type { Product } from "@/types/entities";
 import type { PosCartItem } from "@/modules/pos/hooks/usePosSale";
 import {
@@ -34,6 +38,7 @@ export interface PosSmartViewProps {
   onEdit: (item: PosCartItem) => void;
   onRemove: (productId: string) => void;
   onClearCart: () => void;
+  onCycleReturnableStatus?: (productId: string) => void;
   disabled?: boolean;
   canWrite?: boolean;
   onOpenDebtPaymentModal?: () => void;
@@ -49,6 +54,7 @@ export interface PosSmartViewProps {
   // Totales y Cobro
   subtotal: number;
   total: number;
+  roundingAdjustment?: number;
   onCheckout: () => void;
 
   // Panel de funciones superior derecho
@@ -68,6 +74,7 @@ export const PosSmartView = ({
   onEdit,
   onRemove,
   onClearCart,
+  onCycleReturnableStatus,
   disabled = false,
   canWrite = true,
   onOpenDebtPaymentModal,
@@ -79,6 +86,7 @@ export const PosSmartView = ({
   onScanBarcode,
   subtotal,
   total,
+  roundingAdjustment = 0,
   onCheckout,
   userName,
   operatorInitials,
@@ -87,6 +95,9 @@ export const PosSmartView = ({
   onOpenReceipts,
   onOpenQuickProduct,
 }: PosSmartViewProps) => {
+  const theme = useUiStore((state) => state.theme);
+  const cycleTheme = useUiStore((state) => state.cycleTheme);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [searchScope, setSearchScope] = useState<ProductSearchScope>("all");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -366,6 +377,48 @@ export const PosSmartView = ({
                         </>
                       )}
                     </div>
+
+                    {/* Botón rápido de estado de envase retornable */}
+                    {item.returnable_config?.enabled && onCycleReturnableStatus ? (
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                          Envase ({item.returnable_config.packageName}):
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onCycleReturnableStatus(item.product_id)}
+                          disabled={disabled || !canWrite}
+                          className={cn(
+                            "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border transition shadow-2xs cursor-pointer",
+                            item.returnable_status === "charge"
+                              ? "bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/70 dark:text-amber-200 dark:border-amber-700 hover:bg-amber-200 dark:hover:bg-amber-900"
+                              : item.returnable_status === "owe"
+                              ? "bg-purple-100 text-purple-900 border-purple-300 dark:bg-purple-950/70 dark:text-purple-200 dark:border-purple-700 hover:bg-purple-200 dark:hover:bg-purple-900"
+                              : "bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950/70 dark:text-emerald-200 dark:border-emerald-700 hover:bg-emerald-200 dark:hover:bg-emerald-900"
+                          )}
+                          title="Hacé clic para cambiar: Canje mano a mano / Cobrar envase / Anotar en cuenta corriente"
+                        >
+                          {item.returnable_status === "charge" ? (
+                            <>
+                              <span>💰 Cobrar envase</span>
+                              <span className="font-extrabold text-[10px]">
+                                (+{currency.format(item.returnable_config.packagePrice * item.quantity)})
+                              </span>
+                            </>
+                          ) : item.returnable_status === "owe" ? (
+                            <>
+                              <span>📝 Debe envase</span>
+                              <span className="font-normal text-[10px]">(Cta. Cte.)</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>🔄 Canje</span>
+                              <span className="font-normal text-[10px]">(Trajo envase)</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
 
                   {/* Controles de cantidad táctiles compactos */}
@@ -457,15 +510,35 @@ export const PosSmartView = ({
               <span>Actualizar productos</span>
             </button>
 
-            <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800/90 bg-slate-50 dark:bg-slate-900/80 px-2.5 py-1.5">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-fuchsia-600 text-xs font-bold text-white shadow-sm">
-                {operatorInitials}
-              </span>
-              <div className="leading-tight">
-                <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate max-w-[110px]">
-                  {userName}
-                </p>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400">Operador de caja</p>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={cycleTheme}
+                className="flex items-center gap-1 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-2.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition shadow-2xs"
+                title={`Tema actual: ${theme === "midnight" ? "Azul Medianoche" : theme === "dark" ? "Oscuro" : "Claro"}. Clic para cambiar.`}
+              >
+                {theme === "midnight" ? (
+                  <MoonStar size={14} className="text-indigo-400" />
+                ) : theme === "dark" ? (
+                  <Moon size={14} className="text-amber-300" />
+                ) : (
+                  <Sun size={14} className="text-amber-500" />
+                )}
+                <span className="text-[11px] font-bold">
+                  {theme === "midnight" ? "Azul" : theme === "dark" ? "Oscuro" : "Claro"}
+                </span>
+              </button>
+
+              <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800/90 bg-slate-50 dark:bg-slate-900/80 px-2.5 py-1.5">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-fuchsia-600 text-xs font-bold text-white shadow-sm">
+                  {operatorInitials}
+                </span>
+                <div className="leading-tight">
+                  <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate max-w-[100px]">
+                    {userName}
+                  </p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Operador</p>
+                </div>
               </div>
             </div>
           </div>
@@ -549,6 +622,16 @@ export const PosSmartView = ({
                 <span>+{currency.format(debtPaymentAmount)}</span>
               </div>
             ) : null}
+
+            {roundingAdjustment !== 0 ? (
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                <span>Redondeo comercial</span>
+                <span className="font-semibold text-slate-900 dark:text-slate-200">
+                  {roundingAdjustment > 0 ? `+${currency.format(roundingAdjustment)}` : currency.format(roundingAdjustment)}
+                </span>
+              </div>
+            ) : null}
+
             <div className="flex items-baseline justify-between pt-2 border-t border-slate-200 dark:border-slate-800/80">
               <span className="text-sm font-bold text-slate-900 dark:text-slate-100">Total final</span>
               <span className="text-2xl font-black text-blue-600 dark:text-sky-400 tracking-tight">

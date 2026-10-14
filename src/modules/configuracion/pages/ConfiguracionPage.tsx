@@ -6,7 +6,9 @@ import {
   AlertTriangle,
   AppWindow,
   Building2,
+  Calculator,
   CheckCircle2,
+  Coins,
   ExternalLink,
   FileText,
   Package,
@@ -30,6 +32,7 @@ import { useAccountingCatalogs } from "@/modules/configuracion/hooks/useAccounti
 import { useConfiguracionModule } from "@/modules/configuracion/hooks/useConfiguracionModule";
 import { useUiStore, type UiFontSize } from "@/store/ui.store";
 import { cn } from "@/utils/cn";
+import { calculatePosRounding } from "@/utils/pos-rounding";
 import type { AppModule } from "@/types/modules";
 import type {
   AppearanceSettings,
@@ -37,6 +40,9 @@ import type {
   FacturacionSettings,
   MercadoPagoMode,
   BankAccount,
+  PosRoundingMode,
+  PosRoundingRule,
+  PosRoundingTarget,
   TenantSettings,
   TenantSettingsSectionKey,
 } from "@/types/entities";
@@ -874,6 +880,169 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   </p>
                 </button>
               </div>
+            </div>
+
+            {/* SECCIÓN ERGONÓMICA Y MINIMALISTA: REDONDEO FINAL DE PRECIO / TICKET */}
+            <div className="md:col-span-2 space-y-4 rounded-xl border border-slate-200/90 bg-white dark:border-slate-800 dark:bg-slate-900/60 p-4 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-3 dark:border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
+                    <Coins size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      Redondeo de Precios y Cobro en Caja
+                      <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:text-slate-300">
+                        {draft.pos.rounding_enabled ? "Activo" : "Desactivado"}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Evita centavos o monedas pequeñas redondeando el total de la venta a múltiplos de $10, $50, $100 o $1.000.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Switch de activación */}
+                <label className="pos-switch relative inline-flex shrink-0 cursor-pointer items-center self-start sm:self-auto">
+                  <input
+                    type="checkbox"
+                    checked={draft.pos.rounding_enabled ?? false}
+                    onChange={(e) =>
+                      updateSection("pos", {
+                        rounding_enabled: e.target.checked,
+                        rounding_rule: e.target.checked && (!draft.pos.rounding_rule || draft.pos.rounding_rule === "none") ? "100" : draft.pos.rounding_rule,
+                      })
+                    }
+                    className="peer sr-only"
+                    disabled={!canWriteConfiguracion}
+                  />
+                  <span className="pos-switch-track">
+                    <span className="pos-switch-thumb" />
+                  </span>
+                </label>
+              </div>
+
+              {draft.pos.rounding_enabled ? (
+                <div className="space-y-4 animate-in fade-in-50 duration-200">
+                  {/* Selector 1: Múltiplo / Magnitud de redondeo */}
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                      Múltiplo de Redondeo
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                      {[
+                        { id: "integer", label: "Al entero", desc: "$1 (Sin centavos)" },
+                        { id: "10", label: "Decena", desc: "A los $10" },
+                        { id: "50", label: "Cincuenta", desc: "A los $50" },
+                        { id: "100", label: "Centena", desc: "A los $100 (Sugerido)" },
+                        { id: "500", label: "Quinientos", desc: "A los $500" },
+                        { id: "1000", label: "Mil", desc: "A los $1.000" },
+                      ].map((opt) => {
+                        const isSelected = (draft.pos.rounding_rule ?? "100") === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => updateSection("pos", { rounding_rule: opt.id as PosRoundingRule })}
+                            disabled={!canWriteConfiguracion}
+                            className={cn(
+                              "flex flex-col rounded-lg border p-2.5 text-left transition text-xs",
+                              isSelected
+                                ? "border-amber-500 bg-amber-50/40 dark:border-amber-500 dark:bg-amber-950/30 text-amber-950 dark:text-amber-100 ring-2 ring-amber-500/20 font-bold"
+                                : "border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600"
+                            )}
+                          >
+                            <span className="flex items-center justify-between">
+                              <span className="font-bold">{opt.label}</span>
+                              {isSelected ? <CheckCircle2 size={13} className="text-amber-600 dark:text-amber-400" /> : null}
+                            </span>
+                            <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400 mt-0.5">
+                              {opt.desc}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {/* Selector 2: Criterio / Dirección matemática */}
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        Criterio de Redondeo
+                      </label>
+                      <select
+                        className="ui-input"
+                        value={draft.pos.rounding_mode ?? "nearest"}
+                        onChange={(e) => updateSection("pos", { rounding_mode: e.target.value as PosRoundingMode })}
+                        disabled={!canWriteConfiguracion}
+                      >
+                        <option value="nearest">Al más cercano (Estándar comercial)</option>
+                        <option value="up">Hacia arriba / Techo (A favor del comercio)</option>
+                        <option value="down">Hacia abajo / Piso (A favor del cliente)</option>
+                      </select>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-1">
+                        Determina si los importes intermedios van al múltiplo superior, inferior o más próximo.
+                      </span>
+                    </div>
+
+                    {/* Selector 3: Medios de pago alcanzados */}
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        Aplicación por Medio de Pago
+                      </label>
+                      <select
+                        className="ui-input"
+                        value={draft.pos.rounding_target ?? "cash_only"}
+                        onChange={(e) => updateSection("pos", { rounding_target: e.target.value as PosRoundingTarget })}
+                        disabled={!canWriteConfiguracion}
+                      >
+                        <option value="cash_only">Solo Efectivo (Recomendado para dar vuelto)</option>
+                        <option value="all_methods">Todos los medios de pago (Efectivo, Tarjetas, MP, Transferencias)</option>
+                      </select>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-1">
+                        En transferencias y tarjetas el cobro digital puede ser exacto al centavo.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* VISTA PREVIA SIMULADA EN TIEMPO REAL */}
+                  {(() => {
+                    const sampleAmount = 4347.5;
+                    const preview = calculatePosRounding(sampleAmount, {
+                      enabled: true,
+                      rule: draft.pos.rounding_rule ?? "100",
+                      mode: draft.pos.rounding_mode ?? "nearest",
+                      target: "all_methods",
+                      isCashPayment: true,
+                    });
+
+                    return (
+                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/40 p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                          <Calculator size={16} className="text-amber-500 shrink-0" />
+                          <span>
+                            Ejemplo en vivo: Total calculado: <strong className="font-mono text-slate-900 dark:text-white">$4.347,50</strong>
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 font-mono">
+                          <span className="text-slate-500">
+                            Ajuste: {preview.adjustmentAmount > 0 ? `+$${preview.adjustmentAmount.toFixed(2)}` : `-$${Math.abs(preview.adjustmentAmount).toFixed(2)}`}
+                          </span>
+                          <span className="text-slate-400">➔</span>
+                          <span className="rounded-lg bg-emerald-100 dark:bg-emerald-950/70 px-2 py-1 font-bold text-emerald-800 dark:text-emerald-300 text-sm">
+                            Cobro final: ${preview.roundedAmount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-slate-200 dark:border-slate-800 p-3 text-xs text-slate-500 dark:text-slate-400">
+                  El cobro en POS se realizará por el valor numérico exacto con dos decimales de centavos (ej: $1.234,75).
+                </div>
+              )}
             </div>
           </div>
         </section>
