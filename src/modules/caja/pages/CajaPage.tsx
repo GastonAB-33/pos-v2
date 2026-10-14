@@ -541,25 +541,25 @@ export const CajaPage = () => {
       {/* MODAL: Movimiento Manual (con altura máxima y scroll para evitar desbordes) */}
       {isManualMovementModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="w-full max-w-lg max-h-[88vh] flex flex-col bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden">
-            <header className="shrink-0 px-4 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/70">
+          <div className="w-full max-w-lg max-h-[88vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+            <header className="shrink-0 px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/70 dark:bg-slate-800/60">
               <div className="flex items-center gap-2">
-                <ArrowLeftRight className="h-4 w-4 text-slate-500" />
-                <h3 className="text-xs font-semibold text-slate-800">Movimiento Manual de Caja</h3>
+                <ArrowLeftRight className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-100">Movimiento Manual de Caja</h3>
               </div>
               <ModalCloseButton onClick={() => setIsManualMovementModalOpen(false)} />
             </header>
 
             {/* Selector de Pestañas Ingreso / Egreso */}
             <div className="shrink-0 px-4 pt-3 pb-1">
-              <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-lg">
+              <div className="grid grid-cols-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
                 <button
                   type="button"
                   onClick={() => setManualMovementTab("income")}
-                  className={`h-7 text-xs font-semibold rounded-md transition-colors ${
+                  className={`h-7 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
                     manualMovementTab === "income"
-                      ? "bg-white text-emerald-700 shadow-xs"
-                      : "text-slate-600 hover:text-slate-900"
+                      ? "bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                   }`}
                 >
                   + Ingreso
@@ -567,10 +567,10 @@ export const CajaPage = () => {
                 <button
                   type="button"
                   onClick={() => setManualMovementTab("expense")}
-                  className={`h-7 text-xs font-semibold rounded-md transition-colors ${
+                  className={`h-7 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
                     manualMovementTab === "expense"
-                      ? "bg-white text-rose-700 shadow-xs"
-                      : "text-slate-600 hover:text-slate-900"
+                      ? "bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-400 shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                   }`}
                 >
                   - Retiro / Egreso
@@ -612,11 +612,11 @@ export const CajaPage = () => {
       {/* MODAL: Cierre de Caja */}
       {isCloseCashModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="w-full max-w-xl max-h-[88vh] flex flex-col bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden">
-            <header className="shrink-0 px-4 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/70">
+          <div className="w-full max-w-xl max-h-[88vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+            <header className="shrink-0 px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/70 dark:bg-slate-800/60">
               <div className="flex items-center gap-2">
-                <Lock className="h-4 w-4 text-slate-500" />
-                <h3 className="text-xs font-semibold text-slate-800">Cierre de Caja y Arqueo de Turno</h3>
+                <Lock className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-100">Cierre de Caja y Arqueo de Turno</h3>
               </div>
               <ModalCloseButton onClick={() => setIsCloseCashModalOpen(false)} />
             </header>
@@ -624,28 +624,28 @@ export const CajaPage = () => {
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {currentSession ? (
                 <>
-                  <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200/70">
+                  <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-lg border border-slate-200/70 dark:border-slate-700">
                     <div>
-                      <span className="text-slate-500 text-[11px]">Cobros por venta:</span>
-                      <p className="font-semibold text-slate-900">
+                      <span className="text-slate-500 dark:text-slate-400 text-[11px]">Cobros por venta:</span>
+                      <p className="font-semibold text-slate-900 dark:text-slate-100">
                         {formatMoney(currentSessionIncomeSummary.salePaymentsTotal)}
                       </p>
                     </div>
                     <div>
-                      <span className="text-slate-500 text-[11px]">Ingresos manuales:</span>
-                      <p className="font-semibold text-slate-900">
+                      <span className="text-slate-500 dark:text-slate-400 text-[11px]">Ingresos manuales:</span>
+                      <p className="font-semibold text-slate-900 dark:text-slate-100">
                         {formatMoney(currentSessionIncomeSummary.manualIncomesTotal)}
                       </p>
                     </div>
                     <div>
-                      <span className="text-slate-500 text-[11px]">Ajustes positivos:</span>
-                      <p className="font-semibold text-slate-900">
+                      <span className="text-slate-500 dark:text-slate-400 text-[11px]">Ajustes positivos:</span>
+                      <p className="font-semibold text-slate-900 dark:text-slate-100">
                         {formatMoney(currentSessionIncomeSummary.positiveAdjustmentsTotal)}
                       </p>
                     </div>
                     <div>
-                      <span className="text-slate-500 text-[11px]">Total ingresos del turno:</span>
-                      <p className="font-bold text-emerald-700">
+                      <span className="text-slate-500 dark:text-slate-400 text-[11px]">Total ingresos del turno:</span>
+                      <p className="font-bold text-emerald-700 dark:text-emerald-400">
                         {formatMoney(currentSessionIncomeSummary.totalIncomes)}
                       </p>
                     </div>
@@ -660,7 +660,7 @@ export const CajaPage = () => {
                   />
                 </>
               ) : (
-                <div className="p-4 text-center text-xs text-rose-600 bg-rose-50 rounded-lg border border-rose-200">
+                <div className="p-4 text-center text-xs text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/60 rounded-lg border border-rose-200 dark:border-rose-800/80">
                   No hay una caja abierta para cerrar.
                 </div>
               )}
@@ -672,9 +672,9 @@ export const CajaPage = () => {
       {/* MODAL: Resumen de Ingresos / Egresos / Total Esperado */}
       {openSummaryModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md max-h-[88vh] flex flex-col bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden">
-            <header className="shrink-0 px-4 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/70">
-              <h3 className="text-xs font-semibold text-slate-800">
+          <div className="w-full max-w-md max-h-[88vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+            <header className="shrink-0 px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/70 dark:bg-slate-800/60">
+              <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-100">
                 {openSummaryModal === "incomes"
                   ? "Detalle de Ingresos del Turno"
                   : openSummaryModal === "expenses"
@@ -688,9 +688,9 @@ export const CajaPage = () => {
               {dailySessionBreakdown ? (
                 openSummaryModal === "incomes" ? (
                   <div className="space-y-2">
-                    <div className="flex justify-between items-center pb-2 border-b border-slate-100 text-xs">
-                      <span className="text-slate-500">Total Ingresos:</span>
-                      <span className="font-bold text-emerald-700">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800 text-xs">
+                      <span className="text-slate-500 dark:text-slate-400">Total Ingresos:</span>
+                      <span className="font-bold text-emerald-700 dark:text-emerald-400">
                         {formatMoney(dailySessionBreakdown.incomes.total)}
                       </span>
                     </div>
@@ -700,26 +700,26 @@ export const CajaPage = () => {
                         {dailySessionBreakdown.incomes.items.map((item) => (
                           <div
                             key={item.code}
-                            className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/60 px-3 py-2 text-xs"
+                            className="flex items-center justify-between rounded-lg border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/60 px-3 py-2 text-xs"
                           >
-                            <span className="text-slate-700">{item.label}</span>
-                            <span className="font-semibold text-slate-900">
+                            <span className="text-slate-700 dark:text-slate-300 font-medium">{item.label}</span>
+                            <span className="font-semibold text-slate-900 dark:text-slate-100">
                               {formatMoney(item.amount)}
                             </span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-400 text-center py-4">
+                      <p className="text-xs text-slate-400 dark:text-slate-500 text-center py-4">
                         No hay ingresos en esta sesión.
                       </p>
                     )}
                   </div>
                 ) : openSummaryModal === "expenses" ? (
                   <div className="space-y-2">
-                    <div className="flex justify-between items-center pb-2 border-b border-slate-100 text-xs">
-                      <span className="text-slate-500">Total Egresos:</span>
-                      <span className="font-bold text-rose-700">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-800 text-xs">
+                      <span className="text-slate-500 dark:text-slate-400">Total Egresos:</span>
+                      <span className="font-bold text-rose-700 dark:text-rose-400">
                         {formatMoney(dailySessionBreakdown.expenses.total)}
                       </span>
                     </div>
@@ -729,48 +729,48 @@ export const CajaPage = () => {
                         {dailySessionBreakdown.expenses.items.map((item) => (
                           <div
                             key={item.code}
-                            className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/60 px-3 py-2 text-xs"
+                            className="flex items-center justify-between rounded-lg border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/60 px-3 py-2 text-xs"
                           >
-                            <span className="text-slate-700">{item.label}</span>
-                            <span className="font-semibold text-rose-700">
+                            <span className="text-slate-700 dark:text-slate-300 font-medium">{item.label}</span>
+                            <span className="font-semibold text-rose-700 dark:text-rose-400">
                               -{formatMoney(item.amount)}
                             </span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-400 text-center py-4">
+                      <p className="text-xs text-slate-400 dark:text-slate-500 text-center py-4">
                         No hay egresos en esta sesión.
                       </p>
                     )}
                   </div>
                 ) : (
                   <div className="space-y-2.5">
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
                       Cálculo de control para verificar el efectivo real en caja:
                     </p>
-                    <div className="space-y-2 rounded-lg border border-slate-200/80 bg-slate-50/70 p-3 text-xs">
-                      <div className="flex justify-between text-slate-700">
+                    <div className="space-y-2 rounded-lg border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60 p-3 text-xs">
+                      <div className="flex justify-between text-slate-700 dark:text-slate-300">
                         <span>Fondo de apertura:</span>
-                        <span className="font-semibold text-slate-900">
+                        <span className="font-semibold text-slate-900 dark:text-slate-100">
                           {formatMoney(dailySessionBreakdown.totalCash.openingAmount)}
                         </span>
                       </div>
-                      <div className="flex justify-between text-emerald-700">
+                      <div className="flex justify-between text-emerald-700 dark:text-emerald-400">
                         <span>+ Total ingresos:</span>
                         <span className="font-semibold">
                           +{formatMoney(dailySessionBreakdown.totalCash.incomes)}
                         </span>
                       </div>
-                      <div className="flex justify-between text-rose-700">
+                      <div className="flex justify-between text-rose-700 dark:text-rose-400">
                         <span>- Total egresos:</span>
                         <span className="font-semibold">
                           -{formatMoney(dailySessionBreakdown.totalCash.expenses)}
                         </span>
                       </div>
-                      <div className="border-t border-slate-200 pt-2 flex justify-between text-xs font-bold text-slate-900">
+                      <div className="border-t border-slate-200 dark:border-slate-700 pt-2 flex justify-between text-xs font-bold text-slate-900 dark:text-slate-100">
                         <span>Saldo esperado:</span>
-                        <span className="text-emerald-700">
+                        <span className="text-emerald-700 dark:text-emerald-400">
                           {formatMoney(dailySessionBreakdown.totalCash.expectedBalance)}
                         </span>
                       </div>
@@ -778,7 +778,7 @@ export const CajaPage = () => {
                   </div>
                 )
               ) : (
-                <p className="text-xs text-slate-400 text-center py-4">
+                <p className="text-xs text-slate-400 dark:text-slate-500 text-center py-4">
                   No hay datos disponibles.
                 </p>
               )}
@@ -790,11 +790,11 @@ export const CajaPage = () => {
       {/* MODAL: Cuenta Corriente */}
       {isCurrentAccountModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="w-full max-w-3xl max-h-[88vh] flex flex-col bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden">
-            <header className="shrink-0 px-4 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/70">
+          <div className="w-full max-w-3xl max-h-[88vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+            <header className="shrink-0 px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/70 dark:bg-slate-800/60">
               <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-slate-500" />
-                <h3 className="text-xs font-semibold text-slate-800">
+                <Users className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-100">
                   Resumen de Cuenta Corriente del Día
                 </h3>
               </div>
@@ -802,9 +802,9 @@ export const CajaPage = () => {
             </header>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 Jornada analizada:{" "}
-                <span className="font-semibold text-slate-800">
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
                   {dailyDate ? new Date(`${dailyDate}T00:00:00`).toLocaleDateString("es-AR") : "-"}
                 </span>
               </p>
@@ -812,44 +812,44 @@ export const CajaPage = () => {
               {currentAccountDailySummary ? (
                 <>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <div className="p-2.5 rounded-lg border border-slate-200/80 bg-slate-50">
-                      <span className="text-[10px] uppercase font-medium text-slate-500">
+                    <div className="p-2.5 rounded-lg border border-slate-200/80 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60">
+                      <span className="text-[10px] uppercase font-medium text-slate-500 dark:text-slate-400">
                         Clientes con saldo
                       </span>
-                      <p className="text-base font-bold text-slate-900 mt-0.5">
+                      <p className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
                         {currentAccountDailySummary.customersCount}
                       </p>
                     </div>
-                    <div className="p-2.5 rounded-lg border border-slate-200/80 bg-slate-50">
-                      <span className="text-[10px] uppercase font-medium text-slate-500">
+                    <div className="p-2.5 rounded-lg border border-slate-200/80 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60">
+                      <span className="text-[10px] uppercase font-medium text-slate-500 dark:text-slate-400">
                         Débitos del día
                       </span>
-                      <p className="text-base font-bold text-slate-900 mt-0.5">
+                      <p className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
                         {formatMoney(currentAccountDailySummary.totalDebitsAmount)}
                       </p>
                     </div>
-                    <div className="p-2.5 rounded-lg border border-slate-200/80 bg-slate-50">
-                      <span className="text-[10px] uppercase font-medium text-slate-500">
+                    <div className="p-2.5 rounded-lg border border-slate-200/80 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60">
+                      <span className="text-[10px] uppercase font-medium text-slate-500 dark:text-slate-400">
                         Pagos del día
                       </span>
-                      <p className="text-base font-bold text-emerald-700 mt-0.5">
+                      <p className="text-base font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">
                         {formatMoney(currentAccountDailySummary.totalPaymentsAmount)}
                       </p>
                     </div>
-                    <div className="p-2.5 rounded-lg border border-slate-200/80 bg-slate-50">
-                      <span className="text-[10px] uppercase font-medium text-slate-500">
+                    <div className="p-2.5 rounded-lg border border-slate-200/80 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60">
+                      <span className="text-[10px] uppercase font-medium text-slate-500 dark:text-slate-400">
                         Saldo global CC
                       </span>
-                      <p className="text-base font-bold text-slate-900 mt-0.5">
+                      <p className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
                         {formatMoney(currentAccountDailySummary.totalCurrentBalance)}
                       </p>
                     </div>
                   </div>
 
                   {currentAccountDailySummary.customers.length ? (
-                    <div className="max-h-60 overflow-auto rounded-lg border border-slate-200/80">
+                    <div className="max-h-60 overflow-auto rounded-lg border border-slate-200/80 dark:border-slate-800">
                       <table className="w-full text-left text-xs">
-                        <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100">
+                        <thead className="bg-slate-50 dark:bg-slate-900 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800">
                           <tr>
                             <th className="py-2 px-3">Cliente</th>
                             <th className="py-2 px-3 text-right">Débitos</th>
@@ -858,22 +858,22 @@ export const CajaPage = () => {
                             <th className="py-2 px-3 text-right">Saldo total</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
+                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900/60">
                           {currentAccountDailySummary.customers.map((c) => (
-                            <tr key={c.customerId} className="hover:bg-slate-50/70">
-                              <td className="py-2 px-3 font-medium text-slate-800">
+                            <tr key={c.customerId} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors">
+                              <td className="py-2 px-3 font-medium text-slate-800 dark:text-slate-200">
                                 {c.customerName}
                               </td>
-                              <td className="py-2 px-3 text-right font-medium text-slate-700">
+                              <td className="py-2 px-3 text-right font-medium text-slate-700 dark:text-slate-300">
                                 {formatMoney(c.dailyDebitsAmount)}
                               </td>
-                              <td className="py-2 px-3 text-right font-medium text-emerald-600">
+                              <td className="py-2 px-3 text-right font-medium text-emerald-600 dark:text-emerald-400">
                                 {formatMoney(c.dailyPaymentsAmount)}
                               </td>
-                              <td className="py-2 px-3 text-right font-medium text-slate-800">
+                              <td className="py-2 px-3 text-right font-medium text-slate-800 dark:text-slate-200">
                                 {formatMoney(c.dailyNetAmount)}
                               </td>
-                              <td className="py-2 px-3 text-right font-bold text-slate-900">
+                              <td className="py-2 px-3 text-right font-bold text-slate-900 dark:text-slate-100">
                                 {formatMoney(c.currentBalance)}
                               </td>
                             </tr>
@@ -882,13 +882,13 @@ export const CajaPage = () => {
                       </table>
                     </div>
                   ) : (
-                    <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-slate-200/70">
+                    <div className="p-6 text-center text-xs text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/40 rounded-lg border border-slate-200/70 dark:border-slate-800">
                       No hay registros de cuenta corriente para esta jornada.
                     </div>
                   )}
                 </>
               ) : (
-                <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-lg border border-slate-200/70">
+                <div className="p-6 text-center text-xs text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/40 rounded-lg border border-slate-200/70 dark:border-slate-800">
                   No hay datos disponibles para calcular el resumen de cuenta corriente.
                 </div>
               )}
@@ -900,13 +900,13 @@ export const CajaPage = () => {
       {/* MODAL: Detalle de Movimientos del Día */}
       {isDailyDetailModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="w-full max-w-5xl max-h-[88vh] flex flex-col bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden">
-            <header className="shrink-0 px-4 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/70">
+          <div className="w-full max-w-5xl max-h-[88vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+            <header className="shrink-0 px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/70 dark:bg-slate-800/60">
               <div>
-                <h3 className="text-xs font-semibold text-slate-800">
+                <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-100">
                   Movimientos de la Jornada
                 </h3>
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-slate-400 dark:text-slate-500">
                   Fecha:{" "}
                   {activeDetailDate
                     ? new Date(`${activeDetailDate}T00:00:00`).toLocaleDateString("es-AR")
@@ -923,7 +923,7 @@ export const CajaPage = () => {
                   onChange={(event) =>
                     setMovementTypeFilter(event.target.value as typeof movementTypeFilter)
                   }
-                  className="h-8 text-xs border border-slate-200 rounded-lg px-2.5 bg-slate-50/70 text-slate-700 focus:outline-none focus:bg-white focus:ring-1 focus:ring-slate-900 transition-colors"
+                  className="h-8 text-xs border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-slate-900 dark:focus:ring-slate-400 transition-colors"
                 >
                   <option value="all">Todos los movimientos</option>
                   <option value="sale_payment">Solo Cobros de Venta</option>
@@ -931,13 +931,13 @@ export const CajaPage = () => {
                   <option value="expense">Solo Egresos / Retiros</option>
                   <option value="adjustment">Solo Ajustes</option>
                 </select>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-slate-400 dark:text-slate-500">
                   {detailMovements.length} movimientos
                 </span>
               </div>
 
               {isLoading ? (
-                <div className="p-8 text-center text-xs text-slate-500">
+                <div className="p-8 text-center text-xs text-slate-500 dark:text-slate-400">
                   Cargando movimientos...
                 </div>
               ) : (
@@ -956,9 +956,9 @@ export const CajaPage = () => {
       {/* MODAL: Comprobante / Ticket / Factura */}
       {isSaleDocumentModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="w-full max-w-2xl max-h-[88vh] flex flex-col bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden">
-            <header className="shrink-0 px-4 py-3 border-b border-slate-100 flex justify-between items-center bg-slate-50/70">
-              <h3 className="text-xs font-semibold text-slate-800">Comprobante de Venta</h3>
+          <div className="w-full max-w-2xl max-h-[88vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+            <header className="shrink-0 px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/70 dark:bg-slate-800/60">
+              <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-100">Comprobante de Venta</h3>
               <ModalCloseButton
                 onClick={() => {
                   setIsSaleDocumentModalOpen(false);
@@ -972,11 +972,11 @@ export const CajaPage = () => {
 
             <div className="flex-1 overflow-y-auto p-4">
               {isSaleDocumentLoading ? (
-                <div className="p-8 text-center text-xs text-slate-500">
+                <div className="p-8 text-center text-xs text-slate-500 dark:text-slate-400">
                   Cargando comprobante...
                 </div>
               ) : saleDocumentError ? (
-                <div className="p-4 text-xs text-rose-700 bg-rose-50 rounded-lg border border-rose-200">
+                <div className="p-4 text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/60 rounded-lg border border-rose-200 dark:border-rose-800/80">
                   {saleDocumentError}
                 </div>
               ) : selectedReceipt ? (
@@ -990,7 +990,7 @@ export const CajaPage = () => {
                   }}
                 />
               ) : (
-                <div className="p-8 text-center text-xs text-slate-400">
+                <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500">
                   No hay comprobante disponible.
                 </div>
               )}

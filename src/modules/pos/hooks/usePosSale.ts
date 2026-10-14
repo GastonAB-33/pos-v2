@@ -58,6 +58,7 @@ export interface PosCartItem {
   scale_total_price: number | null;
   scale_barcode: string | null;
   is_manual_item: boolean;
+  is_price_overridden?: boolean;
   is_debt_payment_item?: boolean;
   debt_customer_id?: string | null;
   debt_customer_name?: string | null;
@@ -122,6 +123,7 @@ export interface PosCartItemEditInput {
   category: string;
   quantity: number;
   unitPrice: number;
+  saleMode?: "unit" | "weight";
 }
 
 export interface PosSaleTab {
@@ -759,6 +761,8 @@ export const usePosSale = (tenantId: string | null) => {
     [getCustomerPriceList, tenantId]
   );
 
+  const previousCustomerIdRef = useRef<string | null>(null);
+
   const recalculateCartPricesForCustomer = useCallback(
     async (customerId: string | null) => {
       const cartSnapshot = cartRef.current;
@@ -768,6 +772,14 @@ export const usePosSale = (tenantId: string | null) => {
         cartSnapshot.map(async (item) => {
           const product = products.find((candidate) => candidate.id === item.product_id);
           if (!product) return item;
+
+          // Si el usuario modificó manualmente el precio del producto, nunca sobreescribirlo
+          if (item.is_price_overridden) {
+            return {
+              ...item,
+              stock_available: product.stock_current,
+            };
+          }
 
           const pricing = await resolvePricingForProduct(product, customerId);
           const hasCustomerPriceList = Boolean(pricing.priceListId);
@@ -804,7 +816,11 @@ export const usePosSale = (tenantId: string | null) => {
   );
 
   useEffect(() => {
-    void recalculateCartPricesForCustomer(selectedCustomerId || null);
+    const currentId = selectedCustomerId || null;
+    if (previousCustomerIdRef.current !== currentId) {
+      previousCustomerIdRef.current = currentId;
+      void recalculateCartPricesForCustomer(currentId);
+    }
   }, [recalculateCartPricesForCustomer, selectedCustomerId]);
 
   const promotionsResolution = useMemo(
@@ -973,11 +989,14 @@ export const usePosSale = (tenantId: string | null) => {
       const existing = prev.find((item) => item.product_id === product.id);
 
       if (existing) {
+        const isPriceOverridden = Boolean(existing.is_price_overridden);
         const nextUnitPrice =
           forcedUnitPrice != null
             ? roundAmount(
                 (existing.quantity * existing.unit_price + normalizedQty * forcedUnitPrice) / nextQty
               )
+            : isPriceOverridden
+            ? existing.unit_price
             : pricing.unitPrice;
 
         return prev.map((item) =>
@@ -986,6 +1005,7 @@ export const usePosSale = (tenantId: string | null) => {
                 ...item,
                 quantity: nextQty,
                 unit_price: nextUnitPrice,
+                is_price_overridden: isPriceOverridden || forcedUnitPrice != null,
                 base_unit_price: roundAmount(product.price),
                 stock_available: product.stock_current,
                 price_list_id: pricing.priceListId,
@@ -1020,6 +1040,7 @@ export const usePosSale = (tenantId: string | null) => {
           sale_mode: product.sale_mode,
           quantity: normalizedQty,
           unit_price: forcedUnitPrice ?? pricing.unitPrice,
+          is_price_overridden: forcedUnitPrice != null,
           base_unit_price: roundAmount(product.price),
           stock_available: product.stock_current,
           price_list_id: pricing.priceListId,
@@ -1666,6 +1687,8 @@ export const usePosSale = (tenantId: string | null) => {
               quantity: normalizedQty,
               unit_price: normalizedPrice,
               base_unit_price: item.is_manual_item ? normalizedPrice : item.base_unit_price,
+              is_price_overridden: true,
+              sale_mode: input.saleMode ?? target.sale_mode,
             }
           : item
       );

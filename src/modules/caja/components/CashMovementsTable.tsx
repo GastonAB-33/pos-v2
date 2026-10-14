@@ -90,7 +90,7 @@ export const CashMovementsTable = ({
       columnHelper.accessor("created_at", {
         header: "Fecha / Hora",
         cell: (info) => (
-          <span className="whitespace-nowrap text-slate-500">
+          <span className="whitespace-nowrap text-slate-500 dark:text-slate-400">
             {new Date(info.getValue()).toLocaleString("es-AR", {
               day: "2-digit",
               month: "2-digit",
@@ -107,27 +107,27 @@ export const CashMovementsTable = ({
           const type = info.getValue();
           if (type === "expense") {
             return (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-rose-50 text-rose-700 border border-rose-200/60 whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-200/60 dark:border-rose-800/80 whitespace-nowrap">
                 <ArrowUpRight className="h-3 w-3" /> Egreso
               </span>
             );
           }
           if (type === "income") {
             return (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60 whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/80 whitespace-nowrap">
                 <ArrowDownLeft className="h-3 w-3" /> Ingreso
               </span>
             );
           }
           if (type === "sale_payment") {
             return (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200/60 whitespace-nowrap">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/80 whitespace-nowrap">
                 <ReceiptIcon className="h-3 w-3" /> Cobro venta
               </span>
             );
           }
           return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200/60 whitespace-nowrap">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/80 whitespace-nowrap">
               <Sliders className="h-3 w-3" /> Ajuste
             </span>
           );
@@ -139,10 +139,10 @@ export const CashMovementsTable = ({
         cell: (info) => {
           const movement = info.row.original;
           return (
-            <div className="font-medium text-slate-800">
+            <div className="font-medium text-slate-800 dark:text-slate-200">
               {formatReference(movement, saleNumbersById)}
               {movement.notes && (
-                <p className="text-[10px] text-slate-400 font-normal mt-0.5">{movement.notes}</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-normal mt-0.5">{movement.notes}</p>
               )}
             </div>
           );
@@ -152,11 +152,11 @@ export const CashMovementsTable = ({
         header: "Usuario",
         cell: (info) => {
           const userId = info.getValue();
-          if (!userId) return <span className="text-slate-400">Sistema</span>;
+          if (!userId) return <span className="text-slate-400 dark:text-slate-500">Sistema</span>;
           const name = usersById[userId] ?? userId;
           return (
-            <div className="flex items-center gap-1 text-slate-600 whitespace-nowrap">
-              <User className="h-3 w-3 text-slate-400" />
+            <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+              <User className="h-3 w-3 text-slate-400 dark:text-slate-500" />
               <span>{name}</span>
             </div>
           );
@@ -171,7 +171,7 @@ export const CashMovementsTable = ({
           return (
             <div
               className={`text-right font-semibold whitespace-nowrap ${
-                isNegative ? "text-rose-600" : "text-emerald-600"
+                isNegative ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"
               }`}
             >
               {isNegative ? "-" : "+"} {currency.format(Math.abs(signedAmount))}
@@ -185,16 +185,16 @@ export const CashMovementsTable = ({
         cell: (info) => {
           const movement = info.row.original;
           if (movement.movement_type !== "sale_payment" || !movement.reference_id) {
-            return <div className="text-right text-slate-400">-</div>;
+            return <div className="text-right text-slate-400 dark:text-slate-600">-</div>;
           }
           return (
             <div className="text-right">
               <button
                 type="button"
-                className="h-6 inline-flex items-center gap-1 px-2 text-[11px] font-medium text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-md transition-colors shadow-xs"
+                className="h-6 inline-flex items-center gap-1 px-2 text-[11px] font-medium text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-md transition-colors shadow-xs cursor-pointer"
                 onClick={() => onViewSaleDocument?.(movement.reference_id!)}
               >
-                <FileText className="h-3 w-3 text-slate-400" />
+                <FileText className="h-3 w-3 text-slate-400 dark:text-slate-500" />
                 Ticket
               </button>
             </div>

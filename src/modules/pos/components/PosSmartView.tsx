@@ -22,6 +22,7 @@ import {
   type ProductSearchScope,
 } from "@/utils/search";
 import { cn } from "@/utils/cn";
+import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
 
 const currency = new Intl.NumberFormat("es-AR", {
   style: "currency",
@@ -29,12 +30,16 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
+const kgToGrams = (quantityKg: number): number => Number((quantityKg * 1000).toFixed(3));
+const gramsToKg = (quantityGrams: number): number => Number((quantityGrams / 1000).toFixed(3));
+
 export interface PosSmartViewProps {
   // Carrito
   items: PosCartItem[];
   isHighlighted?: boolean;
   onIncrease: (productId: string) => void;
   onDecrease: (productId: string) => void;
+  onSetQuantity?: (productId: string, quantity: number) => void;
   onEdit: (item: PosCartItem) => void;
   onRemove: (productId: string) => void;
   onClearCart: () => void;
@@ -71,6 +76,7 @@ export const PosSmartView = ({
   isHighlighted = false,
   onIncrease,
   onDecrease,
+  onSetQuantity,
   onEdit,
   onRemove,
   onClearCart,
@@ -97,6 +103,18 @@ export const PosSmartView = ({
 }: PosSmartViewProps) => {
   const theme = useUiStore((state) => state.theme);
   const cycleTheme = useUiStore((state) => state.cycleTheme);
+
+  const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setQuantityDrafts((current) => {
+      const itemIds = new Set(items.map((item) => item.product_id));
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([productId]) => itemIds.has(productId))
+      );
+      return Object.keys(next).length === Object.keys(current).length ? current : next;
+    });
+  }, [items]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchScope, setSearchScope] = useState<ProductSearchScope>("all");
@@ -421,36 +439,114 @@ export const PosSmartView = ({
                     ) : null}
                   </div>
 
-                  {/* Controles de cantidad táctiles compactos */}
-                  <div className="flex items-center gap-2 shrink-0">
+                  {/* Controles de cantidad táctiles interactivos */}
+                  <div className="flex flex-col items-center sm:items-end gap-1 shrink-0">
                     {item.is_debt_payment_item ? (
                       <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800/50">
                         Pago único
                       </span>
                     ) : (
-                      <div className="flex items-center rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-900/80 p-0.5 shadow-2xs">
+                      <div className="flex items-center rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-900/90 p-0.5 shadow-2xs">
                         <button
                           type="button"
                           onClick={() => onDecrease(item.product_id)}
                           disabled={disabled || !canWrite}
                           className="w-7 h-7 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center text-xs font-bold transition disabled:opacity-40"
-                          title="Disminuir cantidad"
+                          title={item.sale_mode === "weight" ? "Disminuir 50g" : "Disminuir cantidad"}
                         >
                           -
                         </button>
-                        <span className="min-w-[44px] px-1 text-center font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 tabular-nums">
-                          {item.sale_mode === "weight" ? `${item.quantity} kg` : item.quantity}
-                        </span>
+                        <div className="flex items-center px-1">
+                          <input
+                            type="number"
+                            step="any"
+                            min={0}
+                            placeholder="0"
+                            value={
+                              quantityDrafts[item.product_id] ??
+                              (item.sale_mode === "weight"
+                                ? String(kgToGrams(item.quantity))
+                                : String(item.quantity))
+                            }
+                            onFocus={(event) =>
+                              handleNumericInputFocus(event, {
+                                isNew: true,
+                                onClear: () =>
+                                  setQuantityDrafts((current) => ({
+                                    ...current,
+                                    [item.product_id]: "",
+                                  })),
+                              })
+                            }
+                            onChange={(event) => {
+                              const nextValue = event.target.value;
+                              setQuantityDrafts((current) => ({
+                                ...current,
+                                ...{ [item.product_id]: nextValue },
+                              }));
+                              const parsedInput = Number(nextValue);
+                              if (nextValue.trim() && Number.isFinite(parsedInput) && parsedInput >= 0 && onSetQuantity) {
+                                onSetQuantity(
+                                  item.product_id,
+                                  item.sale_mode === "weight" ? gramsToKg(parsedInput) : parsedInput
+                                );
+                              }
+                            }}
+                            onBlur={(event) => {
+                              handleNumericInputBlur(event, "0", () => {
+                                setQuantityDrafts((current) => ({
+                                  ...current,
+                                  ...{ [item.product_id]: "0" },
+                                }));
+                                onSetQuantity?.(item.product_id, 0);
+                              });
+                              const rawValue = quantityDrafts[item.product_id];
+                              if (rawValue != null && onSetQuantity) {
+                                const parsedInput = Number(rawValue);
+                                if (Number.isFinite(parsedInput) && parsedInput >= 0) {
+                                  onSetQuantity(
+                                    item.product_id,
+                                    item.sale_mode === "weight" ? gramsToKg(parsedInput) : parsedInput
+                                  );
+                                }
+                              }
+                              setQuantityDrafts((current) => {
+                                const { [item.product_id]: _discard, ...next } = current;
+                                return next;
+                              });
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.currentTarget.blur();
+                              }
+                            }}
+                            className="w-14 sm:w-16 h-7 bg-transparent text-center font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 focus:outline-none tabular-nums"
+                            title={
+                              item.sale_mode === "weight"
+                                ? "Tipeá los gramos libremente (ej: 260)"
+                                : "Cantidad en unidades"
+                            }
+                            disabled={disabled || !canWrite}
+                          />
+                          <span className="text-[10px] font-semibold text-slate-400 select-none">
+                            {item.sale_mode === "weight" ? "g" : "u."}
+                          </span>
+                        </div>
                         <button
                           type="button"
                           onClick={() => onIncrease(item.product_id)}
                           disabled={disabled || !canWrite}
                           className="w-7 h-7 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center text-xs font-bold transition disabled:opacity-40"
-                          title="Aumentar cantidad"
+                          title={item.sale_mode === "weight" ? "Aumentar 50g" : "Aumentar cantidad"}
                         >
                           +
                         </button>
                       </div>
+                    )}
+                    {item.sale_mode === "weight" && (
+                      <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 tabular-nums">
+                        = {Number(item.quantity.toFixed(3))} kg
+                      </span>
                     )}
                   </div>
 

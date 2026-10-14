@@ -217,7 +217,7 @@ export const PosCart = ({
       ) : (
         <div className="flex-1 min-h-[140px] max-h-[calc(100dvh-18rem)] space-y-1.5 overflow-y-auto pr-1">
           {items.map((item) => {
-            const qtyStep = item.sale_mode === "weight" ? 50 : 1;
+            const qtyStep = item.sale_mode === "weight" ? "any" : 1;
 
             return (
               <article
@@ -284,69 +284,74 @@ export const PosCart = ({
                       <input
                         type="number"
                         step={qtyStep}
-                      min={0}
-                      placeholder="0"
-                      title={
-                        item.sale_mode === "weight"
-                          ? "Cantidad en gramos"
-                          : "Cantidad en unidades"
-                      }
-                      value={quantityDrafts[item.product_id] ?? quantityToInputValue(item)}
-                      onFocus={(event) =>
-                        handleNumericInputFocus(event, {
-                          isNew: true,
-                          onClear: () =>
-                            setQuantityDrafts((current) => ({
-                              ...current,
-                              [item.product_id]: "",
-                            })),
-                        })
-                      }
-                      onChange={(event) => {
-                        const nextValue = event.target.value;
-                        setQuantityDrafts((current) => ({
-                          ...current,
-                          [item.product_id]: nextValue,
-                        }));
-
-                        const parsedInput = Number(nextValue);
-                        if (nextValue.trim() && Number.isFinite(parsedInput) && parsedInput >= 0) {
-                          onSetQuantity(
-                            item.product_id,
-                            item.sale_mode === "weight" ? gramsToKg(parsedInput) : parsedInput
-                          );
+                        min={0}
+                        placeholder="0"
+                        title={
+                          item.sale_mode === "weight"
+                            ? "Cantidad en gramos"
+                            : "Cantidad en unidades"
                         }
-                      }}
-                      onBlur={(event) => {
-                        handleNumericInputBlur(event, "0", () => {
+                        value={quantityDrafts[item.product_id] ?? quantityToInputValue(item)}
+                        onFocus={(event) =>
+                          handleNumericInputFocus(event, {
+                            isNew: true,
+                            onClear: () =>
+                              setQuantityDrafts((current) => ({
+                                ...current,
+                                [item.product_id]: "",
+                              })),
+                          })
+                        }
+                        onChange={(event) => {
+                          const nextValue = event.target.value;
                           setQuantityDrafts((current) => ({
                             ...current,
-                            [item.product_id]: "0",
+                            [item.product_id]: nextValue,
                           }));
-                          onSetQuantity(item.product_id, 0);
-                        });
-                        commitQuantityDraft(item);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.currentTarget.blur();
-                        }
-                      }}
-                      className="h-6 w-14 rounded-lg border border-slate-300 bg-white text-center text-xs font-bold text-slate-900 focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                      disabled={disabled || !canWrite}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => onIncrease(item.product_id)}
-                      disabled={disabled || !canWrite}
-                      className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                    >
-                      +
-                    </button>
-                    {item.sale_mode === "weight" ? (
-                      <span className="text-[10px] font-medium text-slate-400">g</span>
-                    ) : null}
-                  </div>
+
+                          const parsedInput = Number(nextValue);
+                          if (nextValue.trim() && Number.isFinite(parsedInput) && parsedInput >= 0) {
+                            onSetQuantity(
+                              item.product_id,
+                              item.sale_mode === "weight" ? gramsToKg(parsedInput) : parsedInput
+                            );
+                          }
+                        }}
+                        onBlur={(event) => {
+                          handleNumericInputBlur(event, "0", () => {
+                            setQuantityDrafts((current) => ({
+                              ...current,
+                              [item.product_id]: "0",
+                            }));
+                            onSetQuantity(item.product_id, 0);
+                          });
+                          commitQuantityDraft(item);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.currentTarget.blur();
+                          }
+                        }}
+                        className="h-6 w-14 rounded-lg border border-slate-300 bg-white text-center text-xs font-bold text-slate-900 focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        disabled={disabled || !canWrite}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => onIncrease(item.product_id)}
+                        disabled={disabled || !canWrite}
+                        className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-300 bg-slate-50 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                      >
+                        +
+                      </button>
+                      {item.sale_mode === "weight" ? (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-medium text-slate-400">g</span>
+                          <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 tabular-nums">
+                            ({Number(item.quantity.toFixed(3))} kg)
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
                   )}
 
                   <div className="flex items-center gap-1">

@@ -286,10 +286,18 @@ export const PosPage = () => {
       ),
     [products]
   );
-  const editingCartItem = useMemo(
-    () => cart.find((item) => item.product_id === editingCartItemId) ?? null,
-    [cart, editingCartItemId]
-  );
+  const editingCartItem = useMemo(() => {
+    if (!editingCartItemId) return null;
+    const cartItem = cart.find((item) => item.product_id === editingCartItemId);
+    if (!cartItem) return null;
+    const product = products.find((p) => p.id === cartItem.product_id);
+    const barcode = primaryBarcodes[cartItem.product_id] ?? null;
+    return {
+      ...cartItem,
+      code: product?.code ?? null,
+      barcode,
+    };
+  }, [cart, editingCartItemId, products, primaryBarcodes]);
   const existingDebtItem = useMemo(
     () => cart.find((item) => item.is_debt_payment_item) ?? null,
     [cart]
@@ -1334,6 +1342,7 @@ export const PosPage = () => {
           isHighlighted={isCartHighlighted}
           onIncrease={increaseQuantity}
           onDecrease={decreaseQuantity}
+          onSetQuantity={setCartItemQuantity}
           onEdit={(item) => {
             if (item.is_debt_payment_item) {
               setIsDebtPaymentModalOpen(true);
@@ -1818,6 +1827,7 @@ export const PosPage = () => {
                   price: roundMoney(values.unitPrice),
                   price_without_vat: computed.precioSinIva,
                   profit_percent: computed.porcentajeGanancia,
+                  ...(values.saleMode ? { sale_mode: values.saleMode } : {}),
                 });
 
                 if (updated) {
@@ -1831,18 +1841,19 @@ export const PosPage = () => {
                     action: "update_product_price",
                     entity_type: "product",
                     entity_id: values.productId,
-                    description: `Precio de venta actualizado desde POS para ${existingProduct?.name ?? values.name}: $${values.unitPrice}`,
+                    description: `Producto actualizado desde POS para ${existingProduct?.name ?? values.name}: $${values.unitPrice}${values.saleMode ? ` (${values.saleMode === "weight" ? "pesable" : "por unidad"})` : ""}`,
                     metadata: {
                       previous_price: existingProduct?.price,
                       next_price: values.unitPrice,
+                      sale_mode: values.saleMode,
                     },
                   });
                 }
 
-                toastSuccess("Precio actualizado en el sistema y en la venta");
+                toastSuccess("Producto actualizado en el sistema y en la venta");
               } catch (error) {
-                console.error("Error al actualizar precio en el sistema:", error);
-                toastError("No se pudo sincronizar el precio con el catálogo");
+                console.error("Error al actualizar producto en el sistema:", error);
+                toastError("No se pudo sincronizar con el catálogo");
               }
             })();
           }
