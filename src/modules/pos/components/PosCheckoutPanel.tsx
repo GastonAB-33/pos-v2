@@ -11,6 +11,7 @@ import {
   QrCode,
   Receipt,
   UserCheck,
+  Users,
   Wallet,
   X,
 } from "lucide-react";
@@ -290,7 +291,11 @@ export const PosCheckoutPanel = ({
   // Montos asignados a cada opción de pago { [optionId]: number }
   const [allocatedAmounts, setAllocatedAmounts] = useState<Record<string, number>>({});
   const [amountInputs, setAmountInputs] = useState<Record<string, string>>({});
+  // Métodos de pago con monto confirmado/establecido { [optionId]: boolean }
+  const [lockedMethodIds, setLockedMethodIds] = useState<Record<string, boolean>>({});
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [isReadyToSubmit, setIsReadyToSubmit] = useState(false);
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // Inicializar con el medio de pago predeterminado o efectivo
   const isInitializedRef = useRef(false);
@@ -309,6 +314,7 @@ export const PosCheckoutPanel = ({
       const initialOption = paymentOptions[chosenIndex];
 
       setHighlightedIndex(chosenIndex);
+      setIsReadyToSubmit(false);
       setAllocatedAmounts({
         [initialOption.id]: checkoutTotal,
       });
@@ -346,10 +352,20 @@ export const PosCheckoutPanel = ({
     return (allocatedAmounts[ccOption.id] || 0) > 0;
   }, [allocatedAmounts, paymentOptions]);
 
-  // Actualizar el monto de un método
+  // Actualizar el monto de un método cuando el usuario escribe
   const updateOptionAmount = useCallback(
     (optionId: string, rawValue: string) => {
       setSubmitError(null);
+      setIsReadyToSubmit(false);
+
+      // Si el usuario edita el monto, se desmarca como establecido hasta presionar Enter
+      setLockedMethodIds((prev) => {
+        if (!prev[optionId]) return prev;
+        const next = { ...prev };
+        delete next[optionId];
+        return next;
+      });
+
       setAmountInputs((prev) => ({ ...prev, [optionId]: rawValue }));
 
       const clean = rawValue.replace(",", ".");
@@ -368,26 +384,89 @@ export const PosCheckoutPanel = ({
     []
   );
 
-  // Asignar el total pendiente al método seleccionado
-  const assignPendingToOption = useCallback(
-    (optionId: string) => {
-      setSubmitError(null);
-      const currentVal = allocatedAmounts[optionId] || 0;
-      const otherTotals = totalAssigned - currentVal;
-      const availableToAssign = Number(Math.max(0, checkoutTotal - otherTotals).toFixed(2));
+  // Limpiar el monto asignado a un método
+  const clearOptionAmount = useCallback((optionId: string) => {
+    setSubmitError(null);
+    setIsReadyToSubmit(false);
+    setLockedMethodIds((prev) => {
+      const next = { ...prev };
+      delete next[optionId];
+      return next;
+    });
+    setAmountInputs((prev) => {
+      const next = { ...prev };
+      delete next[optionId];
+      return next;
+    });
+    setAllocatedAmounts((prev) => {
+      const next = { ...prev };
+      delete next[optionId];
+      return next;
+    });
+  }, []);
 
-      if (availableToAssign <= 0) return;
+  // Desplazar el resto pendiente dinámicamente al método objetivo
+  const shiftRemainderToOption = useCallback(
+    (targetOption: PosPaymentOption) => {
+      if (lockedMethodIds[targetOption.id]) {
+        // Si el método ya está establecido, limpiamos los flotantes no bloqueados
+        setAllocatedAmounts((prev) => {
+          const next: Record<string, number> = {};
+          for (const [id, val] of Object.entries(prev)) {
+            if (lockedMethodIds[id]) {
+              next[id] = val;
+            }
+          }
+          return next;
+        });
+        setAmountInputs((prev) => {
+          const next: Record<string, string> = {};
+          for (const [id, val] of Object.entries(prev)) {
+            if (lockedMethodIds[id]) {
+              next[id] = val;
+            }
+          }
+          return next;
+        });
+        return;
+      }
 
-      setAllocatedAmounts((prev) => ({
-        ...prev,
-        [optionId]: availableToAssign,
-      }));
-      setAmountInputs((prev) => ({
-        ...prev,
-        [optionId]: availableToAssign.toFixed(2),
-      }));
+      // Calcular la suma de lo que ya está establecido
+      const lockedSum = Object.entries(allocatedAmounts).reduce((acc, [id, val]) => {
+        if (lockedMethodIds[id] && id !== targetOption.id) {
+          return acc + (val || 0);
+        }
+        return acc;
+      }, 0);
+      const remainder = Number(Math.max(0, checkoutTotal - lockedSum).toFixed(2));
+
+      setAllocatedAmounts((prev) => {
+        const next: Record<string, number> = {};
+        for (const [id, val] of Object.entries(prev)) {
+          if (lockedMethodIds[id] && id !== targetOption.id) {
+            next[id] = val;
+          }
+        }
+        if (remainder > 0) {
+          next[targetOption.id] = remainder;
+        }
+        return next;
+      });
+
+      setAmountInputs((prev) => {
+        const next: Record<string, string> = {};
+        for (const [id, val] of Object.entries(prev)) {
+          if (lockedMethodIds[id] && id !== targetOption.id) {
+            next[id] = val;
+          }
+        }
+        if (remainder > 0) {
+          next[targetOption.id] = remainder.toFixed(2);
+        }
+        return next;
+      });
     },
-    [allocatedAmounts, checkoutTotal, totalAssigned]
+    [allocatedAmounts, checkoutTotal, lockedMethodIds]
   );
 
   // Manejo de envío final de la venta
@@ -510,12 +589,16 @@ export const PosCheckoutPanel = ({
 
   const panelRef = useRef<HTMLElement | null>(null);
 
-  // Autofocus del panel al montarse
+  // Autofocus del panel al montarse para capturar teclas inmediatamente
   useEffect(() => {
     panelRef.current?.focus();
+    const timer = window.setTimeout(() => {
+      panelRef.current?.focus();
+    }, 50);
+    return () => window.clearTimeout(timer);
   }, []);
 
-  // Seleccionar un método de pago y asignar el total si se hace clic
+  // Seleccionar un método de pago y asignar el resto si se hace clic
   const selectOption = useCallback(
     (targetIndex: number) => {
       if (paymentOptions.length === 0) return;
@@ -525,75 +608,163 @@ export const PosCheckoutPanel = ({
 
       setHighlightedIndex(clampedIndex);
       onPaymentMethodChange(targetOption.paymentMethodId);
-      setAllocatedAmounts({ [targetOption.id]: checkoutTotal });
-      setAmountInputs({ [targetOption.id]: checkoutTotal.toFixed(2) });
+      setIsReadyToSubmit(false);
+
+      shiftRemainderToOption(targetOption);
+
+      window.setTimeout(() => {
+        const el = inputRefs.current[targetOption.id];
+        if (el) {
+          el.focus();
+          el.select();
+        }
+      }, 20);
     },
-    [checkoutTotal, onPaymentMethodChange, paymentOptions]
+    [onPaymentMethodChange, paymentOptions, shiftRemainderToOption]
   );
 
-  // Listener global de teclado para asegurar navegación fluida con flechas y flujo de Enter en 2 pasos
+  // Listener global de teclado para navegación ágil y flujo de Enter en 3 pasos
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       // Si el modal de búsqueda de clientes está abierto, ignorar teclado global
       if (isCustomerModalOpen) return;
 
       const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
-      const isTyping =
-        (targetTag === "input" && (e.target as HTMLInputElement).type !== "button") ||
-        targetTag === "textarea";
+      const activeInputEl = targetTag === "input" ? (e.target as HTMLInputElement) : null;
+      const isEditingAmount = Boolean(activeInputEl && activeInputEl.type === "number");
 
-      // Flecha abajo: solo mueve el foco/resaltado (no asigna el monto hasta que se presione Enter)
+      // Flecha abajo: navega al siguiente método desplazando el monto pendiente dinámicamente
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setHighlightedIndex((prev) =>
-          paymentOptions.length > 0 ? (prev + 1) % paymentOptions.length : 0
-        );
+        if (isEditingAmount) {
+          activeInputEl?.blur();
+        }
+        setIsReadyToSubmit(false);
+        if (paymentOptions.length === 0) return;
+        const nextIndex = (highlightedIndex + 1) % paymentOptions.length;
+        const nextOption = paymentOptions[nextIndex];
+        setHighlightedIndex(nextIndex);
+        if (nextOption) {
+          onPaymentMethodChange(nextOption.paymentMethodId);
+          shiftRemainderToOption(nextOption);
+        }
         return;
       }
 
-      // Flecha arriba: solo mueve el foco/resaltado
+      // Flecha arriba: navega al método anterior desplazando el monto pendiente dinámicamente
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        setHighlightedIndex((prev) =>
-          paymentOptions.length > 0
-            ? (prev - 1 + paymentOptions.length) % paymentOptions.length
-            : 0
-        );
+        if (isEditingAmount) {
+          activeInputEl?.blur();
+        }
+        setIsReadyToSubmit(false);
+        if (paymentOptions.length === 0) return;
+        const nextIndex = (highlightedIndex - 1 + paymentOptions.length) % paymentOptions.length;
+        const nextOption = paymentOptions[nextIndex];
+        setHighlightedIndex(nextIndex);
+        if (nextOption) {
+          onPaymentMethodChange(nextOption.paymentMethodId);
+          shiftRemainderToOption(nextOption);
+        }
         return;
       }
 
       if (e.key === "Enter") {
+        e.preventDefault();
         const activeOption = paymentOptions[highlightedIndex];
         if (!activeOption) return;
 
         // Si es cuenta corriente y falta cliente, abrir selector de cliente
         if (activeOption.isCurrentAccount && !selectedCustomer) {
-          e.preventDefault();
           setIsCustomerModalOpen(true);
           return;
         }
 
-        const activeAmount = allocatedAmounts[activeOption.id] || 0;
+        // PASO 2: El cursor está actualmente dentro de la casilla de monto (editando/confirmando el importe)
+        if (isEditingAmount) {
+          activeInputEl?.blur();
 
-        // PASO 1: Si este método aún no tiene el monto asignado (o hay monto pendiente),
-        // este primer Enter lo selecciona y le asigna el total o restante
-        if (activeAmount < checkoutTotal || totalPending > 0) {
-          e.preventDefault();
-          onPaymentMethodChange(activeOption.paymentMethodId);
-          assignPendingToOption(activeOption.id);
+          // Calculamos de forma inmediata con el valor escrito en el input
+          const clean = (activeInputEl?.value || "").replace(",", ".");
+          const numeric = parseFloat(clean);
+          const currentMethodVal = !isNaN(numeric) && numeric > 0 ? Number(numeric.toFixed(2)) : 0;
+
+          let nextAllocated: Record<string, number> = {};
+
+          if (currentMethodVal > 0) {
+            // Establecer y bloquear este método como confirmado (recuadro pasará a verde)
+            setLockedMethodIds((prev) => ({
+              ...prev,
+              [activeOption.id]: true,
+            }));
+
+            nextAllocated = {
+              ...allocatedAmounts,
+              [activeOption.id]: currentMethodVal,
+            };
+            setAllocatedAmounts(nextAllocated);
+            setAmountInputs((prev) => ({
+              ...prev,
+              [activeOption.id]: currentMethodVal.toFixed(2),
+            }));
+          } else {
+            // Si el monto es 0 o vacío, desbloquear y limpiar
+            setLockedMethodIds((prev) => {
+              const next = { ...prev };
+              delete next[activeOption.id];
+              return next;
+            });
+            nextAllocated = { ...allocatedAmounts };
+            delete nextAllocated[activeOption.id];
+            setAllocatedAmounts(nextAllocated);
+            setAmountInputs((prev) => {
+              const next = { ...prev };
+              delete next[activeOption.id];
+              return next;
+            });
+          }
+
+          const sum = Object.values(nextAllocated).reduce((acc, val) => acc + (val || 0), 0);
+          const pending = Number(Math.max(0, checkoutTotal - sum).toFixed(2));
+
+          if (pending === 0 && Math.abs(sum - checkoutTotal) <= 0.01 && sum > 0) {
+            // Todo el total está cubierto y establecido: el siguiente Enter confirmará la venta
+            setIsReadyToSubmit(true);
+          } else {
+            // Hay monto pendiente: queda listo para desplazarse a la 2da forma de pago con las flechitas
+            setIsReadyToSubmit(false);
+          }
           return;
         }
 
-        // PASO 2: Si este método ya tiene el monto asignado y el total está 100% cubierto,
-        // el segundo Enter confirma y cierra la venta
-        if (isFullyAssigned) {
-          e.preventDefault();
+        // PASO 3: Ya se confirmó el monto (isReadyToSubmit) y el total está 100% asignado
+        if (isReadyToSubmit && isFullyAssigned) {
           void handleFinalSubmit();
           return;
         }
+
+        // PASO 1: El usuario seleccionó el método con Enter desde la lista de métodos
+        onPaymentMethodChange(activeOption.paymentMethodId);
+
+        // Si no está bloqueado, asegurarse de asignar el restante disponible
+        if (!lockedMethodIds[activeOption.id]) {
+          shiftRemainderToOption(activeOption);
+        }
+
+        setIsReadyToSubmit(false);
+
+        // Pone el cursor en el monto con el texto seleccionado por si hay que editarlo
+        window.setTimeout(() => {
+          const el = inputRefs.current[activeOption.id];
+          if (el) {
+            el.focus();
+            el.select();
+          }
+        }, 20);
+        return;
       }
 
-      if (e.key === "Escape" && onClose && !isTyping) {
+      if (e.key === "Escape" && onClose && !isEditingAmount) {
         e.preventDefault();
         onClose();
       }
@@ -604,18 +775,19 @@ export const PosCheckoutPanel = ({
       window.removeEventListener("keydown", handleGlobalKeyDown);
     };
   }, [
-    assignPendingToOption,
+    allocatedAmounts,
     checkoutTotal,
     handleFinalSubmit,
     highlightedIndex,
     isCustomerModalOpen,
     isFullyAssigned,
+    isReadyToSubmit,
+    lockedMethodIds,
     onClose,
     onPaymentMethodChange,
     paymentOptions,
     selectedCustomer,
-    totalPending,
-    allocatedAmounts,
+    shiftRemainderToOption,
   ]);
 
   const isMpHighlighted = paymentOptions[highlightedIndex]?.code === "mercado_pago";
@@ -745,63 +917,75 @@ export const PosCheckoutPanel = ({
         </div>
       </div>
 
-      {/* PANEL UNIFICADO DE CLIENTE Y FACTURA AFIP (ENTRE TARJETAS Y MEDIOS DE PAGO) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40">
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-bold text-slate-700 dark:text-slate-200">Cliente:</span>
+      {/* PANEL UNIFICADO DE CLIENTE Y FACTURA AFIP (COMPACTO Y MISMO TAMAÑO ASIGNADO O NO) */}
+      <div className="flex items-center justify-between gap-2.5 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 min-h-[42px]">
+        <div className="flex items-center gap-1.5 text-xs min-w-0 flex-1">
+          <span className="font-bold text-slate-700 dark:text-slate-200 shrink-0">Cliente:</span>
           {selectedCustomer ? (
-            <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-0.5 shadow-2xs">
-              <span className="font-bold text-slate-900 dark:text-slate-100">
-                {selectedCustomer.full_name}
-              </span>
-              <span className="rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1.5 py-0.2 text-[10px] font-mono text-slate-700 dark:text-slate-300">
-                {formatCustomerDocument(selectedCustomer.document_type, selectedCustomer.document_number)}
-              </span>
-              {currentAccountSnapshot?.available != null && (
-                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold" title="Disponible en Cuenta Corriente">
-                  (Disp: {currency.format(currentAccountSnapshot.available)})
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-0.5 shadow-2xs min-w-0">
+                <span className="font-bold text-slate-900 dark:text-slate-100 truncate max-w-[130px] sm:max-w-[170px]" title={selectedCustomer.full_name}>
+                  {selectedCustomer.full_name}
                 </span>
-              )}
-              <button
-                type="button"
-                onClick={() => onCustomerChange("")}
-                className="inline-flex items-center gap-0.5 rounded bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900/60 px-1.5 py-0.5 text-[11px] font-bold text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/80 transition ml-1 cursor-pointer"
-                title="Quitar cliente (volver a Consumidor Final)"
-              >
-                <X size={12} strokeWidth={2.5} />
-                Quitar
-              </button>
+                {selectedCustomer.document_number && (
+                  <span className="rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1 py-0.2 text-[10px] font-mono text-slate-700 dark:text-slate-300 shrink-0 hidden md:inline-block">
+                    {formatCustomerDocument(selectedCustomer.document_type, selectedCustomer.document_number)}
+                  </span>
+                )}
+              </div>
+
+              {/* Botones de acción agrupados: Quitar junto a Editar y Cambiar (solo iconos con tooltips) */}
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => onOpenCustomerModal(selectedCustomer, "account")}
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer shadow-2xs"
+                  title="Editar cliente para asignarle una cuenta corriente"
+                  aria-label="Editar cliente"
+                >
+                  <Edit2 size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCustomerModalOpen(true)}
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition cursor-pointer shadow-2xs"
+                  title="Cambiar cliente"
+                  aria-label="Cambiar cliente"
+                >
+                  <Users size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onCustomerChange("")}
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/80 transition cursor-pointer shadow-2xs"
+                  title="Quitar cliente asignado (volver a Consumidor Final)"
+                  aria-label="Quitar cliente"
+                >
+                  <X size={13} strokeWidth={2.5} />
+                </button>
+              </div>
             </div>
           ) : (
-            <span className="text-slate-500 dark:text-slate-400 font-medium">
-              Consumidor Final (Venta mostrador)
-            </span>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-slate-500 dark:text-slate-400 font-medium truncate">
+                Consumidor Final (Venta mostrador)
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsCustomerModalOpen(true)}
+                className="inline-flex items-center gap-1 rounded-md border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition cursor-pointer shrink-0"
+              >
+                Asignar
+              </button>
+            </div>
           )}
-          {selectedCustomer ? (
-            <button
-              type="button"
-              onClick={() => onOpenCustomerModal(selectedCustomer, "account")}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer"
-              title="Editar cliente para asignarle una cuenta corriente"
-            >
-              <Edit2 size={12} />
-              Editar
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => setIsCustomerModalOpen(true)}
-            className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1 text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition cursor-pointer"
-          >
-            {selectedCustomer ? "Cambiar" : "Asignar"}
-          </button>
         </div>
 
         {/* Factura AFIP switch */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 text-xs">
-            <FileText size={14} className="text-blue-600 dark:text-blue-400" />
-            <span className="font-bold text-slate-800 dark:text-slate-200">Factura AFIP:</span>
+        <div className="flex items-center gap-2 shrink-0 pl-2.5 border-l border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-1 text-xs">
+            <FileText size={13} className="text-blue-600 dark:text-blue-400" />
+            <span className="font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">Factura AFIP:</span>
           </div>
           <label className="pos-switch relative inline-flex shrink-0 cursor-pointer items-center">
             <input
@@ -829,6 +1013,7 @@ export const PosCheckoutPanel = ({
           const isHighlighted = idx === highlightedIndex;
           const assignedVal = allocatedAmounts[option.id] || 0;
           const hasAmount = assignedVal > 0;
+          const isEstablished = Boolean(lockedMethodIds[option.id] && hasAmount);
           const Icon = getMethodIcon(option.code);
 
           return (
@@ -836,10 +1021,12 @@ export const PosCheckoutPanel = ({
               key={option.id}
               onClick={() => selectOption(idx)}
               className={`group flex items-center justify-between gap-3 py-1.5 px-3 rounded-xl border transition cursor-pointer ${
-                isHighlighted
+                isEstablished
+                  ? "border-emerald-500 dark:border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 ring-2 ring-emerald-500/50 shadow-xs"
+                  : isHighlighted
                   ? "border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/40 ring-2 ring-indigo-500/40"
                   : hasAmount
-                  ? "border-emerald-400 dark:border-emerald-600 bg-emerald-50/20 dark:bg-emerald-950/20"
+                  ? "border-emerald-400/60 dark:border-emerald-800/60 bg-emerald-50/20 dark:bg-emerald-950/20"
                   : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 hover:border-slate-400 dark:hover:border-slate-600"
               }`}
             >
@@ -847,8 +1034,8 @@ export const PosCheckoutPanel = ({
               <div className="flex items-center gap-2.5 min-w-0 flex-1">
                 <div
                   className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition ${
-                    hasAmount
-                      ? "bg-emerald-600 text-white"
+                    isEstablished
+                      ? "bg-emerald-600 text-white shadow-xs"
                       : isHighlighted
                       ? "bg-indigo-600 text-white"
                       : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
@@ -866,10 +1053,15 @@ export const PosCheckoutPanel = ({
                       BANCO
                     </span>
                   )}
-                  {hasAmount && (
-                    <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-500 text-white shrink-0">
-                      <Check size={9} strokeWidth={3} />
-                    </span>
+                  {isEstablished && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-600 text-white">
+                        <Check size={9} strokeWidth={3} />
+                      </span>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/80 px-1.5 py-0.2 rounded border border-emerald-300 dark:border-emerald-800">
+                        Asignado
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -881,10 +1073,21 @@ export const PosCheckoutPanel = ({
               >
                 {/* Casilla de Importe con autoselección total al hacer clic / focus */}
                 <div className="relative w-32">
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">
+                  <span
+                    className={`absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-black pointer-events-none transition ${
+                      isEstablished
+                        ? "text-emerald-700 dark:text-emerald-300"
+                        : isHighlighted
+                        ? "text-indigo-600 dark:text-indigo-400"
+                        : "text-slate-400"
+                    }`}
+                  >
                     $
                   </span>
                   <input
+                    ref={(el) => {
+                      inputRefs.current[option.id] = el;
+                    }}
                     type="number"
                     step="0.01"
                     min="0"
@@ -895,6 +1098,7 @@ export const PosCheckoutPanel = ({
                       e.target.select();
                       setHighlightedIndex(idx);
                       onPaymentMethodChange(option.paymentMethodId);
+                      setIsReadyToSubmit(false);
                     }}
                     onClick={(e) => {
                       (e.target as HTMLInputElement).select();
@@ -904,10 +1108,14 @@ export const PosCheckoutPanel = ({
                     autoCapitalize="off"
                     spellCheck={false}
                     data-lpignore="true"
-                    className={`w-full rounded-lg border py-1 pl-5 pr-2 text-right font-mono text-sm font-bold outline-none transition ${
-                      hasAmount
-                        ? "border-emerald-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white ring-1 ring-emerald-500/30"
-                        : "border-slate-300 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-950 text-slate-700 dark:text-slate-300 focus:bg-white dark:focus:bg-slate-900 focus:border-indigo-500"
+                    className={`w-full rounded-lg border py-1 pl-5 pr-2 text-right font-mono text-sm outline-none transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                      isEstablished
+                        ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/90 text-emerald-950 dark:text-emerald-100 font-black ring-2 ring-emerald-500/50 shadow-xs"
+                        : isHighlighted
+                        ? "border-indigo-400 dark:border-indigo-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold ring-2 ring-indigo-500/40"
+                        : hasAmount
+                        ? "border-emerald-400/80 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold ring-1 ring-emerald-400/30"
+                        : "border-slate-300 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-950 text-slate-700 dark:text-slate-300 font-bold focus:bg-white dark:focus:bg-slate-900 focus:border-indigo-500"
                     }`}
                   />
                 </div>
@@ -915,8 +1123,8 @@ export const PosCheckoutPanel = ({
                 {hasAmount && (
                   <button
                     type="button"
-                    onClick={() => updateOptionAmount(option.id, "")}
-                    className="rounded-lg p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition"
+                    onClick={() => clearOptionAmount(option.id)}
+                    className="rounded-lg p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
                     title="Limpiar monto"
                   >
                     <X size={14} />
@@ -953,13 +1161,21 @@ export const PosCheckoutPanel = ({
           type="button"
           onClick={() => void handleFinalSubmit()}
           disabled={disabled || !canWrite || !isFullyAssigned}
-          className="inline-flex items-center justify-center gap-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 shadow-md shadow-emerald-600/20 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+          className={`inline-flex items-center justify-center gap-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 shadow-md shadow-emerald-600/20 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer ${
+            isReadyToSubmit && isFullyAssigned
+              ? "ring-2 ring-emerald-400 ring-offset-2 dark:ring-offset-slate-900 animate-pulse"
+              : ""
+          }`}
         >
           <div className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20">
             <Check size={13} className="stroke-[3]" />
           </div>
           <span className="text-xs font-black uppercase tracking-wider">
-            {isFullyAssigned ? "Confirmar Venta" : "Asignar Monto Total"}
+            {isFullyAssigned
+              ? isReadyToSubmit
+                ? "Confirmar Venta (Enter)"
+                : "Confirmar Venta"
+              : "Asignar Monto Total"}
           </span>
           <span className="font-mono text-sm font-black ml-1">
             {currency.format(checkoutTotal)}

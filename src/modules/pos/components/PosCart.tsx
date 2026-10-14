@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { BadgePercent, Barcode, ShoppingCart, Trash2 } from "lucide-react";
+import { BadgePercent, Barcode, Percent, ShoppingCart, Trash2 } from "lucide-react";
 import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
 import { cn } from "@/utils/cn";
+import type { CartManualDiscount, PosCartItemComputed } from "@/modules/pos/hooks/usePosSale";
 
 interface PosCartItemView {
   product_id: string;
@@ -19,6 +20,8 @@ interface PosCartItemView {
   scale_total_price: number | null;
   scale_barcode: string | null;
   is_debt_payment_item?: boolean;
+  manual_discount?: { type: "percent" | "amount"; value: number; reason: string } | null;
+  manual_promotion?: { id: string; name: string; code: string; discount_amount: number } | null;
 }
 
 interface PosCartProps {
@@ -29,6 +32,8 @@ interface PosCartProps {
   subtotalBeforePromotions: number;
   promotionDiscountTotal: number;
   cartPromotionDiscountTotal: number;
+  cartManualDiscount?: CartManualDiscount | null;
+  manualCartDiscountTotal?: number;
   subtotal: number;
   surchargeTotal: number;
   paymentDiscountTotal: number;
@@ -36,6 +41,9 @@ interface PosCartProps {
   total: number;
   discountsEnabled?: boolean;
   onToggleDiscounts?: () => void;
+  onOpenCartDiscountModal?: () => void;
+  onRemoveCartDiscount?: () => void;
+  onOpenItemPromoModal?: (item: PosCartItemComputed) => void;
   canWrite: boolean;
   disabled?: boolean;
   onBarcodeChange: (value: string) => void;
@@ -75,6 +83,8 @@ export const PosCart = ({
   subtotalBeforePromotions,
   promotionDiscountTotal,
   cartPromotionDiscountTotal,
+  cartManualDiscount,
+  manualCartDiscountTotal = 0,
   subtotal,
   surchargeTotal,
   paymentDiscountTotal,
@@ -82,6 +92,9 @@ export const PosCart = ({
   total,
   discountsEnabled = true,
   onToggleDiscounts,
+  onOpenCartDiscountModal,
+  onRemoveCartDiscount,
+  onOpenItemPromoModal,
   canWrite,
   disabled,
   onBarcodeChange,
@@ -190,6 +203,34 @@ export const PosCart = ({
             </button>
           ) : null}
 
+          {onOpenCartDiscountModal ? (
+            <button
+              type="button"
+              onClick={onOpenCartDiscountModal}
+              disabled={disabled || !canWrite || items.length === 0}
+              title={
+                cartManualDiscount
+                  ? `Descuento global aplicado: ${cartManualDiscount.type === "percent" ? `${cartManualDiscount.value}%` : `$${cartManualDiscount.value}`}. Clic para editar`
+                  : "Aplicar descuento global al carrito con monto y motivo"
+              }
+              className={cn(
+                "h-6 px-2 rounded-lg border flex items-center justify-center gap-1 text-[11px] font-semibold transition shadow-2xs cursor-pointer disabled:opacity-40",
+                cartManualDiscount
+                  ? "border-emerald-400 bg-emerald-50 text-emerald-800 dark:border-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 font-bold"
+                  : "border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400 dark:hover:border-emerald-800/80"
+              )}
+            >
+              <Percent size={11} className={cartManualDiscount ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"} />
+              <span>
+                {cartManualDiscount
+                  ? cartManualDiscount.type === "percent"
+                    ? `-${cartManualDiscount.value}%`
+                    : `-$${cartManualDiscount.value.toLocaleString("es-AR")}`
+                  : "Desc."}
+              </span>
+            </button>
+          ) : null}
+
           {items.length > 0 && onClearCart ? (
             <button
               type="button"
@@ -252,6 +293,55 @@ export const PosCart = ({
         </div>
       ) : (
         <div className="flex-1 min-h-[140px] max-h-[calc(100dvh-18rem)] space-y-1.5 overflow-y-auto pr-1">
+          {cartManualDiscount ? (
+            <div className="flex items-center justify-between gap-2 p-2 rounded-xl border border-dashed border-emerald-400 dark:border-emerald-600 bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <BadgePercent size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-bold text-xs">Desc. Carrito</span>
+                    <span className="text-[10px] font-extrabold px-1 py-0.2 rounded bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200">
+                      {cartManualDiscount.type === "percent"
+                        ? `-${cartManualDiscount.value}%`
+                        : `-$${cartManualDiscount.value.toLocaleString("es-AR")}`}
+                    </span>
+                    {manualCartDiscountTotal > 0 ? (
+                      <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                        (-{currency.format(manualCartDiscountTotal)})
+                      </span>
+                    ) : null}
+                  </div>
+                  {cartManualDiscount.reason ? (
+                    <p className="text-[10px] text-emerald-700 dark:text-emerald-300 truncate">
+                      {cartManualDiscount.reason}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                {onOpenCartDiscountModal ? (
+                  <button
+                    type="button"
+                    onClick={onOpenCartDiscountModal}
+                    className="px-2 py-0.5 text-[10px] font-semibold rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50"
+                  >
+                    Editar
+                  </button>
+                ) : null}
+                {onRemoveCartDiscount ? (
+                  <button
+                    type="button"
+                    onClick={onRemoveCartDiscount}
+                    className="p-1 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-white dark:hover:bg-slate-800"
+                    title="Quitar descuento del carrito"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           {items.map((item) => {
             const qtyStep = item.sale_mode === "weight" ? "any" : 1;
 
@@ -284,6 +374,16 @@ export const PosCart = ({
                       {item.applied_promotion_name ? (
                         <span className="rounded bg-emerald-100 px-1 py-0.2 text-[9px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
                           {item.applied_promotion_name}
+                        </span>
+                      ) : null}
+                      {item.manual_discount ? (
+                        <span className="rounded bg-emerald-100 px-1 py-0.2 text-[9px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700">
+                          {item.manual_discount.type === "percent" ? `-${item.manual_discount.value}%` : `-$${item.manual_discount.value}`}
+                        </span>
+                      ) : null}
+                      {item.manual_promotion ? (
+                        <span className="rounded bg-purple-100 px-1 py-0.2 text-[9px] font-bold text-purple-800 dark:bg-purple-950 dark:text-purple-200 border border-purple-300 dark:border-purple-700">
+                          {item.manual_promotion.name}
                         </span>
                       ) : null}
                     </div>
@@ -391,6 +491,27 @@ export const PosCart = ({
                   )}
 
                   <div className="flex items-center gap-1">
+                    {!item.is_debt_payment_item && onOpenItemPromoModal ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenItemPromoModal(item as PosCartItemComputed)}
+                        disabled={disabled || !canWrite}
+                        aria-label={`Promoción o descuento para ${item.name}`}
+                        className={cn(
+                          "rounded-lg border px-1.5 py-0.5 text-[11px] font-semibold transition cursor-pointer flex items-center gap-1",
+                          item.manual_discount || item.manual_promotion
+                            ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 font-bold"
+                            : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                        )}
+                        title="Aplicar promoción o descuento a este producto"
+                      >
+                        <BadgePercent
+                          size={11}
+                          className={item.manual_discount || item.manual_promotion ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}
+                        />
+                        <span>Promo</span>
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => onEdit(item)}
@@ -442,6 +563,18 @@ export const PosCart = ({
             <div className="mt-0.5 flex items-center justify-between text-[11px] text-rose-500 dark:text-rose-400">
               <span>Descuentos</span>
               <span className="font-semibold text-[10px] uppercase">Desactivados</span>
+            </div>
+          ) : null}
+
+          {manualCartDiscountTotal > 0 ? (
+            <div className="mt-0.5 flex items-center justify-between text-[11px] text-emerald-700 dark:text-emerald-400">
+              <span className="flex items-center gap-1">
+                <Percent size={11} />
+                <span>
+                  Desc. carrito {cartManualDiscount?.type === "percent" ? `(${cartManualDiscount.value}%)` : ""}
+                </span>
+              </span>
+              <span className="font-semibold">-{currency.format(manualCartDiscountTotal)}</span>
             </div>
           ) : null}
 

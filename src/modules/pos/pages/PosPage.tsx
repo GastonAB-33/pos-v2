@@ -18,14 +18,16 @@ import { getEditableDocumentNumber } from "@/modules/configuracion/hooks/useEnti
 import { CashOpenForm } from "@/modules/caja/components/CashOpenForm";
 import { ReceiptTicketPanel } from "@/modules/comprobantes/components/ReceiptTicketPanel";
 import { PosCart } from "@/modules/pos/components/PosCart";
+import { PosCartDiscountModal } from "@/modules/pos/components/PosCartDiscountModal";
 import { PosCartItemEditModal } from "@/modules/pos/components/PosCartItemEditModal";
 import { PosCheckoutPanel } from "@/modules/pos/components/PosCheckoutPanel";
 import { PosDebtPaymentModal } from "@/modules/pos/components/PosDebtPaymentModal";
+import { PosItemPromoModal } from "@/modules/pos/components/PosItemPromoModal";
 import { PosProductList } from "@/modules/pos/components/PosProductList";
 import { PosQuickProductModal } from "@/modules/pos/components/PosQuickProductModal";
 import { PosSmartView } from "@/modules/pos/components/PosSmartView";
 import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
-import { usePosSale } from "@/modules/pos/hooks/usePosSale";
+import { usePosSale, type PosCartItemComputed } from "@/modules/pos/hooks/usePosSale";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
 import { useUiStore } from "@/store/ui.store";
 import { useProductsStore } from "@/features/products/store/products.store";
@@ -190,6 +192,12 @@ export const PosPage = () => {
     selectedCustomer,
     appliedPriceList,
     cart,
+    cartManualDiscount,
+    manualCartDiscountTotal,
+    promotions,
+    applyCartDiscount,
+    applyItemDiscount,
+    applyItemPromotion,
     subtotalBeforePromotions,
     promotionDiscountTotal,
     cartPromotionDiscountTotal,
@@ -245,6 +253,8 @@ export const PosPage = () => {
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [isDebtPaymentModalOpen, setIsDebtPaymentModalOpen] = useState(false);
   const [isQuickProductModalOpen, setIsQuickProductModalOpen] = useState(false);
+  const [isCartDiscountModalOpen, setIsCartDiscountModalOpen] = useState(false);
+  const [itemPromoModalTarget, setItemPromoModalTarget] = useState<PosCartItemComputed | null>(null);
   const [lastNotFoundBarcode, setLastNotFoundBarcode] = useState<string>("");
   const posWindowMode = useUiStore((state) => state.posWindowMode);
   const theme = useUiStore((state) => state.theme);
@@ -1573,6 +1583,12 @@ export const PosPage = () => {
           onOpenDebtPaymentModal={() => setIsDebtPaymentModalOpen(true)}
           hasDebtPaymentInCart={Boolean(existingDebtItem)}
           debtPaymentAmount={debtPaymentTotal}
+          cartManualDiscount={cartManualDiscount}
+          manualCartDiscountTotal={manualCartDiscountTotal}
+          subtotalBeforePromotions={subtotalBeforePromotions}
+          onOpenCartDiscountModal={() => setIsCartDiscountModalOpen(true)}
+          onRemoveCartDiscount={() => applyCartDiscount(null)}
+          onOpenItemPromoModal={(item) => setItemPromoModalTarget(item)}
           disabled={isSubmitting || isCashGateBlocking}
           canWrite={canWritePos}
           products={products}
@@ -1813,6 +1829,8 @@ export const PosPage = () => {
                   subtotalBeforePromotions={subtotalBeforePromotions}
                   promotionDiscountTotal={promotionDiscountTotal}
                   cartPromotionDiscountTotal={cartPromotionDiscountTotal}
+                  cartManualDiscount={cartManualDiscount}
+                  manualCartDiscountTotal={manualCartDiscountTotal}
                   subtotal={checkoutSummary.subtotal}
                   surchargeTotal={0}
                   paymentDiscountTotal={0}
@@ -1820,6 +1838,9 @@ export const PosPage = () => {
                   total={checkoutSummary.total}
                   discountsEnabled={discountsEnabled}
                   onToggleDiscounts={toggleDiscounts}
+                  onOpenCartDiscountModal={() => setIsCartDiscountModalOpen(true)}
+                  onRemoveCartDiscount={() => applyCartDiscount(null)}
+                  onOpenItemPromoModal={(item) => setItemPromoModalTarget(item)}
                   canWrite={canWritePos}
                   disabled={isSubmitting || isCashGateBlocking}
                   onBarcodeChange={setVisibleBarcodeValue}
@@ -2458,6 +2479,55 @@ export const PosPage = () => {
           }
         />
       ) : null}
+
+      <PosCartDiscountModal
+        isOpen={isCartDiscountModalOpen}
+        onClose={() => setIsCartDiscountModalOpen(false)}
+        currentDiscount={cartManualDiscount}
+        cartSubtotal={subtotalBeforePromotions > 0 ? subtotalBeforePromotions : checkoutSummary.subtotal}
+        onApplyDiscount={(discount) => {
+          applyCartDiscount(discount);
+          setIsCartDiscountModalOpen(false);
+          if (discount) {
+            toastSuccess(
+              discount.type === "percent"
+                ? `Descuento del ${discount.value}% aplicado al carrito`
+                : `Descuento de ${currency.format(discount.value)} aplicado al carrito`
+            );
+          } else {
+            toastSuccess("Descuento del carrito eliminado");
+          }
+        }}
+      />
+
+      <PosItemPromoModal
+        isOpen={Boolean(itemPromoModalTarget)}
+        item={itemPromoModalTarget}
+        promotions={promotions}
+        onClose={() => setItemPromoModalTarget(null)}
+        onApplyDiscount={(productId, discount) => {
+          applyItemDiscount(productId, discount);
+          setItemPromoModalTarget(null);
+          if (discount) {
+            toastSuccess(
+              discount.type === "percent"
+                ? `Descuento del ${discount.value}% aplicado al producto`
+                : `Descuento de ${currency.format(discount.value)} aplicado al producto`
+            );
+          } else {
+            toastSuccess("Descuento quitado del producto");
+          }
+        }}
+        onApplyPromotion={(productId, promo) => {
+          applyItemPromotion(productId, promo);
+          setItemPromoModalTarget(null);
+          if (promo) {
+            toastSuccess(`Promoción "${promo.name}" aplicada`);
+          } else {
+            toastSuccess("Promoción quitada del producto");
+          }
+        }}
+      />
     </div>
   );
 };

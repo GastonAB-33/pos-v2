@@ -5,19 +5,25 @@ import {
   FileText,
   Moon,
   MoonStar,
+  Percent,
   Plus,
   PlusCircle,
   RefreshCw,
   Scale,
   Search,
   ShoppingCart,
+  Sparkles,
   Sun,
   Trash2,
   X,
 } from "lucide-react";
 import { useUiStore } from "@/store/ui.store";
 import type { Product } from "@/types/entities";
-import type { PosCartItem } from "@/modules/pos/hooks/usePosSale";
+import type {
+  PosCartItem,
+  PosCartItemComputed,
+  CartManualDiscount,
+} from "@/modules/pos/hooks/usePosSale";
 import {
   matchesProductSearch,
   PRODUCT_SEARCH_SCOPE_OPTIONS,
@@ -38,12 +44,12 @@ const gramsToKg = (quantityGrams: number): number => Number((quantityGrams / 100
 
 export interface PosSmartViewProps {
   // Carrito
-  items: PosCartItem[];
+  items: (PosCartItem | PosCartItemComputed)[];
   isHighlighted?: boolean;
   onIncrease: (productId: string) => void;
   onDecrease: (productId: string) => void;
   onSetQuantity?: (productId: string, quantity: number) => void;
-  onEdit: (item: PosCartItem) => void;
+  onEdit: (item: PosCartItem | PosCartItemComputed) => void;
   onRemove: (productId: string) => void;
   onClearCart: () => void;
   onCycleReturnableStatus?: (productId: string) => void;
@@ -52,6 +58,14 @@ export interface PosSmartViewProps {
   onOpenDebtPaymentModal?: () => void;
   hasDebtPaymentInCart?: boolean;
   debtPaymentAmount?: number;
+
+  // Descuentos y Promociones
+  cartManualDiscount?: CartManualDiscount | null;
+  manualCartDiscountTotal?: number;
+  subtotalBeforePromotions?: number;
+  onOpenCartDiscountModal?: () => void;
+  onRemoveCartDiscount?: () => void;
+  onOpenItemPromoModal?: (item: PosCartItemComputed) => void;
 
   // Catálogo y búsqueda
   products: Product[];
@@ -93,6 +107,12 @@ export const PosSmartView = ({
   onOpenDebtPaymentModal,
   hasDebtPaymentInCart = false,
   debtPaymentAmount = 0,
+  cartManualDiscount,
+  manualCartDiscountTotal = 0,
+  subtotalBeforePromotions,
+  onOpenCartDiscountModal,
+  onRemoveCartDiscount,
+  onOpenItemPromoModal,
   products,
   primaryBarcodes,
   onAddProduct,
@@ -285,6 +305,34 @@ export const PosSmartView = ({
               </button>
             ) : null}
 
+            {onOpenCartDiscountModal ? (
+              <button
+                type="button"
+                onClick={onOpenCartDiscountModal}
+                disabled={disabled || !canWrite || items.length === 0}
+                title={
+                  cartManualDiscount
+                    ? `Descuento carrito: ${cartManualDiscount.type === "percent" ? `${cartManualDiscount.value}%` : `$${cartManualDiscount.value}`}. Clic para editar`
+                    : "Aplicar descuento global al carrito con monto y motivo"
+                }
+                className={cn(
+                  "h-8 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition shadow-2xs cursor-pointer disabled:opacity-40 whitespace-nowrap shrink-0",
+                  cartManualDiscount
+                    ? "border-emerald-400 bg-emerald-50 text-emerald-800 dark:border-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 font-bold"
+                    : "border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400 dark:hover:border-emerald-800/80"
+                )}
+              >
+                <Percent size={13} className={cartManualDiscount ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"} />
+                <span>
+                  {cartManualDiscount
+                    ? cartManualDiscount.type === "percent"
+                      ? `-${cartManualDiscount.value}%`
+                      : `-$${cartManualDiscount.value.toLocaleString("es-AR")}`
+                    : "Descuento"}
+                </span>
+              </button>
+            ) : null}
+
             {onOpenDebtPaymentModal ? (
               <button
                 type="button"
@@ -456,6 +504,57 @@ export const PosSmartView = ({
             ref={cartContainerRef}
             className="flex flex-col gap-2.5 flex-1 overflow-y-auto max-h-[calc(100vh-280px)] min-h-[360px] pr-1"
           >
+            {cartManualDiscount ? (
+              <div className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-dashed border-emerald-400 dark:border-emerald-600 bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200 shadow-2xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 shrink-0">
+                    <BadgePercent size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-xs">Descuento Global al Carrito</span>
+                      <span className="text-[11px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-200 dark:bg-emerald-900/80 text-emerald-900 dark:text-emerald-200">
+                        {cartManualDiscount.type === "percent"
+                          ? `-${cartManualDiscount.value}%`
+                          : `-$${cartManualDiscount.value.toLocaleString("es-AR")}`}
+                      </span>
+                      {manualCartDiscountTotal > 0 ? (
+                        <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
+                          (-{currency.format(manualCartDiscountTotal)})
+                        </span>
+                      ) : null}
+                    </div>
+                    {cartManualDiscount.reason ? (
+                      <p className="text-[11px] text-emerald-700 dark:text-emerald-300 truncate">
+                        Motivo: <span className="font-semibold">{cartManualDiscount.reason}</span>
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {onOpenCartDiscountModal ? (
+                    <button
+                      type="button"
+                      onClick={onOpenCartDiscountModal}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-slate-700 cursor-pointer shadow-2xs"
+                    >
+                      Editar
+                    </button>
+                  ) : null}
+                  {onRemoveCartDiscount ? (
+                    <button
+                      type="button"
+                      onClick={onRemoveCartDiscount}
+                      className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition cursor-pointer"
+                      title="Quitar descuento del carrito"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
             {items.map((item, index) => {
               const isLastItem = item.product_id === effectiveLastAddedId;
               const itemSubtotal =
@@ -494,6 +593,23 @@ export const PosSmartView = ({
                       {item.is_debt_payment_item ? (
                         <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/60">
                           Cobro Cta. Cte.
+                        </span>
+                      ) : null}
+                      {"manual_discount" in item && (item as PosCartItemComputed).manual_discount ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/60">
+                          <Percent size={10} />
+                          {(item as PosCartItemComputed).manual_discount!.type === "percent"
+                            ? `-${(item as PosCartItemComputed).manual_discount!.value}%`
+                            : `-$${(item as PosCartItemComputed).manual_discount!.value.toLocaleString("es-AR")}`}
+                          {(item as PosCartItemComputed).manual_discount!.reason
+                            ? ` (${(item as PosCartItemComputed).manual_discount!.reason})`
+                            : ""}
+                        </span>
+                      ) : null}
+                      {"manual_promotion" in item && (item as PosCartItemComputed).manual_promotion ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-purple-100 dark:bg-purple-950/60 px-1.5 py-0.5 text-[10px] font-bold text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800/60">
+                          <Sparkles size={10} />
+                          {(item as PosCartItemComputed).manual_promotion!.name}
                         </span>
                       ) : null}
                     </div>
@@ -682,9 +798,41 @@ export const PosSmartView = ({
                       <span className="font-extrabold text-sm sm:text-base text-blue-600 dark:text-sky-400 tracking-tight">
                         {currency.format(itemSubtotal)}
                       </span>
+                      {"promotion_discount_total" in item && typeof item.promotion_discount_total === "number" && item.promotion_discount_total > 0 ? (
+                        <span className="block text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                          -{currency.format(item.promotion_discount_total)}
+                        </span>
+                      ) : null}
                     </div>
 
                     <div className="flex items-center gap-1.5">
+                      {!item.is_debt_payment_item && onOpenItemPromoModal ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenItemPromoModal(item as PosCartItemComputed)}
+                          disabled={disabled || !canWrite}
+                          title="Aplicar promoción o descuento manual a este producto"
+                          className={cn(
+                            "px-2.5 py-1 rounded-lg border text-xs font-semibold transition disabled:opacity-40 flex items-center gap-1 cursor-pointer",
+                            ("manual_discount" in item && (item as PosCartItemComputed).manual_discount) ||
+                            ("manual_promotion" in item && (item as PosCartItemComputed).manual_promotion)
+                              ? "border-emerald-400 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 font-bold"
+                              : "border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200"
+                          )}
+                        >
+                          <BadgePercent
+                            size={12}
+                            className={
+                              ("manual_discount" in item && (item as PosCartItemComputed).manual_discount) ||
+                              ("manual_promotion" in item && (item as PosCartItemComputed).manual_promotion)
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : "text-slate-400"
+                            }
+                          />
+                          <span>Promo</span>
+                        </button>
+                      ) : null}
+
                       <button
                         type="button"
                         onClick={() => onEdit(item)}
@@ -829,6 +977,34 @@ export const PosSmartView = ({
                 </button>
               ) : null}
 
+              {onOpenCartDiscountModal ? (
+                <button
+                  type="button"
+                  onClick={onOpenCartDiscountModal}
+                  disabled={disabled || !canWrite || items.length === 0}
+                  title={
+                    cartManualDiscount
+                      ? `Descuento carrito: ${cartManualDiscount.type === "percent" ? `${cartManualDiscount.value}%` : `$${cartManualDiscount.value}`}. Clic para editar`
+                      : "Aplicar descuento global al carrito con monto y motivo"
+                  }
+                  className={cn(
+                    "h-8 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition shadow-2xs cursor-pointer disabled:opacity-40 whitespace-nowrap shrink-0",
+                    cartManualDiscount
+                      ? "border-emerald-400 bg-emerald-50 text-emerald-800 dark:border-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 font-bold"
+                      : "border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400 dark:hover:border-emerald-800/80"
+                  )}
+                >
+                  <Percent size={13} className={cartManualDiscount ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"} />
+                  <span>
+                    {cartManualDiscount
+                      ? cartManualDiscount.type === "percent"
+                        ? `-${cartManualDiscount.value}%`
+                        : `-$${cartManualDiscount.value.toLocaleString("es-AR")}`
+                      : "Descuento"}
+                  </span>
+                </button>
+              ) : null}
+
               {onOpenDebtPaymentModal ? (
                 <button
                   type="button"
@@ -866,14 +1042,33 @@ export const PosSmartView = ({
             <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
               <span>Subtotal</span>
               <span className="text-slate-900 dark:text-slate-200 font-medium">
-                {currency.format(subtotal)}
+                {currency.format(
+                  subtotalBeforePromotions && subtotalBeforePromotions > 0
+                    ? subtotalBeforePromotions
+                    : subtotal
+                )}
               </span>
             </div>
 
-            {discountsEnabled && promotionDiscountTotal > 0 ? (
+            {manualCartDiscountTotal > 0 ? (
               <div className="flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                <span>Desc. promociones</span>
-                <span className="font-semibold">-{currency.format(promotionDiscountTotal)}</span>
+                <span className="flex items-center gap-1">
+                  <Percent size={12} />
+                  <span>
+                    Desc. carrito{" "}
+                    {cartManualDiscount?.type === "percent" ? `(${cartManualDiscount.value}%)` : ""}
+                  </span>
+                </span>
+                <span className="font-semibold">-{currency.format(manualCartDiscountTotal)}</span>
+              </div>
+            ) : null}
+
+            {discountsEnabled && promotionDiscountTotal - manualCartDiscountTotal > 0 ? (
+              <div className="flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                <span>Desc. productos / promociones</span>
+                <span className="font-semibold">
+                  -{currency.format(promotionDiscountTotal - manualCartDiscountTotal)}
+                </span>
               </div>
             ) : !discountsEnabled ? (
               <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">

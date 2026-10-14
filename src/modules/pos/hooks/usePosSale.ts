@@ -25,7 +25,7 @@ import { priceListsService } from "@/services/price-lists.service";
 import { productsService } from "@/services/products.service";
 import { useProductsStore } from "@/features/products/store/products.store";
 import { storageKeys } from "@/utils/local-storage";
-import { buildPromotionBarcode, promotionsService, type PromotionWithDetails } from "@/services/promotions.service";
+import { buildPromotionBarcode, calculateProductPromotionDiscount, promotionsService, type PromotionWithDetails } from "@/services/promotions.service";
 import { receiptsService } from "@/services/receipts.service";
 import { salesService } from "@/services/sales.service";
 import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
@@ -40,6 +40,12 @@ import {
   type ReturnableConfig,
   type ReturnableCartStatus,
 } from "@/utils/returnable-packages";
+
+export interface CartManualDiscount {
+  type: "percent" | "amount";
+  value: number;
+  reason: string;
+}
 
 export interface PosCartItem {
   product_id: string;
@@ -66,6 +72,17 @@ export interface PosCartItem {
   returnable_status?: ReturnableCartStatus;
   code?: string | null;
   barcode?: string | null;
+  manual_discount?: {
+    type: "percent" | "amount";
+    value: number;
+    reason: string;
+  } | null;
+  manual_promotion?: {
+    id: string;
+    name: string;
+    code: string;
+    discount_amount: number;
+  } | null;
 }
 
 export interface PosCartItemComputed extends PosCartItem {
@@ -305,6 +322,7 @@ export const usePosSale = (tenantId: string | null) => {
     useState<InvoiceDocumentType>("B");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [cartState, setCartState] = useState<PosCartItem[]>([]);
+  const [cartManualDiscount, setCartManualDiscount] = useState<CartManualDiscount | null>(null);
   const [discountsEnabled, setDiscountsEnabled] = useState(true);
   const [lastAddedProductId, setLastAddedProductId] = useState<string | null>(null);
   const [saleTabs, setSaleTabs] = useState<PosSaleTab[]>([
@@ -903,14 +921,66 @@ export const usePosSale = (tenantId: string | null) => {
         };
       }
 
-      const resolved = resolutionByProductId.get(item.product_id);
       const returnableSurcharge =
         item.returnable_status === "charge" && item.returnable_config
           ? roundAmount(item.returnable_config.packagePrice * item.quantity)
           : 0;
 
-      const baseSubtotal = resolved?.line_subtotal ?? roundAmount(item.quantity * item.unit_price);
-      const baseLineTotal = resolved?.line_total ?? roundAmount(item.quantity * item.unit_price);
+      const grossLine = roundAmount(item.quantity * item.unit_price);
+
+      // 1. Si tiene descuento manual específico en este ítem
+      if (item.manual_discount && item.manual_discount.value > 0) {
+        const discountAmt =
+          item.manual_discount.type === "percent"
+            ? roundAmount(grossLine * (item.manual_discount.value / 100))
+            : roundAmount(Math.min(grossLine, item.manual_discount.value));
+        const lineTotal = roundAmount(Math.max(0, grossLine - discountAmt) + returnableSurcharge);
+
+        return {
+          ...item,
+          line_subtotal: roundAmount(grossLine + returnableSurcharge),
+          promotion_discount_total: discountAmt,
+          product_promotion_discount_total: discountAmt,
+          cart_promotion_discount_total: 0,
+          line_total: lineTotal,
+          applied_promotion_name: item.manual_discount.reason ? `Desc: ${item.manual_discount.reason}` : "Desc. manual",
+          applied_promotion_snapshot: {
+            kind: "manual_discount",
+            discount_type: item.manual_discount.type,
+            discount_value: item.manual_discount.value,
+            discount_reason: item.manual_discount.reason,
+          },
+        };
+      }
+
+      // 2. Si tiene promoción manual vinculada desde el módulo promociones
+      if (item.manual_promotion) {
+        const foundPromo = promotions.find((p) => p.id === item.manual_promotion?.id);
+        const promoDiscount = foundPromo
+          ? calculateProductPromotionDiscount(foundPromo, item.quantity, item.unit_price)
+          : item.manual_promotion.discount_amount;
+        const discountAmt = roundAmount(Math.min(grossLine, promoDiscount));
+        const lineTotal = roundAmount(Math.max(0, grossLine - discountAmt) + returnableSurcharge);
+
+        return {
+          ...item,
+          line_subtotal: roundAmount(grossLine + returnableSurcharge),
+          promotion_discount_total: discountAmt,
+          product_promotion_discount_total: discountAmt,
+          cart_promotion_discount_total: 0,
+          line_total: lineTotal,
+          applied_promotion_name: item.manual_promotion.name,
+          applied_promotion_snapshot: {
+            type: "manual_promotion",
+            ...item.manual_promotion,
+          },
+        };
+      }
+
+      // 3. Resolución automática estándar
+      const resolved = resolutionByProductId.get(item.product_id);
+      const baseSubtotal = resolved?.line_subtotal ?? grossLine;
+      const baseLineTotal = resolved?.line_total ?? grossLine;
 
       return {
         ...item,
@@ -926,14 +996,28 @@ export const usePosSale = (tenantId: string | null) => {
       };
     });
 
-    if (promotionsResolution.cart_discount_total <= 0 || !itemsWithProductPromotions.length) {
-      return itemsWithProductPromotions;
-    }
-
     const eligibleItems = itemsWithProductPromotions.filter((item) => !item.is_debt_payment_item);
     const subtotalAfterProductPromotions = roundAmount(
       eligibleItems.reduce((acc, item) => acc + item.line_total, 0)
     );
+
+    // Descuento manual a nivel carrito si fue asignado
+    let manualCartDiscountVal = 0;
+    if (cartManualDiscount && cartManualDiscount.value > 0 && subtotalAfterProductPromotions > 0) {
+      if (cartManualDiscount.type === "percent") {
+        manualCartDiscountVal = roundAmount(subtotalAfterProductPromotions * (cartManualDiscount.value / 100));
+      } else {
+        manualCartDiscountVal = roundAmount(Math.min(subtotalAfterProductPromotions, cartManualDiscount.value));
+      }
+    }
+
+    const totalCartDiscountToDistribute = roundAmount(
+      promotionsResolution.cart_discount_total + manualCartDiscountVal
+    );
+
+    if (totalCartDiscountToDistribute <= 0 || !itemsWithProductPromotions.length) {
+      return itemsWithProductPromotions;
+    }
 
     if (subtotalAfterProductPromotions <= 0) {
       return itemsWithProductPromotions;
@@ -955,9 +1039,9 @@ export const usePosSale = (tenantId: string | null) => {
 
       const isLast = i === eligibleIndices.length - 1;
       const proportional = isLast
-        ? roundAmount(promotionsResolution.cart_discount_total - accumulated)
+        ? roundAmount(totalCartDiscountToDistribute - accumulated)
         : roundAmount(
-            promotionsResolution.cart_discount_total * (item.line_total / subtotalAfterProductPromotions)
+            totalCartDiscountToDistribute * (item.line_total / subtotalAfterProductPromotions)
           );
 
       const itemCartDiscount = roundAmount(Math.min(item.line_total, Math.max(0, proportional)));
@@ -971,7 +1055,7 @@ export const usePosSale = (tenantId: string | null) => {
     }
 
     return allocated;
-  }, [cartState, promotionsResolution]);
+  }, [cartManualDiscount, cartState, promotions, promotionsResolution]);
 
   const debtPaymentTotal = useMemo(
     () =>
@@ -983,14 +1067,52 @@ export const usePosSale = (tenantId: string | null) => {
     [cartState]
   );
 
-  const subtotalBeforePromotions = roundAmount(
-    promotionsResolution.subtotal_before_promotions + debtPaymentTotal
+  const subtotalBeforePromotions = useMemo(
+    () =>
+      roundAmount(
+        cartState.reduce((acc, item) => {
+          const returnableSurcharge =
+            item.returnable_status === "charge" && item.returnable_config
+              ? roundAmount(item.returnable_config.packagePrice * item.quantity)
+              : 0;
+          return acc + item.unit_price * item.quantity + returnableSurcharge;
+        }, 0)
+      ),
+    [cartState]
   );
-  const promotionDiscountTotal = promotionsResolution.product_discount_total;
-  const cartPromotionDiscountTotal = promotionsResolution.cart_discount_total;
-  const totalPromotionDiscount = promotionsResolution.total_discount;
-  const subtotal = roundAmount(
-    promotionsResolution.subtotal_after_promotions + debtPaymentTotal
+
+  const promotionDiscountTotal = useMemo(
+    () => roundAmount(cart.reduce((acc, item) => acc + item.product_promotion_discount_total, 0)),
+    [cart]
+  );
+
+  const cartPromotionDiscountTotal = useMemo(
+    () => roundAmount(cart.reduce((acc, item) => acc + item.cart_promotion_discount_total, 0)),
+    [cart]
+  );
+
+  const manualCartDiscountTotal = useMemo(() => {
+    if (!cartManualDiscount || cartManualDiscount.value <= 0) return 0;
+    const eligibleSubtotal = roundAmount(
+      cart
+        .filter((item) => !item.is_debt_payment_item)
+        .reduce((acc, item) => acc + item.line_subtotal - item.product_promotion_discount_total, 0)
+    );
+    if (eligibleSubtotal <= 0) return 0;
+    if (cartManualDiscount.type === "percent") {
+      return roundAmount(eligibleSubtotal * (cartManualDiscount.value / 100));
+    }
+    return roundAmount(Math.min(eligibleSubtotal, cartManualDiscount.value));
+  }, [cart, cartManualDiscount]);
+
+  const totalPromotionDiscount = useMemo(
+    () => roundAmount(promotionDiscountTotal + cartPromotionDiscountTotal),
+    [cartPromotionDiscountTotal, promotionDiscountTotal]
+  );
+
+  const subtotal = useMemo(
+    () => roundAmount(Math.max(0, subtotalBeforePromotions - totalPromotionDiscount)),
+    [subtotalBeforePromotions, totalPromotionDiscount]
   );
 
   const addProductToCart = async (
@@ -1827,9 +1949,93 @@ export const usePosSale = (tenantId: string | null) => {
 
   const clearCart = () => {
     setCartState([]);
+    setCartManualDiscount(null);
     setDiscountsEnabled(true);
     setLastAddedProductId(null);
   };
+
+  const applyCartDiscount = useCallback((discount: CartManualDiscount | null) => {
+    setCartManualDiscount(discount);
+    if (discount) {
+      setFeedback({
+        type: "success",
+        message: `Descuento ${discount.type === "percent" ? `${discount.value}%` : currency.format(discount.value)} aplicado al carrito`,
+      });
+    } else {
+      setFeedback({
+        type: "success",
+        message: "Descuento del carrito removido",
+      });
+    }
+  }, []);
+
+  const applyItemDiscount = useCallback(
+    (
+      productId: string,
+      discount: { type: "percent" | "amount"; value: number; reason: string } | null
+    ) => {
+      setCartState((prev) =>
+        prev.map((item) => {
+          if (item.product_id !== productId) return item;
+          return {
+            ...item,
+            manual_discount: discount,
+            manual_promotion: null,
+          };
+        })
+      );
+      if (discount) {
+        setFeedback({
+          type: "success",
+          message: "Descuento aplicado al producto",
+        });
+      } else {
+        setFeedback({
+          type: "success",
+          message: "Descuento del producto removido",
+        });
+      }
+    },
+    []
+  );
+
+  const applyItemPromotion = useCallback(
+    (productId: string, promo: PromotionWithDetails | null) => {
+      setCartState((prev) =>
+        prev.map((item) => {
+          if (item.product_id !== productId) return item;
+          if (!promo) {
+            return {
+              ...item,
+              manual_promotion: null,
+            };
+          }
+          return {
+            ...item,
+            manual_promotion: {
+              id: promo.id,
+              name: promo.name,
+              code: promo.code,
+              discount_amount: promo.discount_amount ?? 0,
+            },
+            manual_discount: null,
+          };
+        })
+      );
+      if (promo) {
+        setFeedback({
+          type: "success",
+          message: `Promoción "${promo.name}" vinculada al producto`,
+        });
+      } else {
+        setFeedback({
+          type: "success",
+          message: "Promoción removida del producto",
+        });
+      }
+    },
+    []
+  );
 
   const setSelectedCustomer = useCallback((customerId: string) => {
     const normalized = customerId.trim();
@@ -3236,7 +3442,13 @@ export const usePosSale = (tenantId: string | null) => {
     selectedCustomerId,
     selectedCustomer,
     appliedPriceList,
+    promotions,
     cart,
+    cartManualDiscount,
+    manualCartDiscountTotal,
+    applyCartDiscount,
+    applyItemDiscount,
+    applyItemPromotion,
     subtotal,
     subtotalBeforePromotions,
     promotionDiscountTotal,
