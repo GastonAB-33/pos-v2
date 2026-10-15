@@ -95,13 +95,15 @@ export const ProductForm = ({
     });
 
     const returnableConfig = parseReturnableConfig(product.description);
+    const isWeight = product.sale_mode === "weight";
+    const initialStock = isWeight ? Number((product.stock_current * 1000).toFixed(3)) : product.stock_current;
 
     reset({
       nombre: product.name,
       saleMode: product.sale_mode,
       codigoBarras: primaryBarcode ?? "",
       codigoProducto: product.code ?? "",
-      stock: product.stock_current,
+      stock: initialStock,
       categoria: product.category,
       subcategoria: product.subcategory ?? "",
       precioCosto: product.cost_price,
@@ -161,8 +163,17 @@ export const ProductForm = ({
     setIfChangedNumber("precioFinal", computed.precioFinal);
   }, [calcMode, getValues, porcentajeGanancia, porcentajeIva, precioCosto, precioFinal, setValue]);
 
+  const submitForm = (values: ProductFormValues) => {
+    const isWeight = values.saleMode === "weight";
+    const stockToSubmit = isWeight ? Number((values.stock / 1000).toFixed(4)) : values.stock;
+    onSubmit({
+      ...values,
+      stock: stockToSubmit,
+    });
+  };
+
   return (
-    <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
+    <form className="grid gap-4" onSubmit={handleSubmit(submitForm)}>
       <div>
         <label className="mb-1 block text-sm font-medium text-slate-700">Nombre del producto</label>
         <div className="flex items-center gap-2">
@@ -262,11 +273,11 @@ export const ProductForm = ({
       <div className="grid gap-4 md:grid-cols-3">
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">
-            {saleMode === "weight" ? "Stock en kg" : "Stock en unidades"}
+            {saleMode === "weight" ? "Stock en gramos (g)" : "Stock en unidades"}
           </label>
           <input
             type="number"
-            step="0.001"
+            step={saleMode === "weight" ? "1" : "0.001"}
             placeholder="0"
             {...register("stock", {
               setValueAs: parseNumericField,
@@ -342,7 +353,7 @@ export const ProductForm = ({
             <input type="radio" value="weight" {...register("saleMode")} disabled={disabled} />
             <span>
               <span className="block font-semibold text-slate-900">Pesable</span>
-              <span className="text-xs text-slate-500">Precio por kg, stock en kg y venta por gramos.</span>
+              <span className="text-xs text-slate-500">Precio por kg, stock en gramos y venta por gramos.</span>
             </span>
           </label>
         </div>

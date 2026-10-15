@@ -241,7 +241,9 @@ export const useCurrentAccount = (
       const [list, currentBalance, openSession, methods, activeBankAccounts, activeOriginBanks, activeInstallmentPlans] = await Promise.all([
         currentAccountsService.getByCustomer(tenantId, customer.id),
         currentAccountsService.getCustomerBalance(tenantId, customer.id),
-        userId ? cashService.getOpenSessionByUser(tenantId, userId) : Promise.resolve(null),
+        userId
+          ? cashService.getOpenSessionByUser(tenantId, userId)
+          : cashService.getOpenSession(tenantId),
         paymentMethodsService.getActiveByTenant(tenantId),
         bankAccountsService.getActiveByTenant(tenantId),
         originBanksService.getActiveByTenant(tenantId),
@@ -506,7 +508,9 @@ export const useCurrentAccount = (
 
     setIsSubmitting(true);
     try {
-      const openSession = await cashService.getOpenSessionByUser(tenantId, userId);
+      const openSession =
+        (userId ? await cashService.getOpenSessionByUser(tenantId, userId) : null) ??
+        (await cashService.getOpenSession(tenantId));
       if (!openSession) {
         setFeedback({
           type: "error",

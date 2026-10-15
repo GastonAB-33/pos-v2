@@ -42,7 +42,7 @@ const friendlyErrorMessage = (msg: string): string => {
     lower.includes("email already exists") ||
     lower.includes("user already registered")
   ) {
-    return "Ya existe un usuario registrado con este correo electrónico.";
+    return "Ya existe un usuario registrado en el sistema con este correo electrónico (asociado a otro comercio o cuenta previa).";
   }
   if (
     lower.includes("no tenes permisos") ||

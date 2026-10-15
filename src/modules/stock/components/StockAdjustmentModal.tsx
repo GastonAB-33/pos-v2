@@ -30,7 +30,7 @@ const toPositiveNumber = (value: string): number => {
   return Number(parsed.toFixed(3));
 };
 
-const unitLabel = (product: Product): string => (product.sale_mode === "weight" ? "kg" : "u.");
+const unitLabel = (product: Product): string => (product.sale_mode === "weight" ? "g" : "u.");
 
 export const StockAdjustmentModal = ({
   open,
@@ -96,8 +96,11 @@ export const StockAdjustmentModal = ({
     return products
       .map((product) => {
         const draft = drafts[product.id];
-        const quantityIn = toPositiveNumber(draft?.quantityIn ?? "");
-        const quantityOut = toPositiveNumber(draft?.quantityOut ?? "");
+        const rawQuantityIn = toPositiveNumber(draft?.quantityIn ?? "");
+        const rawQuantityOut = toPositiveNumber(draft?.quantityOut ?? "");
+        const isWeight = product.sale_mode === "weight";
+        const quantityIn = isWeight ? Number((rawQuantityIn / 1000).toFixed(4)) : rawQuantityIn;
+        const quantityOut = isWeight ? Number((rawQuantityOut / 1000).toFixed(4)) : rawQuantityOut;
         return {
           productId: product.id,
           quantityIn,
@@ -240,7 +243,7 @@ export const StockAdjustmentModal = ({
                           <p className="text-xs text-slate-500">{product.code}</p>
                         </td>
                         <td className="px-3 py-2 text-slate-700">
-                          {product.stock_current.toLocaleString("es-AR")} {unitLabel(product)}
+                          {(product.sale_mode === "weight" ? product.stock_current * 1000 : product.stock_current).toLocaleString("es-AR")} {unitLabel(product)}
                         </td>
                         <td className="px-3 py-2">
                           <input
@@ -257,7 +260,7 @@ export const StockAdjustmentModal = ({
                             }
                             className="ui-input"
                             placeholder="0"
-                            title={product.sale_mode === "weight" ? "Cantidad en kg" : "Cantidad en unidades"}
+                            title={product.sale_mode === "weight" ? "Cantidad en gramos (g)" : "Cantidad en unidades"}
                             disabled={busy || !canWrite}
                           />
                         </td>
@@ -276,7 +279,7 @@ export const StockAdjustmentModal = ({
                             }
                             className="ui-input"
                             placeholder="0"
-                            title={product.sale_mode === "weight" ? "Cantidad en kg" : "Cantidad en unidades"}
+                            title={product.sale_mode === "weight" ? "Cantidad en gramos (g)" : "Cantidad en unidades"}
                             disabled={busy || !canWrite}
                           />
                         </td>

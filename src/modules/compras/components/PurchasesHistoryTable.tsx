@@ -615,7 +615,11 @@ export const PurchasesHistoryTable = ({
                   {selectedPurchase.purchase.items?.map((item) => {
                     const product = item.product ?? productsById.get(item.product_id);
                     const salePrice = item.sale_price ?? product?.price;
-                    const unitLabel = product?.sale_mode === "weight" ? "kg" : "u.";
+                    const isWeight = product?.sale_mode === "weight";
+                    const unitLabel = isWeight ? "g" : "u.";
+                    const displayQty = isWeight ? item.quantity * 1000 : item.quantity;
+                    const displayBonified = (item.bonified_quantity || 0) * (isWeight ? 1000 : 1);
+                    const displayReturned = (item.returned_quantity || 0) * (isWeight ? 1000 : 1);
 
                     return (
                       <div
@@ -627,15 +631,15 @@ export const PurchasesHistoryTable = ({
                             {item.product_name_snapshot}
                           </p>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                            <span>Cant. pagada: {item.quantity} {unitLabel}</span>
+                            <span>Cant. pagada: {displayQty.toLocaleString("es-AR")} {unitLabel}</span>
                             {item.bonified_quantity ? (
                               <span className="inline-flex items-center gap-0.5 font-medium text-emerald-700 dark:text-emerald-400">
-                                <Gift className="h-3 w-3" /> +{item.bonified_quantity} bonificados
+                                <Gift className="h-3 w-3" /> +{displayBonified.toLocaleString("es-AR")} {unitLabel} bonificados
                               </span>
                             ) : null}
                             {item.returned_quantity ? (
                               <span className="font-medium text-amber-700 dark:text-amber-400">
-                                ({item.returned_quantity} devueltos)
+                                ({displayReturned.toLocaleString("es-AR")} {unitLabel} devueltos)
                               </span>
                             ) : null}
                             <span>• Costo unit: {currency.format(item.unit_cost)}</span>

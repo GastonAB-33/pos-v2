@@ -49,7 +49,7 @@ const normalizeQty = (value: number): string => {
   return Number(value.toFixed(3)).toString();
 };
 
-const unitLabel = (product: Product): string => (product.sale_mode === "weight" ? "kg" : "u.");
+const unitLabel = (product: Product): string => (product.sale_mode === "weight" ? "g" : "u.");
 
 const buildReportDateStamp = (): string => new Date().toISOString().slice(0, 10);
 
@@ -68,9 +68,13 @@ const resolveThresholds = (product: Product, draft: StockDraft | undefined) => {
     };
   }
 
+  const isWeight = product.sale_mode === "weight";
+  const rawMin = toNullableNumber(draft.stockMin);
+  const rawMax = toNullableNumber(draft.stockMax);
+
   return {
-    stockMin: toNullableNumber(draft.stockMin),
-    stockMax: toNullableNumber(draft.stockMax),
+    stockMin: isWeight && rawMin != null ? rawMin / 1000 : rawMin,
+    stockMax: isWeight && rawMax != null ? rawMax / 1000 : rawMax,
   };
 };
 
@@ -246,10 +250,12 @@ export const StockTrackingTable = ({
     paginatedRows.pageItems.length > 0 && selectedPageIds.length === paginatedRows.pageItems.length;
 
   const updateDraft = (product: Product, patch: Partial<StockDraft>) => {
+    const isWeight = product.sale_mode === "weight";
+    const factor = isWeight ? 1000 : 1;
     setDrafts((current) => {
       const currentDraft = current[product.id] ?? {
-        stockMin: product.stock_min != null ? normalizeQty(product.stock_min) : "",
-        stockMax: product.stock_max != null ? normalizeQty(product.stock_max) : "",
+        stockMin: product.stock_min != null ? normalizeQty(product.stock_min * factor) : "",
+        stockMax: product.stock_max != null ? normalizeQty(product.stock_max * factor) : "",
       };
 
       return {
@@ -260,18 +266,23 @@ export const StockTrackingTable = ({
   };
 
   const getDraft = (product: Product): StockDraft => {
+    const isWeight = product.sale_mode === "weight";
+    const factor = isWeight ? 1000 : 1;
     return (
       drafts[product.id] ?? {
-        stockMin: product.stock_min != null ? normalizeQty(product.stock_min) : "",
-        stockMax: product.stock_max != null ? normalizeQty(product.stock_max) : "",
+        stockMin: product.stock_min != null ? normalizeQty(product.stock_min * factor) : "",
+        stockMax: product.stock_max != null ? normalizeQty(product.stock_max * factor) : "",
       }
     );
   };
 
   const persistRowIfChanged = async (product: Product) => {
     const draft = getDraft(product);
-    const nextMin = toNullableNumber(draft.stockMin);
-    const nextMax = toNullableNumber(draft.stockMax);
+    const isWeight = product.sale_mode === "weight";
+    const rawMin = toNullableNumber(draft.stockMin);
+    const rawMax = toNullableNumber(draft.stockMax);
+    const nextMin = isWeight && rawMin != null ? Number((rawMin / 1000).toFixed(4)) : rawMin;
+    const nextMax = isWeight && rawMax != null ? Number((rawMax / 1000).toFixed(4)) : rawMax;
 
     const currentMin = product.stock_min;
     const currentMax = product.stock_max;
@@ -320,10 +331,23 @@ export const StockTrackingTable = ({
         ? selectedVisibleIds
         : rows.filter((row) => (categoryFilter ? row.category === categoryFilter : true)).map((row) => row.id);
 
-    await onUpdateBulk(targetIds, {
-      stockMin: parsedMin,
-      stockMax: parsedMax,
-    });
+    const targetProducts = products.filter((p) => targetIds.includes(p.id));
+    const unitTargetIds = targetProducts.filter((p) => p.sale_mode !== "weight").map((p) => p.id);
+    const weightTargetIds = targetProducts.filter((p) => p.sale_mode === "weight").map((p) => p.id);
+
+    if (unitTargetIds.length > 0) {
+      await onUpdateBulk(unitTargetIds, {
+        stockMin: parsedMin,
+        stockMax: parsedMax,
+      });
+    }
+
+    if (weightTargetIds.length > 0) {
+      await onUpdateBulk(weightTargetIds, {
+        stockMin: parsedMin !== undefined ? (parsedMin != null ? Number((parsedMin / 1000).toFixed(4)) : null) : undefined,
+        stockMax: parsedMax !== undefined ? (parsedMax != null ? Number((parsedMax / 1000).toFixed(4)) : null) : undefined,
+      });
+    }
 
     setDrafts((current) => {
       const next = { ...current };
@@ -344,15 +368,18 @@ export const StockTrackingTable = ({
       .map((product) => {
         const { stockMin, stockMax } = resolveThresholds(product, drafts[product.id]);
         const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
+        const isWeight = product.sale_mode === "weight";
+        const factor = isWeight ? 1000 : 1;
 
         return {
           producto: product.name,
           codigo: product.code,
           categoria: product.category,
           subcategoria: product.subcategory ?? "",
-          stock_actual: Number(product.stock_current.toFixed(3)),
-          stock_min: stockMin ?? "",
-          stock_max: stockMax ?? "",
+          stock_actual: Number((product.stock_current * factor).toFixed(1)),
+          unidad: isWeight ? "g" : "u.",
+          stock_min: stockMin != null ? Number((stockMin * factor).toFixed(1)) : "",
+          stock_max: stockMax != null ? Number((stockMax * factor).toFixed(1)) : "",
           estado: status,
         };
       })
@@ -591,7 +618,7 @@ export const StockTrackingTable = ({
                     </td>
                     <td className="px-3 py-2 text-slate-700">{product.category}</td>
                     <td className="px-3 py-2 text-slate-700">
-                      {product.stock_current.toLocaleString("es-AR")} {unitLabel(product)}
+                      {(product.sale_mode === "weight" ? product.stock_current * 1000 : product.stock_current).toLocaleString("es-AR")} {unitLabel(product)}
                     </td>
                     <td className="px-3 py-2">
                       <input

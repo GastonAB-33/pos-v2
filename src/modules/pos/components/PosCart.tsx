@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BadgePercent, Barcode, Percent, ShoppingCart, Trash2 } from "lucide-react";
+import { BadgePercent, Barcode, Calculator, Percent, ShoppingCart, Trash2 } from "lucide-react";
 import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
 import { cn } from "@/utils/cn";
 import type { CartManualDiscount, PosCartItemComputed } from "@/modules/pos/hooks/usePosSale";
@@ -38,6 +38,8 @@ interface PosCartProps {
   surchargeTotal: number;
   paymentDiscountTotal: number;
   roundingAdjustment?: number;
+  roundingEnabled?: boolean;
+  onToggleRounding?: () => void;
   total: number;
   discountsEnabled?: boolean;
   onToggleDiscounts?: () => void;
@@ -89,6 +91,8 @@ export const PosCart = ({
   surchargeTotal,
   paymentDiscountTotal,
   roundingAdjustment = 0,
+  roundingEnabled = true,
+  onToggleRounding,
   total,
   discountsEnabled = true,
   onToggleDiscounts,
@@ -174,7 +178,35 @@ export const PosCart = ({
           </h2>
         </div>
         <div className="flex items-center gap-1.5">
-          {onToggleDiscounts ? (
+          {onToggleRounding ? (
+            <button
+              type="button"
+              onClick={onToggleRounding}
+              disabled={disabled || !canWrite}
+              title={
+                roundingEnabled
+                  ? "Redondeo comercial activado (clic para desactivar)"
+                  : "Redondeo comercial desactivado (clic para activar)"
+              }
+              aria-label={roundingEnabled ? "Desactivar redondeo" : "Activar redondeo"}
+              className={cn(
+                "h-6 px-1.5 rounded-lg border flex items-center justify-center gap-1 text-[11px] font-semibold transition shadow-2xs cursor-pointer disabled:opacity-40 whitespace-nowrap shrink-0",
+                roundingEnabled
+                  ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
+                  : "border-rose-300 dark:border-rose-800/80 bg-rose-50 dark:bg-rose-950/40 text-rose-500 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60"
+              )}
+            >
+              {roundingEnabled ? (
+                <Calculator size={13} />
+              ) : (
+                <span className="relative flex items-center justify-center">
+                  <Calculator size={13} className="opacity-50" />
+                  <span className="absolute h-0.5 w-3 bg-rose-500 rotate-45 rounded-full" />
+                </span>
+              )}
+              <span>{roundingEnabled ? "Red. ON" : "Red. OFF"}</span>
+            </button>
+          ) : onToggleDiscounts ? (
             <button
               type="button"
               onClick={onToggleDiscounts}
@@ -606,11 +638,18 @@ export const PosCart = ({
             </div>
           ) : null}
 
-          {roundingAdjustment !== 0 ? (
+          {roundingAdjustment !== 0 && roundingEnabled ? (
             <div className="mt-0.5 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
               <span>Redondeo comercial</span>
               <span className="font-semibold text-slate-800 dark:text-slate-200">
                 {roundingAdjustment > 0 ? `+${currency.format(roundingAdjustment)}` : currency.format(roundingAdjustment)}
+              </span>
+            </div>
+          ) : !roundingEnabled ? (
+            <div className="mt-0.5 flex items-center justify-between text-[11px] text-slate-400 dark:text-slate-500">
+              <span>Redondeo comercial</span>
+              <span className="font-semibold text-[10px] uppercase text-rose-500 dark:text-rose-400">
+                Desactivado
               </span>
             </div>
           ) : null}

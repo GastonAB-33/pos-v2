@@ -271,12 +271,16 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
   }, [loadCashData]);
 
   const currentSession = useMemo(() => {
-    if (!userId) return null;
-    return (
-      sessions.find(
-        (session) => session.status === "open" && session.opened_by_user_id === userId
-      ) ?? null
-    );
+    // 1. Si el usuario actual abrió una sesión abierta propia, usarla
+    const userSession = userId
+      ? sessions.find(
+          (session) => session.status === "open" && session.opened_by_user_id === userId
+        )
+      : null;
+    if (userSession) return userSession;
+
+    // 2. Si no, pero hay una sesión abierta en el comercio (ej. abierta por otro compañero como Patricia), continuar con esa caja abierta
+    return sessions.find((session) => session.status === "open") ?? null;
   }, [sessions, userId]);
 
   useEffect(() => {
@@ -944,9 +948,9 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
     setIsSubmitting(true);
     try {
-      const alreadyOpen = await cashService.getOpenSessionByUser(tenantId, userId);
+      const alreadyOpen = await cashService.getOpenSession(tenantId);
       if (alreadyOpen) {
-        setFeedback({ type: "error", message: "Ya tenes una caja diaria abierta" });
+        setFeedback({ type: "error", message: "Ya existe una caja diaria abierta en este comercio" });
         return;
       }
 

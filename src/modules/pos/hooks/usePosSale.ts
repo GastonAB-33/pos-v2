@@ -175,7 +175,7 @@ interface BackendErrorLike {
   code?: string;
 }
 
-const getBackendErrorMessage = (error: unknown): string | null => {
+export const getBackendErrorMessage = (error: unknown): string | null => {
   if (!error || typeof error !== "object") return null;
   const backendError = error as BackendErrorLike;
   const message = backendError.message?.trim() ?? "";
@@ -236,12 +236,15 @@ const calculateSummaryByMethod = (
   subtotal: number,
   paymentMethod: PaymentMethod | null,
   posSettings?: PosSettings | null,
-  discountsEnabled: boolean = true
+  discountsEnabled: boolean = true,
+  roundingEnabled: boolean = true
 ): PosCheckoutSummary => {
+  const isRoundingActive = Boolean(roundingEnabled && (posSettings?.rounding_enabled ?? true));
+
   if (!paymentMethod) {
     const rounding = calculatePosRounding(subtotal, {
-      enabled: posSettings?.rounding_enabled,
-      rule: posSettings?.rounding_rule,
+      enabled: isRoundingActive,
+      rule: posSettings?.rounding_rule || "integer",
       mode: posSettings?.rounding_mode,
       target: posSettings?.rounding_target,
       isCashPayment: true,
@@ -267,8 +270,8 @@ const calculateSummaryByMethod = (
 
   const isCash = normalizePaymentMethodCode(paymentMethod.code) === "cash";
   const rounding = calculatePosRounding(rawTotal, {
-    enabled: posSettings?.rounding_enabled,
-    rule: posSettings?.rounding_rule,
+    enabled: isRoundingActive,
+    rule: posSettings?.rounding_rule || "integer",
     mode: posSettings?.rounding_mode,
     target: posSettings?.rounding_target,
     isCashPayment: isCash,
@@ -304,6 +307,19 @@ export const usePosSale = (tenantId: string | null) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [productBarcodes, setProductBarcodes] = useState<ProductBarcode[]>([]);
   const [primaryBarcodes, setPrimaryBarcodes] = useState<Record<string, string>>({});
+
+  const actualPrimaryBarcodes = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const row of productBarcodes) {
+      if (row.barcode && row.product_id) {
+        if (row.is_primary || !map[row.product_id]) {
+          map[row.product_id] = row.barcode;
+        }
+      }
+    }
+    return map;
+  }, [productBarcodes]);
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -324,6 +340,7 @@ export const usePosSale = (tenantId: string | null) => {
   const [cartState, setCartState] = useState<PosCartItem[]>([]);
   const [cartManualDiscount, setCartManualDiscount] = useState<CartManualDiscount | null>(null);
   const [discountsEnabled, setDiscountsEnabled] = useState(true);
+  const [roundingEnabled, setRoundingEnabled] = useState<boolean>(true);
   const [lastAddedProductId, setLastAddedProductId] = useState<string | null>(null);
   const [saleTabs, setSaleTabs] = useState<PosSaleTab[]>([
     { id: "sale-1", label: "Venta 1", cart: [], selectedCustomerId: "" },
@@ -341,6 +358,16 @@ export const usePosSale = (tenantId: string | null) => {
   const toggleDiscounts = useCallback(() => {
     setDiscountsEnabled((prev) => !prev);
   }, []);
+
+  const toggleRounding = useCallback(() => {
+    setRoundingEnabled((prev) => !prev);
+  }, []);
+
+  useEffect(() => {
+    if (posSettings?.rounding_enabled !== undefined) {
+      setRoundingEnabled(posSettings.rounding_enabled);
+    }
+  }, [posSettings?.rounding_enabled]);
 
   useEffect(() => {
     cartRef.current = cartState;
@@ -1951,6 +1978,7 @@ export const usePosSale = (tenantId: string | null) => {
     setCartState([]);
     setCartManualDiscount(null);
     setDiscountsEnabled(true);
+    setRoundingEnabled(posSettings?.rounding_enabled ?? true);
     setLastAddedProductId(null);
   };
 
@@ -2087,9 +2115,10 @@ export const usePosSale = (tenantId: string | null) => {
         subtotal,
         getPaymentMethodById(paymentMethodId),
         posSettings,
-        discountsEnabled
+        discountsEnabled,
+        roundingEnabled
       ),
-    [discountsEnabled, getPaymentMethodById, posSettings, subtotal]
+    [discountsEnabled, getPaymentMethodById, posSettings, roundingEnabled, subtotal]
   );
 
   const selectedCustomer = useMemo(
@@ -2679,6 +2708,7 @@ export const usePosSale = (tenantId: string | null) => {
         if (
           !item.is_manual_item &&
           !item.product_id.startsWith("manual-") &&
+          !item.product_id.startsWith("temp-") &&
           !item.is_debt_payment_item &&
           !item.product_id.startsWith("debt-")
         ) {
@@ -2728,24 +2758,45 @@ export const usePosSale = (tenantId: string | null) => {
           if (
             item.is_manual_item ||
             item.product_id.startsWith("manual-") ||
+            item.product_id.startsWith("temp-") ||
             item.is_debt_payment_item ||
             item.product_id.startsWith("debt-")
           ) {
             return itemPromise;
           }
 
-          const stockPromise = stockService.create(tenantId, {
-            product_id: item.product_id,
-            movement_type: "sale",
-            quantity: item.quantity,
-            reference_type: "sale",
-            reference_id: sale.id,
-            notes: `Venta ${sale.sale_number}`,
-            created_by: resolvedCreatedBy,
-          });
+          const stockPromise = (async () => {
+            try {
+              return await stockService.create(tenantId, {
+                product_id: item.product_id,
+                movement_type: "sale",
+                quantity: item.quantity,
+                reference_type: "sale",
+                reference_id: sale.id,
+                notes: `Venta ${sale.sale_number}`,
+                created_by: resolvedCreatedBy,
+              });
+            } catch (stockError) {
+              console.warn(
+                `[POS] No se pudo asentar movimiento de stock para producto ${item.product_id} (${item.name}):`,
+                stockError
+              );
+              return null;
+            }
+          })();
 
           const nextStock = updatedStockByProductId.get(item.product_id) ?? item.stock_available;
-          const updateStockPromise = productsService.updateStock(tenantId, item.product_id, nextStock);
+          const updateStockPromise = (async () => {
+            try {
+              return await productsService.updateStock(tenantId, item.product_id, nextStock);
+            } catch (stockUpdateError) {
+              console.warn(
+                `[POS] No se pudo actualizar stock acumulado para producto ${item.product_id} (${item.name}):`,
+                stockUpdateError
+              );
+              return null;
+            }
+          })();
 
           return Promise.all([itemPromise, stockPromise, updateStockPromise]);
         })
@@ -3420,7 +3471,9 @@ export const usePosSale = (tenantId: string | null) => {
   return {
     products,
     favoriteProducts,
+    productBarcodes,
     primaryBarcodes,
+    actualPrimaryBarcodes,
     customers,
     paymentMethods,
     bankAccounts,
@@ -3456,6 +3509,9 @@ export const usePosSale = (tenantId: string | null) => {
     discountsEnabled,
     setDiscountsEnabled,
     toggleDiscounts,
+    roundingEnabled,
+    setRoundingEnabled,
+    toggleRounding,
     lastAddedProductId,
     isLoading,
     isSubmitting,

@@ -23,8 +23,11 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
-const stockLabel = (product: Product) =>
-  `${product.stock_current.toLocaleString("es-AR")} ${product.sale_mode === "weight" ? "kg" : "u."}`;
+const stockLabel = (product: Product) => {
+  const isWeight = product.sale_mode === "weight";
+  const qty = isWeight ? product.stock_current * 1000 : product.stock_current;
+  return `${qty.toLocaleString("es-AR")} ${isWeight ? "g" : "u."}`;
+};
 
 export const PurchaseProductList = ({
   products,

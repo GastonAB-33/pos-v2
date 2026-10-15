@@ -27,7 +27,7 @@ import { PosProductList } from "@/modules/pos/components/PosProductList";
 import { PosQuickProductModal } from "@/modules/pos/components/PosQuickProductModal";
 import { PosSmartView } from "@/modules/pos/components/PosSmartView";
 import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
-import { usePosSale, type PosCartItemComputed } from "@/modules/pos/hooks/usePosSale";
+import { usePosSale, type PosCartItemComputed, getBackendErrorMessage } from "@/modules/pos/hooks/usePosSale";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
 import { useUiStore } from "@/store/ui.store";
 import { useProductsStore } from "@/features/products/store/products.store";
@@ -37,7 +37,7 @@ import { auditService } from "@/services/audit.service";
 import { bankAccountsService } from "@/services/bank-accounts.service";
 import { cashService } from "@/services/cash.service";
 import { customersService } from "@/services/customers.service";
-import { productsService } from "@/services/products.service";
+import { productsService, type UpdateProductInput } from "@/services/products.service";
 import { invoicesService } from "@/services/invoices.service";
 import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
 import { posCustomerProfilesService } from "@/services/pos-customer-profiles.service";
@@ -158,6 +158,7 @@ export const PosPage = () => {
   const canReadPos = canRead("pos");
   const canWritePos = canWrite("pos");
   const canWriteCustomers = canWrite("clientes");
+  const canWriteProducts = canWrite("productos");
   const { success: toastSuccess, error: toastError } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
@@ -175,6 +176,7 @@ export const PosPage = () => {
     products,
     favoriteProducts,
     primaryBarcodes,
+    actualPrimaryBarcodes,
     customers,
     paymentMethods,
     bankAccounts,
@@ -203,6 +205,8 @@ export const PosPage = () => {
     cartPromotionDiscountTotal,
     discountsEnabled,
     toggleDiscounts,
+    roundingEnabled,
+    toggleRounding,
     lastAddedProductId,
     isLoading,
     isSubmitting,
@@ -357,13 +361,13 @@ export const PosPage = () => {
     const cartItem = cart.find((item) => item.product_id === editingCartItemId);
     if (!cartItem) return null;
     const product = products.find((p) => p.id === cartItem.product_id);
-    const barcode = primaryBarcodes[cartItem.product_id] ?? null;
+    const barcode = actualPrimaryBarcodes[cartItem.product_id] ?? null;
     return {
       ...cartItem,
       code: product?.code ?? null,
       barcode,
     };
-  }, [cart, editingCartItemId, products, primaryBarcodes]);
+  }, [cart, editingCartItemId, products, actualPrimaryBarcodes]);
   const existingDebtItem = useMemo(
     () => cart.find((item) => item.is_debt_payment_item) ?? null,
     [cart]
@@ -705,6 +709,12 @@ export const PosPage = () => {
         return;
       }
 
+      const byAuth = await usersService.getByAuthUserId(user.id);
+      if (byAuth?.is_active && byAuth.tenant_id === tenantId) {
+        persistResolvedUser(byAuth.id);
+        return;
+      }
+
       const lookupValue = user.email?.trim() || user.username?.trim() || "";
       if (lookupValue) {
         const byIdentity = await usersService.getByEmailOrUsername(tenantId, lookupValue);
@@ -712,12 +722,6 @@ export const PosPage = () => {
           persistResolvedUser(byIdentity.id);
           return;
         }
-      }
-
-      const openSession = await cashService.getOpenSession(tenantId);
-      if (openSession?.opened_by_user_id) {
-        persistResolvedUser(openSession.opened_by_user_id, false);
-        return;
       }
 
       const allUsers = await usersService.getAllByTenant(tenantId);
@@ -733,6 +737,12 @@ export const PosPage = () => {
           persistResolvedUser(byFullName.id);
           return;
         }
+      }
+
+      const openSession = await cashService.getOpenSession(tenantId);
+      if (openSession?.opened_by_user_id) {
+        persistResolvedUser(openSession.opened_by_user_id, false);
+        return;
       }
 
       persistResolvedUser(null);
@@ -1315,6 +1325,8 @@ export const PosPage = () => {
     if (!isCheckoutModalOpen) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+
       if (event.key === "Escape") {
         setIsCheckoutModalOpen(false);
         window.setTimeout(() => {
@@ -1324,7 +1336,6 @@ export const PosPage = () => {
       }
 
       if (event.key !== "Enter") return;
-      if (event.defaultPrevented) return;
       if (!cart.length || !paymentMethods.length) return;
       if (!canWritePos || isLoading || isSubmitting || isCashGateBlocking) return;
 
@@ -1608,6 +1619,8 @@ export const PosPage = () => {
           subtotal={checkoutSummary.subtotal}
           total={checkoutSummary.total}
           roundingAdjustment={checkoutSummary.roundingAdjustment}
+          roundingEnabled={roundingEnabled}
+          onToggleRounding={toggleRounding}
           discountsEnabled={discountsEnabled}
           onToggleDiscounts={toggleDiscounts}
           promotionDiscountTotal={promotionDiscountTotal}
@@ -1835,6 +1848,8 @@ export const PosPage = () => {
                   surchargeTotal={0}
                   paymentDiscountTotal={0}
                   roundingAdjustment={checkoutSummary.roundingAdjustment}
+                  roundingEnabled={roundingEnabled}
+                  onToggleRounding={toggleRounding}
                   total={checkoutSummary.total}
                   discountsEnabled={discountsEnabled}
                   onToggleDiscounts={toggleDiscounts}
@@ -2042,6 +2057,7 @@ export const PosPage = () => {
       <PosCartItemEditModal
         item={editingCartItem}
         disabled={isSubmitting || isCashGateBlocking || !canWritePos}
+        canEditCatalog={canWriteProducts}
         onClose={() => {
           setEditingCartItemId(null);
           window.setTimeout(() => {
@@ -2054,6 +2070,11 @@ export const PosPage = () => {
 
           // 2. Si se eligió guardar en catálogo, ejecutar en segundo plano sin frenar la terminal
           if (scope === "system_and_sale" && tenantId && !values.productId.startsWith("manual-")) {
+            if (!canWriteProducts) {
+              toastError("No tenés permisos para actualizar el catálogo de productos. El cambio se aplicó únicamente para esta venta.");
+              return;
+            }
+
             void (async () => {
               try {
                 const existingProduct = products.find((p) => p.id === values.productId);
@@ -2065,18 +2086,32 @@ export const PosPage = () => {
                   porcentajeIva: vatPercent,
                 });
 
-                const updated = await productsService.update(tenantId, values.productId, {
+                const existingCode = existingProduct?.code?.trim() || "";
+                const newCode = values.code?.trim() || "";
+                const hasCodeChanged = newCode !== existingCode;
+
+                const existingBarcode = actualPrimaryBarcodes[values.productId]?.trim() || "";
+                const newBarcode = values.barcode?.trim() || "";
+                const hasBarcodeChanged = values.barcode !== undefined && newBarcode !== existingBarcode;
+
+                const updatePayload: UpdateProductInput = {
                   name: values.name,
                   category: values.category,
                   price: roundMoney(values.unitPrice),
                   price_without_vat: computed.precioSinIva,
                   profit_percent: computed.porcentajeGanancia,
-                  code: values.code?.trim() || undefined,
                   ...(values.saleMode ? { sale_mode: values.saleMode } : {}),
-                });
+                };
 
-                if (values.barcode !== undefined) {
-                  await productsService.setPrimaryBarcode(tenantId, values.productId, values.barcode.trim());
+                if (hasCodeChanged) {
+                  updatePayload.code = newCode || null;
+                }
+
+                const updated = await productsService.update(tenantId, values.productId, updatePayload);
+
+                if (hasBarcodeChanged) {
+                  await productsService.setPrimaryBarcode(tenantId, values.productId, newBarcode);
+                  useProductsStore.getState().patchPrimaryBarcode(values.productId, newBarcode);
                 }
 
                 if (updated) {
@@ -2102,7 +2137,11 @@ export const PosPage = () => {
                 toastSuccess("Producto actualizado en el sistema y en la venta");
               } catch (error) {
                 console.error("Error al actualizar producto en el sistema:", error);
-                toastError("No se pudo sincronizar con el catálogo");
+                const message =
+                  getBackendErrorMessage(error) ||
+                  (error instanceof Error && error.message ? error.message : null) ||
+                  "No se pudo sincronizar con el catálogo";
+                toastError(message);
               }
             })();
           }
@@ -2138,7 +2177,7 @@ export const PosPage = () => {
               }, 0);
             }}
           />
-          <div className="relative z-10 w-full max-w-2xl space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-panel dark:border-slate-800 dark:bg-slate-900">
+          <div className="relative z-10 w-full max-w-2xl space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-panel dark:border-slate-700 dark:bg-slate-900">
             <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
               <div className="flex items-center gap-2">
                 <FileText className="text-blue-600 dark:text-blue-400" size={20} />
@@ -2165,7 +2204,7 @@ export const PosPage = () => {
                 />
                 <button
                   type="button"
-                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:text-slate-400"
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
                   onClick={() => {
                     setIsReceiptsListModalOpen(false);
                     setReceiptsSearchTerm("");
@@ -2190,7 +2229,7 @@ export const PosPage = () => {
                 value={receiptsSearchTerm}
                 onChange={(e) => setReceiptsSearchTerm(e.target.value)}
                 placeholder="Buscar por Nº venta, cliente, banco (Patagonia, etc.) o medio de pago..."
-                className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-8 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder:text-slate-500"
+                className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-8 text-xs text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder:text-slate-400"
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
@@ -2231,7 +2270,7 @@ export const PosPage = () => {
                     return (
                       <article
                         key={receipt.id}
-                        className="rounded-xl border border-slate-200/90 bg-white p-2.5 sm:p-3 transition-colors hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900/70 dark:hover:border-slate-700 shadow-xs"
+                        className="rounded-xl border border-slate-200/90 bg-white p-2.5 sm:p-3 transition-colors hover:border-slate-300 dark:border-slate-700/80 dark:bg-slate-800/60 dark:hover:border-slate-600 shadow-xs"
                       >
                         {/* FILA 1: Identificador amigable + Fecha + Cliente (Izq) y Total + Tipo (Der) */}
                         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -2242,8 +2281,8 @@ export const PosPage = () => {
                             >
                               {friendlyNumber.display}
                             </span>
-                            <span className="text-slate-300 dark:text-slate-600">•</span>
-                            <span className="text-slate-500 dark:text-slate-400">
+                            <span className="text-slate-300 dark:text-slate-500">•</span>
+                            <span className="text-slate-500 dark:text-slate-300">
                               {new Date(receipt.issued_at).toLocaleString("es-AR", {
                                 day: "2-digit",
                                 month: "2-digit",
@@ -2252,10 +2291,10 @@ export const PosPage = () => {
                                 minute: "2-digit",
                               })}
                             </span>
-                            <span className="text-slate-300 dark:text-slate-600">•</span>
-                            <span className="text-slate-600 dark:text-slate-300">
-                              <span className="text-slate-400 dark:text-slate-500">Cliente: </span>
-                              <strong className="font-semibold text-slate-900 dark:text-slate-100">
+                            <span className="text-slate-300 dark:text-slate-500">•</span>
+                            <span className="text-slate-600 dark:text-slate-200">
+                              <span className="text-slate-500 dark:text-slate-400 font-medium">Cliente: </span>
+                              <strong className="font-semibold text-slate-900 dark:text-white">
                                 {receipt.customer_name ?? "Consumidor final"}
                               </strong>
                             </span>
@@ -2266,11 +2305,11 @@ export const PosPage = () => {
                               {currency.format(receipt.total)}
                             </span>
                             {invoice ? (
-                              <span className="inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 dark:border-emerald-800/70 dark:bg-emerald-950/50 dark:text-emerald-300">
+                              <span className="inline-flex items-center rounded-md border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:border-emerald-400/60 dark:bg-emerald-900/50 dark:text-emerald-100 shadow-xs">
                                 Factura {invoice.document_type}
                               </span>
                             ) : (
-                              <span className="inline-flex items-center rounded-md border border-sky-300 bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:border-sky-800/70 dark:bg-sky-950/50 dark:text-sky-300">
+                              <span className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 dark:border-blue-400/60 dark:bg-blue-900/50 dark:text-blue-100 shadow-xs">
                                 Ticket
                               </span>
                             )}
@@ -2278,9 +2317,9 @@ export const PosPage = () => {
                         </div>
 
                         {/* FILA 2: Medio de pago (Izq) y Botones de acción (Der) en una sola línea compacta */}
-                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 dark:border-slate-800/70">
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 dark:border-slate-700/60">
                           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                            <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-300">
                               Pago:
                             </span>
                             {payments.map((p, idx) => {
@@ -2304,22 +2343,31 @@ export const PosPage = () => {
                                 p.methodName.toLowerCase().includes("mercado pago");
 
                               let badgeClasses =
-                                "border border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200";
+                                "border-slate-200 bg-white text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200";
+                              let iconColor = "text-slate-500 dark:text-slate-300";
+                              let bankTextColor = "text-slate-900 dark:text-white";
+
                               if (isTransfer) {
                                 badgeClasses =
-                                  "border border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-700/80 dark:bg-sky-950/60 dark:text-sky-200 font-semibold";
+                                  "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-400/60 dark:bg-blue-900/50 dark:text-blue-100 font-semibold";
+                                iconColor = "text-blue-600 dark:text-blue-300";
+                                bankTextColor = "text-blue-950 dark:text-white";
                               } else if (isCash) {
                                 badgeClasses =
-                                  "border border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-700/80 dark:bg-emerald-950/60 dark:text-emerald-200";
+                                  "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-400/60 dark:bg-emerald-900/50 dark:text-emerald-100 font-semibold";
+                                iconColor = "text-emerald-600 dark:text-emerald-300";
                               } else if (isCurrentAccount) {
                                 badgeClasses =
-                                  "border border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700/80 dark:bg-amber-950/60 dark:text-amber-200";
+                                  "border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-400/60 dark:bg-amber-900/50 dark:text-amber-100 font-semibold";
+                                iconColor = "text-amber-600 dark:text-amber-300";
                               } else if (isCard) {
                                 badgeClasses =
-                                  "border border-purple-300 bg-purple-50 text-purple-800 dark:border-purple-700/80 dark:bg-purple-950/60 dark:text-purple-200";
+                                  "border-purple-300 bg-purple-50 text-purple-900 dark:border-purple-400/60 dark:bg-purple-900/50 dark:text-purple-100 font-semibold";
+                                iconColor = "text-purple-600 dark:text-purple-300";
                               } else if (isMp) {
                                 badgeClasses =
-                                  "border border-cyan-300 bg-cyan-50 text-cyan-800 dark:border-cyan-700/80 dark:bg-cyan-950/60 dark:text-cyan-200";
+                                  "border-cyan-300 bg-cyan-50 text-cyan-900 dark:border-cyan-400/60 dark:bg-cyan-900/50 dark:text-cyan-100 font-semibold";
+                                iconColor = "text-cyan-600 dark:text-cyan-300";
                               }
 
                               const hasBankInfo = isTransfer && (p.bankName || p.holderName);
@@ -2331,27 +2379,27 @@ export const PosPage = () => {
                                 <span
                                   key={idx}
                                   className={cn(
-                                    "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] shadow-xs",
+                                    "inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] shadow-xs",
                                     badgeClasses
                                   )}
                                 >
                                   {isTransfer ? (
-                                    <Landmark size={12} className="shrink-0 text-sky-600 dark:text-sky-400" />
+                                    <Landmark size={12} className={cn("shrink-0", iconColor)} />
                                   ) : isCash ? (
-                                    <Banknote size={12} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                    <Banknote size={12} className={cn("shrink-0", iconColor)} />
                                   ) : isCurrentAccount ? (
-                                    <UserIcon size={12} className="shrink-0 text-amber-600 dark:text-amber-400" />
+                                    <UserIcon size={12} className={cn("shrink-0", iconColor)} />
                                   ) : isCard ? (
-                                    <CreditCard size={12} className="shrink-0 text-purple-600 dark:text-purple-400" />
+                                    <CreditCard size={12} className={cn("shrink-0", iconColor)} />
                                   ) : (
-                                    <FileText size={12} className="shrink-0 text-slate-500" />
+                                    <FileText size={12} className={cn("shrink-0", iconColor)} />
                                   )}
                                   <span>
                                     {isTransfer ? (
                                       <>
                                         <span>Transferencia</span>
                                         {bankDisplay ? (
-                                          <span className="font-bold text-sky-900 dark:text-sky-100">
+                                          <span className={cn("font-bold", bankTextColor)}>
                                             {" "}→ {bankDisplay}
                                           </span>
                                         ) : null}
@@ -2399,10 +2447,10 @@ export const PosPage = () => {
                                 Imprimir
                               </button>
                               {printMenuReceiptId === receipt.id ? (
-                                <div className="absolute right-0 z-20 mt-1 min-w-[164px] rounded-lg border border-slate-200 bg-white p-1.5 shadow-panel dark:border-slate-800 dark:bg-slate-900">
+                                <div className="absolute right-0 z-20 mt-1 min-w-[164px] rounded-lg border border-slate-200 bg-white p-1.5 shadow-panel dark:border-slate-700 dark:bg-slate-900">
                                   <button
                                     type="button"
-                                    className="ui-btn-ghost w-full justify-start px-2 py-1.5 text-xs"
+                                    className="ui-btn-ghost w-full justify-start px-2 py-1.5 text-xs font-medium"
                                     onClick={() => openReceiptModal(item, "ticket", true)}
                                   >
                                     Imprimir ticket
@@ -2410,7 +2458,7 @@ export const PosPage = () => {
                                   {invoice ? (
                                     <button
                                       type="button"
-                                      className="ui-btn-ghost w-full justify-start px-2 py-1.5 text-xs"
+                                      className="ui-btn-ghost w-full justify-start px-2 py-1.5 text-xs font-medium"
                                       onClick={() => openReceiptModal(item, "invoice", true)}
                                     >
                                       Imprimir factura
@@ -2432,22 +2480,22 @@ export const PosPage = () => {
       ) : null}
 
       {receiptModal ? (
-        <section className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
+        <section className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs">
           <button
             type="button"
             aria-label="Cerrar comprobante"
             className="absolute inset-0"
             onClick={closeReceiptModal}
           />
-          <div className="relative z-10 w-full max-w-3xl space-y-3 rounded-2xl bg-white p-4 shadow-panel">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-slate-900">
+          <div className="relative z-10 w-full max-w-3xl space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-panel dark:border-slate-700 dark:bg-slate-900">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
                 {receiptModal.view === "invoice" ? "Factura" : "Ticket"}{" "}
                 {receiptModal.view === "invoice"
                   ? receiptModal.invoice?.document_number
                   : receiptModal.receipt.receipt_number}
               </p>
-              <button type="button" className="ui-btn-ghost px-2.5 py-1.5 text-xs" onClick={closeReceiptModal}>
+              <button type="button" className="ui-btn-ghost px-2.5 py-1.5 text-xs font-semibold" onClick={closeReceiptModal}>
                 Cerrar
               </button>
             </div>

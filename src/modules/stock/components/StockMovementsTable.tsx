@@ -1,4 +1,4 @@
-﻿import {
+import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
@@ -28,7 +28,7 @@ const referenceTypeLabelMap: Record<string, string> = {
 };
 
 const getReferenceTypeLabel = (value: string): string => referenceTypeLabelMap[value] ?? value;
-const unitLabel = (product: Product | null): string => product?.sale_mode === "weight" ? "kg" : "u.";
+const unitLabel = (product: Product | null): string => product?.sale_mode === "weight" ? "g" : "u.";
 
 export const StockMovementsTable = ({ rows }: StockMovementsTableProps) => {
   const columns = [
@@ -50,8 +50,11 @@ export const StockMovementsTable = ({ rows }: StockMovementsTableProps) => {
     columnHelper.accessor((row) => row.movement.quantity, {
       id: "quantity",
       header: "Cantidad",
-      cell: (info) =>
-        `${info.getValue().toLocaleString("es-AR")} ${unitLabel(info.row.original.product)}`,
+      cell: (info) => {
+        const isWeight = info.row.original.product?.sale_mode === "weight";
+        const qty = isWeight ? info.getValue() * 1000 : info.getValue();
+        return `${qty.toLocaleString("es-AR")} ${unitLabel(info.row.original.product)}`;
+      },
     }),
     columnHelper.display({
       id: "reference",

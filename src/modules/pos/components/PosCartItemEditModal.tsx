@@ -21,6 +21,7 @@ export interface PosCartItemView {
 interface PosCartItemEditModalProps {
   item: PosCartItemView | null;
   disabled?: boolean;
+  canEditCatalog?: boolean;
   onClose: () => void;
   onSubmit: (values: PosCartItemEditInput, scope: PosCartItemEditScope) => void | Promise<void>;
 }
@@ -35,6 +36,7 @@ const parsePositive = (value: string): number => {
 export const PosCartItemEditModal = ({
   item,
   disabled,
+  canEditCatalog = true,
   onClose,
   onSubmit,
 }: PosCartItemEditModalProps) => {
@@ -83,7 +85,8 @@ export const PosCartItemEditModal = ({
   };
 
   const handleSubmit = async (scopeToUse?: PosCartItemEditScope) => {
-    const finalScope = scopeToUse ?? editScope;
+    const requestedScope = scopeToUse ?? editScope;
+    const finalScope = (!canEditCatalog || isManualItem) ? "sale_only" : requestedScope;
     const parsedQuantity = parsePositive(quantity);
     setIsSubmitting(true);
     try {
@@ -153,26 +156,41 @@ export const PosCartItemEditModal = ({
             </label>
 
             <label
-              className={`flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors ${
-                editScope === "system_and_sale"
-                  ? "border-emerald-500 bg-emerald-50/40 dark:border-emerald-400 dark:bg-emerald-950/30"
-                  : "border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/40"
-              } ${isManualItem ? "opacity-50 cursor-not-allowed" : ""}`}
+              className={`flex items-start gap-2.5 rounded-xl border p-3 transition-colors ${
+                isManualItem || !canEditCatalog
+                  ? "cursor-not-allowed opacity-60 border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-800/30"
+                  : editScope === "system_and_sale"
+                  ? "cursor-pointer border-emerald-500 bg-emerald-50/40 dark:border-emerald-400 dark:bg-emerald-950/30"
+                  : "cursor-pointer border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/40"
+              }`}
             >
               <input
                 type="radio"
                 name="pos-item-edit-scope"
-                disabled={isManualItem}
-                checked={editScope === "system_and_sale"}
-                onChange={() => setEditScope("system_and_sale")}
+                disabled={isManualItem || !canEditCatalog}
+                checked={canEditCatalog && !isManualItem && editScope === "system_and_sale"}
+                onChange={() => {
+                  if (canEditCatalog && !isManualItem) {
+                    setEditScope("system_and_sale");
+                  }
+                }}
                 className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
               />
               <div>
-                <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Editar y guardar en el sistema
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Editar y guardar en el sistema
+                  </span>
+                  {!canEditCatalog && (
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                      Solo lectura
+                    </span>
+                  )}
+                </div>
                 <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
-                  {isManualItem
+                  {!canEditCatalog
+                    ? "Requiere permisos de edición en el módulo de Productos (rol Administrador)."
+                    : isManualItem
                     ? "No disponible para ítems manuales sin producto registrado."
                     : "Actualiza precio y modalidad en esta venta y en el catálogo para futuras ventas."}
                 </span>

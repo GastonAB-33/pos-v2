@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BadgePercent,
+  Calculator,
   Coins,
   FileText,
   Moon,
@@ -77,6 +78,8 @@ export interface PosSmartViewProps {
   subtotal: number;
   total: number;
   roundingAdjustment?: number;
+  roundingEnabled?: boolean;
+  onToggleRounding?: () => void;
   discountsEnabled?: boolean;
   onToggleDiscounts?: () => void;
   promotionDiscountTotal?: number;
@@ -120,6 +123,8 @@ export const PosSmartView = ({
   subtotal,
   total,
   roundingAdjustment = 0,
+  roundingEnabled = true,
+  onToggleRounding,
   discountsEnabled = true,
   onToggleDiscounts,
   promotionDiscountTotal = 0,
@@ -265,105 +270,12 @@ export const PosSmartView = ({
           isHighlighted && "ring-2 ring-emerald-500/60 border-emerald-500/80"
         )}
       >
-        {/* Encabezado: Carrito (N ítems) + Botones de acción unificados */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-4">
-          <div className="flex items-center gap-2.5">
-            <ShoppingCart className="text-blue-600 dark:text-sky-400" size={20} />
-            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-              Carrito ({items.length} {items.length === 1 ? "ítem" : "ítems"})
-            </h2>
-          </div>
-
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {onToggleDiscounts ? (
-              <button
-                type="button"
-                onClick={onToggleDiscounts}
-                disabled={disabled || !canWrite}
-                title={
-                  discountsEnabled
-                    ? "Descuentos activados (clic para desactivar)"
-                    : "Descuentos desactivados (clic para activar)"
-                }
-                aria-label={discountsEnabled ? "Desactivar descuentos" : "Activar descuentos"}
-                className={cn(
-                  "h-8 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition shadow-2xs cursor-pointer disabled:opacity-40 whitespace-nowrap shrink-0",
-                  discountsEnabled
-                    ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
-                    : "border-rose-300 dark:border-rose-800/80 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60"
-                )}
-              >
-                {discountsEnabled ? (
-                  <BadgePercent size={14} />
-                ) : (
-                  <span className="relative flex items-center justify-center">
-                    <BadgePercent size={14} className="opacity-50" />
-                    <span className="absolute h-0.5 w-3.5 bg-rose-500 rotate-45 rounded-full" />
-                  </span>
-                )}
-                <span>{discountsEnabled ? "Desc. ON" : "Desc. OFF"}</span>
-              </button>
-            ) : null}
-
-            {onOpenCartDiscountModal ? (
-              <button
-                type="button"
-                onClick={onOpenCartDiscountModal}
-                disabled={disabled || !canWrite || items.length === 0}
-                title={
-                  cartManualDiscount
-                    ? `Descuento carrito: ${cartManualDiscount.type === "percent" ? `${cartManualDiscount.value}%` : `$${cartManualDiscount.value}`}. Clic para editar`
-                    : "Aplicar descuento global al carrito con monto y motivo"
-                }
-                className={cn(
-                  "h-8 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition shadow-2xs cursor-pointer disabled:opacity-40 whitespace-nowrap shrink-0",
-                  cartManualDiscount
-                    ? "border-emerald-400 bg-emerald-50 text-emerald-800 dark:border-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 font-bold"
-                    : "border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400 dark:hover:border-emerald-800/80"
-                )}
-              >
-                <Percent size={13} className={cartManualDiscount ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"} />
-                <span>
-                  {cartManualDiscount
-                    ? cartManualDiscount.type === "percent"
-                      ? `-${cartManualDiscount.value}%`
-                      : `-$${cartManualDiscount.value.toLocaleString("es-AR")}`
-                    : "Descuento"}
-                </span>
-              </button>
-            ) : null}
-
-            {onOpenDebtPaymentModal ? (
-              <button
-                type="button"
-                onClick={onOpenDebtPaymentModal}
-                disabled={disabled || !canWrite}
-                className={cn(
-                  "h-8 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition shadow-2xs disabled:opacity-50 whitespace-nowrap shrink-0",
-                  hasDebtPaymentInCart
-                    ? "border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-600/80 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/60"
-                    : "border-indigo-200 bg-indigo-50/80 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-700/70 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-900/60"
-                )}
-                title={hasDebtPaymentInCart ? "Modificar cobro de cuenta corriente" : "Agregar cobro de deuda de cuenta corriente al carrito"}
-              >
-                <Coins size={14} className={hasDebtPaymentInCart ? "text-amber-600 dark:text-amber-400" : "text-indigo-600 dark:text-indigo-400"} />
-                <span>{hasDebtPaymentInCart ? "Editar deuda" : "Cobrar deuda"}</span>
-              </button>
-            ) : null}
-
-            {items.length > 0 ? (
-              <button
-                type="button"
-                onClick={onClearCart}
-                disabled={disabled || !canWrite}
-                className="h-8 px-2.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 dark:hover:border-rose-800/80 transition disabled:opacity-50 whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 shadow-2xs"
-                title="Vaciar todos los productos del carrito"
-              >
-                <Trash2 size={13} className="text-slate-400 group-hover:text-rose-500" />
-                <span>Vaciar</span>
-              </button>
-            ) : null}
-          </div>
+        {/* Encabezado: Carrito (N ítems) */}
+        <div className="flex items-center gap-2.5 mb-4">
+          <ShoppingCart className="text-blue-600 dark:text-sky-400" size={20} />
+          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+            Carrito ({items.length} {items.length === 1 ? "ítem" : "ítems"})
+          </h2>
         </div>
 
         {/* Buscador general con filtro desplegable de categoría */}
@@ -947,7 +859,35 @@ export const PosSmartView = ({
               </span>
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
-              {onToggleDiscounts ? (
+              {onToggleRounding ? (
+                <button
+                  type="button"
+                  onClick={onToggleRounding}
+                  disabled={disabled || !canWrite}
+                  title={
+                    roundingEnabled
+                      ? "Redondeo comercial activado (clic para desactivar)"
+                      : "Redondeo comercial desactivado (clic para activar)"
+                  }
+                  aria-label={roundingEnabled ? "Desactivar redondeo" : "Activar redondeo"}
+                  className={cn(
+                    "h-8 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition shadow-2xs cursor-pointer disabled:opacity-40 whitespace-nowrap shrink-0",
+                    roundingEnabled
+                      ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
+                      : "border-rose-300 dark:border-rose-800/80 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60"
+                  )}
+                >
+                  {roundingEnabled ? (
+                    <Calculator size={14} />
+                  ) : (
+                    <span className="relative flex items-center justify-center">
+                      <Calculator size={14} className="opacity-50" />
+                      <span className="absolute h-0.5 w-3.5 bg-rose-500 rotate-45 rounded-full" />
+                    </span>
+                  )}
+                  <span>{roundingEnabled ? "Red. ON" : "Red. OFF"}</span>
+                </button>
+              ) : onToggleDiscounts ? (
                 <button
                   type="button"
                   onClick={onToggleDiscounts}
@@ -1089,11 +1029,18 @@ export const PosSmartView = ({
               </div>
             ) : null}
 
-            {roundingAdjustment !== 0 ? (
+            {roundingAdjustment !== 0 && roundingEnabled ? (
               <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                 <span>Redondeo comercial</span>
                 <span className="font-semibold text-slate-900 dark:text-slate-200">
                   {roundingAdjustment > 0 ? `+${currency.format(roundingAdjustment)}` : currency.format(roundingAdjustment)}
+                </span>
+              </div>
+            ) : !roundingEnabled ? (
+              <div className="flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
+                <span>Redondeo comercial</span>
+                <span className="text-[11px] font-semibold text-rose-500 dark:text-rose-400">
+                  Desactivado
                 </span>
               </div>
             ) : null}
