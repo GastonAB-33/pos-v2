@@ -203,6 +203,8 @@ export const PosPage = () => {
     cartPromotionDiscountTotal,
     discountsEnabled,
     toggleDiscounts,
+    roundingEnabled,
+    toggleRounding,
     lastAddedProductId,
     isLoading,
     isSubmitting,
@@ -1608,6 +1610,8 @@ export const PosPage = () => {
           subtotal={checkoutSummary.subtotal}
           total={checkoutSummary.total}
           roundingAdjustment={checkoutSummary.roundingAdjustment}
+          roundingEnabled={roundingEnabled}
+          onToggleRounding={toggleRounding}
           discountsEnabled={discountsEnabled}
           onToggleDiscounts={toggleDiscounts}
           promotionDiscountTotal={promotionDiscountTotal}
@@ -1835,6 +1839,8 @@ export const PosPage = () => {
                   surchargeTotal={0}
                   paymentDiscountTotal={0}
                   roundingAdjustment={checkoutSummary.roundingAdjustment}
+                  roundingEnabled={roundingEnabled}
+                  onToggleRounding={toggleRounding}
                   total={checkoutSummary.total}
                   discountsEnabled={discountsEnabled}
                   onToggleDiscounts={toggleDiscounts}

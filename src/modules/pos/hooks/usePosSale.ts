@@ -236,12 +236,15 @@ const calculateSummaryByMethod = (
   subtotal: number,
   paymentMethod: PaymentMethod | null,
   posSettings?: PosSettings | null,
-  discountsEnabled: boolean = true
+  discountsEnabled: boolean = true,
+  roundingEnabled: boolean = true
 ): PosCheckoutSummary => {
+  const isRoundingActive = Boolean(roundingEnabled && (posSettings?.rounding_enabled ?? true));
+
   if (!paymentMethod) {
     const rounding = calculatePosRounding(subtotal, {
-      enabled: posSettings?.rounding_enabled,
-      rule: posSettings?.rounding_rule,
+      enabled: isRoundingActive,
+      rule: posSettings?.rounding_rule || "integer",
       mode: posSettings?.rounding_mode,
       target: posSettings?.rounding_target,
       isCashPayment: true,
@@ -267,8 +270,8 @@ const calculateSummaryByMethod = (
 
   const isCash = normalizePaymentMethodCode(paymentMethod.code) === "cash";
   const rounding = calculatePosRounding(rawTotal, {
-    enabled: posSettings?.rounding_enabled,
-    rule: posSettings?.rounding_rule,
+    enabled: isRoundingActive,
+    rule: posSettings?.rounding_rule || "integer",
     mode: posSettings?.rounding_mode,
     target: posSettings?.rounding_target,
     isCashPayment: isCash,
@@ -324,6 +327,7 @@ export const usePosSale = (tenantId: string | null) => {
   const [cartState, setCartState] = useState<PosCartItem[]>([]);
   const [cartManualDiscount, setCartManualDiscount] = useState<CartManualDiscount | null>(null);
   const [discountsEnabled, setDiscountsEnabled] = useState(true);
+  const [roundingEnabled, setRoundingEnabled] = useState<boolean>(true);
   const [lastAddedProductId, setLastAddedProductId] = useState<string | null>(null);
   const [saleTabs, setSaleTabs] = useState<PosSaleTab[]>([
     { id: "sale-1", label: "Venta 1", cart: [], selectedCustomerId: "" },
@@ -341,6 +345,16 @@ export const usePosSale = (tenantId: string | null) => {
   const toggleDiscounts = useCallback(() => {
     setDiscountsEnabled((prev) => !prev);
   }, []);
+
+  const toggleRounding = useCallback(() => {
+    setRoundingEnabled((prev) => !prev);
+  }, []);
+
+  useEffect(() => {
+    if (posSettings?.rounding_enabled !== undefined) {
+      setRoundingEnabled(posSettings.rounding_enabled);
+    }
+  }, [posSettings?.rounding_enabled]);
 
   useEffect(() => {
     cartRef.current = cartState;
@@ -1951,6 +1965,7 @@ export const usePosSale = (tenantId: string | null) => {
     setCartState([]);
     setCartManualDiscount(null);
     setDiscountsEnabled(true);
+    setRoundingEnabled(posSettings?.rounding_enabled ?? true);
     setLastAddedProductId(null);
   };
 
@@ -2087,9 +2102,10 @@ export const usePosSale = (tenantId: string | null) => {
         subtotal,
         getPaymentMethodById(paymentMethodId),
         posSettings,
-        discountsEnabled
+        discountsEnabled,
+        roundingEnabled
       ),
-    [discountsEnabled, getPaymentMethodById, posSettings, subtotal]
+    [discountsEnabled, getPaymentMethodById, posSettings, roundingEnabled, subtotal]
   );
 
   const selectedCustomer = useMemo(
@@ -3456,6 +3472,9 @@ export const usePosSale = (tenantId: string | null) => {
     discountsEnabled,
     setDiscountsEnabled,
     toggleDiscounts,
+    roundingEnabled,
+    setRoundingEnabled,
+    toggleRounding,
     lastAddedProductId,
     isLoading,
     isSubmitting,
