@@ -115,7 +115,7 @@ export const ReceiptTicketPanel = ({
   };
 
   return (
-    <article className="mx-auto w-full max-w-2xl space-y-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-panel">
+    <article className="mx-auto w-full max-w-2xl space-y-3 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900 p-4 shadow-panel">
       {showTicket ? (
         <>
           <header className="border-b border-dashed border-slate-300 dark:border-slate-700 pb-3 text-center">
@@ -149,7 +149,7 @@ export const ReceiptTicketPanel = ({
 
           <div className="space-y-2 py-3 text-sm">
             {receipt.items.map((item, index) => (
-              <div key={`${item.name}-${index}`} className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 p-2">
+              <div key={`${item.name}-${index}`} className="rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/60 p-2">
                 <p className="font-medium text-slate-900 dark:text-slate-100">{item.name}</p>
                 <p className="mt-1 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                   <span>
@@ -185,7 +185,7 @@ export const ReceiptTicketPanel = ({
       ) : null}
 
       {showInvoice && hasInvoice ? (
-        <section className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-3">
+        <section className="rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               Factura {invoice!.document_type} {invoice!.document_number}
@@ -202,11 +202,11 @@ export const ReceiptTicketPanel = ({
               ARCA {invoice!.arca_status}
             </span>
           </div>
-          <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
             Referencia: {invoice!.arca_reference ?? "Sin referencia"}{" "}
             {invoice!.arca_message ? `| ${invoice!.arca_message}` : ""}
           </p>
-          <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">Total factura: {currency.format(invoice!.total)}</p>
+          <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">Total factura: {currency.format(invoice!.total)}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className="ui-btn-primary" onClick={printInvoice}>
               Imprimir factura
@@ -219,7 +219,7 @@ export const ReceiptTicketPanel = ({
       ) : null}
 
       {showInvoice && !hasInvoice ? (
-        <section className="rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-3 text-sm text-slate-600 dark:text-slate-400">
+        <section className="rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 p-3 text-sm text-slate-600 dark:text-slate-300">
           Este comprobante no tiene factura asociada.
         </section>
       ) : null}

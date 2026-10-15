@@ -19,15 +19,6 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
-const QUICK_REASONS = [
-  "Atención comercial",
-  "Cliente habitual",
-  "Promoción especial",
-  "Descuento contado",
-  "Falla / Detalle",
-  "Descuento por volumen",
-];
-
 export const PosCartDiscountModal = ({
   isOpen,
   onClose,
@@ -50,7 +41,7 @@ export const PosCartDiscountModal = ({
       } else {
         setMode("percent");
         setValueStr("10");
-        setReason("Atención comercial");
+        setReason("");
       }
     }
   }, [isOpen, currentDiscount]);

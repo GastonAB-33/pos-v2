@@ -68,26 +68,45 @@ const createMovementRow = (
 const getLatestOpenSession = async (tenantId: string, userId?: string): Promise<CashSession | null> => {
   if (dataProvider === "mock") {
     const sessions = await cashSessionsCrud.getAllByTenant(tenantId);
-    return sessions
-      .filter((session) =>
-        userId
-          ? session.status === "open" && session.opened_by_user_id === userId
-          : session.status === "open"
-      )
-      .sort((a, b) => b.opened_at.localeCompare(a.opened_at))[0] ?? null;
+    if (userId) {
+      const userSession = sessions.find(
+        (session) => session.status === "open" && session.opened_by_user_id === userId
+      );
+      if (userSession) return userSession;
+    }
+    return (
+      sessions
+        .filter((session) => session.status === "open")
+        .sort((a, b) => b.opened_at.localeCompare(a.opened_at))[0] ?? null
+    );
   }
 
-  let query = supabase
+  // 1. Si se especificó userId, intentar buscar primero una sesión abierta por este usuario
+  if (userId) {
+    const { data: userData, error: userError } = await supabase
+      .from(dbTables.cash_sessions)
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .eq("status", "open")
+      .eq("opened_by_user_id", userId)
+      .order("opened_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!userError && userData) {
+      return userData as CashSession;
+    }
+  }
+
+  // 2. Si el usuario no abrió la caja (o no se especificó), buscar la caja abierta activa del comercio/tenant
+  const { data, error } = await supabase
     .from(dbTables.cash_sessions)
     .select("*")
     .eq("tenant_id", tenantId)
-    .eq("status", "open");
-
-  if (userId) {
-    query = query.eq("opened_by_user_id", userId);
-  }
-
-  const { data, error } = await query.order("opened_at", { ascending: false }).limit(1).maybeSingle();
+    .eq("status", "open")
+    .order("opened_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (error) {
     throw error;

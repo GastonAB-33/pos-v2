@@ -84,8 +84,8 @@ const DuplicateProductReviewModal = ({
               <div>
                 <p className="font-semibold text-slate-900 dark:text-slate-100">{product.name}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {product.code ? `Código: ${product.code} | ` : ""}Stock: {product.stock_current.toLocaleString("es-AR")}{" "}
-                  {product.sale_mode === "weight" ? "kg" : "u."}
+                  {product.code ? `Código: ${product.code} | ` : ""}Stock: {(product.sale_mode === "weight" ? product.stock_current * 1000 : product.stock_current).toLocaleString("es-AR")}{" "}
+                  {product.sale_mode === "weight" ? "g" : "u."}
                 </p>
               </div>
               <button

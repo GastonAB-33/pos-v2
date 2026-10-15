@@ -405,6 +405,75 @@ export const PosCheckoutPanel = ({
     });
   }, []);
 
+  // Confirmar y fijar el monto asignado a un método (pasa a verde)
+  const confirmOptionAmount = useCallback(
+    (optionId: string) => {
+      setSubmitError(null);
+      const targetOption = paymentOptions.find((o) => o.id === optionId);
+      if (!targetOption) return;
+
+      if (targetOption.isCurrentAccount && !selectedCustomer) {
+        setIsCustomerModalOpen(true);
+        return;
+      }
+
+      const inputVal = amountInputs[optionId] ?? "";
+      const clean = String(inputVal).replace(",", ".");
+      const numeric = parseFloat(clean);
+      const currentMethodVal =
+        !isNaN(numeric) && numeric > 0
+          ? Number(numeric.toFixed(2))
+          : allocatedAmounts[optionId] || 0;
+
+      let nextAllocated: Record<string, number> = {};
+
+      if (currentMethodVal > 0) {
+        setLockedMethodIds((prev) => ({
+          ...prev,
+          [optionId]: true,
+        }));
+        nextAllocated = {
+          ...allocatedAmounts,
+          [optionId]: currentMethodVal,
+        };
+        setAllocatedAmounts(nextAllocated);
+        setAmountInputs((prev) => ({
+          ...prev,
+          [optionId]: currentMethodVal.toFixed(2),
+        }));
+      } else {
+        setLockedMethodIds((prev) => {
+          const next = { ...prev };
+          delete next[optionId];
+          return next;
+        });
+        nextAllocated = { ...allocatedAmounts };
+        delete nextAllocated[optionId];
+        setAllocatedAmounts(nextAllocated);
+        setAmountInputs((prev) => {
+          const next = { ...prev };
+          delete next[optionId];
+          return next;
+        });
+      }
+
+      const sum = Object.values(nextAllocated).reduce((acc, val) => acc + (val || 0), 0);
+      const pending = Number(Math.max(0, checkoutTotal - sum).toFixed(2));
+
+      if (pending === 0 && Math.abs(sum - checkoutTotal) <= 0.01 && sum > 0) {
+        setIsReadyToSubmit(true);
+      } else {
+        setIsReadyToSubmit(false);
+      }
+
+      const inputEl = inputRefs.current[optionId];
+      if (inputEl) {
+        inputEl.blur();
+      }
+    },
+    [allocatedAmounts, amountInputs, checkoutTotal, paymentOptions, selectedCustomer]
+  );
+
   // Desplazar el resto pendiente dinámicamente al método objetivo
   const shiftRemainderToOption = useCallback(
     (targetOption: PosPaymentOption) => {
@@ -683,57 +752,7 @@ export const PosCheckoutPanel = ({
         // PASO 2: El cursor está actualmente dentro de la casilla de monto (editando/confirmando el importe)
         if (isEditingAmount) {
           activeInputEl?.blur();
-
-          // Calculamos de forma inmediata con el valor escrito en el input
-          const clean = (activeInputEl?.value || "").replace(",", ".");
-          const numeric = parseFloat(clean);
-          const currentMethodVal = !isNaN(numeric) && numeric > 0 ? Number(numeric.toFixed(2)) : 0;
-
-          let nextAllocated: Record<string, number> = {};
-
-          if (currentMethodVal > 0) {
-            // Establecer y bloquear este método como confirmado (recuadro pasará a verde)
-            setLockedMethodIds((prev) => ({
-              ...prev,
-              [activeOption.id]: true,
-            }));
-
-            nextAllocated = {
-              ...allocatedAmounts,
-              [activeOption.id]: currentMethodVal,
-            };
-            setAllocatedAmounts(nextAllocated);
-            setAmountInputs((prev) => ({
-              ...prev,
-              [activeOption.id]: currentMethodVal.toFixed(2),
-            }));
-          } else {
-            // Si el monto es 0 o vacío, desbloquear y limpiar
-            setLockedMethodIds((prev) => {
-              const next = { ...prev };
-              delete next[activeOption.id];
-              return next;
-            });
-            nextAllocated = { ...allocatedAmounts };
-            delete nextAllocated[activeOption.id];
-            setAllocatedAmounts(nextAllocated);
-            setAmountInputs((prev) => {
-              const next = { ...prev };
-              delete next[activeOption.id];
-              return next;
-            });
-          }
-
-          const sum = Object.values(nextAllocated).reduce((acc, val) => acc + (val || 0), 0);
-          const pending = Number(Math.max(0, checkoutTotal - sum).toFixed(2));
-
-          if (pending === 0 && Math.abs(sum - checkoutTotal) <= 0.01 && sum > 0) {
-            // Todo el total está cubierto y establecido: el siguiente Enter confirmará la venta
-            setIsReadyToSubmit(true);
-          } else {
-            // Hay monto pendiente: queda listo para desplazarse a la 2da forma de pago con las flechitas
-            setIsReadyToSubmit(false);
-          }
+          confirmOptionAmount(activeOption.id);
           return;
         }
 
@@ -777,6 +796,7 @@ export const PosCheckoutPanel = ({
   }, [
     allocatedAmounts,
     checkoutTotal,
+    confirmOptionAmount,
     handleFinalSubmit,
     highlightedIndex,
     isCustomerModalOpen,
@@ -1022,12 +1042,12 @@ export const PosCheckoutPanel = ({
               onClick={() => selectOption(idx)}
               className={`group flex items-center justify-between gap-3 py-1.5 px-3 rounded-xl border transition cursor-pointer ${
                 isEstablished
-                  ? "border-emerald-500 dark:border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 ring-2 ring-emerald-500/50 shadow-xs"
+                  ? "border-emerald-500 dark:border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/40 ring-2 ring-emerald-500/60 shadow-xs"
                   : isHighlighted
-                  ? "border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/40 ring-2 ring-indigo-500/40"
+                  ? "border-amber-400 dark:border-amber-400 bg-amber-500/15 dark:bg-amber-500/20 ring-2 ring-amber-400 dark:ring-amber-400/90 shadow-sm"
                   : hasAmount
-                  ? "border-emerald-400/60 dark:border-emerald-800/60 bg-emerald-50/20 dark:bg-emerald-950/20"
-                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 hover:border-slate-400 dark:hover:border-slate-600"
+                  ? "border-slate-300 dark:border-slate-600 bg-slate-100/70 dark:bg-slate-800/80 hover:border-slate-400 dark:hover:border-slate-500"
+                  : "border-slate-300 dark:border-slate-600/90 bg-white dark:bg-slate-800/60 hover:border-slate-400 dark:hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/90"
               }`}
             >
               {/* Lado izquierdo: Icono y Nombre */}
@@ -1035,40 +1055,52 @@ export const PosCheckoutPanel = ({
                 <div
                   className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition ${
                     isEstablished
-                      ? "bg-emerald-600 text-white shadow-xs"
+                      ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-slate-950 shadow-xs"
                       : isHighlighted
-                      ? "bg-indigo-600 text-white"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                      ? "bg-amber-400 dark:bg-amber-400 text-slate-950 font-black shadow-xs"
+                      : "bg-slate-100 dark:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600/70"
                   }`}
                 >
                   <Icon size={15} />
                 </div>
 
                 <div className="min-w-0 flex-1 flex items-center gap-2">
-                  <span className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                  <span
+                    className={`font-bold text-sm truncate ${
+                      isEstablished
+                        ? "text-slate-900 dark:text-white"
+                        : isHighlighted
+                        ? "text-slate-950 dark:text-amber-100"
+                        : "text-slate-800 dark:text-slate-200"
+                    }`}
+                  >
                     {option.name}
                   </span>
                   {option.isBankTransfer && (
-                    <span className="rounded bg-sky-100 dark:bg-sky-950/80 border border-sky-200 dark:border-sky-800 px-1.5 py-0.2 text-[9px] font-bold text-sky-800 dark:text-sky-300">
+                    <span className="rounded bg-sky-100 dark:bg-sky-950/80 border border-sky-300 dark:border-sky-800 px-1.5 py-0.2 text-[9px] font-bold text-sky-800 dark:text-sky-300">
                       BANCO
                     </span>
                   )}
-                  {isEstablished && (
+                  {isEstablished ? (
                     <div className="flex items-center gap-1 shrink-0">
                       <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-600 text-white">
                         <Check size={9} strokeWidth={3} />
                       </span>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/80 px-1.5 py-0.2 rounded border border-emerald-300 dark:border-emerald-800">
-                        Asignado
+                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-950/90 px-1.5 py-0.2 rounded border border-emerald-300 dark:border-emerald-700">
+                        Confirmado
                       </span>
                     </div>
-                  )}
+                  ) : isHighlighted ? (
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900 dark:text-amber-200 bg-amber-200/80 dark:bg-amber-950/80 px-1.5 py-0.2 rounded border border-amber-400/80 dark:border-amber-600/80 shrink-0">
+                      Seleccionado
+                    </span>
+                  ) : null}
                 </div>
               </div>
 
-              {/* Lado derecho: Casilla de Importe y botón limpiar */}
+              {/* Lado derecho: Casilla de Importe y botones */}
               <div
-                className="flex items-center gap-2 shrink-0"
+                className="flex items-center gap-1.5 shrink-0"
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* Casilla de Importe con autoselección total al hacer clic / focus */}
@@ -1078,8 +1110,8 @@ export const PosCheckoutPanel = ({
                       isEstablished
                         ? "text-emerald-700 dark:text-emerald-300"
                         : isHighlighted
-                        ? "text-indigo-600 dark:text-indigo-400"
-                        : "text-slate-400"
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-slate-400 dark:text-slate-500"
                     }`}
                   >
                     $
@@ -1103,6 +1135,12 @@ export const PosCheckoutPanel = ({
                     onClick={(e) => {
                       (e.target as HTMLInputElement).select();
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        confirmOptionAmount(option.id);
+                      }
+                    }}
                     autoComplete="off"
                     autoCorrect="off"
                     autoCapitalize="off"
@@ -1110,15 +1148,28 @@ export const PosCheckoutPanel = ({
                     data-lpignore="true"
                     className={`w-full rounded-lg border py-1 pl-5 pr-2 text-right font-mono text-sm outline-none transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
                       isEstablished
-                        ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/90 text-emerald-950 dark:text-emerald-100 font-black ring-2 ring-emerald-500/50 shadow-xs"
+                        ? "border-emerald-500 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/90 text-emerald-950 dark:text-emerald-100 font-black ring-2 ring-emerald-500/50 shadow-xs"
                         : isHighlighted
-                        ? "border-indigo-400 dark:border-indigo-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold ring-2 ring-indigo-500/40"
+                        ? "border-amber-400 dark:border-amber-400 bg-white dark:bg-slate-900 text-slate-950 dark:text-amber-100 font-bold ring-2 ring-amber-400/60 shadow-xs"
                         : hasAmount
-                        ? "border-emerald-400/80 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold ring-1 ring-emerald-400/30"
-                        : "border-slate-300 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-950 text-slate-700 dark:text-slate-300 font-bold focus:bg-white dark:focus:bg-slate-900 focus:border-indigo-500"
+                        ? "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"
+                        : "border-slate-300 dark:border-slate-600 bg-slate-50/80 dark:bg-slate-900/90 text-slate-700 dark:text-slate-300 font-bold focus:bg-white dark:focus:bg-slate-900 focus:border-amber-400 dark:focus:border-amber-400"
                     }`}
                   />
                 </div>
+
+                {/* Botón Confirmar Monto si está seleccionado con monto y aún no confirmado */}
+                {!isEstablished && hasAmount && isHighlighted && (
+                  <button
+                    type="button"
+                    onClick={() => confirmOptionAmount(option.id)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-500 dark:bg-amber-400 dark:hover:bg-amber-300 text-slate-950 font-bold text-xs shadow-xs transition cursor-pointer"
+                    title="Confirmar monto asignado (Enter)"
+                  >
+                    <Check size={13} strokeWidth={3} />
+                    <span className="hidden sm:inline">OK</span>
+                  </button>
+                )}
 
                 {hasAmount && (
                   <button

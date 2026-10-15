@@ -25,6 +25,7 @@ export const StockAdjustmentForm = ({
     handleSubmit,
     reset,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<StockAdjustmentValues>({
     resolver: zodResolver(stockAdjustmentSchema),
@@ -35,8 +36,16 @@ export const StockAdjustmentForm = ({
     },
   });
 
+  const selectedProductId = watch("productId");
+  const selectedProduct = products.find((p) => p.id === selectedProductId);
+  const isWeight = selectedProduct?.sale_mode === "weight";
+
   const submit = async (values: StockAdjustmentValues) => {
-    await onSubmit(values);
+    const qty = isWeight ? Number((values.quantity / 1000).toFixed(4)) : values.quantity;
+    await onSubmit({
+      ...values,
+      quantity: qty,
+    });
     reset({
       productId: "",
       quantity: 0,
@@ -59,11 +68,16 @@ export const StockAdjustmentForm = ({
             <option value="">Seleccionar...</option>
             {products
               .filter((product) => product.is_active)
-              .map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.name} (stock: {product.stock_current.toLocaleString("es-AR")})
-                </option>
-              ))}
+              .map((product) => {
+                const isProdWeight = product.sale_mode === "weight";
+                const displayStock = isProdWeight ? product.stock_current * 1000 : product.stock_current;
+                const unit = isProdWeight ? "g" : "u.";
+                return (
+                  <option key={product.id} value={product.id}>
+                    {product.name} (stock: {displayStock.toLocaleString("es-AR")} {unit})
+                  </option>
+                );
+              })}
           </select>
           {errors.productId ? (
             <p className="mt-1 text-xs text-red-600">{errors.productId.message}</p>
@@ -72,7 +86,7 @@ export const StockAdjustmentForm = ({
 
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">
-            Cantidad (positivo suma, negativo resta)
+            Cantidad {isWeight ? "en gramos (g) — positivo suma, negativo resta" : "(positivo suma, negativo resta)"}
           </label>
           <input
             type="number"

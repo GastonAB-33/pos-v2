@@ -80,8 +80,10 @@ export const ProductsTable = ({
       header: "Stock",
       cell: (info) => {
         const product = info.row.original;
-        const unit = product.sale_mode === "weight" ? "kg" : "u.";
-        return `${info.getValue().toLocaleString("es-AR")} ${unit}`;
+        const isWeight = product.sale_mode === "weight";
+        const qty = isWeight ? info.getValue() * 1000 : info.getValue();
+        const unit = isWeight ? "g" : "u.";
+        return `${qty.toLocaleString("es-AR")} ${unit}`;
       },
     }),
     columnHelper.accessor("cost_price", {

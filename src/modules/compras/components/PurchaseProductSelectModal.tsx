@@ -381,12 +381,12 @@ export const PurchaseProductSelectModal = ({
                             </p>
                             {product.sale_mode === "weight" && (
                               <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                                Balanza (kg)
+                                Pesable (g)
                               </span>
                             )}
                             {inCartQty > 0 && (
                               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                                <Check className="h-3 w-3" /> En compra ({inCartQty})
+                                <Check className="h-3 w-3" /> En compra ({(product.sale_mode === "weight" ? inCartQty * 1000 : inCartQty).toLocaleString("es-AR")} {product.sale_mode === "weight" ? "g" : "u."})
                               </span>
                             )}
                           </div>
@@ -410,8 +410,8 @@ export const PurchaseProductSelectModal = ({
                             </span>
                             <span>•</span>
                             <span>
-                              Stock: {product.stock_current.toLocaleString("es-AR")}{" "}
-                              {product.sale_mode === "weight" ? "kg" : "u."}
+                              Stock: {(product.sale_mode === "weight" ? product.stock_current * 1000 : product.stock_current).toLocaleString("es-AR")}{" "}
+                              {product.sale_mode === "weight" ? "g" : "u."}
                             </span>
                           </div>
                         </div>

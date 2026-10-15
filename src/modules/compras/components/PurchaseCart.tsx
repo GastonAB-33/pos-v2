@@ -111,7 +111,7 @@ export const PurchaseCart = ({
   }, [vatPercent]);
 
   const getUnitLabel = (item: PurchaseCartItemView) =>
-    item.sale_mode === "weight" ? "kg" : "u.";
+    item.sale_mode === "weight" ? "g" : "u.";
 
   useEffect(() => {
     const ids = new Set(items.map((item) => item.product_id));
@@ -141,7 +141,8 @@ export const PurchaseCart = ({
     const sanitized = raw.trim().replace(",", ".");
     const parsed = Number(sanitized);
     if (Number.isFinite(parsed) && parsed >= 0) {
-      onSetQuantity(item.product_id, parsed);
+      const qtyToSet = item.sale_mode === "weight" ? Number((parsed / 1000).toFixed(4)) : parsed;
+      onSetQuantity(item.product_id, qtyToSet);
     }
     setQuantityDrafts((current) => {
       const { [item.product_id]: _discard, ...next } = current;
@@ -211,7 +212,8 @@ export const PurchaseCart = ({
     const sanitized = raw.trim().replace(",", ".");
     const parsed = Number(sanitized);
     if (Number.isFinite(parsed) && parsed >= 0) {
-      onSetBonifiedQuantity(item.product_id, parsed);
+      const qtyToSet = item.sale_mode === "weight" ? Number((parsed / 1000).toFixed(4)) : parsed;
+      onSetBonifiedQuantity(item.product_id, qtyToSet);
     }
     setBonifiedDrafts((current) => {
       const { [item.product_id]: _discard, ...next } = current;
@@ -239,12 +241,11 @@ export const PurchaseCart = ({
             <p className="text-[11px] text-slate-400 dark:text-slate-400">
               Total mercadería a ingresar en stock:{" "}
               <strong className="text-slate-700 dark:text-slate-200">
-                {summary.totalUnits.toLocaleString("es-AR", { maximumFractionDigits: 3 })}{" "}
                 {items.some((i) => i.sale_mode === "weight")
                   ? items.every((i) => i.sale_mode === "weight")
-                    ? "kg"
-                    : "u. / kg"
-                  : "u."}
+                    ? `${(summary.totalUnits * 1000).toLocaleString("es-AR", { maximumFractionDigits: 1 })} g`
+                    : `${summary.totalUnits.toLocaleString("es-AR", { maximumFractionDigits: 3 })} (u. y kg)`
+                  : `${summary.totalUnits.toLocaleString("es-AR", { maximumFractionDigits: 3 })} u.`}
               </strong>
             </p>
           </div>
@@ -343,7 +344,7 @@ export const PurchaseCart = ({
                       <p className="text-xs font-bold text-slate-900 truncate dark:text-slate-100">{item.name}</p>
                       {item.sale_mode === "weight" && (
                         <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                          Balanza (kg)
+                          Pesable (g)
                         </span>
                       )}
                     </div>
@@ -351,14 +352,14 @@ export const PurchaseCart = ({
                       <span>
                         Stock actual:{" "}
                         <strong className="text-slate-700 dark:text-slate-200">
-                          {item.stock_current.toLocaleString("es-AR", { maximumFractionDigits: 3 })}{" "}
+                          {(item.sale_mode === "weight" ? item.stock_current * 1000 : item.stock_current).toLocaleString("es-AR", { maximumFractionDigits: 3 })}{" "}
                           {getUnitLabel(item)}
                         </strong>
                       </span>
                       <span>•</span>
                       <span className="font-semibold text-emerald-700 dark:text-emerald-400">
                         Ingresa a stock: +
-                        {totalStockIn.toLocaleString("es-AR", { maximumFractionDigits: 3 })}{" "}
+                        {(item.sale_mode === "weight" ? totalStockIn * 1000 : totalStockIn).toLocaleString("es-AR", { maximumFractionDigits: 3 })}{" "}
                         {getUnitLabel(item)}
                       </span>
                     </div>
@@ -386,7 +387,12 @@ export const PurchaseCart = ({
                       type="number"
                       step={item.sale_mode === "weight" ? "any" : "1"}
                       min="0"
-                      value={quantityDrafts[item.product_id] ?? String(item.quantity)}
+                      value={
+                        quantityDrafts[item.product_id] ??
+                        (item.sale_mode === "weight"
+                          ? String(Number((item.quantity * 1000).toFixed(3)))
+                          : String(item.quantity))
+                      }
                       onChange={(event) => {
                         const nextValue = event.target.value;
                         setQuantityDrafts((current) => ({
@@ -396,7 +402,8 @@ export const PurchaseCart = ({
                         if (!nextValue.trim()) return;
                         const parsed = Number(nextValue.trim().replace(",", "."));
                         if (Number.isFinite(parsed) && parsed >= 0) {
-                          onSetQuantity(item.product_id, parsed);
+                          const qtyToSet = item.sale_mode === "weight" ? Number((parsed / 1000).toFixed(4)) : parsed;
+                          onSetQuantity(item.product_id, qtyToSet);
                         }
                       }}
                       onFocus={(e) =>
@@ -468,7 +475,12 @@ export const PurchaseCart = ({
                       step={item.sale_mode === "weight" ? "any" : "1"}
                       min="0"
                       placeholder="0"
-                      value={bonifiedDrafts[item.product_id] ?? String(item.bonified_quantity || 0)}
+                      value={
+                        bonifiedDrafts[item.product_id] ??
+                        (item.sale_mode === "weight"
+                          ? String(Number(((item.bonified_quantity || 0) * 1000).toFixed(3)))
+                          : String(item.bonified_quantity || 0))
+                      }
                       onChange={(event) => {
                         const nextValue = event.target.value;
                         setBonifiedDrafts((current) => ({
@@ -478,7 +490,8 @@ export const PurchaseCart = ({
                         if (!nextValue.trim()) return;
                         const parsed = Number(nextValue.trim().replace(",", "."));
                         if (Number.isFinite(parsed) && parsed >= 0) {
-                          onSetBonifiedQuantity(item.product_id, parsed);
+                          const qtyToSet = item.sale_mode === "weight" ? Number((parsed / 1000).toFixed(4)) : parsed;
+                          onSetBonifiedQuantity(item.product_id, qtyToSet);
                         }
                       }}
                       onFocus={(e) =>
