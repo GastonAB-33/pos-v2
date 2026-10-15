@@ -2708,6 +2708,7 @@ export const usePosSale = (tenantId: string | null) => {
         if (
           !item.is_manual_item &&
           !item.product_id.startsWith("manual-") &&
+          !item.product_id.startsWith("temp-") &&
           !item.is_debt_payment_item &&
           !item.product_id.startsWith("debt-")
         ) {
@@ -2757,24 +2758,45 @@ export const usePosSale = (tenantId: string | null) => {
           if (
             item.is_manual_item ||
             item.product_id.startsWith("manual-") ||
+            item.product_id.startsWith("temp-") ||
             item.is_debt_payment_item ||
             item.product_id.startsWith("debt-")
           ) {
             return itemPromise;
           }
 
-          const stockPromise = stockService.create(tenantId, {
-            product_id: item.product_id,
-            movement_type: "sale",
-            quantity: item.quantity,
-            reference_type: "sale",
-            reference_id: sale.id,
-            notes: `Venta ${sale.sale_number}`,
-            created_by: resolvedCreatedBy,
-          });
+          const stockPromise = (async () => {
+            try {
+              return await stockService.create(tenantId, {
+                product_id: item.product_id,
+                movement_type: "sale",
+                quantity: item.quantity,
+                reference_type: "sale",
+                reference_id: sale.id,
+                notes: `Venta ${sale.sale_number}`,
+                created_by: resolvedCreatedBy,
+              });
+            } catch (stockError) {
+              console.warn(
+                `[POS] No se pudo asentar movimiento de stock para producto ${item.product_id} (${item.name}):`,
+                stockError
+              );
+              return null;
+            }
+          })();
 
           const nextStock = updatedStockByProductId.get(item.product_id) ?? item.stock_available;
-          const updateStockPromise = productsService.updateStock(tenantId, item.product_id, nextStock);
+          const updateStockPromise = (async () => {
+            try {
+              return await productsService.updateStock(tenantId, item.product_id, nextStock);
+            } catch (stockUpdateError) {
+              console.warn(
+                `[POS] No se pudo actualizar stock acumulado para producto ${item.product_id} (${item.name}):`,
+                stockUpdateError
+              );
+              return null;
+            }
+          })();
 
           return Promise.all([itemPromise, stockPromise, updateStockPromise]);
         })
