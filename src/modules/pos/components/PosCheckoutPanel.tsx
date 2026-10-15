@@ -46,6 +46,7 @@ interface PosCheckoutPanelProps {
   installmentPlans: InstallmentPlan[];
   selectedCustomerId: string;
   selectedPaymentMethodId: string;
+  defaultPaymentMethodId?: string;
   isOnline: boolean;
   checkoutTotal: number;
   rawCheckoutTotal?: number;
@@ -123,6 +124,7 @@ export const PosCheckoutPanel = ({
   bankAccounts,
   selectedCustomerId,
   selectedPaymentMethodId,
+  defaultPaymentMethodId,
   isOnline,
   checkoutTotal,
   rawCheckoutTotal,
@@ -307,9 +309,10 @@ export const PosCheckoutPanel = ({
     if (!isInitializedRef.current) {
       isInitializedRef.current = true;
 
-      // Buscar si coincide con selectedPaymentMethodId
+      // Buscar si coincide con defaultPaymentMethodId o selectedPaymentMethodId
+      const targetMethodId = defaultPaymentMethodId || selectedPaymentMethodId;
       const targetIndex = paymentOptions.findIndex(
-        (opt) => opt.paymentMethodId === selectedPaymentMethodId
+        (opt) => opt.paymentMethodId === targetMethodId
       );
       const chosenIndex = targetIndex >= 0 ? targetIndex : 0;
       const initialOption = paymentOptions[chosenIndex];
@@ -326,7 +329,13 @@ export const PosCheckoutPanel = ({
 
       onPaymentMethodChange(initialOption.paymentMethodId);
     }
-  }, [checkoutTotal, onPaymentMethodChange, paymentOptions, selectedPaymentMethodId]);
+  }, [
+    checkoutTotal,
+    defaultPaymentMethodId,
+    onPaymentMethodChange,
+    paymentOptions,
+    selectedPaymentMethodId,
+  ]);
 
   // Cálculos de asignación total y pendiente
   const totalAssigned = useMemo(() => {
@@ -857,11 +866,12 @@ export const PosCheckoutPanel = ({
           return;
         }
 
-        // 5. Determinar la opción inicial por defecto (normalmente Efectivo)
+        // 5. Determinar la opción inicial por defecto (según configuración o Efectivo)
+        const targetMethodId = defaultPaymentMethodId || selectedPaymentMethodId;
         const defaultIndex = paymentOptions.findIndex(
           (opt) =>
             opt.id === initialOptionIdRef.current ||
-            opt.paymentMethodId === selectedPaymentMethodId
+            (targetMethodId && opt.paymentMethodId === targetMethodId)
         );
         const fallbackIndex = defaultIndex >= 0 ? defaultIndex : 0;
         const defaultOption = paymentOptions[fallbackIndex];
@@ -911,6 +921,7 @@ export const PosCheckoutPanel = ({
     checkoutTotal,
     clearOptionAmount,
     confirmOptionAmount,
+    defaultPaymentMethodId,
     handleFinalSubmit,
     highlightedIndex,
     isCustomerModalOpen,
