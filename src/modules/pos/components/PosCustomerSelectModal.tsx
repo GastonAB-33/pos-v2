@@ -116,6 +116,7 @@ export const PosCustomerSelectModal = ({
 
     if (e.key === "Escape") {
       e.preventDefault();
+      e.stopPropagation();
       onClose();
     }
   };

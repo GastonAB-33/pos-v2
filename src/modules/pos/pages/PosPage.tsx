@@ -27,7 +27,7 @@ import { PosProductList } from "@/modules/pos/components/PosProductList";
 import { PosQuickProductModal } from "@/modules/pos/components/PosQuickProductModal";
 import { PosSmartView } from "@/modules/pos/components/PosSmartView";
 import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
-import { usePosSale, type PosCartItemComputed } from "@/modules/pos/hooks/usePosSale";
+import { usePosSale, type PosCartItemComputed, getBackendErrorMessage } from "@/modules/pos/hooks/usePosSale";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
 import { useUiStore } from "@/store/ui.store";
 import { useProductsStore } from "@/features/products/store/products.store";
@@ -37,7 +37,7 @@ import { auditService } from "@/services/audit.service";
 import { bankAccountsService } from "@/services/bank-accounts.service";
 import { cashService } from "@/services/cash.service";
 import { customersService } from "@/services/customers.service";
-import { productsService } from "@/services/products.service";
+import { productsService, type UpdateProductInput } from "@/services/products.service";
 import { invoicesService } from "@/services/invoices.service";
 import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
 import { posCustomerProfilesService } from "@/services/pos-customer-profiles.service";
@@ -158,6 +158,7 @@ export const PosPage = () => {
   const canReadPos = canRead("pos");
   const canWritePos = canWrite("pos");
   const canWriteCustomers = canWrite("clientes");
+  const canWriteProducts = canWrite("productos");
   const { success: toastSuccess, error: toastError } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
@@ -175,6 +176,7 @@ export const PosPage = () => {
     products,
     favoriteProducts,
     primaryBarcodes,
+    actualPrimaryBarcodes,
     customers,
     paymentMethods,
     bankAccounts,
@@ -359,13 +361,13 @@ export const PosPage = () => {
     const cartItem = cart.find((item) => item.product_id === editingCartItemId);
     if (!cartItem) return null;
     const product = products.find((p) => p.id === cartItem.product_id);
-    const barcode = primaryBarcodes[cartItem.product_id] ?? null;
+    const barcode = actualPrimaryBarcodes[cartItem.product_id] ?? null;
     return {
       ...cartItem,
       code: product?.code ?? null,
       barcode,
     };
-  }, [cart, editingCartItemId, products, primaryBarcodes]);
+  }, [cart, editingCartItemId, products, actualPrimaryBarcodes]);
   const existingDebtItem = useMemo(
     () => cart.find((item) => item.is_debt_payment_item) ?? null,
     [cart]
@@ -707,6 +709,12 @@ export const PosPage = () => {
         return;
       }
 
+      const byAuth = await usersService.getByAuthUserId(user.id);
+      if (byAuth?.is_active && byAuth.tenant_id === tenantId) {
+        persistResolvedUser(byAuth.id);
+        return;
+      }
+
       const lookupValue = user.email?.trim() || user.username?.trim() || "";
       if (lookupValue) {
         const byIdentity = await usersService.getByEmailOrUsername(tenantId, lookupValue);
@@ -714,12 +722,6 @@ export const PosPage = () => {
           persistResolvedUser(byIdentity.id);
           return;
         }
-      }
-
-      const openSession = await cashService.getOpenSession(tenantId);
-      if (openSession?.opened_by_user_id) {
-        persistResolvedUser(openSession.opened_by_user_id, false);
-        return;
       }
 
       const allUsers = await usersService.getAllByTenant(tenantId);
@@ -735,6 +737,12 @@ export const PosPage = () => {
           persistResolvedUser(byFullName.id);
           return;
         }
+      }
+
+      const openSession = await cashService.getOpenSession(tenantId);
+      if (openSession?.opened_by_user_id) {
+        persistResolvedUser(openSession.opened_by_user_id, false);
+        return;
       }
 
       persistResolvedUser(null);
@@ -1317,6 +1325,8 @@ export const PosPage = () => {
     if (!isCheckoutModalOpen) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+
       if (event.key === "Escape") {
         setIsCheckoutModalOpen(false);
         window.setTimeout(() => {
@@ -1326,7 +1336,6 @@ export const PosPage = () => {
       }
 
       if (event.key !== "Enter") return;
-      if (event.defaultPrevented) return;
       if (!cart.length || !paymentMethods.length) return;
       if (!canWritePos || isLoading || isSubmitting || isCashGateBlocking) return;
 
@@ -2048,6 +2057,7 @@ export const PosPage = () => {
       <PosCartItemEditModal
         item={editingCartItem}
         disabled={isSubmitting || isCashGateBlocking || !canWritePos}
+        canEditCatalog={canWriteProducts}
         onClose={() => {
           setEditingCartItemId(null);
           window.setTimeout(() => {
@@ -2060,6 +2070,11 @@ export const PosPage = () => {
 
           // 2. Si se eligió guardar en catálogo, ejecutar en segundo plano sin frenar la terminal
           if (scope === "system_and_sale" && tenantId && !values.productId.startsWith("manual-")) {
+            if (!canWriteProducts) {
+              toastError("No tenés permisos para actualizar el catálogo de productos. El cambio se aplicó únicamente para esta venta.");
+              return;
+            }
+
             void (async () => {
               try {
                 const existingProduct = products.find((p) => p.id === values.productId);
@@ -2071,18 +2086,32 @@ export const PosPage = () => {
                   porcentajeIva: vatPercent,
                 });
 
-                const updated = await productsService.update(tenantId, values.productId, {
+                const existingCode = existingProduct?.code?.trim() || "";
+                const newCode = values.code?.trim() || "";
+                const hasCodeChanged = newCode !== existingCode;
+
+                const existingBarcode = actualPrimaryBarcodes[values.productId]?.trim() || "";
+                const newBarcode = values.barcode?.trim() || "";
+                const hasBarcodeChanged = values.barcode !== undefined && newBarcode !== existingBarcode;
+
+                const updatePayload: UpdateProductInput = {
                   name: values.name,
                   category: values.category,
                   price: roundMoney(values.unitPrice),
                   price_without_vat: computed.precioSinIva,
                   profit_percent: computed.porcentajeGanancia,
-                  code: values.code?.trim() || undefined,
                   ...(values.saleMode ? { sale_mode: values.saleMode } : {}),
-                });
+                };
 
-                if (values.barcode !== undefined) {
-                  await productsService.setPrimaryBarcode(tenantId, values.productId, values.barcode.trim());
+                if (hasCodeChanged) {
+                  updatePayload.code = newCode || null;
+                }
+
+                const updated = await productsService.update(tenantId, values.productId, updatePayload);
+
+                if (hasBarcodeChanged) {
+                  await productsService.setPrimaryBarcode(tenantId, values.productId, newBarcode);
+                  useProductsStore.getState().patchPrimaryBarcode(values.productId, newBarcode);
                 }
 
                 if (updated) {
@@ -2108,7 +2137,11 @@ export const PosPage = () => {
                 toastSuccess("Producto actualizado en el sistema y en la venta");
               } catch (error) {
                 console.error("Error al actualizar producto en el sistema:", error);
-                toastError("No se pudo sincronizar con el catálogo");
+                const message =
+                  getBackendErrorMessage(error) ||
+                  (error instanceof Error && error.message ? error.message : null) ||
+                  "No se pudo sincronizar con el catálogo";
+                toastError(message);
               }
             })();
           }

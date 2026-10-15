@@ -642,13 +642,16 @@ export const ProductQuickPriceModal = ({
     setFieldErrors({});
 
     try {
+      const isWeight = selectedProduct.saleMode === "weight";
+      const stockToAdd = parsedAddedStock > 0 ? (isWeight ? parsedAddedStock / 1000 : parsedAddedStock) : undefined;
+
       await onSavePrice(selectedProduct.entity.id, {
         costPrice: roundMoney(costPrice),
         profitPercent: roundPercent(profitPercent),
         vatPercent: roundPercent(vatPercent),
         priceWithoutVat: roundMoney(priceWithoutVat),
         finalPrice: roundMoney(finalPrice),
-        addedStock: parsedAddedStock > 0 ? parsedAddedStock : undefined,
+        addedStock: stockToAdd,
       });
 
       setSelectedProduct((prev) =>
@@ -660,7 +663,7 @@ export const ProductQuickPriceModal = ({
               porcentajeIva: roundPercent(vatPercent),
               precioSinIva: roundMoney(priceWithoutVat),
               precioFinal: roundMoney(finalPrice),
-              stock: roundMoney((prev.stock ?? 0) + (parsedAddedStock > 0 ? parsedAddedStock : 0)),
+              stock: roundMoney((prev.stock ?? 0) + (stockToAdd ?? 0)),
             }
           : null
       );
@@ -921,7 +924,9 @@ export const ProductQuickPriceModal = ({
                           : "font-semibold text-slate-700 dark:text-slate-200"
                       }
                     >
-                      {selectedProduct.stock} {selectedProduct.saleMode === "weight" ? "kg" : "unid."}
+                      {selectedProduct.saleMode === "weight"
+                        ? `${(selectedProduct.stock * 1000).toLocaleString("es-AR")} g`
+                        : `${selectedProduct.stock} unid.`}
                     </span>
                   </p>
 
@@ -1138,11 +1143,14 @@ export const ProductQuickPriceModal = ({
                               : "text-slate-700 dark:text-slate-300"
                           }`}
                         >
-                          Agregar Stock (+)
+                          Agregar Stock (+) {selectedProduct.saleMode === "weight" ? "(g)" : ""}
                         </label>
                         {addedStock && Number(addedStock) > 0 ? (
                           <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 animate-in fade-in">
-                            Total: {roundMoney((selectedProduct.stock ?? 0) + Number(addedStock))}
+                            Total:{" "}
+                            {selectedProduct.saleMode === "weight"
+                              ? `${((selectedProduct.stock ?? 0) * 1000 + Number(addedStock)).toLocaleString("es-AR")} g`
+                              : `${roundMoney((selectedProduct.stock ?? 0) + Number(addedStock))} u.`}
                           </span>
                         ) : null}
                       </div>
@@ -1275,7 +1283,7 @@ export const ProductQuickPriceModal = ({
                             </span>
                           )}
                           <span>
-                            Stock: <strong>{product.stock}</strong> {product.saleMode === "weight" ? "kg" : "unid."}
+                            Stock: <strong>{product.saleMode === "weight" ? (product.stock * 1000).toLocaleString("es-AR") : product.stock}</strong> {product.saleMode === "weight" ? "g" : "unid."}
                           </span>
                         </div>
                       </div>

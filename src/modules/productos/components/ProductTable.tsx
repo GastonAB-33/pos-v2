@@ -93,7 +93,7 @@ export const ProductTable = ({
                   {isWeight ? " / kg" : ""}
                 </td>
                 <td className="px-3 py-3">
-                  {product.stock.toLocaleString("es-AR")} {isWeight ? "kg" : "u."}
+                  {(isWeight ? product.stock * 1000 : product.stock).toLocaleString("es-AR")} {isWeight ? "g" : "u."}
                 </td>
                 <td className="px-3 py-3">
                   <div className="inline-flex items-center gap-2">

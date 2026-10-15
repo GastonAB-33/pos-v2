@@ -250,7 +250,13 @@ export const CajaPage = () => {
             {dailySession && (
               <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
                 <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
-                <span>Responsable: <strong className="text-slate-800 dark:text-slate-200 font-semibold">{dailySessionResponsible}</strong></span>
+                <span>Responsable de apertura: <strong className="text-slate-800 dark:text-slate-200 font-semibold">{dailySessionResponsible}</strong></span>
+                {user?.id && dailySession.opened_by_user_id !== user.id && (
+                  <>
+                    <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
+                    <span className="text-blue-600 dark:text-blue-400 font-medium">Operando: <strong>{user.fullName || user.username || "Tú"}</strong></span>
+                  </>
+                )}
                 <span className="hidden md:inline text-slate-300 dark:text-slate-600">•</span>
                 <span className="hidden md:inline">Desde {formatDateTime(dailySession.opened_at)}</span>
               </span>

@@ -299,6 +299,7 @@ export const PosCheckoutPanel = ({
 
   // Inicializar con el medio de pago predeterminado o efectivo
   const isInitializedRef = useRef(false);
+  const initialOptionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (paymentOptions.length === 0) return;
@@ -312,6 +313,7 @@ export const PosCheckoutPanel = ({
       );
       const chosenIndex = targetIndex >= 0 ? targetIndex : 0;
       const initialOption = paymentOptions[chosenIndex];
+      initialOptionIdRef.current = initialOption.id;
 
       setHighlightedIndex(chosenIndex);
       setIsReadyToSubmit(false);
@@ -695,8 +697,16 @@ export const PosCheckoutPanel = ({
   // Listener global de teclado para navegación ágil y flujo de Enter en 3 pasos
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // Si el modal de búsqueda de clientes está abierto, ignorar teclado global
-      if (isCustomerModalOpen) return;
+      // Si el modal de búsqueda de clientes está abierto
+      if (isCustomerModalOpen) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          setIsCustomerModalOpen(false);
+        }
+        return;
+      }
 
       const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       const activeInputEl = targetTag === "input" ? (e.target as HTMLInputElement) : null;
@@ -783,19 +793,123 @@ export const PosCheckoutPanel = ({
         return;
       }
 
-      if (e.key === "Escape" && onClose && !isEditingAmount) {
+      // Escape: Volver un paso atrás si hay pasos previos; si no hay paso atrás, cerrar la ventana
+      if (e.key === "Escape") {
         e.preventDefault();
-        onClose();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        // 1. Si el foco está dentro de un input (editando monto o texto), desenfocarlo y volver a la navegación
+        if (isEditingAmount || activeInputEl) {
+          activeInputEl?.blur();
+          panelRef.current?.focus();
+          return;
+        }
+
+        // 2. Si estaba en estado "listo para confirmar venta" (botón verde con pulsación), cancelar estado de confirmación
+        if (isReadyToSubmit) {
+          setIsReadyToSubmit(false);
+          const currentOption = paymentOptions[highlightedIndex];
+          if (currentOption && lockedMethodIds[currentOption.id]) {
+            setLockedMethodIds((prev) => {
+              const next = { ...prev };
+              delete next[currentOption.id];
+              return next;
+            });
+          }
+          return;
+        }
+
+        const currentOption = paymentOptions[highlightedIndex];
+        const lockedKeys = Object.keys(lockedMethodIds);
+        const allocatedKeys = Object.keys(allocatedAmounts);
+
+        // 3. Si el método actual tiene un monto asignado flotante (no confirmado)
+        // y hay otros métodos con importe asignado o confirmados, desasignar este método
+        if (
+          currentOption &&
+          !lockedMethodIds[currentOption.id] &&
+          (allocatedAmounts[currentOption.id] || 0) > 0 &&
+          (lockedKeys.length > 0 || allocatedKeys.length > 1)
+        ) {
+          clearOptionAmount(currentOption.id);
+          return;
+        }
+
+        // 4. Si hay métodos confirmados (bloqueados en verde), desbloquear el actual o el último
+        if (lockedKeys.length > 0) {
+          if (currentOption && lockedMethodIds[currentOption.id]) {
+            setLockedMethodIds((prev) => {
+              const next = { ...prev };
+              delete next[currentOption.id];
+              return next;
+            });
+            setIsReadyToSubmit(false);
+            return;
+          }
+          const lastLockedKey = lockedKeys[lockedKeys.length - 1];
+          setLockedMethodIds((prev) => {
+            const next = { ...prev };
+            delete next[lastLockedKey];
+            return next;
+          });
+          setIsReadyToSubmit(false);
+          return;
+        }
+
+        // 5. Determinar la opción inicial por defecto (normalmente Efectivo)
+        const defaultIndex = paymentOptions.findIndex(
+          (opt) =>
+            opt.id === initialOptionIdRef.current ||
+            opt.paymentMethodId === selectedPaymentMethodId
+        );
+        const fallbackIndex = defaultIndex >= 0 ? defaultIndex : 0;
+        const defaultOption = paymentOptions[fallbackIndex];
+
+        // Comprobar si ya estamos exactamente en el estado inicial limpio
+        const isDefaultOptionHighlighted = highlightedIndex === fallbackIndex;
+        const isOnlyDefaultAllocated =
+          allocatedKeys.length === 1 &&
+          defaultOption &&
+          allocatedAmounts[defaultOption.id] === checkoutTotal &&
+          amountInputs[defaultOption.id] === checkoutTotal.toFixed(2);
+
+        // Si no estamos en el estado inicial limpio (ej: se navegó a otro medio como en la captura,
+        // o se cambió el monto del default, o hay mensaje de error), volver al estado inicial por defecto
+        if (!isDefaultOptionHighlighted || !isOnlyDefaultAllocated || submitError) {
+          setSubmitError(null);
+          if (defaultOption) {
+            setHighlightedIndex(fallbackIndex);
+            onPaymentMethodChange(defaultOption.paymentMethodId);
+            setAllocatedAmounts({
+              [defaultOption.id]: checkoutTotal,
+            });
+            setAmountInputs({
+              [defaultOption.id]: checkoutTotal.toFixed(2),
+            });
+            setLockedMethodIds({});
+            setIsReadyToSubmit(false);
+          }
+          return;
+        }
+
+        // 6. Si ya no hay ningún paso atrás disponible (estado inicial limpio), cerrar el modal de cobro
+        if (onClose) {
+          onClose();
+        }
+        return;
       }
     };
 
-    window.addEventListener("keydown", handleGlobalKeyDown);
+    window.addEventListener("keydown", handleGlobalKeyDown, { capture: true });
     return () => {
-      window.removeEventListener("keydown", handleGlobalKeyDown);
+      window.removeEventListener("keydown", handleGlobalKeyDown, { capture: true });
     };
   }, [
     allocatedAmounts,
+    amountInputs,
     checkoutTotal,
+    clearOptionAmount,
     confirmOptionAmount,
     handleFinalSubmit,
     highlightedIndex,
@@ -807,7 +921,9 @@ export const PosCheckoutPanel = ({
     onPaymentMethodChange,
     paymentOptions,
     selectedCustomer,
+    selectedPaymentMethodId,
     shiftRemainderToOption,
+    submitError,
   ]);
 
   const isMpHighlighted = paymentOptions[highlightedIndex]?.code === "mercado_pago";

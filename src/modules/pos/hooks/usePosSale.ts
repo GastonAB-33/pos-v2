@@ -175,7 +175,7 @@ interface BackendErrorLike {
   code?: string;
 }
 
-const getBackendErrorMessage = (error: unknown): string | null => {
+export const getBackendErrorMessage = (error: unknown): string | null => {
   if (!error || typeof error !== "object") return null;
   const backendError = error as BackendErrorLike;
   const message = backendError.message?.trim() ?? "";
@@ -307,6 +307,19 @@ export const usePosSale = (tenantId: string | null) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [productBarcodes, setProductBarcodes] = useState<ProductBarcode[]>([]);
   const [primaryBarcodes, setPrimaryBarcodes] = useState<Record<string, string>>({});
+
+  const actualPrimaryBarcodes = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const row of productBarcodes) {
+      if (row.barcode && row.product_id) {
+        if (row.is_primary || !map[row.product_id]) {
+          map[row.product_id] = row.barcode;
+        }
+      }
+    }
+    return map;
+  }, [productBarcodes]);
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -3436,7 +3449,9 @@ export const usePosSale = (tenantId: string | null) => {
   return {
     products,
     favoriteProducts,
+    productBarcodes,
     primaryBarcodes,
+    actualPrimaryBarcodes,
     customers,
     paymentMethods,
     bankAccounts,

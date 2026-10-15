@@ -230,9 +230,16 @@ export const ProductFormModal = ({
     if (!open) return;
 
     if (!product) {
+      const initSaleMode = initialValues?.saleMode ?? "unit";
+      const isInitWeight = initSaleMode === "weight";
+      const initStock = initialValues?.stock != null
+        ? (isInitWeight ? Number((initialValues.stock * 1000).toFixed(3)) : initialValues.stock)
+        : 0;
+
       reset({
         ...createDefaults(),
         ...(initialValues ?? {}),
+        stock: initStock,
         codigoBarras: initialBarcode ? initialBarcode.trim() : (initialValues?.codigoBarras ?? ""),
         nombre: initialName ? initialName.trim() : (initialValues?.nombre ?? ""),
         categoria: "",
@@ -248,13 +255,17 @@ export const ProductFormModal = ({
     }
 
     const returnableConfig = parseReturnableConfig(product.entity?.description);
+    const isWeight = (product.saleMode ?? product.entity?.sale_mode) === "weight";
+    const initialStock = isWeight
+      ? Number(((product.stock ?? product.entity?.stock_current ?? 0) * 1000).toFixed(3))
+      : (product.stock ?? 0);
 
     reset({
       nombre: product.nombre,
       saleMode: product.saleMode,
       codigoBarras: product.codigoBarras,
       codigoProducto: product.codigoProducto,
-      stock: product.stock,
+      stock: initialStock,
       categoria: product.categoria,
       subcategoria: product.subcategoria,
       precioCosto: product.precioCosto,
@@ -522,8 +533,12 @@ export const ProductFormModal = ({
       porcentajeGanancia = forward.porcentajeGanancia;
     }
 
+    const isWeight = values.saleMode === "weight";
+    const stockToSubmit = isWeight ? Number((values.stock / 1000).toFixed(4)) : values.stock;
+
     await onSubmit({
       ...values,
+      stock: stockToSubmit,
       saleMode: values.saleMode,
       codigoBarras: values.codigoBarras?.trim() ?? "",
       codigoProducto: values.codigoProducto?.trim() ?? "",
@@ -600,7 +615,7 @@ export const ProductFormModal = ({
                 <div>
                   <div className="mb-1 flex min-h-[34px] items-center justify-between gap-2">
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                      {saleMode === "weight" ? "Stock en kg" : "Stock (unidades)"}
+                      {saleMode === "weight" ? "Stock en gramos (g)" : "Stock (unidades)"}
                     </label>
                     <VoiceDictationButton
                       value={String(stock ?? "")}
@@ -615,7 +630,7 @@ export const ProductFormModal = ({
                     type="number"
                     inputMode="decimal"
                     min={0}
-                    step="0.001"
+                    step={saleMode === "weight" ? "1" : "0.001"}
                     placeholder="0"
                     {...register("stock", {
                       setValueAs: parseNumericField,
@@ -636,7 +651,7 @@ export const ProductFormModal = ({
                   />
                   <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                     {saleMode === "weight"
-                      ? "Para pesables, el stock se guarda en kg. Ej: 10 kg disponibles = 10,000 kg."
+                      ? "Para pesables, el stock se gestiona en gramos. Ej: 1 kg disponible = 1000 g."
                       : "Para unitarios, el stock se guarda como unidades."}
                   </p>
                   {errors.stock ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.stock.message}</p> : null}
@@ -671,7 +686,7 @@ export const ProductFormModal = ({
                       <span>
                         <span className="block font-semibold text-slate-900">Pesable</span>
                         <span className="block text-xs text-slate-500">
-                          Precio por kg, compras en kg y ventas por kg/gramos.
+                          Precio por kg, stock en gramos y ventas por gramos.
                         </span>
                       </span>
                     </label>

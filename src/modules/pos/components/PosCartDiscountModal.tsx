@@ -176,28 +176,11 @@ export const PosCartDiscountModal = ({
             </div>
           </div>
 
-          {/* Motivo del descuento con atajos rápidos */}
-          <div className="space-y-2">
+          {/* Motivo o Razón libre */}
+          <div className="space-y-1.5">
             <label htmlFor="discount-reason" className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
-              Motivo o Razón
+              Motivo o Razón <span className="font-normal text-slate-400 dark:text-slate-500">(opcional)</span>
             </label>
-            <div className="flex flex-wrap gap-1.5">
-              {QUICK_REASONS.map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setReason(r)}
-                  className={cn(
-                    "px-2 py-1 rounded-lg text-[11px] font-semibold border transition cursor-pointer",
-                    reason === r
-                      ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-200"
-                      : "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60"
-                  )}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
             <input
               id="discount-reason"
               type="text"
@@ -208,8 +191,8 @@ export const PosCartDiscountModal = ({
               data-lpignore="true"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Escribí un motivo o seleccioná uno de arriba..."
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 py-2 px-3 text-xs text-slate-900 dark:text-slate-100 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition placeholder:text-slate-400"
+              placeholder="Escribí el motivo del descuento libremente..."
+              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 py-2.5 px-3.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition placeholder:text-slate-400 dark:placeholder:text-slate-500"
             />
           </div>
 
