@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Barcode, Hash, Package, Scale } from "lucide-react";
 import type { PosCartItemEditInput } from "@/modules/pos/hooks/usePosSale";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
@@ -6,13 +7,15 @@ import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-h
 
 export type PosCartItemEditScope = "sale_only" | "system_and_sale";
 
-interface PosCartItemView {
+export interface PosCartItemView {
   product_id: string;
   name: string;
   category: string;
   sale_mode: "unit" | "weight";
   quantity: number;
   unit_price: number;
+  code?: string | null;
+  barcode?: string | null;
 }
 
 interface PosCartItemEditModalProps {
@@ -37,7 +40,10 @@ export const PosCartItemEditModal = ({
 }: PosCartItemEditModalProps) => {
   useBodyScrollLock(Boolean(item));
   const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [barcode, setBarcode] = useState("");
   const [category, setCategory] = useState("");
+  const [saleMode, setSaleMode] = useState<"unit" | "weight">("unit");
   const [quantity, setQuantity] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
   const [editScope, setEditScope] = useState<PosCartItemEditScope>("sale_only");
@@ -46,7 +52,10 @@ export const PosCartItemEditModal = ({
   useEffect(() => {
     if (!item) return;
     setName(item.name);
+    setCode(item.code || "");
+    setBarcode(item.barcode || "");
     setCategory(item.category);
+    setSaleMode(item.sale_mode);
     setQuantity(String(item.sale_mode === "weight" ? kgToGrams(item.quantity) : item.quantity));
     setUnitPrice(String(item.unit_price));
     setEditScope("sale_only");
@@ -56,6 +65,22 @@ export const PosCartItemEditModal = ({
   if (!item) return null;
 
   const isManualItem = item.product_id.startsWith("manual-");
+
+  const handleSaleModeChange = (nextMode: "unit" | "weight") => {
+    if (nextMode === saleMode) return;
+    setSaleMode(nextMode);
+
+    const currentQtyNum = parsePositive(quantity);
+    if (nextMode === "weight") {
+      // De unidades a gramos: si tenía 1 unidad, pasar a 1000g (1 kg)
+      const convertedGrams = currentQtyNum > 0 ? kgToGrams(currentQtyNum) : 1000;
+      setQuantity(String(convertedGrams));
+    } else {
+      // De gramos a unidades: si tenía gramos, convertir a kg y redondear
+      const convertedUnits = Math.max(1, Math.round(gramsToKg(currentQtyNum)));
+      setQuantity(String(convertedUnits));
+    }
+  };
 
   const handleSubmit = async (scopeToUse?: PosCartItemEditScope) => {
     const finalScope = scopeToUse ?? editScope;
@@ -67,8 +92,11 @@ export const PosCartItemEditModal = ({
           productId: item.product_id,
           name: name.trim() || item.name,
           category: category.trim() || item.category,
-          quantity: item.sale_mode === "weight" ? gramsToKg(parsedQuantity) : parsedQuantity,
+          saleMode,
+          quantity: saleMode === "weight" ? gramsToKg(parsedQuantity) : parsedQuantity,
           unitPrice: parsePositive(unitPrice),
+          code: code.trim(),
+          barcode: barcode.trim(),
         },
         finalScope
       );
@@ -78,15 +106,20 @@ export const PosCartItemEditModal = ({
     }
   };
 
+  const currentGramsEquivalent =
+    saleMode === "weight" && parsePositive(quantity) > 0
+      ? gramsToKg(parsePositive(quantity))
+      : null;
+
   return (
     <section className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-3 sm:p-4">
       <button type="button" aria-label="Cerrar edicion de item" className="absolute inset-0" onClick={onClose} />
       <div className="relative z-10 w-full max-w-xl rounded-2xl bg-white p-4 sm:p-5 shadow-panel dark:bg-slate-900 dark:border dark:border-slate-800">
-        <div className="mb-4 flex items-center justify-between gap-2 border-b border-slate-200 pb-3 dark:border-slate-800">
+        <div className="mb-3 flex items-center justify-between gap-2 border-b border-slate-200 pb-3 dark:border-slate-800">
           <div>
             <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Editar producto del carrito</h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Modificá el precio de venta o la cantidad y elegí el alcance del cambio.
+              Modificá modalidad de venta, precio, códigos o cantidad y elegí el alcance del cambio.
             </p>
           </div>
           <ModalCloseButton label="Cerrar edición" onClick={onClose} disabled={isSubmitting} />
@@ -114,7 +147,7 @@ export const PosCartItemEditModal = ({
                   Editar para esta venta
                 </span>
                 <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
-                  Aplica el precio únicamente a este carrito sin alterar el catálogo.
+                  Aplica únicamente a este carrito sin alterar el catálogo.
                 </span>
               </div>
             </label>
@@ -141,10 +174,43 @@ export const PosCartItemEditModal = ({
                 <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">
                   {isManualItem
                     ? "No disponible para ítems manuales sin producto registrado."
-                    : "Actualiza el precio en esta venta y en la base de datos para futuras ventas."}
+                    : "Actualiza precio y modalidad en esta venta y en el catálogo para futuras ventas."}
                 </span>
               </div>
             </label>
+          </div>
+
+          {/* Selector de modalidad de venta: Por unidad vs Pesable */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">
+              Modalidad de venta
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleSaleModeChange("unit")}
+                className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                  saleMode === "unit"
+                    ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm dark:border-blue-400 dark:bg-blue-950/50 dark:text-blue-300"
+                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                }`}
+              >
+                <Package size={15} />
+                <span>Por unidad (u.)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaleModeChange("weight")}
+                className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold transition ${
+                  saleMode === "weight"
+                    ? "border-amber-500 bg-amber-50 text-amber-800 shadow-sm dark:border-amber-400 dark:bg-amber-950/50 dark:text-amber-300"
+                    : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                }`}
+              >
+                <Scale size={15} />
+                <span>Pesable / Balanza (kg)</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -153,7 +219,7 @@ export const PosCartItemEditModal = ({
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                className="ui-input"
+                className="ui-input border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90"
                 autoFocus
                 autoComplete="off"
                 autoCorrect="off"
@@ -162,12 +228,17 @@ export const PosCartItemEditModal = ({
                 data-lpignore="true"
               />
             </div>
+
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Categoria</label>
+              <label className="mb-1 flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+                <Hash size={14} className="text-slate-400 dark:text-slate-500" />
+                <span>Código interno</span>
+              </label>
               <input
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-                className="ui-input"
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+                className="ui-input border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 font-mono text-xs uppercase"
+                placeholder="Sin código"
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
@@ -175,31 +246,42 @@ export const PosCartItemEditModal = ({
                 data-lpignore="true"
               />
             </div>
+
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                {item.sale_mode === "weight" ? "Cantidad (gramos)" : "Cantidad"}
+              <label className="mb-1 flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">
+                <Barcode size={14} className="text-slate-400 dark:text-slate-500" />
+                <span>Código de barras</span>
               </label>
               <input
-                type="number"
-                min="0"
-                step={item.sale_mode === "weight" ? "50" : "0.001"}
-                value={quantity}
-                onChange={(event) => setQuantity(event.target.value)}
-                onFocus={(e) =>
-                  handleNumericInputFocus(e, {
-                    isNew: quantity === "0" || quantity === "0.00" || quantity === "0,00",
-                    onClear: () => setQuantity(""),
-                  })
-                }
-                onBlur={(e) =>
-                  handleNumericInputBlur(e, item.sale_mode === "weight" ? "0" : "1", (val) => setQuantity(val))
-                }
-                className="ui-input"
+                value={barcode}
+                onChange={(event) => setBarcode(event.target.value)}
+                className="ui-input border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 font-mono text-xs"
+                placeholder="Sin código de barras"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-lpignore="true"
               />
             </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Categoría</label>
+              <input
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+                className="ui-input border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-lpignore="true"
+              />
+            </div>
+
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                {item.sale_mode === "weight" ? "Precio venta (por kg)" : "Precio venta"}
+                {saleMode === "weight" ? "Precio venta (por kg)" : "Precio venta (por unidad)"}
               </label>
               <input
                 type="number"
@@ -216,7 +298,38 @@ export const PosCartItemEditModal = ({
                 onBlur={(e) =>
                   handleNumericInputBlur(e, "0", (val) => setUnitPrice(val))
                 }
-                className="ui-input"
+                className="ui-input border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <div className="mb-1 flex items-center justify-between">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  {saleMode === "weight" ? "Cantidad en gramos" : "Cantidad en unidades"}
+                </label>
+                {currentGramsEquivalent !== null && (
+                  <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                    = {currentGramsEquivalent} kg
+                  </span>
+                )}
+              </div>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={quantity}
+                onChange={(event) => setQuantity(event.target.value)}
+                onFocus={(e) =>
+                  handleNumericInputFocus(e, {
+                    isNew: quantity === "0" || quantity === "0.00" || quantity === "0,00",
+                    onClear: () => setQuantity(""),
+                  })
+                }
+                onBlur={(e) =>
+                  handleNumericInputBlur(e, saleMode === "weight" ? "0" : "1", (val) => setQuantity(val))
+                }
+                className="ui-input border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90"
+                placeholder={saleMode === "weight" ? "Ej: 260" : "Ej: 1"}
               />
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { PosQuickProductInput } from "@/modules/pos/hooks/usePosSale";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
@@ -55,11 +55,8 @@ export const PosQuickProductModal = ({
   const [category, setCategory] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [unitPrice, setUnitPrice] = useState("");
-  const [costPrice, setCostPrice] = useState("");
-  const [stock, setStock] = useState("");
   const [code, setCode] = useState("");
   const [barcode, setBarcode] = useState(initialBarcode ?? "");
-  const [favorite, setFavorite] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -72,28 +69,21 @@ export const PosQuickProductModal = ({
     setCategory("");
     setQuantity("1");
     setUnitPrice("");
-    setCostPrice("");
-    setStock("");
     setCode("");
     setBarcode(cleanInitialBarcode);
-    setFavorite(true);
     setIsSubmitting(false);
     setErrorMessage(null);
   }, [categories, initialBarcode, initialName, open]);
 
   const quantityLabel = saleMode === "weight" ? "Cantidad a vender (gramos)" : "Cantidad a vender";
   const priceLabel = saleMode === "weight" ? "Precio venta (por kg)" : "Precio venta";
-  const stockLabel = saleMode === "weight" ? "Stock inicial en kg" : "Stock inicial";
-  const parsedQuantity = useMemo(() => parsePositive(quantity), [quantity]);
-  const suggestedStock =
-    saleMode === "weight" ? String(Math.max(gramsToKg(parsedQuantity), 0.001)) : quantity;
 
   if (!open) return null;
 
   const buildInput = (): PosQuickProductInput => {
     const quantityValue = parsePositive(quantity);
     const normalizedQuantity = saleMode === "weight" ? gramsToKg(quantityValue) : quantityValue;
-    const stockValue = parsePositive(stock || suggestedStock);
+    const stockValue = normalizedQuantity > 0 ? normalizedQuantity : 1;
 
     return {
       name,
@@ -101,11 +91,11 @@ export const PosQuickProductModal = ({
       saleMode,
       quantity: normalizedQuantity,
       unitPrice: parsePositive(unitPrice),
-      costPrice: parsePositive(costPrice),
+      costPrice: 0,
       stock: stockValue,
       code,
       barcode,
-      favorite,
+      favorite: false,
     };
   };
 
@@ -302,68 +292,24 @@ export const PosQuickProductModal = ({
             </div>
 
             {saveMode === "catalog" ? (
-              <>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Costo</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={costPrice}
-                    onChange={(event) => setCostPrice(event.target.value)}
-                    onFocus={(e) =>
-                      handleNumericInputFocus(e, {
-                        isNew: costPrice === "0" || costPrice === "0.00",
-                        onClear: () => setCostPrice(""),
-                      })
-                    }
-                    className="ui-input"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">{stockLabel}</label>
-                  <input
-                    type="number"
-                    min="0.001"
-                    step="0.001"
-                    value={stock}
-                    onChange={(event) => setStock(event.target.value)}
-                    onFocus={(e) =>
-                      handleNumericInputFocus(e, {
-                        isNew: stock === "0" || stock === "0.00",
-                        onClear: () => setStock(""),
-                      })
-                    }
-                    placeholder={suggestedStock}
-                    className="ui-input"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                    Código interno <span className="text-xs text-slate-400 font-normal">(opcional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    data-lpignore="true"
-                    data-form-type="other"
-                    value={code}
-                    placeholder="Opcional"
-                    onChange={(event) => setCode(event.target.value)}
-                    className="ui-input"
-                  />
-                </div>
-
-                <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
-                  <input type="checkbox" checked={favorite} onChange={(event) => setFavorite(event.target.checked)} />
-                  Mostrar en favoritos del POS
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Código interno <span className="text-xs text-slate-400 font-normal">(opcional)</span>
                 </label>
-              </>
+                <input
+                  type="text"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                  data-form-type="other"
+                  value={code}
+                  placeholder="Opcional"
+                  onChange={(event) => setCode(event.target.value)}
+                  className="ui-input"
+                />
+              </div>
             ) : null}
           </div>
         </div>

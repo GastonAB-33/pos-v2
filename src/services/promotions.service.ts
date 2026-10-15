@@ -169,7 +169,7 @@ const toPromotionSnapshot = (promotion: Promotion): AppliedPromotionSnapshot => 
   scope: promotion.scope,
 });
 
-const calculateProductPromotionDiscount = (
+export const calculateProductPromotionDiscount = (
   promotion: Promotion,
   quantity: number,
   unitPrice: number
@@ -199,7 +199,7 @@ const calculateProductPromotionDiscount = (
   return 0;
 };
 
-const calculateCartPromotionDiscount = (promotion: Promotion, subtotal: number) => {
+export const calculateCartPromotionDiscount = (promotion: Promotion, subtotal: number) => {
   if (promotion.type === "percentage_discount") {
     const percent = Math.max(0, promotion.discount_percent ?? 0);
     return roundAmount(subtotal * (percent / 100));

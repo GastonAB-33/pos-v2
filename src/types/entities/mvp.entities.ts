@@ -153,6 +153,7 @@ export interface BankAccount extends TenantScopedEntity {
   currency_code: string;
   notes: string | null;
   is_active: boolean;
+  is_pos_available?: boolean;
   current_balance?: number;
 }
 

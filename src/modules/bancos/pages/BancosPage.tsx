@@ -50,6 +50,7 @@ export const BancosPage = () => {
     reload,
     upsertBankAccount,
     toggleBankAccount,
+    toggleBankAccountPosAvailable,
     toggleOriginBank,
     upsertInstallmentPlan,
     toggleInstallmentPlan,
@@ -100,6 +101,7 @@ export const BancosPage = () => {
     currency_code: string;
     notes: string;
     is_active: boolean;
+    is_pos_available: boolean;
   }>({
     bank_name: "",
     account_type: "cuenta_corriente",
@@ -109,6 +111,7 @@ export const BancosPage = () => {
     currency_code: "ARS",
     notes: "",
     is_active: true,
+    is_pos_available: true,
   });
 
   const [installmentPlanModalOpen, setInstallmentPlanModalOpen] = useState(false);
@@ -135,6 +138,7 @@ export const BancosPage = () => {
         currency_code: account.currency_code,
         notes: account.notes || "",
         is_active: account.is_active,
+        is_pos_available: account.is_pos_available !== false,
       });
     } else {
       setEditingAccount(null);
@@ -147,6 +151,7 @@ export const BancosPage = () => {
         currency_code: "ARS",
         notes: "",
         is_active: true,
+        is_pos_available: true,
       });
     }
     setAccountModalOpen(true);
@@ -164,6 +169,7 @@ export const BancosPage = () => {
         currency_code: accountForm.currency_code.trim() || "ARS",
         notes: accountForm.notes.trim() || null,
         is_active: accountForm.is_active,
+        is_pos_available: accountForm.is_pos_available,
       },
       editingAccount ? editingAccount.id : undefined
     );
@@ -338,6 +344,7 @@ export const BancosPage = () => {
                       <th className="py-3 px-4">Alias</th>
                       <th className="py-3 px-4 text-right">Saldo Actual</th>
                       <th className="py-3 px-4 text-center">Estado</th>
+                      <th className="py-3 px-4 text-center">Cobros POS</th>
                       <th className="py-3 px-4 text-right">Acciones</th>
                     </tr>
                   </thead>
@@ -362,6 +369,32 @@ export const BancosPage = () => {
                           >
                             {acc.is_active ? "Activa" : "Inactiva"}
                           </span>
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          {canWriteModule ? (
+                            <button
+                              type="button"
+                              onClick={() => toggleBankAccountPosAvailable(acc.id)}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold transition cursor-pointer ${
+                                acc.is_pos_available !== false
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700"
+                                  : "bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"
+                              }`}
+                              title="Clic para cambiar disponibilidad de cobro en POS"
+                            >
+                              {acc.is_pos_available !== false ? "✓ En POS" : "Oculto"}
+                            </button>
+                          ) : (
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${
+                                acc.is_pos_available !== false
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
+                              {acc.is_pos_available !== false ? "✓ En POS" : "No"}
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-4 text-right whitespace-nowrap">
                           <button
@@ -624,6 +657,19 @@ export const BancosPage = () => {
                   />
                   <label htmlFor="acc_is_active" className="text-xs text-slate-700 font-medium">
                     Cuenta activa para cobros y pagos
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="acc_is_pos_available"
+                    checked={accountForm.is_pos_available}
+                    onChange={(e) => setAccountForm({ ...accountForm, is_pos_available: e.target.checked })}
+                    className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                  />
+                  <label htmlFor="acc_is_pos_available" className="text-xs text-slate-700 font-medium cursor-pointer">
+                    Disponible para recibir pagos desde el modal de cobro del POS
                   </label>
                 </div>
 

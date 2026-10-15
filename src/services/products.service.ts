@@ -231,91 +231,44 @@ export const productsService = {
   },
   getBarcodesByTenant: async (tenantId: string): Promise<ProductBarcode[]> => {
     const allBarcodes = await barcodeCrud.getAllByTenant(tenantId);
-    const barcodesByProduct: Record<string, ProductBarcode[]> = {};
-
-    for (const barcode of allBarcodes) {
-      if (!barcode.barcode || !barcode.product_id) continue;
-      if (!barcodesByProduct[barcode.product_id]) {
-        barcodesByProduct[barcode.product_id] = [];
-      }
-      barcodesByProduct[barcode.product_id].push(barcode);
-    }
-
-    const activeBarcodes: ProductBarcode[] = [];
-
-    // REGLA: Cada producto tiene un ÚNICO código de barra.
-    // Purgar de la base de datos cualquier código duplicado u obsoleto conservando el más reciente.
-    for (const items of Object.values(barcodesByProduct)) {
-      if (items.length > 1) {
-        items.sort((a, b) => {
-          const timeA = new Date(a.updated_at || a.created_at || 0).getTime();
-          const timeB = new Date(b.updated_at || b.created_at || 0).getTime();
-          if (timeA !== timeB) return timeB - timeA;
-          if (a.is_primary && !b.is_primary) return -1;
-          if (!a.is_primary && b.is_primary) return 1;
-          return 0;
-        });
-
-        const activeBarcode = items[0];
-        const staleItems = items.slice(1);
-        void Promise.all(staleItems.map((stale) => barcodeCrud.delete(tenantId, stale.id)));
-
-        activeBarcodes.push({
-          ...activeBarcode,
-          is_primary: true,
-        });
-      } else if (items.length === 1) {
-        activeBarcodes.push({
-          ...items[0],
-          is_primary: true,
-        });
-      }
-    }
-
-    return activeBarcodes;
+    return allBarcodes.filter((barcode) => Boolean(barcode.barcode && barcode.product_id));
   },
 
   getByBarcode: async (tenantId: string, rawBarcode: string): Promise<Product | null> => {
     const barcode = normalizeBarcode(rawBarcode);
     if (!barcode) return null;
+    const strippedBarcode = barcode.replace(/^0+/, "");
 
+    // 1. Búsqueda directa en tabla de códigos de barras
     const matches = await barcodeCrud.query(tenantId, { eq: { barcode } });
     for (const match of matches) {
-      // Verificar si este código es el activo más reciente del producto
-      const productBarcodes = await barcodeCrud.query(tenantId, {
-        eq: { product_id: match.product_id },
-      });
-      productBarcodes.sort((a, b) => {
-        const timeA = new Date(a.updated_at || a.created_at || 0).getTime();
-        const timeB = new Date(b.updated_at || b.created_at || 0).getTime();
-        if (timeA !== timeB) return timeB - timeA;
-        if (a.is_primary && !b.is_primary) return -1;
-        if (!a.is_primary && b.is_primary) return 1;
-        return 0;
-      });
-
-      const activePrimary = productBarcodes[0] ?? null;
-
-      // Si el código no es el activo del producto, es un remanente obsoleto: purgarlo
-      if (!activePrimary || activePrimary.id !== match.id || normalizeBarcode(activePrimary.barcode) !== barcode) {
-        void barcodeCrud.delete(tenantId, match.id);
-        continue;
-      }
-
-      // Si es el primario activo, verificar que el producto exista y no esté eliminado
       const product = await crud.getById(tenantId, match.product_id);
-      if (product && !isArchivedDeletedProduct(product)) {
+      if (product && !isArchivedDeletedProduct(product) && product.is_active !== false) {
         return product;
       }
-
-      // Si el producto no existe o fue eliminado, purgar código huérfano
-      void barcodeCrud.delete(tenantId, match.id);
     }
 
-    // Búsqueda por código de producto único
+    // 2. Búsqueda por código de producto exacto
     const matchedProducts = await crud.query(tenantId, { eq: { code: barcode }, limit: 1 });
-    const validMatch = matchedProducts.find((p) => !isArchivedDeletedProduct(p));
-    return validMatch ?? null;
+    const validMatch = matchedProducts.find((p) => !isArchivedDeletedProduct(p) && p.is_active !== false);
+    if (validMatch) return validMatch;
+
+    // 3. Fallback: búsqueda quitando ceros a la izquierda (ej: discrepancias UPC-A / EAN-13)
+    if (strippedBarcode && strippedBarcode !== barcode) {
+      const strippedMatches = await barcodeCrud.query(tenantId, { eq: { barcode: strippedBarcode } });
+      for (const match of strippedMatches) {
+        const product = await crud.getById(tenantId, match.product_id);
+        if (product && !isArchivedDeletedProduct(product) && product.is_active !== false) {
+          return product;
+        }
+      }
+
+      const strippedProducts = await crud.query(tenantId, { eq: { code: strippedBarcode }, limit: 1 });
+      const validStripped = strippedProducts.find((p) => !isArchivedDeletedProduct(p) && p.is_active !== false);
+      if (validStripped) return validStripped;
+    }
+
+    return null;
   },
 
   getPrimaryBarcodesMapByTenant: async (tenantId: string): Promise<Record<string, string>> => {
@@ -323,7 +276,9 @@ export const productsService = {
     const barcodeMap: Record<string, string> = {};
     for (const row of activeBarcodes) {
       if (row.product_id && row.barcode) {
-        barcodeMap[row.product_id] = row.barcode;
+        if (row.is_primary || !barcodeMap[row.product_id]) {
+          barcodeMap[row.product_id] = row.barcode;
+        }
       }
     }
     return barcodeMap;

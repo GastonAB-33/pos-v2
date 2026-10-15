@@ -1,24 +1,19 @@
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
 import {
+  AlertCircle,
   Banknote,
   Check,
+  Copy,
   CreditCard,
+  Edit2,
   FileText,
   Landmark,
-  Layers,
-  Lock,
-  Pencil,
-  Plus,
   QrCode,
   Receipt,
-  Search,
-  Trash2,
   UserCheck,
+  Users,
   Wallet,
   X,
-  Zap,
 } from "lucide-react";
 import type {
   MercadoPagoOperationalStatus,
@@ -33,16 +28,12 @@ import type {
   PaymentMethod,
 } from "@/types/entities";
 import { formatCustomerDocument } from "@/modules/configuracion/hooks/useEntityRequirements";
-import {
-  getPaymentMethodPosConfig,
-  normalizePaymentMethodCode,
-  type PaymentMethodPosConfig,
-} from "@/services/payment-methods.service";
-import {
-  posCheckoutSchema,
-  type PosCheckoutValues,
-  type PosPaymentSplitItem,
+import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
+import type {
+  PosCheckoutValues,
+  PosPaymentSplitItem,
 } from "@/modules/pos/schemas/pos-checkout.schema";
+import { PosCustomerSelectModal } from "./PosCustomerSelectModal";
 
 interface PosCheckoutPanelProps {
   panelId?: string;
@@ -76,7 +67,7 @@ interface PosCheckoutPanelProps {
   onCustomerChange: (customerId: string) => void;
   onPaymentMethodChange: (paymentMethodId: string) => void;
   onCreateOriginBank: (name: string) => Promise<OriginBank | null>;
-  onOpenCustomerModal: (customer: Customer | null) => void;
+  onOpenCustomerModal: (customer: Customer | null, defaultTab?: "personal" | "fiscal" | "account") => void;
   onStartMercadoPago: () => void;
   onRefreshMercadoPago: () => void;
   onApproveMercadoPago: () => void;
@@ -92,25 +83,12 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
-const paymentMethodPriority = (method: PaymentMethod): number => {
-  const code = normalizePaymentMethodCode(method.code);
-  if (code === "cash") return 0;
-  if (code === "card_debit") return 1;
-  if (code === "card_credit") return 2;
-  if (code === "transfer") return 3;
-  if (code === "mercado_pago") return 4;
-  if (code === "cheque") return 5;
-  if (code === "current_account") return 6;
-  return 7;
-};
-
 const getMethodIcon = (code: string) => {
   const normalized = normalizePaymentMethodCode(code);
   switch (normalized) {
     case "cash":
       return Banknote;
     case "card_debit":
-      return CreditCard;
     case "card_credit":
       return CreditCard;
     case "transfer":
@@ -126,38 +104,16 @@ const getMethodIcon = (code: string) => {
   }
 };
 
-interface CardDebitDetails {
-  couponNumber: string;
-  authorizationNumber: string;
-  destinationBankAccountId: string;
-}
-
-interface CardCreditDetails extends CardDebitDetails {
-  cardBrand: string;
-  installmentPlanId: string;
-}
-
-interface TransferDetails {
-  originBankId: string;
-  newOriginBankName: string;
-  voucherNumber: string;
-  originAccountHolder: string;
-  destinationBankAccountId: string;
-}
-
-interface MercadoPagoManualDetails {
-  operationId: string;
-  destinationBankAccountId: string;
-}
-
-interface ChequeDetails {
-  chequeNumber: string;
-  approvalNumber: string;
-  dueDate: string;
-  originBankId: string;
-  newOriginBankName: string;
-  originAccountHolder: string;
-  destinationBankAccountId: string;
+interface PosPaymentOption {
+  id: string; // ID único para control de asignación
+  paymentMethodId: string;
+  code: string;
+  name: string;
+  subtitle: string;
+  bankAccountId?: string;
+  bankName?: string;
+  isCurrentAccount?: boolean;
+  isBankTransfer?: boolean;
 }
 
 export const PosCheckoutPanel = ({
@@ -165,8 +121,6 @@ export const PosCheckoutPanel = ({
   customers,
   paymentMethods,
   bankAccounts,
-  originBanks,
-  installmentPlans,
   selectedCustomerId,
   selectedPaymentMethodId,
   isOnline,
@@ -178,13 +132,11 @@ export const PosCheckoutPanel = ({
   mercadoPagoStatus,
   isMercadoPagoLoading,
   canWrite,
-  canManageCustomers,
   currentAccountSnapshot,
-  hasDebtPaymentInCart = false,
+  hasDebtPaymentInCart: _hasDebtPaymentInCart = false,
   disabled,
   onCustomerChange,
   onPaymentMethodChange,
-  onCreateOriginBank,
   onOpenCustomerModal,
   onStartMercadoPago,
   onRefreshMercadoPago,
@@ -194,1453 +146,1062 @@ export const PosCheckoutPanel = ({
   onClose,
   onSubmit,
 }: PosCheckoutPanelProps) => {
-  const [customerQuery, setCustomerQuery] = useState("");
-  const [isCustomerMenuOpen, setIsCustomerMenuOpen] = useState(false);
-  const [isEditingCustomerSearch, setIsEditingCustomerSearch] = useState(false);
-  const [paymentDetailError, setPaymentDetailError] = useState<string | null>(null);
-  const [isCreatingOriginBank, setIsCreatingOriginBank] = useState(false);
+  const [issueInvoice, setIssueInvoice] = useState(false);
+  const [notes] = useState("");
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Modo de pago: "single" (por defecto, 1-clic rápido) vs "split" (combinado)
-  const [paymentMode, setPaymentMode] = useState<"single" | "split">("single");
-  const [splitPayments, setSplitPayments] = useState<PosPaymentSplitItem[]>([]);
-  const [splitAmountInput, setSplitAmountInput] = useState<string>(() => checkoutTotal.toFixed(2));
-  const [splitError, setSplitError] = useState<string | null>(null);
+  // Modal para selección ágil de cliente
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
 
-  const [cardDebitDetails, setCardDebitDetails] = useState<CardDebitDetails>({
-    couponNumber: "",
-    authorizationNumber: "",
-    destinationBankAccountId: "",
-  });
-  const [cardCreditDetails, setCardCreditDetails] = useState<CardCreditDetails>({
-    couponNumber: "",
-    authorizationNumber: "",
-    destinationBankAccountId: "",
-    cardBrand: "",
-    installmentPlanId: "",
-  });
-  const [transferDetails, setTransferDetails] = useState<TransferDetails>({
-    originBankId: "",
-    newOriginBankName: "",
-    voucherNumber: "",
-    originAccountHolder: "",
-    destinationBankAccountId: "",
-  });
-  const [mercadoPagoManualDetails, setMercadoPagoManualDetails] =
-    useState<MercadoPagoManualDetails>({
-      operationId: "",
-      destinationBankAccountId: "",
-    });
-  const [chequeDetails, setChequeDetails] = useState<ChequeDetails>({
-    chequeNumber: "",
-    approvalNumber: "",
-    dueDate: "",
-    originBankId: "",
-    newOriginBankName: "",
-    originAccountHolder: "",
-    destinationBankAccountId: "",
-  });
-  const customerLookupRef = useRef<HTMLDivElement | null>(null);
+  // Cuentas bancarias configuradas y habilitadas para POS
+  const posBankAccounts = useMemo(() => {
+    return bankAccounts.filter((b) => b.is_active && b.is_pos_available !== false);
+  }, [bankAccounts]);
 
-  const splitPaidTotal = useMemo(
-    () => Number(splitPayments.reduce((acc, p) => acc + p.amount, 0).toFixed(2)),
-    [splitPayments]
-  );
-  const splitRemainingTotal = useMemo(
-    () => Number(Math.max(0, checkoutTotal - splitPaidTotal).toFixed(2)),
-    [checkoutTotal, splitPaidTotal]
-  );
-  const isSplitFullyCovered = Math.abs(splitPaidTotal - checkoutTotal) <= 0.01;
+  // Lista unificada de opciones de pago (desglosando bancos habilitados si corresponde)
+  const paymentOptions = useMemo<PosPaymentOption[]>(() => {
+    const options: PosPaymentOption[] = [];
 
-  useEffect(() => {
-    if (splitPayments.length === 0) {
-      setSplitAmountInput(checkoutTotal.toFixed(2));
+    // 1. Efectivo
+    const cashMethod = paymentMethods.find(
+      (m) => normalizePaymentMethodCode(m.code) === "cash"
+    );
+    if (cashMethod) {
+      options.push({
+        id: `method-${cashMethod.id}`,
+        paymentMethodId: cashMethod.id,
+        code: "cash",
+        name: cashMethod.name || "Efectivo",
+        subtitle: "Cobro inmediato en caja física",
+      });
     }
-  }, [checkoutTotal, splitPayments.length]);
 
-  const {
-    register,
-    handleSubmit,
-    watch,
-    reset,
-    setValue,
-  } = useForm<PosCheckoutValues>({
-    resolver: zodResolver(posCheckoutSchema),
-    defaultValues: {
-      customerId: selectedCustomerId,
-      paymentMethodId: selectedPaymentMethodId,
-      issueInvoice: false,
-      notes: "",
-      paymentDetails: null,
-    },
-  });
+    // 2. Transferencias Bancarias (Desglose por bancos del tenant si existen)
+    const transferMethod = paymentMethods.find(
+      (m) => normalizePaymentMethodCode(m.code) === "transfer"
+    );
+
+    if (transferMethod) {
+      if (posBankAccounts.length > 0) {
+        // Desglosar cada cuenta bancaria activa habilitada en POS (ej: Patricia, Octavio)
+        for (const account of posBankAccounts) {
+          const holderPart = account.holder_name ? ` (${account.holder_name})` : "";
+          options.push({
+            id: `bank-acc-${account.id}`,
+            paymentMethodId: transferMethod.id,
+            code: "transfer",
+            name: `Transferencia ${account.bank_name}${holderPart}`,
+            subtitle: `${account.alias ? `Alias: ${account.alias}` : ""}${
+              account.cbu ? ` • CBU: ...${account.cbu.slice(-6)}` : ""
+            }`.trim() || account.account_type.replace("_", " "),
+            bankAccountId: account.id,
+            bankName: account.bank_name,
+            isBankTransfer: true,
+          });
+        }
+      } else {
+        // Fallback genérico si no hay cuentas configuradas en módulo bancos
+        options.push({
+          id: `method-${transferMethod.id}`,
+          paymentMethodId: transferMethod.id,
+          code: "transfer",
+          name: transferMethod.name || "Transferencia Bancaria",
+          subtitle: "Comprobante / acreditación bancaria",
+          isBankTransfer: true,
+        });
+      }
+    }
+
+    // 3. Tarjeta de Débito
+    const debitMethod = paymentMethods.find(
+      (m) => normalizePaymentMethodCode(m.code) === "card_debit"
+    );
+    if (debitMethod) {
+      options.push({
+        id: `method-${debitMethod.id}`,
+        paymentMethodId: debitMethod.id,
+        code: "card_debit",
+        name: debitMethod.name || "Tarjeta de Débito",
+        subtitle: "Cobro posnet / terminal débito",
+      });
+    }
+
+    // 4. Tarjeta de Crédito
+    const creditMethod = paymentMethods.find(
+      (m) => normalizePaymentMethodCode(m.code) === "card_credit"
+    );
+    if (creditMethod) {
+      options.push({
+        id: `method-${creditMethod.id}`,
+        paymentMethodId: creditMethod.id,
+        code: "card_credit",
+        name: creditMethod.name || "Tarjeta de Crédito",
+        subtitle: "Financiación / cuotas",
+      });
+    }
+
+    // 5. Mercado Pago
+    const mpMethod = paymentMethods.find(
+      (m) => normalizePaymentMethodCode(m.code) === "mercado_pago"
+    );
+    if (mpMethod) {
+      options.push({
+        id: `method-${mpMethod.id}`,
+        paymentMethodId: mpMethod.id,
+        code: "mercado_pago",
+        name: mpMethod.name || "Mercado Pago",
+        subtitle: mercadoPagoSettings.enabled
+          ? "Terminal Point QR / Dinámico"
+          : "Transferencia / QR Estático",
+      });
+    }
+
+    // 6. Cheque
+    const chequeMethod = paymentMethods.find(
+      (m) => normalizePaymentMethodCode(m.code) === "cheque"
+    );
+    if (chequeMethod) {
+      options.push({
+        id: `method-${chequeMethod.id}`,
+        paymentMethodId: chequeMethod.id,
+        code: "cheque",
+        name: chequeMethod.name || "Cheque",
+        subtitle: "Cheque físico / eCheq",
+      });
+    }
+
+    // 7. Cuenta Corriente
+    const ccMethod = paymentMethods.find(
+      (m) => normalizePaymentMethodCode(m.code) === "current_account"
+    );
+    if (ccMethod) {
+      options.push({
+        id: `method-${ccMethod.id}`,
+        paymentMethodId: ccMethod.id,
+        code: "current_account",
+        name: ccMethod.name || "Cuenta Corriente",
+        subtitle: "A crédito / saldo fiado al cliente",
+        isCurrentAccount: true,
+      });
+    }
+
+    return options;
+  }, [paymentMethods, posBankAccounts, mercadoPagoSettings.enabled]);
+
+  // Montos asignados a cada opción de pago { [optionId]: number }
+  const [allocatedAmounts, setAllocatedAmounts] = useState<Record<string, number>>({});
+  const [amountInputs, setAmountInputs] = useState<Record<string, string>>({});
+  // Métodos de pago con monto confirmado/establecido { [optionId]: boolean }
+  const [lockedMethodIds, setLockedMethodIds] = useState<Record<string, boolean>>({});
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [isReadyToSubmit, setIsReadyToSubmit] = useState(false);
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Inicializar con el medio de pago predeterminado o efectivo
+  const isInitializedRef = useRef(false);
 
   useEffect(() => {
-    setValue("customerId", selectedCustomerId, { shouldValidate: true });
-  }, [selectedCustomerId, setValue]);
+    if (paymentOptions.length === 0) return;
 
-  useEffect(() => {
-    setValue("paymentMethodId", selectedPaymentMethodId, { shouldValidate: true });
-  }, [selectedPaymentMethodId, setValue]);
+    if (!isInitializedRef.current) {
+      isInitializedRef.current = true;
 
-  const watchedCustomerId = watch("customerId");
-  const watchedPaymentMethodId = watch("paymentMethodId");
-  const watchedIssueInvoice = watch("issueInvoice");
+      // Buscar si coincide con selectedPaymentMethodId
+      const targetIndex = paymentOptions.findIndex(
+        (opt) => opt.paymentMethodId === selectedPaymentMethodId
+      );
+      const chosenIndex = targetIndex >= 0 ? targetIndex : 0;
+      const initialOption = paymentOptions[chosenIndex];
 
-  useEffect(() => {
-    onCustomerChange(watchedCustomerId?.trim() ?? "");
-  }, [onCustomerChange, watchedCustomerId]);
+      setHighlightedIndex(chosenIndex);
+      setIsReadyToSubmit(false);
+      setAllocatedAmounts({
+        [initialOption.id]: checkoutTotal,
+      });
+      setAmountInputs({
+        [initialOption.id]: checkoutTotal.toFixed(2),
+      });
 
-  useEffect(() => {
-    if (!watchedPaymentMethodId) return;
-    onPaymentMethodChange(watchedPaymentMethodId);
-  }, [onPaymentMethodChange, watchedPaymentMethodId]);
+      onPaymentMethodChange(initialOption.paymentMethodId);
+    }
+  }, [checkoutTotal, onPaymentMethodChange, paymentOptions, selectedPaymentMethodId]);
 
+  // Cálculos de asignación total y pendiente
+  const totalAssigned = useMemo(() => {
+    const sum = Object.values(allocatedAmounts).reduce((acc, val) => acc + (val || 0), 0);
+    return Number(sum.toFixed(2));
+  }, [allocatedAmounts]);
+
+  const totalPending = useMemo(() => {
+    const diff = Number((checkoutTotal - totalAssigned).toFixed(2));
+    return Math.max(0, diff);
+  }, [checkoutTotal, totalAssigned]);
+
+  const isFullyAssigned = Math.abs(totalAssigned - checkoutTotal) <= 0.01 && totalAssigned > 0;
+  const isOverpaid = totalAssigned > checkoutTotal + 0.01;
+
+  // Cliente seleccionado actual
   const selectedCustomer = useMemo(
-    () => customers.find((c) => c.id === watchedCustomerId) ?? null,
-    [customers, watchedCustomerId]
+    () => customers.find((c) => c.id === selectedCustomerId) ?? null,
+    [customers, selectedCustomerId]
   );
 
-  const customerInitials = useMemo(() => {
-    if (!selectedCustomer) return "CF";
-    const parts = selectedCustomer.full_name.trim().split(" ");
-    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-    return (parts[0]?.slice(0, 2) || "CL").toUpperCase();
-  }, [selectedCustomer]);
+  const isCurrentAccountUsed = useMemo(() => {
+    const ccOption = paymentOptions.find((opt) => opt.isCurrentAccount);
+    if (!ccOption) return false;
+    return (allocatedAmounts[ccOption.id] || 0) > 0;
+  }, [allocatedAmounts, paymentOptions]);
 
-  const selectedMethod = useMemo(
-    () => paymentMethods.find((method) => method.id === watchedPaymentMethodId) ?? null,
-    [paymentMethods, watchedPaymentMethodId]
+  // Actualizar el monto de un método cuando el usuario escribe
+  const updateOptionAmount = useCallback(
+    (optionId: string, rawValue: string) => {
+      setSubmitError(null);
+      setIsReadyToSubmit(false);
+
+      // Si el usuario edita el monto, se desmarca como establecido hasta presionar Enter
+      setLockedMethodIds((prev) => {
+        if (!prev[optionId]) return prev;
+        const next = { ...prev };
+        delete next[optionId];
+        return next;
+      });
+
+      setAmountInputs((prev) => ({ ...prev, [optionId]: rawValue }));
+
+      const clean = rawValue.replace(",", ".");
+      const numeric = parseFloat(clean);
+
+      setAllocatedAmounts((prev) => {
+        const next = { ...prev };
+        if (isNaN(numeric) || numeric <= 0) {
+          delete next[optionId];
+        } else {
+          next[optionId] = Number(numeric.toFixed(2));
+        }
+        return next;
+      });
+    },
+    []
   );
 
-  const selectedMethodConfig = useMemo<PaymentMethodPosConfig | null>(
-    () => (selectedMethod ? getPaymentMethodPosConfig(selectedMethod) : null),
-    [selectedMethod]
-  );
+  // Limpiar el monto asignado a un método
+  const clearOptionAmount = useCallback((optionId: string) => {
+    setSubmitError(null);
+    setIsReadyToSubmit(false);
+    setLockedMethodIds((prev) => {
+      const next = { ...prev };
+      delete next[optionId];
+      return next;
+    });
+    setAmountInputs((prev) => {
+      const next = { ...prev };
+      delete next[optionId];
+      return next;
+    });
+    setAllocatedAmounts((prev) => {
+      const next = { ...prev };
+      delete next[optionId];
+      return next;
+    });
+  }, []);
 
-  const selectedMethodCode = normalizePaymentMethodCode(selectedMethod?.code);
-  const isCreditCardMethod = selectedMethodCode === "card_credit";
-  const isDebitCardMethod = selectedMethodCode === "card_debit";
-  const isTransferMethod = selectedMethodCode === "transfer";
-  const isChequeMethod = selectedMethodCode === "cheque";
-  const isMercadoPagoMethod = selectedMethodCode === "mercado_pago";
-  const isMercadoPagoManual = isMercadoPagoMethod && !mercadoPagoSettings.enabled;
-  const isCurrentAccountMethod = selectedMethodCode === "current_account";
-
-  const requiresPaymentDetails = Boolean(
-    selectedMethodConfig &&
-      (isCreditCardMethod ||
-        isDebitCardMethod ||
-        isTransferMethod ||
-        isMercadoPagoManual ||
-        isChequeMethod) &&
-      (selectedMethodConfig.ask_destination_bank ||
-        selectedMethodConfig.ask_coupon_number ||
-        selectedMethodConfig.ask_approval_number ||
-        selectedMethodConfig.ask_card_brand ||
-        selectedMethodConfig.ask_installment_plan ||
-        selectedMethodConfig.ask_origin_bank ||
-        selectedMethodConfig.ask_voucher_number ||
-        selectedMethodConfig.ask_origin_account_holder ||
-        selectedMethodConfig.ask_cheque_number ||
-        selectedMethodConfig.ask_cheque_due_date ||
-        selectedMethodConfig.ask_operation_number)
-  );
-
-  const filteredCustomers = useMemo(() => {
-    const query = customerQuery.trim().toLowerCase();
-    if (!query) return customers.slice(0, 8);
-    return customers
-      .filter((customer) => {
-        const nameMatch = customer.full_name.toLowerCase().includes(query);
-        const docMatch = customer.document_number.toLowerCase().includes(query);
-        return nameMatch || docMatch;
-      })
-      .slice(0, 8);
-  }, [customerQuery, customers]);
-
-  useEffect(() => {
-    if (!isCustomerMenuOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof HTMLElement)) return;
-      if (target.closest("[data-customer-lookup='true']")) return;
-      setIsCustomerMenuOpen(false);
-    };
-    window.addEventListener("pointerdown", onPointerDown, true);
-    return () => window.removeEventListener("pointerdown", onPointerDown, true);
-  }, [isCustomerMenuOpen]);
-
-  const selectCustomer = useCallback(
-    (customer: Customer | null) => {
-      if (!customer) {
-        setValue("customerId", "", { shouldDirty: true, shouldValidate: true });
-        setCustomerQuery("");
-        setIsCustomerMenuOpen(false);
-        setIsEditingCustomerSearch(false);
+  // Desplazar el resto pendiente dinámicamente al método objetivo
+  const shiftRemainderToOption = useCallback(
+    (targetOption: PosPaymentOption) => {
+      if (lockedMethodIds[targetOption.id]) {
+        // Si el método ya está establecido, limpiamos los flotantes no bloqueados
+        setAllocatedAmounts((prev) => {
+          const next: Record<string, number> = {};
+          for (const [id, val] of Object.entries(prev)) {
+            if (lockedMethodIds[id]) {
+              next[id] = val;
+            }
+          }
+          return next;
+        });
+        setAmountInputs((prev) => {
+          const next: Record<string, string> = {};
+          for (const [id, val] of Object.entries(prev)) {
+            if (lockedMethodIds[id]) {
+              next[id] = val;
+            }
+          }
+          return next;
+        });
         return;
       }
-      setValue("customerId", customer.id, { shouldDirty: true, shouldValidate: true });
-      const docText = formatCustomerDocument(customer.document_type, customer.document_number);
-      const displayLabel = docText === "Sin documento" ? customer.full_name : `${customer.full_name} (${docText})`;
-      setCustomerQuery(displayLabel);
-      setIsCustomerMenuOpen(false);
-      setIsEditingCustomerSearch(false);
-    },
-    [setValue]
-  );
 
-  const paymentMethodsOrdered = useMemo(
-    () =>
-      paymentMethods
-        .filter((method) => normalizePaymentMethodCode(method.code) !== "mercado_pago")
-        .sort((a, b) => {
-          const priorityDiff = paymentMethodPriority(a) - paymentMethodPriority(b);
-          if (priorityDiff !== 0) return priorityDiff;
-          return a.name.localeCompare(b.name);
-        }),
-    [paymentMethods]
-  );
+      // Calcular la suma de lo que ya está establecido
+      const lockedSum = Object.entries(allocatedAmounts).reduce((acc, [id, val]) => {
+        if (lockedMethodIds[id] && id !== targetOption.id) {
+          return acc + (val || 0);
+        }
+        return acc;
+      }, 0);
+      const remainder = Number(Math.max(0, checkoutTotal - lockedSum).toFixed(2));
 
-  const destinationBankAccounts = useMemo(() => {
-    if (!selectedMethodConfig?.ask_destination_bank) return bankAccounts;
-    if (!selectedMethodConfig.destination_bank_account_ids.length) return bankAccounts;
-    const allowedIds = new Set(selectedMethodConfig.destination_bank_account_ids);
-    const filtered = bankAccounts.filter((account) => allowedIds.has(account.id));
-    return filtered.length ? filtered : bankAccounts;
-  }, [bankAccounts, selectedMethodConfig]);
-
-  const selectedCreditDestination = useMemo(
-    () =>
-      destinationBankAccounts.find(
-        (account) => account.id === cardCreditDetails.destinationBankAccountId
-      ) ?? null,
-    [cardCreditDetails.destinationBankAccountId, destinationBankAccounts]
-  );
-
-  const selectedDebitDestination = useMemo(
-    () =>
-      destinationBankAccounts.find(
-        (account) => account.id === cardDebitDetails.destinationBankAccountId
-      ) ?? null,
-    [cardDebitDetails.destinationBankAccountId, destinationBankAccounts]
-  );
-
-  const selectedTransferDestination = useMemo(
-    () =>
-      destinationBankAccounts.find(
-        (account) => account.id === transferDetails.destinationBankAccountId
-      ) ?? null,
-    [destinationBankAccounts, transferDetails.destinationBankAccountId]
-  );
-
-  const selectedManualMpDestination = useMemo(
-    () =>
-      destinationBankAccounts.find(
-        (account) => account.id === mercadoPagoManualDetails.destinationBankAccountId
-      ) ?? null,
-    [destinationBankAccounts, mercadoPagoManualDetails.destinationBankAccountId]
-  );
-
-  const selectedChequeDestination = useMemo(
-    () =>
-      destinationBankAccounts.find(
-        (account) => account.id === chequeDetails.destinationBankAccountId
-      ) ?? null,
-    [chequeDetails.destinationBankAccountId, destinationBankAccounts]
-  );
-
-  const availableInstallmentPlans = useMemo(() => {
-    const normalizedBrand = cardCreditDetails.cardBrand.trim().toLowerCase();
-    return installmentPlans
-      .filter((plan) => {
-        if (!plan.is_active) return false;
-        if (!normalizedBrand) return true;
-        if (!plan.card_brand) return true;
-        return plan.card_brand.trim().toLowerCase() === normalizedBrand;
-      })
-      .sort((a, b) => {
-        if (a.installments !== b.installments) return a.installments - b.installments;
-        return a.name.localeCompare(b.name);
-      });
-  }, [cardCreditDetails.cardBrand, installmentPlans]);
-
-  const selectedInstallmentPlan = useMemo(
-    () =>
-      availableInstallmentPlans.find((plan) => plan.id === cardCreditDetails.installmentPlanId) ??
-      null,
-    [availableInstallmentPlans, cardCreditDetails.installmentPlanId]
-  );
-
-  const canUseCurrentAccount = Boolean(watchedCustomerId?.trim());
-  const isCurrentAccountEnabled = Boolean(currentAccountSnapshot?.enabled);
-  const isCurrentAccountNoFunds = Boolean(
-    currentAccountSnapshot?.enabled &&
-      currentAccountSnapshot.available != null &&
-      currentAccountSnapshot.available <= 0
-  );
-  const canUseCurrentAccountMethod =
-    canUseCurrentAccount && isCurrentAccountEnabled && !isCurrentAccountNoFunds && !hasDebtPaymentInCart;
-
-  useEffect(() => {
-    if (!selectedMethod) return;
-    if (normalizePaymentMethodCode(selectedMethod.code) !== "current_account") return;
-    if (canUseCurrentAccountMethod) return;
-    const fallback = paymentMethodsOrdered.find(
-      (method) => normalizePaymentMethodCode(method.code) !== "current_account"
-    );
-    if (!fallback) return;
-    setValue("paymentMethodId", fallback.id, { shouldDirty: true, shouldValidate: true });
-  }, [canUseCurrentAccountMethod, paymentMethodsOrdered, selectedMethod, setValue]);
-
-  const isMercadoPagoApproved = mercadoPagoIntent?.status === "approved";
-  const canStartMercadoPago =
-    canWrite &&
-    !disabled &&
-    !isMercadoPagoLoading &&
-    isMercadoPagoMethod &&
-    !isMercadoPagoManual &&
-    mercadoPagoStatus.can_start_payment &&
-    checkoutTotal > 0 &&
-    (!mercadoPagoIntent ||
-      mercadoPagoIntent.status === "rejected" ||
-      mercadoPagoIntent.status === "cancelled" ||
-      mercadoPagoIntent.status === "expired");
-
-  const arePaymentDetailsReady = useMemo(() => {
-    if (!requiresPaymentDetails || !selectedMethodConfig) return true;
-    if (isTransferMethod && transferDetails.originBankId === "__new__") {
-      return Boolean(transferDetails.newOriginBankName.trim());
-    }
-    if (isChequeMethod && chequeDetails.originBankId === "__new__") {
-      return Boolean(chequeDetails.newOriginBankName.trim());
-    }
-    return true;
-  }, [
-    isChequeMethod,
-    isTransferMethod,
-    chequeDetails.newOriginBankName,
-    chequeDetails.originBankId,
-    requiresPaymentDetails,
-    selectedMethodConfig,
-    transferDetails.newOriginBankName,
-    transferDetails.originBankId,
-  ]);
-
-  const buildPaymentDetailsPayload = useCallback(async () => {
-    if (!requiresPaymentDetails || !selectedMethod || !selectedMethodConfig) {
-      return { ok: true as const, payload: null as Record<string, unknown> | null };
-    }
-    const capturedAt = new Date().toISOString();
-
-    if (isCreditCardMethod) {
-      return {
-        ok: true as const,
-        payload: {
-          kind: "card_credit",
-          captured_at: capturedAt,
-          coupon_number: cardCreditDetails.couponNumber.trim() || null,
-          authorization_number: cardCreditDetails.authorizationNumber.trim() || null,
-          card_brand: cardCreditDetails.cardBrand.trim() || null,
-          installment_plan_id: selectedInstallmentPlan?.id ?? null,
-          destination_account_id: selectedCreditDestination?.id ?? null,
-          destination_account_bank: selectedCreditDestination?.bank_name ?? null,
-        },
-      };
-    }
-
-    if (isDebitCardMethod) {
-      return {
-        ok: true as const,
-        payload: {
-          kind: "card_debit",
-          captured_at: capturedAt,
-          coupon_number: cardDebitDetails.couponNumber.trim() || null,
-          authorization_number: cardDebitDetails.authorizationNumber.trim() || null,
-          destination_account_id: selectedDebitDestination?.id ?? null,
-          destination_account_bank: selectedDebitDestination?.bank_name ?? null,
-        },
-      };
-    }
-
-    if (isTransferMethod) {
-      let selectedOriginBank =
-        originBanks.find((bank) => bank.id === transferDetails.originBankId) ?? null;
-      if (selectedMethodConfig.ask_origin_bank && transferDetails.originBankId === "__new__") {
-        const newName = transferDetails.newOriginBankName.trim();
-        if (newName) {
-          setIsCreatingOriginBank(true);
-          try {
-            const created = await onCreateOriginBank(newName);
-            if (created) selectedOriginBank = created;
-          } finally {
-            setIsCreatingOriginBank(false);
+      setAllocatedAmounts((prev) => {
+        const next: Record<string, number> = {};
+        for (const [id, val] of Object.entries(prev)) {
+          if (lockedMethodIds[id] && id !== targetOption.id) {
+            next[id] = val;
           }
         }
-      }
+        if (remainder > 0) {
+          next[targetOption.id] = remainder;
+        }
+        return next;
+      });
 
-      return {
-        ok: true as const,
-        payload: {
-          kind: "transfer",
-          captured_at: capturedAt,
-          origin_bank_id: selectedOriginBank?.id ?? null,
-          origin_bank_name: selectedOriginBank?.name ?? null,
-          voucher_number: transferDetails.voucherNumber.trim() || null,
-          destination_account_id: selectedTransferDestination?.id ?? null,
-          destination_account_bank: selectedTransferDestination?.bank_name ?? null,
-        },
-      };
-    }
+      setAmountInputs((prev) => {
+        const next: Record<string, string> = {};
+        for (const [id, val] of Object.entries(prev)) {
+          if (lockedMethodIds[id] && id !== targetOption.id) {
+            next[id] = val;
+          }
+        }
+        if (remainder > 0) {
+          next[targetOption.id] = remainder.toFixed(2);
+        }
+        return next;
+      });
+    },
+    [allocatedAmounts, checkoutTotal, lockedMethodIds]
+  );
 
-    if (isChequeMethod) {
-      return {
-        ok: true as const,
-        payload: {
-          kind: "cheque",
-          captured_at: capturedAt,
-          cheque_number: chequeDetails.chequeNumber.trim() || null,
-          due_date: chequeDetails.dueDate.trim() || null,
-          approval_number: chequeDetails.approvalNumber.trim() || null,
-          destination_account_id: selectedChequeDestination?.id ?? null,
-          destination_account_bank: selectedChequeDestination?.bank_name ?? null,
-        },
-      };
-    }
+  // Manejo de envío final de la venta
+  const handleFinalSubmit = useCallback(async () => {
+    setSubmitError(null);
 
-    if (isMercadoPagoManual) {
-      return {
-        ok: true as const,
-        payload: {
-          kind: "mercado_pago_manual",
-          captured_at: capturedAt,
-          operation_id: mercadoPagoManualDetails.operationId.trim() || null,
-          destination_account_id: selectedManualMpDestination?.id ?? null,
-          destination_account_bank: selectedManualMpDestination?.bank_name ?? null,
-        },
-      };
-    }
-
-    return { ok: true as const, payload: null as Record<string, unknown> | null };
-  }, [
-    cardCreditDetails.authorizationNumber,
-    cardCreditDetails.cardBrand,
-    cardCreditDetails.couponNumber,
-    cardDebitDetails.authorizationNumber,
-    cardDebitDetails.couponNumber,
-    chequeDetails.approvalNumber,
-    chequeDetails.chequeNumber,
-    chequeDetails.dueDate,
-    isCreditCardMethod,
-    isDebitCardMethod,
-    isChequeMethod,
-    isMercadoPagoManual,
-    isTransferMethod,
-    mercadoPagoManualDetails.operationId,
-    onCreateOriginBank,
-    originBanks,
-    requiresPaymentDetails,
-    selectedChequeDestination,
-    selectedCreditDestination,
-    selectedDebitDestination,
-    selectedInstallmentPlan,
-    selectedManualMpDestination,
-    selectedMethod,
-    selectedMethodConfig,
-    selectedTransferDestination,
-    transferDetails.newOriginBankName,
-    transferDetails.originBankId,
-    transferDetails.voucherNumber,
-  ]);
-
-  const handleAddSplitPayment = async () => {
-    setSplitError(null);
-    const parsed = parseFloat(splitAmountInput.replace(",", "."));
-    if (isNaN(parsed) || parsed <= 0) {
-      setSplitError("Ingresá un monto válido mayor a 0.");
+    if (!canWrite) {
+      setSubmitError("No tenés permisos para registrar ventas.");
       return;
     }
 
-    if (parsed > splitRemainingTotal + 0.01) {
-      setSplitError(
-        `El monto ($${parsed.toFixed(2)}) supera el saldo restante ($${splitRemainingTotal.toFixed(2)}).`
+    if (!isFullyAssigned) {
+      if (totalPending > 0) {
+        setSubmitError(`Resta asignar ${currency.format(totalPending)} para completar el total.`);
+      } else if (isOverpaid) {
+        setSubmitError(
+          `El total asignado supera el monto a pagar por ${currency.format(
+            totalAssigned - checkoutTotal
+          )}.`
+        );
+      }
+      return;
+    }
+
+    // Validar si cuenta corriente está usada y requiere cliente
+    if (isCurrentAccountUsed && !selectedCustomer) {
+      setSubmitError("Debes seleccionar un cliente para cobrar con cuenta corriente.");
+      setIsCustomerModalOpen(true);
+      return;
+    }
+
+    if (isCurrentAccountUsed && selectedCustomer && !currentAccountSnapshot?.enabled) {
+      setSubmitError(
+        `La cuenta corriente no está habilitada para ${selectedCustomer.full_name}. Habilitala desde "Habilitar Cta. Cte." para poder confirmar la venta.`
       );
       return;
     }
 
-    if (
-      isCurrentAccountMethod &&
-      (!canUseCurrentAccount || !isCurrentAccountEnabled || isCurrentAccountNoFunds)
-    ) {
-      setSplitError("No se puede abonar con cuenta corriente para este cliente.");
+    // Obtener los métodos con monto asignado
+    const activeEntries = Object.entries(allocatedAmounts).filter(
+      ([, amount]) => typeof amount === "number" && amount > 0
+    );
+
+    if (activeEntries.length === 0) {
+      setSubmitError("Debes asignar el monto a al menos un medio de pago.");
       return;
     }
 
-    let paymentDetailsPayload: Record<string, unknown> | null = null;
-    if (requiresPaymentDetails) {
-      const built = await buildPaymentDetailsPayload();
-      paymentDetailsPayload = built.payload;
+    // Preparar lista de pagos para el backend
+    const splitPaymentsList: PosPaymentSplitItem[] = activeEntries.map(([optId, amount]) => {
+      const option = paymentOptions.find((o) => o.id === optId)!;
+      let paymentDetails: Record<string, unknown> | null = null;
+
+      if (option.bankAccountId) {
+        paymentDetails = {
+          kind: "transfer",
+          destination_account_id: option.bankAccountId,
+          destination_account_bank: option.bankName,
+          captured_at: new Date().toISOString(),
+        };
+      }
+
+      return {
+        id: `split-${option.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        paymentMethodId: option.paymentMethodId,
+        amount: Number(amount.toFixed(2)),
+        paymentDetails,
+      };
+    });
+
+    const isSplit = splitPaymentsList.length > 1;
+    const primaryOption = paymentOptions.find((o) => o.id === activeEntries[0][0])!;
+
+    let primaryDetails: Record<string, unknown> | null = null;
+    if (primaryOption.bankAccountId) {
+      primaryDetails = {
+        kind: "transfer",
+        destination_account_id: primaryOption.bankAccountId,
+        destination_account_bank: primaryOption.bankName,
+        captured_at: new Date().toISOString(),
+      };
     }
 
-    const newItem: PosPaymentSplitItem = {
-      id: `split-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      paymentMethodId: watchedPaymentMethodId,
-      amount: Number(parsed.toFixed(2)),
-      paymentDetails: paymentDetailsPayload,
+    const payload: PosCheckoutValues = {
+      customerId: selectedCustomerId || undefined,
+      paymentMethodId: primaryOption.paymentMethodId,
+      issueInvoice,
+      notes: notes.trim(),
+      isSplitPayment: isSplit,
+      payments: isSplit ? splitPaymentsList : undefined,
+      paymentDetails: isSplit ? null : primaryDetails,
     };
 
-    const nextPayments = [...splitPayments, newItem];
-    setSplitPayments(nextPayments);
+    await onSubmit(payload);
+  }, [
+    allocatedAmounts,
+    canWrite,
+    checkoutTotal,
+    isCurrentAccountUsed,
+    isFullyAssigned,
+    isOverpaid,
+    issueInvoice,
+    notes,
+    onSubmit,
+    paymentOptions,
+    selectedCustomerId,
+    selectedCustomer,
+    totalAssigned,
+    totalPending,
+  ]);
 
-    const nextPaid = Number(nextPayments.reduce((acc, p) => acc + p.amount, 0).toFixed(2));
-    const nextRemaining = Number(Math.max(0, checkoutTotal - nextPaid).toFixed(2));
-    setSplitAmountInput(nextRemaining > 0 ? nextRemaining.toFixed(2) : "");
-  };
+  const [copiedField, setCopiedField] = useState<"total" | "pending" | null>(null);
 
-  const handleRemoveSplitPayment = (id: string) => {
-    const nextPayments = splitPayments.filter((p) => p.id !== id);
-    setSplitPayments(nextPayments);
-    const nextPaid = Number(nextPayments.reduce((acc, p) => acc + p.amount, 0).toFixed(2));
-    const nextRemaining = Number(Math.max(0, checkoutTotal - nextPaid).toFixed(2));
-    setSplitAmountInput(nextRemaining.toFixed(2));
-    setSplitError(null);
-  };
+  const handleCopyAmount = useCallback((amount: number, field: "total" | "pending") => {
+    const text = amount.toFixed(2);
+    void navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    window.setTimeout(() => setCopiedField(null), 1500);
+  }, []);
 
-  const submit = async (values: PosCheckoutValues) => {
-    setPaymentDetailError(null);
+  const panelRef = useRef<HTMLElement | null>(null);
 
-    if (paymentMode === "split") {
-      if (splitPayments.length === 0) {
-        setPaymentDetailError("Debes agregar al menos un pago en el detalle de pago.");
+  // Autofocus del panel al montarse para capturar teclas inmediatamente
+  useEffect(() => {
+    panelRef.current?.focus();
+    const timer = window.setTimeout(() => {
+      panelRef.current?.focus();
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  // Seleccionar un método de pago y asignar el resto si se hace clic
+  const selectOption = useCallback(
+    (targetIndex: number) => {
+      if (paymentOptions.length === 0) return;
+      const clampedIndex = (targetIndex + paymentOptions.length) % paymentOptions.length;
+      const targetOption = paymentOptions[clampedIndex];
+      if (!targetOption) return;
+
+      setHighlightedIndex(clampedIndex);
+      onPaymentMethodChange(targetOption.paymentMethodId);
+      setIsReadyToSubmit(false);
+
+      shiftRemainderToOption(targetOption);
+
+      window.setTimeout(() => {
+        const el = inputRefs.current[targetOption.id];
+        if (el) {
+          el.focus();
+          el.select();
+        }
+      }, 20);
+    },
+    [onPaymentMethodChange, paymentOptions, shiftRemainderToOption]
+  );
+
+  // Listener global de teclado para navegación ágil y flujo de Enter en 3 pasos
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Si el modal de búsqueda de clientes está abierto, ignorar teclado global
+      if (isCustomerModalOpen) return;
+
+      const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      const activeInputEl = targetTag === "input" ? (e.target as HTMLInputElement) : null;
+      const isEditingAmount = Boolean(activeInputEl && activeInputEl.type === "number");
+
+      // Flecha abajo: navega al siguiente método desplazando el monto pendiente dinámicamente
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (isEditingAmount) {
+          activeInputEl?.blur();
+        }
+        setIsReadyToSubmit(false);
+        if (paymentOptions.length === 0) return;
+        const nextIndex = (highlightedIndex + 1) % paymentOptions.length;
+        const nextOption = paymentOptions[nextIndex];
+        setHighlightedIndex(nextIndex);
+        if (nextOption) {
+          onPaymentMethodChange(nextOption.paymentMethodId);
+          shiftRemainderToOption(nextOption);
+        }
         return;
       }
-      if (!isSplitFullyCovered) {
-        setPaymentDetailError(
-          `Resta cobrar $${splitRemainingTotal.toFixed(2)} para completar el total de la venta.`
-        );
+
+      // Flecha arriba: navega al método anterior desplazando el monto pendiente dinámicamente
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (isEditingAmount) {
+          activeInputEl?.blur();
+        }
+        setIsReadyToSubmit(false);
+        if (paymentOptions.length === 0) return;
+        const nextIndex = (highlightedIndex - 1 + paymentOptions.length) % paymentOptions.length;
+        const nextOption = paymentOptions[nextIndex];
+        setHighlightedIndex(nextIndex);
+        if (nextOption) {
+          onPaymentMethodChange(nextOption.paymentMethodId);
+          shiftRemainderToOption(nextOption);
+        }
         return;
       }
 
-      await onSubmit({
-        ...values,
-        isSplitPayment: true,
-        payments: splitPayments,
-        paymentMethodId: splitPayments[0]?.paymentMethodId || values.paymentMethodId,
-        paymentDetails: null,
-      });
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const activeOption = paymentOptions[highlightedIndex];
+        if (!activeOption) return;
 
-      reset({
-        customerId: "",
-        paymentMethodId: values.paymentMethodId,
-        issueInvoice: false,
-        notes: "",
-        paymentDetails: null,
-      });
-      setSplitPayments([]);
-      setSplitAmountInput("");
-      setCustomerQuery("");
-      setIsCustomerMenuOpen(false);
-      return;
-    }
+        // Si es cuenta corriente y falta cliente, abrir selector de cliente
+        if (activeOption.isCurrentAccount && !selectedCustomer) {
+          setIsCustomerModalOpen(true);
+          return;
+        }
 
-    let paymentDetailsPayload: Record<string, unknown> | null = null;
-    if (requiresPaymentDetails) {
-      const built = await buildPaymentDetailsPayload();
-      paymentDetailsPayload = built.payload;
-    }
+        // PASO 2: El cursor está actualmente dentro de la casilla de monto (editando/confirmando el importe)
+        if (isEditingAmount) {
+          activeInputEl?.blur();
 
-    await onSubmit({
-      ...values,
-      isSplitPayment: false,
-      paymentDetails: paymentDetailsPayload,
-    });
+          // Calculamos de forma inmediata con el valor escrito en el input
+          const clean = (activeInputEl?.value || "").replace(",", ".");
+          const numeric = parseFloat(clean);
+          const currentMethodVal = !isNaN(numeric) && numeric > 0 ? Number(numeric.toFixed(2)) : 0;
 
-    reset({
-      customerId: "",
-      paymentMethodId: values.paymentMethodId,
-      issueInvoice: false,
-      notes: "",
-      paymentDetails: null,
-    });
-    setCustomerQuery("");
-    setIsCustomerMenuOpen(false);
-  };
+          let nextAllocated: Record<string, number> = {};
+
+          if (currentMethodVal > 0) {
+            // Establecer y bloquear este método como confirmado (recuadro pasará a verde)
+            setLockedMethodIds((prev) => ({
+              ...prev,
+              [activeOption.id]: true,
+            }));
+
+            nextAllocated = {
+              ...allocatedAmounts,
+              [activeOption.id]: currentMethodVal,
+            };
+            setAllocatedAmounts(nextAllocated);
+            setAmountInputs((prev) => ({
+              ...prev,
+              [activeOption.id]: currentMethodVal.toFixed(2),
+            }));
+          } else {
+            // Si el monto es 0 o vacío, desbloquear y limpiar
+            setLockedMethodIds((prev) => {
+              const next = { ...prev };
+              delete next[activeOption.id];
+              return next;
+            });
+            nextAllocated = { ...allocatedAmounts };
+            delete nextAllocated[activeOption.id];
+            setAllocatedAmounts(nextAllocated);
+            setAmountInputs((prev) => {
+              const next = { ...prev };
+              delete next[activeOption.id];
+              return next;
+            });
+          }
+
+          const sum = Object.values(nextAllocated).reduce((acc, val) => acc + (val || 0), 0);
+          const pending = Number(Math.max(0, checkoutTotal - sum).toFixed(2));
+
+          if (pending === 0 && Math.abs(sum - checkoutTotal) <= 0.01 && sum > 0) {
+            // Todo el total está cubierto y establecido: el siguiente Enter confirmará la venta
+            setIsReadyToSubmit(true);
+          } else {
+            // Hay monto pendiente: queda listo para desplazarse a la 2da forma de pago con las flechitas
+            setIsReadyToSubmit(false);
+          }
+          return;
+        }
+
+        // PASO 3: Ya se confirmó el monto (isReadyToSubmit) y el total está 100% asignado
+        if (isReadyToSubmit && isFullyAssigned) {
+          void handleFinalSubmit();
+          return;
+        }
+
+        // PASO 1: El usuario seleccionó el método con Enter desde la lista de métodos
+        onPaymentMethodChange(activeOption.paymentMethodId);
+
+        // Si no está bloqueado, asegurarse de asignar el restante disponible
+        if (!lockedMethodIds[activeOption.id]) {
+          shiftRemainderToOption(activeOption);
+        }
+
+        setIsReadyToSubmit(false);
+
+        // Pone el cursor en el monto con el texto seleccionado por si hay que editarlo
+        window.setTimeout(() => {
+          const el = inputRefs.current[activeOption.id];
+          if (el) {
+            el.focus();
+            el.select();
+          }
+        }, 20);
+        return;
+      }
+
+      if (e.key === "Escape" && onClose && !isEditingAmount) {
+        e.preventDefault();
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+    };
+  }, [
+    allocatedAmounts,
+    checkoutTotal,
+    handleFinalSubmit,
+    highlightedIndex,
+    isCustomerModalOpen,
+    isFullyAssigned,
+    isReadyToSubmit,
+    lockedMethodIds,
+    onClose,
+    onPaymentMethodChange,
+    paymentOptions,
+    selectedCustomer,
+    shiftRemainderToOption,
+  ]);
+
+  const isMpHighlighted = paymentOptions[highlightedIndex]?.code === "mercado_pago";
 
   return (
-    <section className="flex flex-col overflow-hidden rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800">
-      {/* Línea de acento superior moderna estilo fintech */}
-      <div className="h-1.5 w-full bg-gradient-to-r from-emerald-400 via-blue-500 to-indigo-600" />
-
-      {/* Top Meta Bar */}
-      <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850 px-5 py-2.5 text-[11px]">
-        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-semibold">
-          <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="uppercase tracking-wider">Terminal Caja</span>
-          <span className="text-slate-300 dark:text-slate-600">•</span>
-          <span className="rounded-md bg-slate-200/80 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] text-slate-700 dark:text-slate-300">
-            TICKET MOSTRADOR
+    <section
+      ref={panelRef}
+      id={formId}
+      className="flex flex-col rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-300 dark:border-slate-700 outline-none p-4 sm:p-5 gap-3 max-h-[92vh] overflow-y-auto"
+      tabIndex={-1}
+    >
+      {/* Cabecera minimalista con título y botón cerrar */}
+      <div className="flex items-center justify-between pb-1">
+        <div className="flex items-center gap-2">
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Cobro de Venta</h3>
+          <span className="rounded-md bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 font-mono">
+            ARS
           </span>
+          {roundingAdjustment !== 0 && (
+            <span
+              className="rounded bg-blue-100 dark:bg-blue-950/80 px-1.5 py-0.5 font-mono text-[9px] font-bold text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+              title={`Subtotal original: ${currency.format(rawCheckoutTotal ?? (checkoutTotal - roundingAdjustment))}`}
+            >
+              Redondeo {roundingAdjustment > 0 ? `+${currency.format(roundingAdjustment)}` : currency.format(roundingAdjustment)}
+            </span>
+          )}
         </div>
 
         {onClose && (
           <button
             type="button"
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition"
+            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition"
             onClick={onClose}
-            title="Cerrar ventana (Esc)"
+            title="Cerrar ventana"
           >
             <X size={18} />
           </button>
         )}
       </div>
 
-      {/* Header Principal: Título + Pestañas + Hero Amount */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 p-5 bg-white dark:bg-slate-900">
-        <div>
-          <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Finalizar Venta</h2>
-          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-            Elegí cliente, medio de pago y datos de cobro
-          </p>
-
-          {/* Selector de modo: Pestañas segmentadas */}
-          <div className="mt-3 inline-flex items-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1 border border-slate-200/80 dark:border-slate-700">
-            <button
-              type="button"
-              onClick={() => setPaymentMode("single")}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                paymentMode === "single"
-                  ? "bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              }`}
-            >
-              <Zap className="h-3.5 w-3.5 text-amber-500" />
-              Pago Único (Rápido)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPaymentMode("split");
-                if (splitPayments.length === 0) {
-                  setSplitAmountInput(checkoutTotal.toFixed(2));
-                }
-              }}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                paymentMode === "split"
-                  ? "bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              }`}
-            >
-              <Layers className="h-3.5 w-3.5 text-indigo-500" />
-              Pago Combinado
-              {splitPayments.length > 0 && (
-                <span className="ml-1 rounded-full bg-blue-100 dark:bg-blue-900/60 px-1.5 py-0.2 text-[10px] font-black text-blue-800 dark:text-blue-300">
-                  {splitPayments.length}
-                </span>
-              )}
-            </button>
+      {/* Banner de integración Mercado Pago si está seleccionado */}
+      {isMpHighlighted && mercadoPagoSettings.enabled && (
+        <div className="rounded-xl border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 p-2.5 text-xs flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <span className="font-bold text-sky-900 dark:text-sky-200 block">Terminal Mercado Pago Point</span>
+            <span className="text-[11px] text-sky-700 dark:text-sky-300">
+              {mercadoPagoIntent ? `Estado: ${mercadoPagoIntent.status}` : "Listo para iniciar cobro en terminal"}
+            </span>
           </div>
-        </div>
-
-        {/* Hero Amount Box */}
-        <div className="flex flex-col items-start sm:items-end justify-center rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3 sm:p-4 border border-slate-200/80 dark:border-slate-700">
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Importe Total
-            </span>
-            <span className="rounded bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.2 font-mono text-[9px] font-bold text-emerald-800 dark:text-emerald-300">
-              ARS
-            </span>
-            {roundingAdjustment !== 0 && (
-              <span
-                className="rounded bg-blue-100 dark:bg-blue-950/80 px-1.5 py-0.2 font-mono text-[9px] font-bold text-blue-800 dark:text-blue-300"
-                title={`Subtotal original: ${currency.format(rawCheckoutTotal ?? (checkoutTotal - roundingAdjustment))}`}
-              >
-                Redondeo {roundingAdjustment > 0 ? `+${currency.format(roundingAdjustment)}` : currency.format(roundingAdjustment)}
-              </span>
+            <button
+              type="button"
+              onClick={onStartMercadoPago}
+              disabled={isMercadoPagoLoading || !mercadoPagoStatus.can_start_payment}
+              className="px-3 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-bold text-xs shadow-xs disabled:opacity-50"
+            >
+              {isMercadoPagoLoading ? "Iniciando..." : "Cobrar en Terminal"}
+            </button>
+            {mercadoPagoIntent && (
+              <>
+                <button type="button" onClick={onRefreshMercadoPago} className="px-2 py-1 bg-sky-100 text-sky-800 rounded-lg text-xs font-semibold">Actualizar</button>
+                <button type="button" onClick={onCancelMercadoPago} className="px-2 py-1 bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold">Cancelar</button>
+              </>
+            )}
+            {mercadoPagoStatus.mode === "mock" && (
+              <>
+                <button type="button" onClick={onApproveMercadoPago} className="px-2 py-1 bg-emerald-100 text-emerald-800 rounded-lg text-xs font-bold">Aprobar mock</button>
+                <button type="button" onClick={onRejectMercadoPago} className="px-2 py-1 bg-rose-100 text-rose-800 rounded-lg text-xs font-bold">Rechazar mock</button>
+              </>
             )}
           </div>
-          <span className="mt-0.5 text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight font-mono">
+        </div>
+      )}
+
+      {/* 2 PANELES SUPERIORES MINIMALISTAS (CLIC PARA COPIAR MONTO) */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* PANEL 1: TOTAL A PAGAR */}
+        <div
+          onClick={() => handleCopyAmount(checkoutTotal, "total")}
+          title="Clic para copiar monto a pagar"
+          className="group relative flex flex-col justify-between rounded-xl p-3 border border-slate-300 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50 hover:border-indigo-400 dark:hover:border-indigo-500 cursor-pointer transition active:scale-[0.99]"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Total a Pagar
+            </span>
+            {copiedField === "total" ? (
+              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 animate-in fade-in">
+                ¡Copiado!
+              </span>
+            ) : (
+              <Copy size={12} className="text-slate-400 opacity-0 group-hover:opacity-100 transition" />
+            )}
+          </div>
+          <span className="block mt-1 text-2xl font-black text-slate-900 dark:text-white tracking-tight font-mono">
             {currency.format(checkoutTotal)}
+          </span>
+        </div>
+
+        {/* PANEL 2: TOTAL PENDIENTE / RESTA CUBRIR */}
+        <div
+          onClick={() => handleCopyAmount(totalPending, "pending")}
+          title="Clic para copiar monto pendiente"
+          className={`group relative flex flex-col justify-between rounded-xl p-3 border cursor-pointer transition active:scale-[0.99] ${
+            isFullyAssigned
+              ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50/50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200"
+              : isOverpaid
+              ? "border-rose-300 dark:border-rose-700/80 bg-rose-50/50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200"
+              : "border-amber-300 dark:border-amber-700/80 bg-amber-50/50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black uppercase tracking-wider">
+              {isFullyAssigned ? "Cubierto al 100%" : isOverpaid ? "Monto Excedido" : "Total Pendiente"}
+            </span>
+            {copiedField === "pending" ? (
+              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 animate-in fade-in">
+                ¡Copiado!
+              </span>
+            ) : (
+              <Copy size={12} className="opacity-0 group-hover:opacity-100 transition" />
+            )}
+          </div>
+          <span className="block mt-1 text-2xl font-black tracking-tight font-mono">
+            {currency.format(totalPending)}
           </span>
         </div>
       </div>
 
-      <form id={formId} className="flex-1 overflow-y-auto p-5 space-y-6" onSubmit={handleSubmit(submit)}>
-        <input type="hidden" {...register("customerId")} />
-        <input type="hidden" {...register("paymentMethodId")} />
-
-        {/* PASO 1: CLIENTE ASOCIADO */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white shadow-xs">
-                1
-              </span>
-              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                Cliente Asociado
-              </h3>
-            </div>
-
-            {selectedCustomer && isCurrentAccountEnabled && (
-              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                <Check className="h-3 w-3" /> Cuenta al día
-              </span>
-            )}
-          </div>
-
-          {/* Tarjeta del cliente (o buscador si se quiere cambiar) */}
-          {!isEditingCustomerSearch ? (
-            <div className="flex items-center justify-between rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/60 p-3 transition hover:bg-slate-100/50 dark:hover:bg-slate-800/90">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 font-black text-xs">
-                  {customerInitials}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 truncate">
-                    <span className="font-bold text-slate-900 dark:text-white text-xs truncate">
-                      {selectedCustomer?.full_name ?? "Consumidor Final"}
-                    </span>
-                    {selectedCustomer ? (
-                      <span className="rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800 dark:text-emerald-300">
-                        {formatCustomerDocument(selectedCustomer.document_type, selectedCustomer.document_number)}
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-slate-200 dark:bg-slate-700 px-1.5 py-0.5 text-[9px] font-semibold text-slate-600 dark:text-slate-300">
-                        Venta mostrador
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                    {selectedCustomer
-                      ? `IVA: ${selectedCustomer.fiscal_condition || "Consumidor Final"}`
-                      : "Sin cuenta corriente asociada"}
-                  </p>
-                </div>
+      {/* PANEL UNIFICADO DE CLIENTE Y FACTURA AFIP (COMPACTO Y MISMO TAMAÑO ASIGNADO O NO) */}
+      <div className="flex items-center justify-between gap-2.5 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 min-h-[42px]">
+        <div className="flex items-center gap-1.5 text-xs min-w-0 flex-1">
+          <span className="font-bold text-slate-700 dark:text-slate-200 shrink-0">Cliente:</span>
+          {selectedCustomer ? (
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-0.5 shadow-2xs min-w-0">
+                <span className="font-bold text-slate-900 dark:text-slate-100 truncate max-w-[130px] sm:max-w-[170px]" title={selectedCustomer.full_name}>
+                  {selectedCustomer.full_name}
+                </span>
+                {selectedCustomer.document_number && (
+                  <span className="rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1 py-0.2 text-[10px] font-mono text-slate-700 dark:text-slate-300 shrink-0 hidden md:inline-block">
+                    {formatCustomerDocument(selectedCustomer.document_type, selectedCustomer.document_number)}
+                  </span>
+                )}
               </div>
 
-              <div className="flex items-center gap-2">
+              {/* Botones de acción agrupados: Quitar junto a Editar y Cambiar (solo iconos con tooltips) */}
+              <div className="flex items-center gap-1 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setIsEditingCustomerSearch(true)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition shadow-2xs"
+                  onClick={() => onOpenCustomerModal(selectedCustomer, "account")}
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer shadow-2xs"
+                  title="Editar cliente para asignarle una cuenta corriente"
+                  aria-label="Editar cliente"
                 >
-                  <Pencil className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
-                  Cambiar
+                  <Edit2 size={13} />
                 </button>
-                {selectedCustomer && (
-                  <button
-                    type="button"
-                    onClick={() => selectCustomer(null)}
-                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-700 dark:hover:text-slate-200 transition"
-                    title="Quitar cliente y volver a Consumidor Final"
-                  >
-                    <X size={15} />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setIsCustomerModalOpen(true)}
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition cursor-pointer shadow-2xs"
+                  title="Cambiar cliente"
+                  aria-label="Cambiar cliente"
+                >
+                  <Users size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onCustomerChange("")}
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/80 transition cursor-pointer shadow-2xs"
+                  title="Quitar cliente asignado (volver a Consumidor Final)"
+                  aria-label="Quitar cliente"
+                >
+                  <X size={13} strokeWidth={2.5} />
+                </button>
               </div>
             </div>
           ) : (
-            <div className="relative" ref={customerLookupRef} data-customer-lookup="true">
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <Search
-                    size={14}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-                  />
-                  <input
-                    type="search"
-                    autoFocus
-                    value={customerQuery}
-                    onChange={(event) => {
-                      setCustomerQuery(event.target.value);
-                      setIsCustomerMenuOpen(true);
-                    }}
-                    onFocus={() => setIsCustomerMenuOpen(true)}
-                    placeholder="Escribí nombre o DNI del cliente..."
-                    className="w-full rounded-xl border border-blue-500 bg-white dark:bg-slate-800 py-2 pl-9 pr-3 text-xs text-slate-900 dark:text-white outline-none ring-2 ring-blue-100 dark:ring-blue-900/40"
-                  />
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-slate-500 dark:text-slate-400 font-medium truncate">
+                Consumidor Final (Venta mostrador)
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsCustomerModalOpen(true)}
+                className="inline-flex items-center gap-1 rounded-md border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition cursor-pointer shrink-0"
+              >
+                Asignar
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Factura AFIP switch */}
+        <div className="flex items-center gap-2 shrink-0 pl-2.5 border-l border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-1 text-xs">
+            <FileText size={13} className="text-blue-600 dark:text-blue-400" />
+            <span className="font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">Factura AFIP:</span>
+          </div>
+          <label className="pos-switch relative inline-flex shrink-0 cursor-pointer items-center">
+            <input
+              type="checkbox"
+              checked={issueInvoice}
+              onChange={(e) => setIssueInvoice(e.target.checked)}
+              className="peer sr-only"
+              disabled={disabled || !canWrite || !isOnline}
+            />
+            <span className="pos-switch-track">
+              <span className="pos-switch-thumb" />
+            </span>
+          </label>
+        </div>
+      </div>
+
+      {/* LISTA DE MEDIOS DE PAGO */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between text-xs px-1 text-slate-500 dark:text-slate-400 font-semibold mb-0.5">
+          <span>Medio de Pago / Cuenta</span>
+          <span className="font-mono">Importe Asignado ($)</span>
+        </div>
+
+        {paymentOptions.map((option, idx) => {
+          const isHighlighted = idx === highlightedIndex;
+          const assignedVal = allocatedAmounts[option.id] || 0;
+          const hasAmount = assignedVal > 0;
+          const isEstablished = Boolean(lockedMethodIds[option.id] && hasAmount);
+          const Icon = getMethodIcon(option.code);
+
+          return (
+            <div
+              key={option.id}
+              onClick={() => selectOption(idx)}
+              className={`group flex items-center justify-between gap-3 py-1.5 px-3 rounded-xl border transition cursor-pointer ${
+                isEstablished
+                  ? "border-emerald-500 dark:border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 ring-2 ring-emerald-500/50 shadow-xs"
+                  : isHighlighted
+                  ? "border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/40 ring-2 ring-indigo-500/40"
+                  : hasAmount
+                  ? "border-emerald-400/60 dark:border-emerald-800/60 bg-emerald-50/20 dark:bg-emerald-950/20"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 hover:border-slate-400 dark:hover:border-slate-600"
+              }`}
+            >
+              {/* Lado izquierdo: Icono y Nombre */}
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition ${
+                    isEstablished
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : isHighlighted
+                      ? "bg-indigo-600 text-white"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                  }`}
+                >
+                  <Icon size={15} />
                 </div>
-                <button
-                  type="button"
-                  title="Dar de alta nuevo cliente"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
-                  disabled={disabled || !canWrite || !canManageCustomers}
-                  onClick={() => onOpenCustomerModal(selectedCustomer ?? null)}
-                >
-                  <Plus size={16} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsEditingCustomerSearch(false)}
-                  className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
-                >
-                  Cancelar
-                </button>
+
+                <div className="min-w-0 flex-1 flex items-center gap-2">
+                  <span className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                    {option.name}
+                  </span>
+                  {option.isBankTransfer && (
+                    <span className="rounded bg-sky-100 dark:bg-sky-950/80 border border-sky-200 dark:border-sky-800 px-1.5 py-0.2 text-[9px] font-bold text-sky-800 dark:text-sky-300">
+                      BANCO
+                    </span>
+                  )}
+                  {isEstablished && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-600 text-white">
+                        <Check size={9} strokeWidth={3} />
+                      </span>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/80 px-1.5 py-0.2 rounded border border-emerald-300 dark:border-emerald-800">
+                        Asignado
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {isCustomerMenuOpen && (
-                <div className="absolute z-20 mt-1 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 shadow-xl">
+              {/* Lado derecho: Casilla de Importe y botón limpiar */}
+              <div
+                className="flex items-center gap-2 shrink-0"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Casilla de Importe con autoselección total al hacer clic / focus */}
+                <div className="relative w-32">
+                  <span
+                    className={`absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-black pointer-events-none transition ${
+                      isEstablished
+                        ? "text-emerald-700 dark:text-emerald-300"
+                        : isHighlighted
+                        ? "text-indigo-600 dark:text-indigo-400"
+                        : "text-slate-400"
+                    }`}
+                  >
+                    $
+                  </span>
+                  <input
+                    ref={(el) => {
+                      inputRefs.current[option.id] = el;
+                    }}
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={amountInputs[option.id] ?? ""}
+                    onChange={(e) => updateOptionAmount(option.id, e.target.value)}
+                    onFocus={(e) => {
+                      e.target.select();
+                      setHighlightedIndex(idx);
+                      onPaymentMethodChange(option.paymentMethodId);
+                      setIsReadyToSubmit(false);
+                    }}
+                    onClick={(e) => {
+                      (e.target as HTMLInputElement).select();
+                    }}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-lpignore="true"
+                    className={`w-full rounded-lg border py-1 pl-5 pr-2 text-right font-mono text-sm outline-none transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                      isEstablished
+                        ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/90 text-emerald-950 dark:text-emerald-100 font-black ring-2 ring-emerald-500/50 shadow-xs"
+                        : isHighlighted
+                        ? "border-indigo-400 dark:border-indigo-500 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold ring-2 ring-indigo-500/40"
+                        : hasAmount
+                        ? "border-emerald-400/80 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold ring-1 ring-emerald-400/30"
+                        : "border-slate-300 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-950 text-slate-700 dark:text-slate-300 font-bold focus:bg-white dark:focus:bg-slate-900 focus:border-indigo-500"
+                    }`}
+                  />
+                </div>
+
+                {hasAmount && (
                   <button
                     type="button"
-                    className="ui-btn-ghost w-full justify-start px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300"
-                    onClick={() => selectCustomer(null)}
+                    onClick={() => clearOptionAmount(option.id)}
+                    className="rounded-lg p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
+                    title="Limpiar monto"
                   >
-                    Consumidor final (sin cliente)
+                    <X size={14} />
                   </button>
-                  {filteredCustomers.length ? (
-                    filteredCustomers.map((customer) => (
-                      <button
-                        key={customer.id}
-                        type="button"
-                        className="ui-btn-ghost w-full justify-start px-2.5 py-1.5 text-xs"
-                        onClick={() => selectCustomer(customer)}
-                      >
-                        <span className="truncate font-semibold text-slate-800 dark:text-slate-200">
-                          {customer.full_name}
-                        </span>
-                        <span className="ml-auto font-mono text-[11px] text-slate-500 dark:text-slate-400">
-                          {formatCustomerDocument(customer.document_type, customer.document_number)}
-                        </span>
-                      </button>
-                    ))
-                  ) : (
-                    <p className="px-2.5 py-1.5 text-xs text-slate-400">Sin coincidencias</p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* PASO 2: MEDIOS DE PAGO SELECCIONADOS */}
-        <div>
-          <div className="flex items-center justify-between mb-2.5">
-            <div className="flex items-center gap-2">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white shadow-xs">
-                2
-              </span>
-              <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                Medios de Pago Seleccionados
-              </h3>
-            </div>
-
-            {paymentMode === "split" ? (
-              isSplitFullyCovered ? (
-                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <Check className="h-3 w-3" /> MONTO ASIGNADO AL 100%
-                </span>
-              ) : (
-                <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400">
-                  RESTA ASIGNAR {currency.format(splitRemainingTotal)}
-                </span>
-              )
-            ) : (
-              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                <Check className="h-3 w-3" /> MONTO ASIGNADO AL 100%
-              </span>
-            )}
-          </div>
-
-          {/* Cuadrícula de tarjetas de Medios de Pago reales */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            {paymentMethodsOrdered.map((method) => {
-              const code = normalizePaymentMethodCode(method.code);
-              const Icon = getMethodIcon(code);
-
-              // Lógica de asignación y selección
-              let isAssigned = false;
-              let assignedDisplay = "Sin asignar";
-
-              if (paymentMode === "split") {
-                const totalInMethod = splitPayments
-                  .filter((p) => p.paymentMethodId === method.id)
-                  .reduce((acc, p) => acc + p.amount, 0);
-                if (totalInMethod > 0) {
-                  isAssigned = true;
-                  assignedDisplay = currency.format(totalInMethod);
-                } else if (watchedPaymentMethodId === method.id) {
-                  assignedDisplay = "Seleccionado";
-                }
-              } else {
-                if (watchedPaymentMethodId === method.id) {
-                  isAssigned = true;
-                  assignedDisplay = currency.format(checkoutTotal);
-                }
-              }
-
-              const isCurrentAccount = code === "current_account";
-              const isMethodDisabled =
-                disabled ||
-                !canWrite ||
-                (isCurrentAccount &&
-                  (!canUseCurrentAccount || !isCurrentAccountEnabled || isCurrentAccountNoFunds || hasDebtPaymentInCart));
-
-              const isCardSelected = watchedPaymentMethodId === method.id;
-
-              return (
-                <button
-                  key={method.id}
-                  type="button"
-                  disabled={isMethodDisabled}
-                  onClick={() => {
-                    setValue("paymentMethodId", method.id, {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    });
-                    if (paymentMode === "split" && splitRemainingTotal > 0) {
-                      setSplitAmountInput(splitRemainingTotal.toFixed(2));
-                    }
-                  }}
-                  className={`relative flex flex-col justify-between rounded-xl border p-3 text-left transition ${
-                    isAssigned || isCardSelected
-                      ? "border-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/40 shadow-xs ring-1 ring-emerald-500/30"
-                      : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50/70 dark:hover:bg-slate-800"
-                  } ${isMethodDisabled ? "opacity-45 cursor-not-allowed" : "cursor-pointer"}`}
-                >
-                  <div className="flex items-center justify-between w-full mb-2">
-                    <div
-                      className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                        isAssigned || isCardSelected
-                          ? "bg-emerald-600 text-white"
-                          : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
-                      }`}
-                    >
-                      <Icon className="h-4 w-4" />
-                    </div>
-
-                    {isAssigned && (
-                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white">
-                        <Check className="h-2.5 w-2.5 stroke-[3]" />
-                      </span>
-                    )}
-
-                    {isCurrentAccount && currentAccountSnapshot?.available != null && (
-                      <span className="rounded bg-indigo-100 dark:bg-indigo-950/80 px-1 py-0.2 text-[9px] font-bold text-indigo-800 dark:text-indigo-300">
-                        DISP ${(currentAccountSnapshot.available / 1000).toFixed(0)}K
-                      </span>
-                    )}
-                  </div>
-
-                  <div>
-                    <span
-                      className={`block text-xs font-bold truncate ${
-                        isAssigned || isCardSelected
-                          ? "text-slate-900 dark:text-white"
-                          : "text-slate-700 dark:text-slate-300"
-                      }`}
-                    >
-                      {method.name}
-                    </span>
-                    <span
-                      className={`block text-[11px] font-mono mt-0.5 truncate ${
-                        isAssigned
-                          ? "font-bold text-emerald-700 dark:text-emerald-400"
-                          : isCardSelected
-                          ? "text-blue-700 dark:text-blue-400 font-semibold"
-                          : "text-slate-400 dark:text-slate-500"
-                      }`}
-                    >
-                      {assignedDisplay}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Barra de métricas (KPIs de Cobro) */}
-          <div className="grid grid-cols-3 gap-2 mt-3.5 rounded-xl border border-slate-200/90 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/60 p-2.5 text-center text-xs">
-            <div className="rounded-lg bg-white dark:bg-slate-800 p-2 border border-slate-100 dark:border-slate-700 shadow-2xs">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Monto Total
-              </span>
-              <span className="font-bold text-slate-800 dark:text-white text-sm font-mono">
-                {currency.format(checkoutTotal)}
-              </span>
-            </div>
-
-            <div className="rounded-lg bg-emerald-100/70 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/80 p-2 shadow-2xs">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
-                Cobrado
-              </span>
-              <span className="font-black text-emerald-800 dark:text-emerald-300 text-sm font-mono">
-                {currency.format(paymentMode === "split" ? splitPaidTotal : checkoutTotal)}
-              </span>
-            </div>
-
-            <div className="rounded-lg bg-white dark:bg-slate-800 p-2 border border-slate-100 dark:border-slate-700 shadow-2xs">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Resta Cubrir
-              </span>
-              <span
-                className={`font-black text-sm font-mono ${
-                  paymentMode === "split" && !isSplitFullyCovered
-                    ? "text-amber-700 dark:text-amber-400"
-                    : "text-emerald-700 dark:text-emerald-400"
-                }`}
-              >
-                {paymentMode === "split"
-                  ? isSplitFullyCovered
-                    ? "$0,00"
-                    : currency.format(splitRemainingTotal)
-                  : "$0,00"}
-              </span>
-            </div>
-          </div>
-
-          {/* En Modo Combinado: Detalle de pagos agregados */}
-          {paymentMode === "split" && (
-            <div className="mt-3.5 space-y-3">
-              <div className="divide-y divide-slate-100 dark:divide-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80">
-                {splitPayments.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-slate-400">
-                    Todavía no agregaste pagos parciales. Asigná el monto y medio a continuación.
-                  </div>
-                ) : (
-                  splitPayments.map((item, idx) => {
-                    const method = paymentMethods.find((m) => m.id === item.paymentMethodId);
-                    const Icon = getMethodIcon(method?.code || "");
-                    const bank =
-                      item.paymentDetails && typeof item.paymentDetails === "object"
-                        ? (item.paymentDetails.destination_account_bank as string)
-                        : null;
-                    const voucher =
-                      item.paymentDetails && typeof item.paymentDetails === "object"
-                        ? (item.paymentDetails.voucher_number as string)
-                        : null;
-
-                    return (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between p-3 text-xs hover:bg-slate-50/70 dark:hover:bg-slate-700/50 transition"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
-                            <Icon className="h-4 w-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-bold text-slate-900 dark:text-white truncate">
-                              {method?.name || "Medio de pago"}
-                            </div>
-                            <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                              {bank ? `Banco: ${bank}` : ""}
-                              {voucher ? ` • Ref: ${voucher}` : ""}
-                              {!bank && !voucher ? `Pago parcial #${idx + 1}` : ""}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          <span className="font-black text-slate-900 dark:text-white text-sm font-mono">
-                            {currency.format(item.amount)}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveSplitPayment(item.id)}
-                            className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 hover:text-rose-600 dark:hover:text-rose-400 transition"
-                            title="Quitar este pago"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* Subformulario para agregar el siguiente método */}
-              {!isSplitFullyCovered && (
-                <div className="rounded-xl border border-blue-200/80 dark:border-blue-900/60 bg-blue-50/30 dark:bg-blue-950/20 p-3.5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
-                      + Asignar monto a: <strong>{selectedMethod?.name || "Medio elegido"}</strong>
-                    </span>
-                    <span className="text-[11px] text-blue-700 dark:text-blue-300">
-                      Resta cubrir: <strong>{currency.format(splitRemainingTotal)}</strong>
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-bold">
-                        $
-                      </span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        max={splitRemainingTotal}
-                        value={splitAmountInput}
-                        onChange={(e) => setSplitAmountInput(e.target.value)}
-                        placeholder="0.00"
-                        className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 py-2 pl-7 pr-3 text-xs font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleAddSplitPayment}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700 transition shadow-xs"
-                    >
-                      <Plus size={14} />
-                      Agregar pago
-                    </button>
-                  </div>
-
-                  {splitError && (
-                    <p className="text-[11px] font-semibold text-rose-600">{splitError}</p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Datos condicionales simplificados del método elegido */}
-          {isTransferMethod && (
-            <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 p-3 text-xs space-y-2">
-              <span className="font-bold text-slate-800 dark:text-slate-200 block">Datos de Transferencia:</span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[10px] text-slate-500 dark:text-slate-400 font-semibold mb-0.5">
-                    Cuenta bancaria donde ingresa:
-                  </label>
-                  <select
-                    value={transferDetails.destinationBankAccountId}
-                    onChange={(e) =>
-                      setTransferDetails((curr) => ({
-                        ...curr,
-                        destinationBankAccountId: e.target.value,
-                      }))
-                    }
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
-                  >
-                    <option value="">Seleccionar cuenta destino (opcional)</option>
-                    {destinationBankAccounts.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.bank_name} — {b.holder_name || b.account_type}{b.alias ? ` (${b.alias})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] text-slate-500 dark:text-slate-400 font-semibold mb-0.5">
-                    Nº de Comprobante / Ref:
-                  </label>
-                  <input
-                    type="text"
-                    value={transferDetails.voucherNumber}
-                    onChange={(e) =>
-                      setTransferDetails((curr) => ({ ...curr, voucherNumber: e.target.value }))
-                    }
-                    placeholder="Ej: 9842 (opcional)"
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {isCreditCardMethod && (
-            <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 p-3 text-xs space-y-2">
-              <span className="font-bold text-slate-800 dark:text-slate-200 block">Plan de Cuotas:</span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <select
-                  value={cardCreditDetails.installmentPlanId}
-                  onChange={(e) =>
-                    setCardCreditDetails((curr) => ({ ...curr, installmentPlanId: e.target.value }))
-                  }
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
-                >
-                  <option value="">1 cuota sin interés</option>
-                  {availableInstallmentPlans.map((plan) => (
-                    <option key={plan.id} value={plan.id}>
-                      {plan.name} ({plan.installments} cuotas)
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  value={cardCreditDetails.couponNumber}
-                  onChange={(e) =>
-                    setCardCreditDetails((curr) => ({ ...curr, couponNumber: e.target.value }))
-                  }
-                  placeholder="Nº de cupón (opcional)"
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
-                />
-              </div>
-            </div>
-          )}
-
-          {isDebitCardMethod && (
-            <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 p-3 text-xs space-y-2">
-              <span className="font-bold text-slate-800 dark:text-slate-200 block">Datos Tarjeta de Débito:</span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  value={cardDebitDetails.couponNumber}
-                  onChange={(e) =>
-                    setCardDebitDetails((curr) => ({ ...curr, couponNumber: e.target.value }))
-                  }
-                  placeholder="Nº de cupón (opcional)"
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
-                />
-                <input
-                  type="text"
-                  value={cardDebitDetails.authorizationNumber}
-                  onChange={(e) =>
-                    setCardDebitDetails((curr) => ({ ...curr, authorizationNumber: e.target.value }))
-                  }
-                  placeholder="Nº de autorización (opcional)"
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
-                />
-              </div>
-            </div>
-          )}
-
-          {isMercadoPagoManual && (
-            <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 p-3 text-xs space-y-2">
-              <span className="font-bold text-slate-800 dark:text-slate-200 block">Mercado Pago (Transferencia / Manual):</span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  value={mercadoPagoManualDetails.operationId}
-                  onChange={(e) =>
-                    setMercadoPagoManualDetails((curr) => ({ ...curr, operationId: e.target.value }))
-                  }
-                  placeholder="ID de Operación MP (opcional)"
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
-                />
-                <select
-                  value={mercadoPagoManualDetails.destinationBankAccountId}
-                  onChange={(e) =>
-                    setMercadoPagoManualDetails((curr) => ({
-                      ...curr,
-                      destinationBankAccountId: e.target.value,
-                    }))
-                  }
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
-                >
-                  <option value="">Cuenta destino (opcional)</option>
-                  {destinationBankAccounts.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.bank_name} — {b.holder_name || b.account_type}{b.alias ? ` (${b.alias})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
-
-          {isChequeMethod && (
-            <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 p-3 text-xs space-y-2">
-              <span className="font-bold text-slate-800 dark:text-slate-200 block">Datos del Cheque:</span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <input
-                  type="text"
-                  value={chequeDetails.chequeNumber}
-                  onChange={(e) =>
-                    setChequeDetails((curr) => ({ ...curr, chequeNumber: e.target.value }))
-                  }
-                  placeholder="Nº de cheque (opcional)"
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
-                />
-                <input
-                  type="date"
-                  value={chequeDetails.dueDate}
-                  onChange={(e) =>
-                    setChequeDetails((curr) => ({ ...curr, dueDate: e.target.value }))
-                  }
-                  placeholder="Fecha vencimiento (opcional)"
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
-                />
-                <input
-                  type="text"
-                  value={chequeDetails.approvalNumber}
-                  onChange={(e) =>
-                    setChequeDetails((curr) => ({ ...curr, approvalNumber: e.target.value }))
-                  }
-                  placeholder="Nº aprobación (opcional)"
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-1.5 text-xs text-slate-800 dark:text-slate-100"
-                />
-              </div>
-            </div>
-          )}
-
-          {isCurrentAccountMethod && (
-            <div className="mt-3 rounded-xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/40 dark:bg-indigo-950/30 p-3 text-xs space-y-1.5">
-              <div className="flex items-center justify-between font-bold text-indigo-900 dark:text-indigo-200">
-                <span>Cuenta Corriente del Cliente</span>
-                <span>
-                  {currentAccountSnapshot?.available != null
-                    ? `Disponible: ${currency.format(currentAccountSnapshot.available)}`
-                    : "Sin límite"}
-                </span>
-              </div>
-              <p className="text-[11px] text-indigo-700 dark:text-indigo-300">
-                Al confirmar, el monto se registrará como saldo deudor en la cuenta de{" "}
-                <strong>{selectedCustomer?.full_name}</strong>.
-              </p>
-            </div>
-          )}
-
-          {isMercadoPagoMethod && !isMercadoPagoManual && (
-            <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-3 text-xs space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-800 dark:text-slate-200">Terminal Mercado Pago:</span>
-                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                  {mercadoPagoIntent ? `Estado: ${mercadoPagoIntent.status}` : "Listo para iniciar"}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={onStartMercadoPago}
-                  disabled={!canStartMercadoPago}
-                  className="ui-btn-primary text-xs py-1.5 px-3"
-                >
-                  {isMercadoPagoLoading ? "Procesando..." : "Iniciar cobro en terminal"}
-                </button>
-                {mercadoPagoIntent && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={onRefreshMercadoPago}
-                      className="ui-btn-ghost text-xs py-1.5 px-2.5"
-                    >
-                      Actualizar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={onCancelMercadoPago}
-                      className="ui-btn-ghost text-xs py-1.5 px-2.5"
-                    >
-                      Cancelar
-                    </button>
-                  </>
-                )}
-                {mercadoPagoStatus.mode === "mock" && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={onApproveMercadoPago}
-                      className="ui-btn-ghost text-xs py-1.5 px-2.5"
-                    >
-                      Aprobar mock
-                    </button>
-                    <button
-                      type="button"
-                      onClick={onRejectMercadoPago}
-                      className="ui-btn-ghost text-xs py-1.5 px-2.5"
-                    >
-                      Rechazar mock
-                    </button>
-                  </>
                 )}
               </div>
             </div>
-          )}
+          );
+        })}
+      </div>
+
+      {submitError && (
+        <div className="flex items-center gap-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 p-2.5 text-xs font-semibold text-rose-700 dark:text-rose-300">
+          <AlertCircle size={15} className="shrink-0" />
+          <span>{submitError}</span>
         </div>
+      )}
 
-        {/* PASO 3: CIERRE FISCAL & FACTURACIÓN */}
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white shadow-xs">
-              3
-            </span>
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-200">
-              Cierre Fiscal & Facturación
-            </h3>
-          </div>
-
-          <div className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/60 p-3.5 transition hover:bg-slate-100/70 dark:hover:bg-slate-800/80">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-300">
-                <FileText size={18} />
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-slate-900 dark:text-white">
-                    Emitir Factura Electrónica (AFIP)
-                  </span>
-                  <span className="rounded bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.2 font-mono text-[9px] font-bold text-emerald-800 dark:text-emerald-300">
-                    CAE ONLINE
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Sincronización directa con WebServices AFIP / ARCA
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 hidden sm:inline-block">
-                {watchedIssueInvoice
-                  ? selectedCustomer?.fiscal_condition === "responsable_inscripto"
-                    ? "Factura A"
-                    : "Factura B Consumidor Final"
-                  : "Comprobante X"}
-              </span>
-
-              <label className="pos-switch relative inline-flex shrink-0 cursor-pointer items-center">
-                <input
-                  type="checkbox"
-                  {...register("issueInvoice")}
-                  className="peer sr-only"
-                  disabled={disabled || !canWrite || !isOnline}
-                />
-                <span className="pos-switch-track">
-                  <span className="pos-switch-thumb" />
-                </span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        {paymentDetailError && (
-          <p className="text-xs font-semibold text-rose-600">{paymentDetailError}</p>
+      {/* FOOTER: Botones Cancelar y Confirmar Venta */}
+      <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+        {onClose ? (
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-300 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+          >
+            Cancelar
+          </button>
+        ) : (
+          <div />
         )}
 
-        {/* FOOTER: Confirmación destacada */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-            <Lock size={12} className="text-emerald-600" />
-            <span>Transacción Segura POS Ready</span>
+        <button
+          type="button"
+          onClick={() => void handleFinalSubmit()}
+          disabled={disabled || !canWrite || !isFullyAssigned}
+          className={`inline-flex items-center justify-center gap-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 shadow-md shadow-emerald-600/20 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer ${
+            isReadyToSubmit && isFullyAssigned
+              ? "ring-2 ring-emerald-400 ring-offset-2 dark:ring-offset-slate-900 animate-pulse"
+              : ""
+          }`}
+        >
+          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20">
+            <Check size={13} className="stroke-[3]" />
           </div>
+          <span className="text-xs font-black uppercase tracking-wider">
+            {isFullyAssigned
+              ? isReadyToSubmit
+                ? "Confirmar Venta (Enter)"
+                : "Confirmar Venta"
+              : "Asignar Monto Total"}
+          </span>
+          <span className="font-mono text-sm font-black ml-1">
+            {currency.format(checkoutTotal)}
+          </span>
+        </button>
+      </div>
 
-          <button
-            type="submit"
-            className="w-full sm:w-auto min-w-[280px] inline-flex items-center justify-between gap-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3.5 px-5 shadow-lg shadow-emerald-600/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={
-              disabled ||
-              !canWrite ||
-              !paymentMethods.length ||
-              (paymentMode === "split"
-                ? !isSplitFullyCovered || splitPayments.length === 0
-                : (isCurrentAccountMethod && !canUseCurrentAccountMethod) ||
-                  (isMercadoPagoMethod && !isMercadoPagoManual && !isMercadoPagoApproved) ||
-                  (requiresPaymentDetails && !arePaymentDetailsReady) ||
-                  isCreatingOriginBank)
-            }
-          >
-            <div className="flex items-center gap-2">
-              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20">
-                <Check size={13} className="stroke-[3]" />
-              </div>
-              <span className="text-xs font-black uppercase tracking-wider">
-                {paymentMode === "split" ? "Confirmar Venta Combinada" : "Confirmar Venta"}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-sm font-black">
-                {currency.format(checkoutTotal)}
-              </span>
-              <kbd className="hidden sm:inline-block rounded bg-black/20 px-1.5 py-0.5 text-[10px] font-mono font-semibold text-white/80">
-                ↵
-              </kbd>
-            </div>
-          </button>
-        </div>
-      </form>
+      {/* Modal Ágil de Búsqueda y Selección de Cliente */}
+      <PosCustomerSelectModal
+        isOpen={isCustomerModalOpen}
+        customers={customers}
+        selectedCustomerId={selectedCustomerId}
+        onClose={() => setIsCustomerModalOpen(false)}
+        onSelect={(cust) => {
+          onCustomerChange(cust.id);
+          setIsCustomerModalOpen(false);
+        }}
+        onOpenCreateCustomer={() => {
+          setIsCustomerModalOpen(false);
+          onOpenCustomerModal(null);
+        }}
+        onEditCustomer={(cust, defaultTab) => {
+          setIsCustomerModalOpen(false);
+          onOpenCustomerModal(cust, defaultTab ?? "account");
+        }}
+      />
     </section>
   );
 };

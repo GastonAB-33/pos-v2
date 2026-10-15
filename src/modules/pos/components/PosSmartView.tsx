@@ -1,20 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  BadgePercent,
   Coins,
   FileText,
   Moon,
   MoonStar,
+  Percent,
   Plus,
+  PlusCircle,
   RefreshCw,
+  Scale,
   Search,
   ShoppingCart,
+  Sparkles,
   Sun,
   Trash2,
   X,
 } from "lucide-react";
 import { useUiStore } from "@/store/ui.store";
 import type { Product } from "@/types/entities";
-import type { PosCartItem } from "@/modules/pos/hooks/usePosSale";
+import type {
+  PosCartItem,
+  PosCartItemComputed,
+  CartManualDiscount,
+} from "@/modules/pos/hooks/usePosSale";
 import {
   matchesProductSearch,
   PRODUCT_SEARCH_SCOPE_OPTIONS,
@@ -22,6 +31,7 @@ import {
   type ProductSearchScope,
 } from "@/utils/search";
 import { cn } from "@/utils/cn";
+import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
 
 const currency = new Intl.NumberFormat("es-AR", {
   style: "currency",
@@ -29,13 +39,17 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
+const kgToGrams = (quantityKg: number): number => Number((quantityKg * 1000).toFixed(3));
+const gramsToKg = (quantityGrams: number): number => Number((quantityGrams / 1000).toFixed(3));
+
 export interface PosSmartViewProps {
   // Carrito
-  items: PosCartItem[];
+  items: (PosCartItem | PosCartItemComputed)[];
   isHighlighted?: boolean;
   onIncrease: (productId: string) => void;
   onDecrease: (productId: string) => void;
-  onEdit: (item: PosCartItem) => void;
+  onSetQuantity?: (productId: string, quantity: number) => void;
+  onEdit: (item: PosCartItem | PosCartItemComputed) => void;
   onRemove: (productId: string) => void;
   onClearCart: () => void;
   onCycleReturnableStatus?: (productId: string) => void;
@@ -44,6 +58,14 @@ export interface PosSmartViewProps {
   onOpenDebtPaymentModal?: () => void;
   hasDebtPaymentInCart?: boolean;
   debtPaymentAmount?: number;
+
+  // Descuentos y Promociones
+  cartManualDiscount?: CartManualDiscount | null;
+  manualCartDiscountTotal?: number;
+  subtotalBeforePromotions?: number;
+  onOpenCartDiscountModal?: () => void;
+  onRemoveCartDiscount?: () => void;
+  onOpenItemPromoModal?: (item: PosCartItemComputed) => void;
 
   // Catálogo y búsqueda
   products: Product[];
@@ -55,6 +77,10 @@ export interface PosSmartViewProps {
   subtotal: number;
   total: number;
   roundingAdjustment?: number;
+  discountsEnabled?: boolean;
+  onToggleDiscounts?: () => void;
+  promotionDiscountTotal?: number;
+  lastAddedProductId?: string | null;
   onCheckout: () => void;
 
   // Panel de funciones superior derecho
@@ -71,6 +97,7 @@ export const PosSmartView = ({
   isHighlighted = false,
   onIncrease,
   onDecrease,
+  onSetQuantity,
   onEdit,
   onRemove,
   onClearCart,
@@ -80,6 +107,12 @@ export const PosSmartView = ({
   onOpenDebtPaymentModal,
   hasDebtPaymentInCart = false,
   debtPaymentAmount = 0,
+  cartManualDiscount,
+  manualCartDiscountTotal = 0,
+  subtotalBeforePromotions,
+  onOpenCartDiscountModal,
+  onRemoveCartDiscount,
+  onOpenItemPromoModal,
   products,
   primaryBarcodes,
   onAddProduct,
@@ -87,6 +120,10 @@ export const PosSmartView = ({
   subtotal,
   total,
   roundingAdjustment = 0,
+  discountsEnabled = true,
+  onToggleDiscounts,
+  promotionDiscountTotal = 0,
+  lastAddedProductId,
   onCheckout,
   userName,
   operatorInitials,
@@ -98,21 +135,60 @@ export const PosSmartView = ({
   const theme = useUiStore((state) => state.theme);
   const cycleTheme = useUiStore((state) => state.cycleTheme);
 
+  const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setQuantityDrafts((current) => {
+      const itemIds = new Set(items.map((item) => item.product_id));
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([productId]) => itemIds.has(productId))
+      );
+      return Object.keys(next).length === Object.keys(current).length ? current : next;
+    });
+  }, [items]);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [searchScope, setSearchScope] = useState<ProductSearchScope>("all");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const cartContainerRef = useRef<HTMLDivElement | null>(null);
   const lastItemRef = useRef<HTMLElement | null>(null);
   const prevItemsLengthRef = useRef(items.length);
 
-  // Último producto en la secuencia de carga del carrito
-  const lastAddedProductId = items.length > 0 ? items[items.length - 1].product_id : null;
+  // Cerrar el menú de búsqueda al hacer clic en cualquier otra parte del sistema
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(event.target as Node)
+      ) {
+        setIsSearchOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Último producto en la secuencia de carga del carrito (al principio de la lista arriba)
+  const effectiveLastAddedId =
+    lastAddedProductId !== undefined
+      ? lastAddedProductId
+      : items.length > 0
+      ? items[0].product_id
+      : null;
 
   useEffect(() => {
-    // Si se agregó un nuevo producto, hacemos scroll suave hacia la fila recién agregada
+    // Si se agregó un nuevo producto, hacemos scroll suave hacia la fila recién agregada en la parte superior
     if (items.length > prevItemsLengthRef.current) {
-      lastItemRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      if (cartContainerRef.current) {
+        cartContainerRef.current.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        lastItemRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
     }
     prevItemsLengthRef.current = items.length;
   }, [items.length]);
@@ -189,8 +265,8 @@ export const PosSmartView = ({
           isHighlighted && "ring-2 ring-emerald-500/60 border-emerald-500/80"
         )}
       >
-        {/* Encabezado: Carrito (N ítems) + Botón Vaciar */}
-        <div className="flex items-center justify-between gap-3 mb-4">
+        {/* Encabezado: Carrito (N ítems) + Botones de acción unificados */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-4">
           <div className="flex items-center gap-2.5">
             <ShoppingCart className="text-blue-600 dark:text-sky-400" size={20} />
             <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
@@ -198,21 +274,109 @@ export const PosSmartView = ({
             </h2>
           </div>
 
-          {items.length > 0 ? (
-            <button
-              type="button"
-              onClick={onClearCart}
-              disabled={disabled || !canWrite}
-              className="rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-800/50 px-3.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700/70 hover:text-slate-900 dark:hover:text-white transition disabled:opacity-50"
-            >
-              Vaciar
-            </button>
-          ) : null}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {onToggleDiscounts ? (
+              <button
+                type="button"
+                onClick={onToggleDiscounts}
+                disabled={disabled || !canWrite}
+                title={
+                  discountsEnabled
+                    ? "Descuentos activados (clic para desactivar)"
+                    : "Descuentos desactivados (clic para activar)"
+                }
+                aria-label={discountsEnabled ? "Desactivar descuentos" : "Activar descuentos"}
+                className={cn(
+                  "h-8 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition shadow-2xs cursor-pointer disabled:opacity-40 whitespace-nowrap shrink-0",
+                  discountsEnabled
+                    ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
+                    : "border-rose-300 dark:border-rose-800/80 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60"
+                )}
+              >
+                {discountsEnabled ? (
+                  <BadgePercent size={14} />
+                ) : (
+                  <span className="relative flex items-center justify-center">
+                    <BadgePercent size={14} className="opacity-50" />
+                    <span className="absolute h-0.5 w-3.5 bg-rose-500 rotate-45 rounded-full" />
+                  </span>
+                )}
+                <span>{discountsEnabled ? "Desc. ON" : "Desc. OFF"}</span>
+              </button>
+            ) : null}
+
+            {onOpenCartDiscountModal ? (
+              <button
+                type="button"
+                onClick={onOpenCartDiscountModal}
+                disabled={disabled || !canWrite || items.length === 0}
+                title={
+                  cartManualDiscount
+                    ? `Descuento carrito: ${cartManualDiscount.type === "percent" ? `${cartManualDiscount.value}%` : `$${cartManualDiscount.value}`}. Clic para editar`
+                    : "Aplicar descuento global al carrito con monto y motivo"
+                }
+                className={cn(
+                  "h-8 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition shadow-2xs cursor-pointer disabled:opacity-40 whitespace-nowrap shrink-0",
+                  cartManualDiscount
+                    ? "border-emerald-400 bg-emerald-50 text-emerald-800 dark:border-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 font-bold"
+                    : "border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400 dark:hover:border-emerald-800/80"
+                )}
+              >
+                <Percent size={13} className={cartManualDiscount ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"} />
+                <span>
+                  {cartManualDiscount
+                    ? cartManualDiscount.type === "percent"
+                      ? `-${cartManualDiscount.value}%`
+                      : `-$${cartManualDiscount.value.toLocaleString("es-AR")}`
+                    : "Descuento"}
+                </span>
+              </button>
+            ) : null}
+
+            {onOpenDebtPaymentModal ? (
+              <button
+                type="button"
+                onClick={onOpenDebtPaymentModal}
+                disabled={disabled || !canWrite}
+                className={cn(
+                  "h-8 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition shadow-2xs disabled:opacity-50 whitespace-nowrap shrink-0",
+                  hasDebtPaymentInCart
+                    ? "border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-600/80 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/60"
+                    : "border-indigo-200 bg-indigo-50/80 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-700/70 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-900/60"
+                )}
+                title={hasDebtPaymentInCart ? "Modificar cobro de cuenta corriente" : "Agregar cobro de deuda de cuenta corriente al carrito"}
+              >
+                <Coins size={14} className={hasDebtPaymentInCart ? "text-amber-600 dark:text-amber-400" : "text-indigo-600 dark:text-indigo-400"} />
+                <span>{hasDebtPaymentInCart ? "Editar deuda" : "Cobrar deuda"}</span>
+              </button>
+            ) : null}
+
+            {items.length > 0 ? (
+              <button
+                type="button"
+                onClick={onClearCart}
+                disabled={disabled || !canWrite}
+                className="h-8 px-2.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 dark:hover:border-rose-800/80 transition disabled:opacity-50 whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 shadow-2xs"
+                title="Vaciar todos los productos del carrito"
+              >
+                <Trash2 size={13} className="text-slate-400 group-hover:text-rose-500" />
+                <span>Vaciar</span>
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {/* Buscador general con filtro desplegable de categoría */}
-        <div className="relative mb-5 z-20">
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-[#0f1a33] px-3.5 py-2.5 focus-within:border-blue-500 dark:focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:focus-within:ring-sky-500/20 transition-all shadow-inner">
+        <div ref={searchContainerRef} className="relative mb-5 z-20">
+          <div
+            className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-[#0f1a33] px-3.5 py-2.5 focus-within:border-blue-500 dark:focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:focus-within:ring-sky-500/20 transition-all shadow-inner cursor-text"
+            onClick={() => {
+              if (searchQuery.trim()) {
+                setIsSearchOpen(true);
+              }
+              searchInputRef.current?.focus();
+            }}
+          >
             <Search size={18} className="text-slate-400 shrink-0" />
             <input
               ref={searchInputRef}
@@ -223,6 +387,10 @@ export const PosSmartView = ({
                 setIsSearchOpen(true);
               }}
               onFocus={() => {
+                if (searchQuery.trim()) setIsSearchOpen(true);
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
                 if (searchQuery.trim()) setIsSearchOpen(true);
               }}
               onKeyDown={handleSearchKeyDown}
@@ -236,11 +404,14 @@ export const PosSmartView = ({
             {searchQuery ? (
               <button
                 type="button"
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   setSearchQuery("");
                   setIsSearchOpen(false);
+                  searchInputRef.current?.focus();
                 }}
                 className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+                title="Limpiar búsqueda"
               >
                 <X size={14} />
               </button>
@@ -250,7 +421,11 @@ export const PosSmartView = ({
 
             <select
               value={searchScope}
-              onChange={(e) => setSearchScope(e.target.value as ProductSearchScope)}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                setSearchScope(e.target.value as ProductSearchScope);
+                if (searchQuery.trim()) setIsSearchOpen(true);
+              }}
               className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer py-0.5 px-1 shrink-0 max-w-[150px] truncate"
               aria-label="Filtro de búsqueda"
             >
@@ -278,9 +453,17 @@ export const PosSmartView = ({
                     className="flex items-center justify-between gap-3 p-2.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/70 cursor-pointer transition"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                        {prod.name}
-                      </p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                          {prod.name}
+                        </p>
+                        {prod.sale_mode === "weight" && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60">
+                            <Scale size={10} className="shrink-0" />
+                            <span>Pesable</span>
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
                         {prod.category} {barcode ? `| Barcode: ${barcode}` : ""}
                       </p>
@@ -288,6 +471,9 @@ export const PosSmartView = ({
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-xs sm:text-sm font-bold text-blue-600 dark:text-sky-400">
                         {currency.format(prod.price)}
+                        <span className="text-[10px] font-medium text-slate-400 ml-0.5">
+                          / {prod.sale_mode === "weight" ? "kg" : "u."}
+                        </span>
                       </span>
                       <button
                         type="button"
@@ -318,8 +504,59 @@ export const PosSmartView = ({
             ref={cartContainerRef}
             className="flex flex-col gap-2.5 flex-1 overflow-y-auto max-h-[calc(100vh-280px)] min-h-[360px] pr-1"
           >
+            {cartManualDiscount ? (
+              <div className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-dashed border-emerald-400 dark:border-emerald-600 bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200 shadow-2xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 shrink-0">
+                    <BadgePercent size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-xs">Descuento Global al Carrito</span>
+                      <span className="text-[11px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-200 dark:bg-emerald-900/80 text-emerald-900 dark:text-emerald-200">
+                        {cartManualDiscount.type === "percent"
+                          ? `-${cartManualDiscount.value}%`
+                          : `-$${cartManualDiscount.value.toLocaleString("es-AR")}`}
+                      </span>
+                      {manualCartDiscountTotal > 0 ? (
+                        <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
+                          (-{currency.format(manualCartDiscountTotal)})
+                        </span>
+                      ) : null}
+                    </div>
+                    {cartManualDiscount.reason ? (
+                      <p className="text-[11px] text-emerald-700 dark:text-emerald-300 truncate">
+                        Motivo: <span className="font-semibold">{cartManualDiscount.reason}</span>
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {onOpenCartDiscountModal ? (
+                    <button
+                      type="button"
+                      onClick={onOpenCartDiscountModal}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-slate-700 cursor-pointer shadow-2xs"
+                    >
+                      Editar
+                    </button>
+                  ) : null}
+                  {onRemoveCartDiscount ? (
+                    <button
+                      type="button"
+                      onClick={onRemoveCartDiscount}
+                      className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition cursor-pointer"
+                      title="Quitar descuento del carrito"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
             {items.map((item, index) => {
-              const isLastItem = item.product_id === lastAddedProductId;
+              const isLastItem = item.product_id === effectiveLastAddedId;
               const itemSubtotal =
                 "line_total" in item && typeof (item as { line_total?: number }).line_total === "number"
                   ? (item as { line_total: number }).line_total
@@ -356,6 +593,23 @@ export const PosSmartView = ({
                       {item.is_debt_payment_item ? (
                         <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/60">
                           Cobro Cta. Cte.
+                        </span>
+                      ) : null}
+                      {"manual_discount" in item && (item as PosCartItemComputed).manual_discount ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/60">
+                          <Percent size={10} />
+                          {(item as PosCartItemComputed).manual_discount!.type === "percent"
+                            ? `-${(item as PosCartItemComputed).manual_discount!.value}%`
+                            : `-$${(item as PosCartItemComputed).manual_discount!.value.toLocaleString("es-AR")}`}
+                          {(item as PosCartItemComputed).manual_discount!.reason
+                            ? ` (${(item as PosCartItemComputed).manual_discount!.reason})`
+                            : ""}
+                        </span>
+                      ) : null}
+                      {"manual_promotion" in item && (item as PosCartItemComputed).manual_promotion ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-purple-100 dark:bg-purple-950/60 px-1.5 py-0.5 text-[10px] font-bold text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800/60">
+                          <Sparkles size={10} />
+                          {(item as PosCartItemComputed).manual_promotion!.name}
                         </span>
                       ) : null}
                     </div>
@@ -421,32 +675,115 @@ export const PosSmartView = ({
                     ) : null}
                   </div>
 
-                  {/* Controles de cantidad táctiles compactos */}
-                  <div className="flex items-center gap-2 shrink-0">
+                  {/* Controles de cantidad táctiles interactivos */}
+                  <div className="flex items-center shrink-0">
                     {item.is_debt_payment_item ? (
-                      <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800/50">
+                      <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60">
                         Pago único
                       </span>
                     ) : (
-                      <div className="flex items-center rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-900/80 p-0.5 shadow-2xs">
+                      <div className="flex items-center h-8 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-2xs overflow-hidden">
                         <button
                           type="button"
                           onClick={() => onDecrease(item.product_id)}
                           disabled={disabled || !canWrite}
-                          className="w-7 h-7 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center text-xs font-bold transition disabled:opacity-40"
-                          title="Disminuir cantidad"
+                          className="h-full w-8 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-40 select-none shrink-0 border-r border-slate-200 dark:border-slate-800/80"
+                          title={item.sale_mode === "weight" ? "Disminuir 50g" : "Disminuir cantidad"}
                         >
                           -
                         </button>
-                        <span className="min-w-[44px] px-1 text-center font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 tabular-nums">
-                          {item.sale_mode === "weight" ? `${item.quantity} kg` : item.quantity}
-                        </span>
+                        <div className="flex items-center justify-center px-1.5 h-full">
+                          <input
+                            type="number"
+                            step="any"
+                            min={0}
+                            placeholder="0"
+                            value={
+                              quantityDrafts[item.product_id] ??
+                              (item.sale_mode === "weight"
+                                ? String(kgToGrams(item.quantity))
+                                : String(item.quantity))
+                            }
+                            onFocus={(event) =>
+                              handleNumericInputFocus(event, {
+                                isNew: true,
+                                onClear: () =>
+                                  setQuantityDrafts((current) => ({
+                                    ...current,
+                                    [item.product_id]: "",
+                                  })),
+                              })
+                            }
+                            onChange={(event) => {
+                              const nextValue = event.target.value;
+                              setQuantityDrafts((current) => ({
+                                ...current,
+                                ...{ [item.product_id]: nextValue },
+                              }));
+                              const parsedInput = Number(nextValue);
+                              if (nextValue.trim() && Number.isFinite(parsedInput) && parsedInput >= 0 && onSetQuantity) {
+                                onSetQuantity(
+                                  item.product_id,
+                                  item.sale_mode === "weight" ? gramsToKg(parsedInput) : parsedInput
+                                );
+                              }
+                            }}
+                            onBlur={(event) => {
+                              handleNumericInputBlur(event, "0", () => {
+                                setQuantityDrafts((current) => ({
+                                  ...current,
+                                  ...{ [item.product_id]: "0" },
+                                }));
+                                onSetQuantity?.(item.product_id, 0);
+                              });
+                              const rawValue = quantityDrafts[item.product_id];
+                              if (rawValue != null && onSetQuantity) {
+                                const parsedInput = Number(rawValue);
+                                if (Number.isFinite(parsedInput) && parsedInput >= 0) {
+                                  onSetQuantity(
+                                    item.product_id,
+                                    item.sale_mode === "weight" ? gramsToKg(parsedInput) : parsedInput
+                                  );
+                                }
+                              }
+                              setQuantityDrafts((current) => {
+                                const { [item.product_id]: _discard, ...next } = current;
+                                return next;
+                              });
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.currentTarget.blur();
+                              }
+                            }}
+                            style={{
+                              backgroundColor: "transparent",
+                              border: "none",
+                              outline: "none",
+                              boxShadow: "none",
+                              padding: 0,
+                            }}
+                            className={cn(
+                              "h-full !bg-transparent !border-0 !outline-none !shadow-none !p-0 !min-h-0 font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 tabular-nums text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+                              item.sale_mode === "weight" ? "w-14" : "w-10"
+                            )}
+                            title={
+                              item.sale_mode === "weight"
+                                ? "Tipeá los gramos libremente (ej: 260)"
+                                : "Cantidad en unidades"
+                            }
+                            disabled={disabled || !canWrite}
+                          />
+                          <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 select-none shrink-0 pl-1">
+                            {item.sale_mode === "weight" ? "g" : "u."}
+                          </span>
+                        </div>
                         <button
                           type="button"
                           onClick={() => onIncrease(item.product_id)}
                           disabled={disabled || !canWrite}
-                          className="w-7 h-7 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center text-xs font-bold transition disabled:opacity-40"
-                          title="Aumentar cantidad"
+                          className="h-full w-8 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-40 select-none shrink-0 border-l border-slate-200 dark:border-slate-800/80"
+                          title={item.sale_mode === "weight" ? "Aumentar 50g" : "Aumentar cantidad"}
                         >
                           +
                         </button>
@@ -461,9 +798,41 @@ export const PosSmartView = ({
                       <span className="font-extrabold text-sm sm:text-base text-blue-600 dark:text-sky-400 tracking-tight">
                         {currency.format(itemSubtotal)}
                       </span>
+                      {"promotion_discount_total" in item && typeof item.promotion_discount_total === "number" && item.promotion_discount_total > 0 ? (
+                        <span className="block text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                          -{currency.format(item.promotion_discount_total)}
+                        </span>
+                      ) : null}
                     </div>
 
                     <div className="flex items-center gap-1.5">
+                      {!item.is_debt_payment_item && onOpenItemPromoModal ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenItemPromoModal(item as PosCartItemComputed)}
+                          disabled={disabled || !canWrite}
+                          title="Aplicar promoción o descuento manual a este producto"
+                          className={cn(
+                            "px-2.5 py-1 rounded-lg border text-xs font-semibold transition disabled:opacity-40 flex items-center gap-1 cursor-pointer",
+                            ("manual_discount" in item && (item as PosCartItemComputed).manual_discount) ||
+                            ("manual_promotion" in item && (item as PosCartItemComputed).manual_promotion)
+                              ? "border-emerald-400 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 font-bold"
+                              : "border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200"
+                          )}
+                        >
+                          <BadgePercent
+                            size={12}
+                            className={
+                              ("manual_discount" in item && (item as PosCartItemComputed).manual_discount) ||
+                              ("manual_promotion" in item && (item as PosCartItemComputed).manual_promotion)
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : "text-slate-400"
+                            }
+                          />
+                          <span>Promo</span>
+                        </button>
+                      ) : null}
+
                       <button
                         type="button"
                         onClick={() => onEdit(item)}
@@ -496,98 +865,160 @@ export const PosSmartView = ({
       <aside className="lg:col-span-4 flex flex-col gap-3.5">
         {/* Panel Superior Derecho: Botones y funciones */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-3.5 sm:p-4 space-y-3 shadow-sm">
+          {/* Fila 1: Operador y Tema */}
           <div className="flex items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={onRefreshCatalog}
-              disabled={isRefreshingCatalog || disabled}
-              className="flex items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition disabled:opacity-50"
-            >
-              <RefreshCw
-                size={14}
-                className={isRefreshingCatalog ? "animate-spin text-blue-600 dark:text-sky-400" : ""}
-              />
-              <span>Actualizar productos</span>
-            </button>
-
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={cycleTheme}
-                className="flex items-center gap-1 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-2.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition shadow-2xs"
-                title={`Tema actual: ${theme === "midnight" ? "Azul Medianoche" : theme === "dark" ? "Oscuro" : "Claro"}. Clic para cambiar.`}
-              >
-                {theme === "midnight" ? (
-                  <MoonStar size={14} className="text-indigo-400" />
-                ) : theme === "dark" ? (
-                  <Moon size={14} className="text-amber-300" />
-                ) : (
-                  <Sun size={14} className="text-amber-500" />
-                )}
-                <span className="text-[11px] font-bold">
-                  {theme === "midnight" ? "Azul" : theme === "dark" ? "Oscuro" : "Claro"}
-                </span>
-              </button>
-
-              <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800/90 bg-slate-50 dark:bg-slate-900/80 px-2.5 py-1.5">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-fuchsia-600 text-xs font-bold text-white shadow-sm">
-                  {operatorInitials}
-                </span>
-                <div className="leading-tight">
-                  <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate max-w-[100px]">
-                    {userName}
-                  </p>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400">Operador</p>
-                </div>
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800/90 bg-slate-50 dark:bg-slate-900/80 px-2.5 py-1.5 h-8">
+              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-fuchsia-600 text-[10px] font-bold text-white shadow-sm shrink-0">
+                {operatorInitials}
+              </span>
+              <div className="leading-tight flex items-baseline gap-1.5 min-w-0">
+                <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate max-w-[110px]">
+                  {userName}
+                </p>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 shrink-0">Operador</span>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={cycleTheme}
+              className="h-8 flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-2.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition shadow-2xs whitespace-nowrap shrink-0"
+              title={`Tema actual: ${theme === "midnight" ? "Azul Medianoche" : theme === "dark" ? "Oscuro" : "Claro"}. Clic para cambiar.`}
+            >
+              {theme === "midnight" ? (
+                <MoonStar size={14} className="text-indigo-400" />
+              ) : theme === "dark" ? (
+                <Moon size={14} className="text-amber-300" />
+              ) : (
+                <Sun size={14} className="text-amber-500" />
+              )}
+              <span className="text-xs font-semibold">
+                {theme === "midnight" ? "Azul" : theme === "dark" ? "Oscuro" : "Claro"}
+              </span>
+            </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Fila 2: Acciones operativas (Comprobantes, Producto rápido, Actualizar) */}
+          <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
               onClick={onOpenReceipts}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition"
+              className="h-8 flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition shadow-2xs whitespace-nowrap min-w-0"
+              title="Ver comprobantes y ventas emitidas"
             >
-              <FileText size={14} />
-              <span>Comprobantes</span>
+              <FileText size={14} className="shrink-0" />
+              <span className="truncate">Comprobantes</span>
             </button>
 
             <button
               type="button"
               onClick={onOpenQuickProduct}
               disabled={disabled || !canWrite}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition disabled:opacity-50"
+              className="h-8 flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition shadow-2xs disabled:opacity-50 whitespace-nowrap min-w-0"
+              title="Crear o vender producto rápido no registrado"
             >
-              <span>Producto rápido</span>
+              <PlusCircle size={14} className="shrink-0" />
+              <span className="truncate">Prod. rápido</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onRefreshCatalog}
+              disabled={isRefreshingCatalog || disabled}
+              className="h-8 flex items-center justify-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition shadow-2xs disabled:opacity-50 whitespace-nowrap min-w-0"
+              title="Actualizar catálogo de productos"
+            >
+              <RefreshCw
+                size={14}
+                className={cn("shrink-0", isRefreshingCatalog ? "animate-spin text-blue-600 dark:text-sky-400" : "")}
+              />
+              <span className="truncate">Actualizar</span>
             </button>
           </div>
         </div>
 
         {/* Panel Inferior Derecho: Detalle de total y confirmación de cobro */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-4 sm:p-5 space-y-4 shadow-sm">
-          <div className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800/80 pb-3">
+          <div className="flex flex-col gap-2.5 border-b border-slate-200 dark:border-slate-800/80 pb-3">
             <div className="flex items-center gap-2">
-              <ShoppingCart size={18} className="text-blue-600 dark:text-sky-400" />
+              <ShoppingCart size={18} className="text-blue-600 dark:text-sky-400 shrink-0" />
               <span className="font-bold text-sm text-slate-900 dark:text-slate-100">
                 Carrito ({items.length} {items.length === 1 ? "ítem" : "ítems"})
               </span>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {onToggleDiscounts ? (
+                <button
+                  type="button"
+                  onClick={onToggleDiscounts}
+                  disabled={disabled || !canWrite}
+                  title={
+                    discountsEnabled
+                      ? "Descuentos activados (clic para desactivar)"
+                      : "Descuentos desactivados (clic para activar)"
+                  }
+                  aria-label={discountsEnabled ? "Desactivar descuentos" : "Activar descuentos"}
+                  className={cn(
+                    "h-8 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition shadow-2xs cursor-pointer disabled:opacity-40 whitespace-nowrap shrink-0",
+                    discountsEnabled
+                      ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
+                      : "border-rose-300 dark:border-rose-800/80 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60"
+                  )}
+                >
+                  {discountsEnabled ? (
+                    <BadgePercent size={14} />
+                  ) : (
+                    <span className="relative flex items-center justify-center">
+                      <BadgePercent size={14} className="opacity-50" />
+                      <span className="absolute h-0.5 w-3.5 bg-rose-500 rotate-45 rounded-full" />
+                    </span>
+                  )}
+                  <span>{discountsEnabled ? "Desc. ON" : "Desc. OFF"}</span>
+                </button>
+              ) : null}
+
+              {onOpenCartDiscountModal ? (
+                <button
+                  type="button"
+                  onClick={onOpenCartDiscountModal}
+                  disabled={disabled || !canWrite || items.length === 0}
+                  title={
+                    cartManualDiscount
+                      ? `Descuento carrito: ${cartManualDiscount.type === "percent" ? `${cartManualDiscount.value}%` : `$${cartManualDiscount.value}`}. Clic para editar`
+                      : "Aplicar descuento global al carrito con monto y motivo"
+                  }
+                  className={cn(
+                    "h-8 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition shadow-2xs cursor-pointer disabled:opacity-40 whitespace-nowrap shrink-0",
+                    cartManualDiscount
+                      ? "border-emerald-400 bg-emerald-50 text-emerald-800 dark:border-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 font-bold"
+                      : "border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-400 dark:hover:border-emerald-800/80"
+                  )}
+                >
+                  <Percent size={13} className={cartManualDiscount ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"} />
+                  <span>
+                    {cartManualDiscount
+                      ? cartManualDiscount.type === "percent"
+                        ? `-${cartManualDiscount.value}%`
+                        : `-$${cartManualDiscount.value.toLocaleString("es-AR")}`
+                      : "Descuento"}
+                  </span>
+                </button>
+              ) : null}
+
               {onOpenDebtPaymentModal ? (
                 <button
                   type="button"
                   onClick={onOpenDebtPaymentModal}
                   disabled={disabled || !canWrite}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition shadow-2xs disabled:opacity-50",
+                    "h-8 px-2.5 rounded-xl border flex items-center justify-center gap-1.5 text-xs font-semibold transition shadow-2xs disabled:opacity-50 whitespace-nowrap shrink-0",
                     hasDebtPaymentInCart
                       ? "border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-600/80 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/60"
                       : "border-indigo-200 bg-indigo-50/80 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-700/70 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-900/60"
                   )}
                   title={hasDebtPaymentInCart ? "Modificar cobro de cuenta corriente" : "Agregar cobro de deuda de cuenta corriente al carrito"}
                 >
-                  <Coins size={13} className={hasDebtPaymentInCart ? "text-amber-600 dark:text-amber-400" : "text-indigo-600 dark:text-indigo-400"} />
+                  <Coins size={14} className={hasDebtPaymentInCart ? "text-amber-600 dark:text-amber-400" : "text-indigo-600 dark:text-indigo-400"} />
                   <span>{hasDebtPaymentInCart ? "Editar deuda" : "Cobrar deuda"}</span>
                 </button>
               ) : null}
@@ -597,9 +1028,11 @@ export const PosSmartView = ({
                   type="button"
                   onClick={onClearCart}
                   disabled={disabled || !canWrite}
-                  className="rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-100 dark:bg-slate-800/40 px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700/60 transition disabled:opacity-50"
+                  className="h-8 px-2.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 dark:hover:border-rose-800/80 transition disabled:opacity-50 whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 shadow-2xs"
+                  title="Vaciar todos los productos del carrito"
                 >
-                  Vaciar
+                  <Trash2 size={13} className="text-slate-400 group-hover:text-rose-500" />
+                  <span>Vaciar</span>
                 </button>
               ) : null}
             </div>
@@ -609,9 +1042,42 @@ export const PosSmartView = ({
             <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
               <span>Subtotal</span>
               <span className="text-slate-900 dark:text-slate-200 font-medium">
-                {currency.format(subtotal)}
+                {currency.format(
+                  subtotalBeforePromotions && subtotalBeforePromotions > 0
+                    ? subtotalBeforePromotions
+                    : subtotal
+                )}
               </span>
             </div>
+
+            {manualCartDiscountTotal > 0 ? (
+              <div className="flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                <span className="flex items-center gap-1">
+                  <Percent size={12} />
+                  <span>
+                    Desc. carrito{" "}
+                    {cartManualDiscount?.type === "percent" ? `(${cartManualDiscount.value}%)` : ""}
+                  </span>
+                </span>
+                <span className="font-semibold">-{currency.format(manualCartDiscountTotal)}</span>
+              </div>
+            ) : null}
+
+            {discountsEnabled && promotionDiscountTotal - manualCartDiscountTotal > 0 ? (
+              <div className="flex items-center justify-between text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                <span>Desc. productos / promociones</span>
+                <span className="font-semibold">
+                  -{currency.format(promotionDiscountTotal - manualCartDiscountTotal)}
+                </span>
+              </div>
+            ) : !discountsEnabled ? (
+              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                <span className="text-rose-500 dark:text-rose-400">Descuentos</span>
+                <span className="text-[11px] font-semibold text-rose-500 dark:text-rose-400">
+                  Desactivados
+                </span>
+              </div>
+            ) : null}
 
             {hasDebtPaymentInCart && debtPaymentAmount > 0 ? (
               <div className="flex items-center justify-between text-xs font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-1 rounded-lg border border-amber-200 dark:border-amber-900/60">

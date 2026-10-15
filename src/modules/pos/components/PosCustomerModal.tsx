@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { FieldErrors } from "react-hook-form";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { CreditCard } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -57,6 +58,7 @@ interface PosCustomerModalProps {
   initialValues: PosCustomerModalValues;
   currentBalance: number;
   disabled?: boolean;
+  defaultTab?: PosCustomerModalTab;
   onCancel: () => void;
   onSubmit: (values: PosCustomerModalValues) => Promise<void>;
   onOpenCurrentAccount?: () => void;
@@ -78,6 +80,7 @@ export const PosCustomerModal = ({
   initialValues,
   currentBalance,
   disabled,
+  defaultTab = "personal",
   onCancel,
   onSubmit,
   onOpenCurrentAccount,
@@ -89,8 +92,13 @@ export const PosCustomerModal = ({
 
   const schema = useMemo(() => buildPosCustomerModalSchema(activeReq), [activeReq]);
 
-  const [tab, setTab] = useState<PosCustomerModalTab>("personal");
+  const [tab, setTab] = useState<PosCustomerModalTab>(defaultTab);
   const [highlightedTab, setHighlightedTab] = useState<PosCustomerModalTab | null>(null);
+
+  // Estado para la confirmación de asignación de cuenta corriente al crear un cliente nuevo
+  const [pendingSubmitValues, setPendingSubmitValues] = useState<PosCustomerModalValues | null>(null);
+  const [isCurrentAccountPromptOpen, setIsCurrentAccountPromptOpen] = useState(false);
+  const [promptLimit, setPromptLimit] = useState("");
 
   useBodyScrollLock(true);
 
@@ -115,9 +123,21 @@ export const PosCustomerModal = ({
 
   useEffect(() => {
     reset(cleanInitialValues);
-    setTab("personal");
+    setTab(defaultTab);
     setHighlightedTab(null);
-  }, [cleanInitialValues, reset]);
+  }, [cleanInitialValues, defaultTab, reset]);
+
+  const handlePreSubmit = async (values: PosCustomerModalValues) => {
+    // Si estamos creando un cliente nuevo desde el POS y NO tiene la cuenta corriente activada, le preguntamos
+    if (mode === "create" && !values.currentAccountEnabled) {
+      setPendingSubmitValues(values);
+      setPromptLimit("");
+      setIsCurrentAccountPromptOpen(true);
+      return;
+    }
+
+    await onSubmit(values);
+  };
 
   useEffect(() => {
     if (!highlightedTab) return;
@@ -225,7 +245,7 @@ export const PosCustomerModal = ({
       <form
         autoComplete="off"
         className="relative z-10 w-full max-w-3xl space-y-4 rounded-2xl bg-white p-4 shadow-panel dark:bg-slate-900 dark:border dark:border-slate-800"
-        onSubmit={handleSubmit(onSubmit, onInvalid)}
+        onSubmit={handleSubmit(handlePreSubmit, onInvalid)}
       >
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
@@ -551,6 +571,98 @@ export const PosCustomerModal = ({
           </button>
         </div>
       </form>
+
+      {/* Cuadro de confirmación ágil: Preguntar si desea asignarle cuenta corriente */}
+      {isCurrentAccountPromptOpen && pendingSubmitValues ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/65 p-4 animate-in fade-in duration-150">
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-2xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-100 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400">
+                <CreditCard size={22} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h4 className="text-base font-bold text-slate-900 dark:text-slate-100 leading-snug">
+                  ¿Deseas asignarle una Cuenta Corriente?
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Cliente: <strong className="text-slate-800 dark:text-slate-200">{pendingSubmitValues.firstName} {pendingSubmitValues.lastName}</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-3.5 space-y-2.5 text-xs text-slate-600 dark:text-slate-300">
+              <p className="leading-relaxed">
+                Asignar una cuenta corriente permite realizar <strong>ventas fiadas / a crédito</strong> desde el POS y llevar el registro de saldos y cobranzas.
+              </p>
+
+              <div className="pt-1.5 border-t border-slate-200/80 dark:border-slate-700/60">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1">
+                  Límite de crédito autorizado ($) <span className="text-[10px] font-normal text-slate-400 lowercase">(opcional)</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 pointer-events-none">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Sin límite fijado"
+                    value={promptLimit}
+                    onChange={(e) => setPromptLimit(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 py-1.5 pl-7 pr-3 text-xs font-mono font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    autoFocus
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCurrentAccountPromptOpen(false);
+                  setPendingSubmitValues(null);
+                }}
+                disabled={disabled}
+                className="ui-btn-ghost text-xs order-3 sm:order-1"
+              >
+                Volver
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsCurrentAccountPromptOpen(false);
+                  await onSubmit({
+                    ...pendingSubmitValues,
+                    currentAccountEnabled: false,
+                    currentAccountLimit: "",
+                  });
+                }}
+                disabled={disabled}
+                className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3.5 py-2 text-xs font-bold transition order-2 text-center"
+              >
+                No, crear sin cuenta corriente
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsCurrentAccountPromptOpen(false);
+                  await onSubmit({
+                    ...pendingSubmitValues,
+                    currentAccountEnabled: true,
+                    currentAccountLimit: promptLimit.trim(),
+                  });
+                }}
+                disabled={disabled}
+                className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-xs font-bold shadow-lg shadow-indigo-600/20 transition order-1 sm:order-3 text-center cursor-pointer"
+              >
+                Sí, asignar cuenta corriente
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 };

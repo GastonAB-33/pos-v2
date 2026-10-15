@@ -25,7 +25,7 @@ import { priceListsService } from "@/services/price-lists.service";
 import { productsService } from "@/services/products.service";
 import { useProductsStore } from "@/features/products/store/products.store";
 import { storageKeys } from "@/utils/local-storage";
-import { buildPromotionBarcode, promotionsService, type PromotionWithDetails } from "@/services/promotions.service";
+import { buildPromotionBarcode, calculateProductPromotionDiscount, promotionsService, type PromotionWithDetails } from "@/services/promotions.service";
 import { receiptsService } from "@/services/receipts.service";
 import { salesService } from "@/services/sales.service";
 import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
@@ -40,6 +40,12 @@ import {
   type ReturnableConfig,
   type ReturnableCartStatus,
 } from "@/utils/returnable-packages";
+
+export interface CartManualDiscount {
+  type: "percent" | "amount";
+  value: number;
+  reason: string;
+}
 
 export interface PosCartItem {
   product_id: string;
@@ -58,11 +64,25 @@ export interface PosCartItem {
   scale_total_price: number | null;
   scale_barcode: string | null;
   is_manual_item: boolean;
+  is_price_overridden?: boolean;
   is_debt_payment_item?: boolean;
   debt_customer_id?: string | null;
   debt_customer_name?: string | null;
   returnable_config?: ReturnableConfig | null;
   returnable_status?: ReturnableCartStatus;
+  code?: string | null;
+  barcode?: string | null;
+  manual_discount?: {
+    type: "percent" | "amount";
+    value: number;
+    reason: string;
+  } | null;
+  manual_promotion?: {
+    id: string;
+    name: string;
+    code: string;
+    discount_amount: number;
+  } | null;
 }
 
 export interface PosCartItemComputed extends PosCartItem {
@@ -122,6 +142,9 @@ export interface PosCartItemEditInput {
   category: string;
   quantity: number;
   unitPrice: number;
+  saleMode?: "unit" | "weight";
+  code?: string;
+  barcode?: string;
 }
 
 export interface PosSaleTab {
@@ -212,7 +235,8 @@ const defaultArcaSettings: ArcaSettings = {
 const calculateSummaryByMethod = (
   subtotal: number,
   paymentMethod: PaymentMethod | null,
-  posSettings?: PosSettings | null
+  posSettings?: PosSettings | null,
+  discountsEnabled: boolean = true
 ): PosCheckoutSummary => {
   if (!paymentMethod) {
     const rounding = calculatePosRounding(subtotal, {
@@ -235,7 +259,9 @@ const calculateSummaryByMethod = (
   }
 
   const surchargeTotal = roundAmount(subtotal * (paymentMethod.surcharge_percent / 100));
-  const discountTotal = roundAmount(subtotal * (paymentMethod.discount_percent / 100));
+  const discountTotal = discountsEnabled
+    ? roundAmount(subtotal * (paymentMethod.discount_percent / 100))
+    : 0;
   const paymentAdjustment = roundAmount(surchargeTotal - discountTotal);
   const rawTotal = roundAmount(subtotal + paymentAdjustment);
 
@@ -296,6 +322,9 @@ export const usePosSale = (tenantId: string | null) => {
     useState<InvoiceDocumentType>("B");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [cartState, setCartState] = useState<PosCartItem[]>([]);
+  const [cartManualDiscount, setCartManualDiscount] = useState<CartManualDiscount | null>(null);
+  const [discountsEnabled, setDiscountsEnabled] = useState(true);
+  const [lastAddedProductId, setLastAddedProductId] = useState<string | null>(null);
   const [saleTabs, setSaleTabs] = useState<PosSaleTab[]>([
     { id: "sale-1", label: "Venta 1", cart: [], selectedCustomerId: "" },
   ]);
@@ -308,6 +337,10 @@ export const usePosSale = (tenantId: string | null) => {
   const [generatedInvoice, setGeneratedInvoice] = useState<Invoice | null>(null);
   const [mercadoPagoIntent, setMercadoPagoIntent] = useState<MercadoPagoPaymentIntent | null>(null);
   const cartRef = useRef<PosCartItem[]>([]);
+
+  const toggleDiscounts = useCallback(() => {
+    setDiscountsEnabled((prev) => !prev);
+  }, []);
 
   useEffect(() => {
     cartRef.current = cartState;
@@ -599,21 +632,28 @@ export const usePosSale = (tenantId: string | null) => {
         };
 
         const activeProducts = allProducts.filter((product) => product.is_active !== false);
-        const activeProductBarcodes = allProductBarcodes.filter((row) => row.is_primary);
-        const primaryBarcodeMap = activeProductBarcodes.reduce<Record<string, string>>((acc, row) => {
-          acc[row.product_id] = row.barcode;
-          return acc;
-        }, {});
+        const validProductBarcodes = allProductBarcodes.filter((row) => Boolean(row.barcode && row.product_id));
+        const primaryBarcodeMap: Record<string, string> = {};
+        for (const row of validProductBarcodes) {
+          if (row.is_primary || !primaryBarcodeMap[row.product_id]) {
+            primaryBarcodeMap[row.product_id] = row.barcode;
+          }
+        }
+        for (const product of activeProducts) {
+          if (!primaryBarcodeMap[product.id] && product.code) {
+            primaryBarcodeMap[product.id] = product.code;
+          }
+        }
 
         setProducts(activeProducts);
-        setProductBarcodes(activeProductBarcodes);
+        setProductBarcodes(validProductBarcodes);
         setPrimaryBarcodes(primaryBarcodeMap);
         setPriceLists(allPriceLists);
 
         if (allProducts.length > 0 && shouldFetchCatalog) {
           useProductsStore.setState({
             products: allProducts,
-            allBarcodes: activeProductBarcodes,
+            allBarcodes: validProductBarcodes,
             primaryBarcodes: primaryBarcodeMap,
             priceLists: allPriceLists,
             loadedTenantId: tenantId,
@@ -759,6 +799,8 @@ export const usePosSale = (tenantId: string | null) => {
     [getCustomerPriceList, tenantId]
   );
 
+  const previousCustomerIdRef = useRef<string | null>(null);
+
   const recalculateCartPricesForCustomer = useCallback(
     async (customerId: string | null) => {
       const cartSnapshot = cartRef.current;
@@ -768,6 +810,14 @@ export const usePosSale = (tenantId: string | null) => {
         cartSnapshot.map(async (item) => {
           const product = products.find((candidate) => candidate.id === item.product_id);
           if (!product) return item;
+
+          // Si el usuario modificó manualmente el precio del producto, nunca sobreescribirlo
+          if (item.is_price_overridden) {
+            return {
+              ...item,
+              stock_available: product.stock_current,
+            };
+          }
 
           const pricing = await resolvePricingForProduct(product, customerId);
           const hasCustomerPriceList = Boolean(pricing.priceListId);
@@ -804,12 +854,40 @@ export const usePosSale = (tenantId: string | null) => {
   );
 
   useEffect(() => {
-    void recalculateCartPricesForCustomer(selectedCustomerId || null);
+    const currentId = selectedCustomerId || null;
+    if (previousCustomerIdRef.current !== currentId) {
+      previousCustomerIdRef.current = currentId;
+      void recalculateCartPricesForCustomer(currentId);
+    }
   }, [recalculateCartPricesForCustomer, selectedCustomerId]);
 
   const promotionsResolution = useMemo(
-    () =>
-      promotionsService.resolveApplicablePromotions(
+    () => {
+      if (!discountsEnabled) {
+        const eligibleItems = cartState.filter((item) => !item.is_debt_payment_item);
+        const subtotal = roundAmount(
+          eligibleItems.reduce((acc, item) => acc + item.quantity * item.unit_price, 0)
+        );
+        return {
+          items: eligibleItems.map((item) => ({
+            product_id: item.product_id,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            line_subtotal: roundAmount(item.quantity * item.unit_price),
+            line_total: roundAmount(item.quantity * item.unit_price),
+            discount_total: 0,
+            applied_promotion: null,
+          })),
+          product_discount_total: 0,
+          cart_discount_total: 0,
+          total_discount: 0,
+          subtotal_before_promotions: subtotal,
+          subtotal_after_promotions: subtotal,
+          applied_cart_promotion: null,
+        };
+      }
+
+      return promotionsService.resolveApplicablePromotions(
         cartState
           .filter((item) => !item.is_debt_payment_item)
           .map((item) => ({
@@ -819,8 +897,9 @@ export const usePosSale = (tenantId: string | null) => {
           })),
         new Date(),
         promotions
-      ),
-    [cartState, promotions]
+      );
+    },
+    [cartState, discountsEnabled, promotions]
   );
 
   const cart = useMemo<PosCartItemComputed[]>(() => {
@@ -842,14 +921,66 @@ export const usePosSale = (tenantId: string | null) => {
         };
       }
 
-      const resolved = resolutionByProductId.get(item.product_id);
       const returnableSurcharge =
         item.returnable_status === "charge" && item.returnable_config
           ? roundAmount(item.returnable_config.packagePrice * item.quantity)
           : 0;
 
-      const baseSubtotal = resolved?.line_subtotal ?? roundAmount(item.quantity * item.unit_price);
-      const baseLineTotal = resolved?.line_total ?? roundAmount(item.quantity * item.unit_price);
+      const grossLine = roundAmount(item.quantity * item.unit_price);
+
+      // 1. Si tiene descuento manual específico en este ítem
+      if (item.manual_discount && item.manual_discount.value > 0) {
+        const discountAmt =
+          item.manual_discount.type === "percent"
+            ? roundAmount(grossLine * (item.manual_discount.value / 100))
+            : roundAmount(Math.min(grossLine, item.manual_discount.value));
+        const lineTotal = roundAmount(Math.max(0, grossLine - discountAmt) + returnableSurcharge);
+
+        return {
+          ...item,
+          line_subtotal: roundAmount(grossLine + returnableSurcharge),
+          promotion_discount_total: discountAmt,
+          product_promotion_discount_total: discountAmt,
+          cart_promotion_discount_total: 0,
+          line_total: lineTotal,
+          applied_promotion_name: item.manual_discount.reason ? `Desc: ${item.manual_discount.reason}` : "Desc. manual",
+          applied_promotion_snapshot: {
+            kind: "manual_discount",
+            discount_type: item.manual_discount.type,
+            discount_value: item.manual_discount.value,
+            discount_reason: item.manual_discount.reason,
+          },
+        };
+      }
+
+      // 2. Si tiene promoción manual vinculada desde el módulo promociones
+      if (item.manual_promotion) {
+        const foundPromo = promotions.find((p) => p.id === item.manual_promotion?.id);
+        const promoDiscount = foundPromo
+          ? calculateProductPromotionDiscount(foundPromo, item.quantity, item.unit_price)
+          : item.manual_promotion.discount_amount;
+        const discountAmt = roundAmount(Math.min(grossLine, promoDiscount));
+        const lineTotal = roundAmount(Math.max(0, grossLine - discountAmt) + returnableSurcharge);
+
+        return {
+          ...item,
+          line_subtotal: roundAmount(grossLine + returnableSurcharge),
+          promotion_discount_total: discountAmt,
+          product_promotion_discount_total: discountAmt,
+          cart_promotion_discount_total: 0,
+          line_total: lineTotal,
+          applied_promotion_name: item.manual_promotion.name,
+          applied_promotion_snapshot: {
+            type: "manual_promotion",
+            ...item.manual_promotion,
+          },
+        };
+      }
+
+      // 3. Resolución automática estándar
+      const resolved = resolutionByProductId.get(item.product_id);
+      const baseSubtotal = resolved?.line_subtotal ?? grossLine;
+      const baseLineTotal = resolved?.line_total ?? grossLine;
 
       return {
         ...item,
@@ -865,14 +996,28 @@ export const usePosSale = (tenantId: string | null) => {
       };
     });
 
-    if (promotionsResolution.cart_discount_total <= 0 || !itemsWithProductPromotions.length) {
-      return itemsWithProductPromotions;
-    }
-
     const eligibleItems = itemsWithProductPromotions.filter((item) => !item.is_debt_payment_item);
     const subtotalAfterProductPromotions = roundAmount(
       eligibleItems.reduce((acc, item) => acc + item.line_total, 0)
     );
+
+    // Descuento manual a nivel carrito si fue asignado
+    let manualCartDiscountVal = 0;
+    if (cartManualDiscount && cartManualDiscount.value > 0 && subtotalAfterProductPromotions > 0) {
+      if (cartManualDiscount.type === "percent") {
+        manualCartDiscountVal = roundAmount(subtotalAfterProductPromotions * (cartManualDiscount.value / 100));
+      } else {
+        manualCartDiscountVal = roundAmount(Math.min(subtotalAfterProductPromotions, cartManualDiscount.value));
+      }
+    }
+
+    const totalCartDiscountToDistribute = roundAmount(
+      promotionsResolution.cart_discount_total + manualCartDiscountVal
+    );
+
+    if (totalCartDiscountToDistribute <= 0 || !itemsWithProductPromotions.length) {
+      return itemsWithProductPromotions;
+    }
 
     if (subtotalAfterProductPromotions <= 0) {
       return itemsWithProductPromotions;
@@ -894,9 +1039,9 @@ export const usePosSale = (tenantId: string | null) => {
 
       const isLast = i === eligibleIndices.length - 1;
       const proportional = isLast
-        ? roundAmount(promotionsResolution.cart_discount_total - accumulated)
+        ? roundAmount(totalCartDiscountToDistribute - accumulated)
         : roundAmount(
-            promotionsResolution.cart_discount_total * (item.line_total / subtotalAfterProductPromotions)
+            totalCartDiscountToDistribute * (item.line_total / subtotalAfterProductPromotions)
           );
 
       const itemCartDiscount = roundAmount(Math.min(item.line_total, Math.max(0, proportional)));
@@ -910,7 +1055,7 @@ export const usePosSale = (tenantId: string | null) => {
     }
 
     return allocated;
-  }, [cartState, promotionsResolution]);
+  }, [cartManualDiscount, cartState, promotions, promotionsResolution]);
 
   const debtPaymentTotal = useMemo(
     () =>
@@ -922,14 +1067,52 @@ export const usePosSale = (tenantId: string | null) => {
     [cartState]
   );
 
-  const subtotalBeforePromotions = roundAmount(
-    promotionsResolution.subtotal_before_promotions + debtPaymentTotal
+  const subtotalBeforePromotions = useMemo(
+    () =>
+      roundAmount(
+        cartState.reduce((acc, item) => {
+          const returnableSurcharge =
+            item.returnable_status === "charge" && item.returnable_config
+              ? roundAmount(item.returnable_config.packagePrice * item.quantity)
+              : 0;
+          return acc + item.unit_price * item.quantity + returnableSurcharge;
+        }, 0)
+      ),
+    [cartState]
   );
-  const promotionDiscountTotal = promotionsResolution.product_discount_total;
-  const cartPromotionDiscountTotal = promotionsResolution.cart_discount_total;
-  const totalPromotionDiscount = promotionsResolution.total_discount;
-  const subtotal = roundAmount(
-    promotionsResolution.subtotal_after_promotions + debtPaymentTotal
+
+  const promotionDiscountTotal = useMemo(
+    () => roundAmount(cart.reduce((acc, item) => acc + item.product_promotion_discount_total, 0)),
+    [cart]
+  );
+
+  const cartPromotionDiscountTotal = useMemo(
+    () => roundAmount(cart.reduce((acc, item) => acc + item.cart_promotion_discount_total, 0)),
+    [cart]
+  );
+
+  const manualCartDiscountTotal = useMemo(() => {
+    if (!cartManualDiscount || cartManualDiscount.value <= 0) return 0;
+    const eligibleSubtotal = roundAmount(
+      cart
+        .filter((item) => !item.is_debt_payment_item)
+        .reduce((acc, item) => acc + item.line_subtotal - item.product_promotion_discount_total, 0)
+    );
+    if (eligibleSubtotal <= 0) return 0;
+    if (cartManualDiscount.type === "percent") {
+      return roundAmount(eligibleSubtotal * (cartManualDiscount.value / 100));
+    }
+    return roundAmount(Math.min(eligibleSubtotal, cartManualDiscount.value));
+  }, [cart, cartManualDiscount]);
+
+  const totalPromotionDiscount = useMemo(
+    () => roundAmount(promotionDiscountTotal + cartPromotionDiscountTotal),
+    [cartPromotionDiscountTotal, promotionDiscountTotal]
+  );
+
+  const subtotal = useMemo(
+    () => roundAmount(Math.max(0, subtotalBeforePromotions - totalPromotionDiscount)),
+    [subtotalBeforePromotions, totalPromotionDiscount]
   );
 
   const addProductToCart = async (
@@ -969,50 +1152,53 @@ export const usePosSale = (tenantId: string | null) => {
         ? roundAmount(options.overrideUnitPrice)
         : null;
 
+    setLastAddedProductId(product.id);
     setCartState((prev) => {
       const existing = prev.find((item) => item.product_id === product.id);
 
       if (existing) {
+        const isPriceOverridden = Boolean(existing.is_price_overridden);
         const nextUnitPrice =
           forcedUnitPrice != null
             ? roundAmount(
                 (existing.quantity * existing.unit_price + normalizedQty * forcedUnitPrice) / nextQty
               )
+            : isPriceOverridden
+            ? existing.unit_price
             : pricing.unitPrice;
 
-        return prev.map((item) =>
-          item.product_id === product.id
-            ? {
-                ...item,
-                quantity: nextQty,
-                unit_price: nextUnitPrice,
-                base_unit_price: roundAmount(product.price),
-                stock_available: product.stock_current,
-                price_list_id: pricing.priceListId,
-                price_list_name: pricing.priceListName,
-                price_list_is_active: pricing.priceListIsActive,
-                is_scale_item: item.is_scale_item || Boolean(options?.parsedScale),
-                scale_weight:
-                  options?.parsedScale?.weight != null
-                    ? roundQty((item.scale_weight ?? 0) + options.parsedScale.weight)
-                    : item.scale_weight,
-                scale_total_price:
-                  options?.parsedScale?.totalPrice != null
-                    ? roundAmount((item.scale_total_price ?? 0) + options.parsedScale.totalPrice)
-                    : item.scale_total_price,
-                scale_barcode: options?.parsedScale?.raw ?? item.scale_barcode,
-                is_manual_item: item.is_manual_item,
-                returnable_config: item.returnable_config ?? parseReturnableConfig(product.description),
-                returnable_status: item.returnable_status ?? "exchange",
-              }
-            : item
-        );
+        const updatedItem = {
+          ...existing,
+          quantity: nextQty,
+          unit_price: nextUnitPrice,
+          is_price_overridden: isPriceOverridden || forcedUnitPrice != null,
+          base_unit_price: roundAmount(product.price),
+          stock_available: product.stock_current,
+          price_list_id: pricing.priceListId,
+          price_list_name: pricing.priceListName,
+          price_list_is_active: pricing.priceListIsActive,
+          is_scale_item: existing.is_scale_item || Boolean(options?.parsedScale),
+          scale_weight:
+            options?.parsedScale?.weight != null
+              ? roundQty((existing.scale_weight ?? 0) + options.parsedScale.weight)
+              : existing.scale_weight,
+          scale_total_price:
+            options?.parsedScale?.totalPrice != null
+              ? roundAmount((existing.scale_total_price ?? 0) + options.parsedScale.totalPrice)
+              : existing.scale_total_price,
+          scale_barcode: options?.parsedScale?.raw ?? existing.scale_barcode,
+          is_manual_item: existing.is_manual_item,
+          returnable_config: existing.returnable_config ?? parseReturnableConfig(product.description),
+          returnable_status: existing.returnable_status ?? "exchange",
+        };
+
+        // El producto recién escaneado se mueve arriba de todo para visibilidad inmediata
+        return [updatedItem, ...prev.filter((item) => item.product_id !== product.id)];
       }
 
       const returnableConfig = parseReturnableConfig(product.description);
 
       return [
-        ...prev,
         {
           product_id: product.id,
           name: product.name,
@@ -1020,6 +1206,7 @@ export const usePosSale = (tenantId: string | null) => {
           sale_mode: product.sale_mode,
           quantity: normalizedQty,
           unit_price: forcedUnitPrice ?? pricing.unitPrice,
+          is_price_overridden: forcedUnitPrice != null,
           base_unit_price: roundAmount(product.price),
           stock_available: product.stock_current,
           price_list_id: pricing.priceListId,
@@ -1033,6 +1220,7 @@ export const usePosSale = (tenantId: string | null) => {
           returnable_config: returnableConfig,
           returnable_status: "exchange",
         },
+        ...prev,
       ];
     });
 
@@ -1061,8 +1249,8 @@ export const usePosSale = (tenantId: string | null) => {
     }
 
     const manualId = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setLastAddedProductId(manualId);
     setCartState((prev) => [
-      ...prev,
       {
         product_id: manualId,
         name,
@@ -1081,6 +1269,7 @@ export const usePosSale = (tenantId: string | null) => {
         scale_barcode: null,
         is_manual_item: true,
       },
+      ...prev,
     ]);
 
     return true;
@@ -1130,9 +1319,10 @@ export const usePosSale = (tenantId: string | null) => {
         setSelectedCustomerId(customer.id);
       }
 
+      setLastAddedProductId(debtItem.product_id);
       setCartState((prev) => [
-        ...prev.filter((i) => !i.is_debt_payment_item),
         debtItem,
+        ...prev.filter((i) => !i.is_debt_payment_item),
       ]);
 
       setFeedback({
@@ -1447,26 +1637,56 @@ export const usePosSale = (tenantId: string | null) => {
     (barcode: string): Product | null => {
       const normalizedBarcode = normalizeBarcodeValue(barcode);
       if (!normalizedBarcode) return null;
+      const strippedBarcode = normalizedBarcode.replace(/^0+/, "");
 
-      const barcodeRow =
+      // 1. Coincidencia directa en productBarcodes (con o sin is_primary)
+      let barcodeRow =
         productBarcodes.find(
           (row) => normalizeBarcodeValue(row.barcode) === normalizedBarcode && row.is_primary
-        ) ?? null;
+        ) ??
+        productBarcodes.find(
+          (row) => normalizeBarcodeValue(row.barcode) === normalizedBarcode
+        ) ??
+        null;
+
+      // Si no coincide directo, intentar quitando ceros a la izquierda (ej: EAN-13 / UPC discrepancias)
+      if (!barcodeRow && strippedBarcode) {
+        barcodeRow =
+          productBarcodes.find(
+            (row) => normalizeBarcodeValue(row.barcode).replace(/^0+/, "") === strippedBarcode
+          ) ?? null;
+      }
 
       if (barcodeRow) {
         const candidate = products.find((product) => product.id === barcodeRow.product_id);
         if (candidate) return candidate;
       }
 
-      // Fallback: coincidencia por código de producto directo
+      // 2. Coincidencia por mapa de primaryBarcodes
+      for (const [productId, pBarcode] of Object.entries(primaryBarcodes)) {
+        if (!pBarcode) continue;
+        const normPBarcode = normalizeBarcodeValue(pBarcode);
+        if (
+          normPBarcode === normalizedBarcode ||
+          (strippedBarcode && normPBarcode.replace(/^0+/, "") === strippedBarcode)
+        ) {
+          const candidate = products.find((p) => p.id === productId);
+          if (candidate) return candidate;
+        }
+      }
+
+      // 3. Fallback: coincidencia por código de producto directo (exacto o quitando ceros a la izquierda)
       return (
-        products.find(
-          (product) =>
-            Boolean(product.code) && normalizeBarcodeValue(product.code as string) === normalizedBarcode
-        ) ?? null
+        products.find((product) => {
+          if (!product.code) return false;
+          const normCode = normalizeBarcodeValue(product.code as string);
+          if (normCode === normalizedBarcode) return true;
+          if (strippedBarcode && normCode.replace(/^0+/, "") === strippedBarcode) return true;
+          return false;
+        }) ?? null
       );
     },
-    [productBarcodes, products]
+    [productBarcodes, primaryBarcodes, products]
   );
 
   const addProductByBarcode = useCallback(
@@ -1524,6 +1744,22 @@ export const usePosSale = (tenantId: string | null) => {
         let product = findProductByUnitBarcode(barcode);
         if (!product && isOnline) {
           product = await productsService.getByBarcode(tenantId, barcode);
+        }
+
+        // Respaldo de seguridad en memoria antes de rechazar
+        if (!product) {
+          const stripped = barcode.replace(/^0+/, "");
+          product =
+            products.find((p) => {
+              if (p.is_active === false) return false;
+              const pCode = p.code ? normalizeBarcodeValue(p.code) : "";
+              const pPrimary = primaryBarcodes[p.id] ? normalizeBarcodeValue(primaryBarcodes[p.id]) : "";
+              return (
+                pCode === barcode ||
+                pPrimary === barcode ||
+                (stripped && (pCode.replace(/^0+/, "") === stripped || pPrimary.replace(/^0+/, "") === stripped))
+              );
+            }) ?? null;
         }
 
         if (!product || !product.is_active) {
@@ -1666,10 +1902,21 @@ export const usePosSale = (tenantId: string | null) => {
               quantity: normalizedQty,
               unit_price: normalizedPrice,
               base_unit_price: item.is_manual_item ? normalizedPrice : item.base_unit_price,
+              is_price_overridden: true,
+              sale_mode: input.saleMode ?? target.sale_mode,
+              ...(input.code !== undefined ? { code: input.code } : {}),
+              ...(input.barcode !== undefined ? { barcode: input.barcode } : {}),
             }
           : item
       );
     });
+
+    if (input.barcode !== undefined) {
+      setPrimaryBarcodes((prev) => ({
+        ...prev,
+        [input.productId]: input.barcode || "",
+      }));
+    }
   };
 
   const increaseQuantity = (productId: string) => {
@@ -1697,9 +1944,98 @@ export const usePosSale = (tenantId: string | null) => {
 
   const removeFromCart = (productId: string) => {
     setCartState((prev) => prev.filter((item) => item.product_id !== productId));
+    setLastAddedProductId((prev) => (prev === productId ? null : prev));
   };
 
-  const clearCart = () => setCartState([]);
+  const clearCart = () => {
+    setCartState([]);
+    setCartManualDiscount(null);
+    setDiscountsEnabled(true);
+    setLastAddedProductId(null);
+  };
+
+  const applyCartDiscount = useCallback((discount: CartManualDiscount | null) => {
+    setCartManualDiscount(discount);
+    if (discount) {
+      setFeedback({
+        type: "success",
+        message: `Descuento ${discount.type === "percent" ? `${discount.value}%` : currency.format(discount.value)} aplicado al carrito`,
+      });
+    } else {
+      setFeedback({
+        type: "success",
+        message: "Descuento del carrito removido",
+      });
+    }
+  }, []);
+
+  const applyItemDiscount = useCallback(
+    (
+      productId: string,
+      discount: { type: "percent" | "amount"; value: number; reason: string } | null
+    ) => {
+      setCartState((prev) =>
+        prev.map((item) => {
+          if (item.product_id !== productId) return item;
+          return {
+            ...item,
+            manual_discount: discount,
+            manual_promotion: null,
+          };
+        })
+      );
+      if (discount) {
+        setFeedback({
+          type: "success",
+          message: "Descuento aplicado al producto",
+        });
+      } else {
+        setFeedback({
+          type: "success",
+          message: "Descuento del producto removido",
+        });
+      }
+    },
+    []
+  );
+
+  const applyItemPromotion = useCallback(
+    (productId: string, promo: PromotionWithDetails | null) => {
+      setCartState((prev) =>
+        prev.map((item) => {
+          if (item.product_id !== productId) return item;
+          if (!promo) {
+            return {
+              ...item,
+              manual_promotion: null,
+            };
+          }
+          return {
+            ...item,
+            manual_promotion: {
+              id: promo.id,
+              name: promo.name,
+              code: promo.code,
+              discount_amount: promo.discount_amount ?? 0,
+            },
+            manual_discount: null,
+          };
+        })
+      );
+      if (promo) {
+        setFeedback({
+          type: "success",
+          message: `Promoción "${promo.name}" vinculada al producto`,
+        });
+      } else {
+        setFeedback({
+          type: "success",
+          message: "Promoción removida del producto",
+        });
+      }
+    },
+    []
+  );
 
   const setSelectedCustomer = useCallback((customerId: string) => {
     const normalized = customerId.trim();
@@ -1708,6 +2044,16 @@ export const usePosSale = (tenantId: string | null) => {
       prevTabs.map((tab) => (tab.id === activeTabId ? { ...tab, selectedCustomerId: normalized } : tab))
     );
   }, [activeTabId]);
+
+  const upsertCustomer = useCallback((customer: Customer) => {
+    setCustomers((prev) => {
+      const exists = prev.some((c) => c.id === customer.id);
+      if (exists) {
+        return prev.map((c) => (c.id === customer.id ? customer : c));
+      }
+      return [customer, ...prev];
+    });
+  }, []);
 
   const createOriginBank = useCallback(
     async (name: string) => {
@@ -1737,8 +2083,13 @@ export const usePosSale = (tenantId: string | null) => {
 
   const getCheckoutSummary = useCallback(
     (paymentMethodId: string | null | undefined): PosCheckoutSummary =>
-      calculateSummaryByMethod(subtotal, getPaymentMethodById(paymentMethodId), posSettings),
-    [getPaymentMethodById, posSettings, subtotal]
+      calculateSummaryByMethod(
+        subtotal,
+        getPaymentMethodById(paymentMethodId),
+        posSettings,
+        discountsEnabled
+      ),
+    [discountsEnabled, getPaymentMethodById, posSettings, subtotal]
   );
 
   const selectedCustomer = useMemo(
@@ -3091,11 +3442,21 @@ export const usePosSale = (tenantId: string | null) => {
     selectedCustomerId,
     selectedCustomer,
     appliedPriceList,
+    promotions,
     cart,
+    cartManualDiscount,
+    manualCartDiscountTotal,
+    applyCartDiscount,
+    applyItemDiscount,
+    applyItemPromotion,
     subtotal,
     subtotalBeforePromotions,
     promotionDiscountTotal,
     cartPromotionDiscountTotal,
+    discountsEnabled,
+    setDiscountsEnabled,
+    toggleDiscounts,
+    lastAddedProductId,
     isLoading,
     isSubmitting,
     isMercadoPagoLoading,
@@ -3110,6 +3471,7 @@ export const usePosSale = (tenantId: string | null) => {
     createProductFromPosAndAddToCart,
     addProductByBarcode,
     setSelectedCustomer,
+    upsertCustomer,
     setCartItemQuantity,
     updateCartItem,
     increaseQuantity,
