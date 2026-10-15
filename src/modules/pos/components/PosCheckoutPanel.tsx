@@ -1192,12 +1192,7 @@ export const PosCheckoutPanel = ({
                   >
                     {option.name}
                   </span>
-                  {option.isBankTransfer && (
-                    <span className="rounded bg-sky-100 dark:bg-sky-950/80 border border-sky-300 dark:border-sky-800 px-1.5 py-0.2 text-[9px] font-bold text-sky-800 dark:text-sky-300">
-                      BANCO
-                    </span>
-                  )}
-                  {isEstablished ? (
+                  {isEstablished && (
                     <div className="flex items-center gap-1 shrink-0">
                       <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-600 text-white">
                         <Check size={9} strokeWidth={3} />
@@ -1206,11 +1201,7 @@ export const PosCheckoutPanel = ({
                         Confirmado
                       </span>
                     </div>
-                  ) : isHighlighted ? (
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900 dark:text-amber-200 bg-amber-200/80 dark:bg-amber-950/80 px-1.5 py-0.2 rounded border border-amber-400/80 dark:border-amber-600/80 shrink-0">
-                      Seleccionado
-                    </span>
-                  ) : null}
+                  )}
                 </div>
               </div>
 
