@@ -229,8 +229,22 @@ let storageInitialized = Boolean(persisted);
 const replaceMockDatabase = (next: MockDatabase): void => {
   const tables = Object.keys(next) as DbTableName[];
   for (const table of tables) {
+    const nextRows = next[table] as unknown[];
+    // Si la tabla entrante está vacía pero en memoria ya teníamos registros de empleados/asistencia/sueldos,
+    // preservamos los datos en lugar de vaciarlos.
+    if (
+      (table === "employees" ||
+        table === "employee_attendance" ||
+        table === "employee_current_account_movements" ||
+        table === "employee_salary_payments") &&
+      nextRows.length === 0 &&
+      (mockDb[table] as unknown[]).length > 0
+    ) {
+      continue;
+    }
+
     (mockDb[table] as unknown[]).length = 0;
-    (mockDb[table] as unknown[]).push(...(next[table] as unknown[]));
+    (mockDb[table] as unknown[]).push(...nextRows);
   }
 };
 
@@ -253,8 +267,8 @@ export const persistMockDatabase = (): void => {
 
   try {
     storage.setItem(MOCK_DB_STORAGE_KEY, JSON.stringify(mockDb));
-  } catch {
-    // Silenciar fallos de persistencia en entorno mock.
+  } catch (err) {
+    console.warn("[mockDb] Fallo al persistir mock database en localStorage:", err);
   }
 };
 

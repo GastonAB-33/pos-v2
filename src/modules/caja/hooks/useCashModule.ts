@@ -49,17 +49,69 @@ export interface CashDailyTrackingRow {
   manualMovementsCount: number;
 }
 
+export interface CashCloseSnapshot {
+  billCounts?: Record<number, number>;
+  coinsAmount?: number;
+  expectedAmount?: number;
+  expectedCashAmount?: number;
+  expectedFullAmount?: number;
+  realAmount?: number;
+  difference?: number;
+  reconciliationMode?: "cash_only" | "full";
+  userNotes?: string;
+}
+
+export const serializeCloseSnapshot = (
+  snapshot: CashCloseSnapshot,
+  userNotes?: string | null
+): string => {
+  const json = JSON.stringify(snapshot);
+  const cleanNotes = userNotes?.trim() || "";
+  return `<!--SNAPSHOT:${json}-->${cleanNotes}`;
+};
+
+export const parseCloseSnapshot = (
+  notes: string | null | undefined
+): { snapshot: CashCloseSnapshot | null; cleanNotes: string } => {
+  if (!notes) return { snapshot: null, cleanNotes: "" };
+  const match = notes.match(/<!--SNAPSHOT:(.*?)-->([\s\S]*)/);
+  if (match) {
+    try {
+      const snapshot = JSON.parse(match[1]) as CashCloseSnapshot;
+      return { snapshot, cleanNotes: match[2]?.trim() || "" };
+    } catch {
+      return { snapshot: null, cleanNotes: notes };
+    }
+  }
+  return { snapshot: null, cleanNotes: notes };
+};
+
 interface CashSessionComputedSummary {
   openingAmount: number;
   incomes: number;
   expenses: number;
+  cashIncomes: number;
+  cashExpenses: number;
   expectedBalance: number;
+  expectedCashBalance: number;
+  expectedFullBalance: number;
   saleMovementsCount: number;
   manualMovementsCount: number;
   salePaymentsTotal: number;
+  cashSalesTotal: number;
   manualIncomesTotal: number;
   positiveAdjustmentsTotal: number;
   negativeAdjustmentsTotal: number;
+}
+
+export interface CashCloseResult {
+  session: CashSession | null;
+  expectedAmount: number;
+  realAmount: number;
+  difference: number;
+  salePaymentsTotal: number;
+  cashSalesTotal: number;
+  totalIncomes: number;
 }
 
 export interface CashBreakdownItem {
@@ -148,6 +200,8 @@ const defaultCashSettings: CashSettings = {
   default_opening_amount: 0,
   allow_manual_movements: true,
   require_notes_on_manual_movements: false,
+  blind_cash_closing: false,
+  cash_reconciliation_mode: "cash_only",
 };
 
 export const useCashModule = (tenantId: string | null, userId: string | null) => {
@@ -333,6 +387,9 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       const sessionMovements = movementsBySessionId.get(session.id) ?? [];
       let incomes = 0;
       let expenses = 0;
+      let cashIncomes = 0;
+      let cashExpenses = 0;
+      let cashSalesTotal = 0;
       let saleMovementsCount = 0;
       let manualMovementsCount = 0;
       let salePaymentsTotal = 0;
@@ -342,21 +399,51 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
       for (const movement of sessionMovements) {
         const amount = Math.abs(movement.amount);
+        const refType = normalizeKey(movement.reference_type);
 
         if (movement.movement_type === "expense") {
           expenses += amount;
+          // Egresos del cajón son en efectivo a menos que sean explícitamente electrónicos
+          if (
+            refType !== "transfer" &&
+            refType !== "card_debit" &&
+            refType !== "card_credit" &&
+            refType !== "cheque"
+          ) {
+            cashExpenses += amount;
+          }
         } else if (movement.movement_type === "income") {
           incomes += amount;
           manualIncomesTotal += amount;
+          // Ingreso manual al cajón
+          if (
+            refType === "cash" ||
+            refType === "efectivo" ||
+            refType === "manual_income" ||
+            !refType
+          ) {
+            cashIncomes += amount;
+          }
         } else if (movement.movement_type === "sale_payment") {
           incomes += amount;
           salePaymentsTotal += amount;
+          // Cobro por venta: SOLO SI ES EFECTIVO ingresa al cajón de caja física
+          if (refType === "cash" || refType === "efectivo") {
+            cashIncomes += amount;
+            cashSalesTotal += amount;
+          }
         } else if (movement.movement_type === "adjustment" && movement.amount < 0) {
           expenses += amount;
           negativeAdjustmentsTotal += amount;
+          if (refType !== "transfer" && refType !== "cheque") {
+            cashExpenses += amount;
+          }
         } else if (movement.movement_type === "adjustment" && movement.amount > 0) {
           incomes += amount;
           positiveAdjustmentsTotal += amount;
+          if (refType !== "transfer" && refType !== "cheque") {
+            cashIncomes += amount;
+          }
         } else {
           incomes += amount;
         }
@@ -376,22 +463,38 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
       const normalizedIncomes = roundAmount(incomes);
       const normalizedExpenses = roundAmount(expenses);
+      const normalizedCashIncomes = roundAmount(cashIncomes);
+      const normalizedCashExpenses = roundAmount(cashExpenses);
+
+      const expectedCashBalance = roundAmount(
+        session.opening_amount + normalizedCashIncomes - normalizedCashExpenses
+      );
+      const expectedFullBalance = roundAmount(
+        session.opening_amount + normalizedIncomes - normalizedExpenses
+      );
+      const isFull = cashSettings.cash_reconciliation_mode === "full";
+      const expectedBalance = isFull ? expectedFullBalance : expectedCashBalance;
 
       acc.set(session.id, {
         openingAmount: session.opening_amount,
         incomes: normalizedIncomes,
         expenses: normalizedExpenses,
-        expectedBalance: roundAmount(session.opening_amount + normalizedIncomes - normalizedExpenses),
+        cashIncomes: normalizedCashIncomes,
+        cashExpenses: normalizedCashExpenses,
+        expectedBalance,
+        expectedCashBalance,
+        expectedFullBalance,
         saleMovementsCount,
         manualMovementsCount,
         salePaymentsTotal: roundAmount(salePaymentsTotal),
+        cashSalesTotal: roundAmount(cashSalesTotal),
         manualIncomesTotal: roundAmount(manualIncomesTotal),
         positiveAdjustmentsTotal: roundAmount(positiveAdjustmentsTotal),
         negativeAdjustmentsTotal: roundAmount(negativeAdjustmentsTotal),
       });
       return acc;
     }, new Map());
-  }, [movements, sessions]);
+  }, [movements, sessions, cashSettings]);
 
   const summary = useMemo(() => {
     if (!selectedSession) {
@@ -400,6 +503,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         incomes: 0,
         expenses: 0,
         expectedBalance: 0,
+        expectedCashBalance: 0,
+        expectedFullBalance: 0,
       };
     }
 
@@ -410,6 +515,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         incomes: 0,
         expenses: 0,
         expectedBalance: selectedSession.opening_amount,
+        expectedCashBalance: selectedSession.opening_amount,
+        expectedFullBalance: selectedSession.opening_amount,
       };
     }
 
@@ -418,6 +525,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       incomes: selectedSummary.incomes,
       expenses: selectedSummary.expenses,
       expectedBalance: selectedSummary.expectedBalance,
+      expectedCashBalance: selectedSummary.expectedCashBalance,
+      expectedFullBalance: selectedSummary.expectedFullBalance,
     };
   }, [selectedSession, sessionSummariesById]);
 
@@ -428,6 +537,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         incomes: 0,
         expenses: 0,
         expectedBalance: 0,
+        expectedCashBalance: 0,
+        expectedFullBalance: 0,
       };
     }
 
@@ -438,6 +549,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         incomes: 0,
         expenses: 0,
         expectedBalance: currentSession.opening_amount,
+        expectedCashBalance: currentSession.opening_amount,
+        expectedFullBalance: currentSession.opening_amount,
       };
     }
 
@@ -446,6 +559,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       incomes: currentSummary.incomes,
       expenses: currentSummary.expenses,
       expectedBalance: currentSummary.expectedBalance,
+      expectedCashBalance: currentSummary.expectedCashBalance,
+      expectedFullBalance: currentSummary.expectedFullBalance,
     };
   }, [currentSession, sessionSummariesById]);
 
@@ -453,6 +568,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     if (!currentSession) {
       return {
         salePaymentsTotal: 0,
+        cashSalesTotal: 0,
         manualIncomesTotal: 0,
         positiveAdjustmentsTotal: 0,
         totalIncomes: 0,
@@ -464,6 +580,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     if (!sessionSummary) {
       return {
         salePaymentsTotal: 0,
+        cashSalesTotal: 0,
         manualIncomesTotal: 0,
         positiveAdjustmentsTotal: 0,
         totalIncomes: 0,
@@ -473,6 +590,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
     return {
       salePaymentsTotal: sessionSummary.salePaymentsTotal,
+      cashSalesTotal: sessionSummary.cashSalesTotal,
       manualIncomesTotal: sessionSummary.manualIncomesTotal,
       positiveAdjustmentsTotal: sessionSummary.positiveAdjustmentsTotal,
       totalIncomes: roundAmount(
@@ -550,6 +668,22 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       }, {}),
     [salesById]
   );
+
+  const saleBankAccountsById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const p of salePayments) {
+      const meta = p.metadata as { payment_details?: { destination_account_id?: string } } | null;
+      const destAccId = meta?.payment_details?.destination_account_id;
+      if (destAccId && p.sale_id) {
+        map[p.sale_id] = destAccId;
+        const code = normalizeKey(p.payment_method_code);
+        if (code) {
+          map[`${p.sale_id}_${code}`] = destAccId;
+        }
+      }
+    }
+    return map;
+  }, [salePayments]);
 
   const getDailyMovements = useCallback(
     (date: string | null, movementType: CashMovementFilter = "all"): CashMovement[] => {
@@ -830,7 +964,14 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       });
 
       const expensesItems = [...expensesByCode.values()].sort((a, b) => b.amount - a.amount);
-      const expectedBalance = roundAmount(session.opening_amount + incomesTotal - expensesTotal);
+      const computedSummary = sessionSummariesById.get(session.id);
+      const cashIncomes =
+        computedSummary?.cashIncomes ??
+        (incomesItems.find((i) => normalizeKey(i.code) === "cash")?.amount ?? 0);
+      const cashExpenses = computedSummary?.cashExpenses ?? expensesTotal;
+      const expectedCashBalance =
+        computedSummary?.expectedBalance ??
+        roundAmount(session.opening_amount + cashIncomes - cashExpenses);
 
       return {
         sessionId: session.id,
@@ -844,9 +985,9 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         },
         totalCash: {
           openingAmount: roundAmount(session.opening_amount),
-          incomes: incomesTotal,
-          expenses: expensesTotal,
-          expectedBalance,
+          incomes: cashIncomes,
+          expenses: cashExpenses,
+          expectedBalance: expectedCashBalance,
         },
       };
     },
@@ -1004,24 +1145,45 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     }
   };
 
-  const closeCash = async (values: CloseCashValues) => {
+  const closeCash = async (values: CloseCashValues): Promise<CashCloseResult | null> => {
     if (!tenantId || !userId || !currentSession) {
       setFeedback({ type: "error", message: "No hay una caja diaria abierta para cerrar" });
-      return;
+      return null;
     }
 
     setIsSubmitting(true);
     try {
-      const difference = roundAmount(values.realAmount - currentSessionSummary.expectedBalance);
+      const reconciliationMode = cashSettings.cash_reconciliation_mode ?? "cash_only";
+      const expectedAmount = currentSessionSummary.expectedBalance;
+      const difference = roundAmount(values.realAmount - expectedAmount);
+
+      const snapshot: CashCloseSnapshot = {
+        billCounts: values.billCounts,
+        coinsAmount: values.coinsAmount,
+        expectedAmount,
+        expectedCashAmount: currentSessionSummary.expectedCashBalance,
+        expectedFullAmount: currentSessionSummary.expectedFullBalance,
+        realAmount: values.realAmount,
+        difference,
+        reconciliationMode,
+        userNotes: values.notes?.trim() || "",
+      };
+
+      const serializedNotes = serializeCloseSnapshot(
+        snapshot,
+        values.notes?.trim() || currentSession.notes
+      );
 
       const closedSession = await cashService.update(tenantId, currentSession.id, {
         status: "closed",
         closed_by_user_id: userId,
         closed_at: new Date().toISOString(),
         closing_amount: values.realAmount,
-        expected_closing_amount: currentSessionSummary.expectedBalance,
+        expected_closing_amount: expectedAmount,
         closing_difference: difference,
-        notes: values.notes?.trim() || currentSession.notes,
+        notes: serializedNotes,
+        closing_bill_counts: (values.billCounts as Record<string, number>) ?? null,
+        closing_coins_amount: values.coinsAmount ?? null,
       });
       await auditService.createSafe(tenantId, {
         user_id: userId,
@@ -1031,9 +1193,11 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         entity_id: closedSession?.id ?? currentSession.id,
         description: "Cierre de caja",
         metadata: {
-          expected_amount: currentSessionSummary.expectedBalance,
+          expected_amount: expectedAmount,
           real_amount: values.realAmount,
           difference,
+          reconciliation_mode: reconciliationMode,
+          bill_counts: values.billCounts,
         },
       });
 
@@ -1053,8 +1217,18 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       }
       setFeedback({ type: "success", message: "Caja diaria cerrada" });
       await loadCashData();
+      return {
+        session: closedSession,
+        expectedAmount: currentSessionSummary.expectedBalance,
+        realAmount: values.realAmount,
+        difference,
+        salePaymentsTotal: currentSessionIncomeSummary.salePaymentsTotal,
+        cashSalesTotal: currentSessionIncomeSummary.cashSalesTotal,
+        totalIncomes: currentSessionIncomeSummary.totalIncomes,
+      };
     } catch {
       setFeedback({ type: "error", message: "No se pudo cerrar la caja diaria" });
+      return null;
     } finally {
       setIsSubmitting(false);
     }
@@ -1183,15 +1357,24 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     }
   };
 
+  const activeShiftMovements = useMemo(() => {
+    if (!currentSession) return [];
+    return movements.filter((m) => m.cash_session_id === currentSession.id);
+  }, [currentSession, movements]);
+
   return {
     currentSession,
     selectedSession,
     selectedSessionId,
     setSelectedSessionId,
     sessionHistory,
+    movements,
+    activeShiftMovements,
     currentSessionMovements: selectedSessionMovements,
     selectedSessionMovements,
     paymentMethods,
+    bankAccounts,
+    saleBankAccountsById,
     dailyTracking,
     usersById,
     cashSettings,

@@ -512,12 +512,19 @@ export const PosProductList = ({
               return (
                 <article key={product.id} className="pos-product-row">
                   <div className="min-w-0">
-                    <p className="truncate text-base font-semibold text-slate-900">{product.name}</p>
-                    <p className="text-xs text-slate-500">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">{product.name}</p>
+                      {product.id.startsWith("promo-") || product.category === "Promociones" ? (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                          PROMO
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
                       {product.category}
                       {product.subcategory ? ` / ${product.subcategory}` : ""}
                     </p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
                       Código: {product.code}
                       {barcode ? ` | Barcode: ${barcode}` : ""}
                       {product.brand ? ` | Marca: ${product.brand}` : ""}
@@ -526,12 +533,14 @@ export const PosProductList = ({
 
                   <div className="flex items-center gap-3">
                     <div className="text-right">
-                      <p className="text-xl font-semibold text-slate-900">
+                      <p className="text-xl font-semibold text-slate-900 dark:text-slate-100">
                         {currency.format(product.price)}
                         {product.sale_mode === "weight" ? " / kg" : ""}
                       </p>
-                      <p className="text-xs text-brand-700">
-                        {productStockLabel(product)} en stock
+                      <p className="text-xs text-brand-700 dark:text-sky-400 font-semibold">
+                        {product.id.startsWith("promo-")
+                          ? `${product.stock_current} combos disponibles`
+                          : `${productStockLabel(product)} en stock`}
                       </p>
                     </div>
                     {renderAddProductAction(product)}

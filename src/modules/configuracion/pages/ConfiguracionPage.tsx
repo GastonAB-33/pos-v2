@@ -1273,7 +1273,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
             <div className="md:col-span-2 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Reglas de Control de Caja</span>
 
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                   <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.caja.require_open_session_for_sale} onChange={(event) => updateSection("caja", { require_open_session_for_sale: event.target.checked })} disabled={!canWriteConfiguracion} />
                   <span>Exigir caja abierta para realizar ventas</span>
@@ -1287,6 +1287,95 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                 <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                   <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.caja.require_notes_on_manual_movements} onChange={(event) => updateSection("caja", { require_notes_on_manual_movements: event.target.checked })} disabled={!canWriteConfiguracion} />
                   <span>Exigir motivo en movimientos manuales</span>
+                </label>
+
+                <label className="flex items-start gap-2.5 rounded-lg border border-blue-200/80 bg-blue-50/40 p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-blue-800/60 dark:bg-blue-950/20 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 mt-0.5 rounded text-blue-600"
+                    checked={draft.caja.blind_cash_closing ?? false}
+                    onChange={(event) =>
+                      updateSection("caja", { blind_cash_closing: event.target.checked })
+                    }
+                    disabled={!canWriteConfiguracion}
+                  />
+                  <div>
+                    <span className="font-semibold block text-slate-900 dark:text-slate-100">
+                      Cierre de caja a ciegas
+                    </span>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400 font-normal mt-0.5">
+                      El cajero no ve las ventas ni el efectivo esperado al cerrar. Debe contar billetes por denominación ($100 a $20.000) y los totales se revelan recién tras confirmar el cierre.
+                    </span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Modalidad de Arqueo: Solo Efectivo vs Completo */}
+            <div className="md:col-span-2 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Modalidad de Arqueo de Caja
+                </span>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Elegí cómo calcular el total de cierre esperado y qué valores se deben rendir al cerrar cada turno.
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label
+                  className={`flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer transition-all ${
+                    (draft.caja.cash_reconciliation_mode ?? "cash_only") === "cash_only"
+                      ? "border-emerald-500 bg-emerald-50/40 dark:bg-emerald-950/20 dark:border-emerald-600 shadow-xs"
+                      : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="cash_reconciliation_mode"
+                    className="mt-0.5 h-4 w-4 text-emerald-600 focus:ring-emerald-500"
+                    checked={(draft.caja.cash_reconciliation_mode ?? "cash_only") === "cash_only"}
+                    onChange={() => updateSection("caja", { cash_reconciliation_mode: "cash_only" })}
+                    disabled={!canWriteConfiguracion}
+                  />
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                        Arqueo solo efectivo de caja
+                      </span>
+                      <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+                        Recomendado
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                      El cierre de caja y el saldo esperado calculan únicamente el efectivo físico en cajón (apertura + ventas en efectivo + ingresos en efectivo - egresos). Las cobranzas por tarjeta o transferencia se auditan aparte.
+                    </p>
+                  </div>
+                </label>
+
+                <label
+                  className={`flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer transition-all ${
+                    draft.caja.cash_reconciliation_mode === "full"
+                      ? "border-blue-500 bg-blue-50/40 dark:bg-blue-950/20 dark:border-blue-600 shadow-xs"
+                      : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="cash_reconciliation_mode"
+                    className="mt-0.5 h-4 w-4 text-blue-600 focus:ring-blue-500"
+                    checked={draft.caja.cash_reconciliation_mode === "full"}
+                    onChange={() => updateSection("caja", { cash_reconciliation_mode: "full" })}
+                    disabled={!canWriteConfiguracion}
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100 block">
+                      Arqueo completo (Todos los medios de cobro)
+                    </span>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                      El cierre de caja y el total esperado exigen conciliar la totalidad de cobros del turno (efectivo + tarjetas de débito/crédito + transferencias + Mercado Pago). Ideal para comercios que rinden ventas consolidadas.
+                    </p>
+                  </div>
                 </label>
               </div>
             </div>

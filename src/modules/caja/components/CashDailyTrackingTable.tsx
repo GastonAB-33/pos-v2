@@ -4,12 +4,13 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { Eye, Calendar } from "lucide-react";
+import { Eye, Calendar, Lock } from "lucide-react";
 import type { CashDailyTrackingRow } from "@/modules/caja/hooks/useCashModule";
 
 interface CashDailyTrackingTableProps {
   rows: CashDailyTrackingRow[];
   onViewDetail?: (date: string) => void;
+  onViewCloseDetail?: (date: string) => void;
 }
 
 const columnHelper = createColumnHelper<CashDailyTrackingRow>();
@@ -20,7 +21,11 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
-export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTrackingTableProps) => {
+export const CashDailyTrackingTable = ({
+  rows,
+  onViewDetail,
+  onViewCloseDetail,
+}: CashDailyTrackingTableProps) => {
   const columns = [
     columnHelper.accessor("date", {
       header: "Fecha y Estado",
@@ -143,17 +148,30 @@ export const CashDailyTrackingTable = ({ rows, onViewDetail }: CashDailyTracking
       header: () => <div className="text-right">Acción</div>,
       cell: (info) => {
         const row = info.row.original;
-        if (!onViewDetail) return "-";
         return (
-          <div className="text-right">
-            <button
-              type="button"
-              className="h-7 inline-flex items-center gap-1 px-2.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-300 dark:border-slate-700 rounded-lg transition-colors shadow-2xs cursor-pointer"
-              onClick={() => onViewDetail(row.date)}
-            >
-              <Eye className="h-3 w-3 text-slate-400 dark:text-slate-400" />
-              Detalle
-            </button>
+          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+            {onViewDetail && (
+              <button
+                type="button"
+                className="h-7 inline-flex items-center gap-1 px-2.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-300 dark:border-slate-700 rounded-lg transition-colors shadow-2xs cursor-pointer"
+                onClick={() => onViewDetail(row.date)}
+                title="Ver movimientos de la jornada"
+              >
+                <Eye className="h-3 w-3 text-slate-400 dark:text-slate-400" />
+                <span>Movimientos</span>
+              </button>
+            )}
+            {onViewCloseDetail && (
+              <button
+                type="button"
+                className="h-7 inline-flex items-center gap-1 px-2.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-300 dark:border-emerald-800 rounded-lg transition-colors shadow-2xs cursor-pointer"
+                onClick={() => onViewCloseDetail(row.date)}
+                title="Ver desglose de billetes y montos del cierre de caja"
+              >
+                <Lock className="h-3 w-3" />
+                <span>Detalle de cierre</span>
+              </button>
+            )}
           </div>
         );
       },

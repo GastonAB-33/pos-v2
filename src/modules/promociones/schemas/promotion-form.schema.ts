@@ -41,19 +41,11 @@ export const promotionFormSchema = z
       .optional(),
   })
   .superRefine((value, context) => {
-    if (value.scope === "product" && !value.productId?.trim()) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["productId"],
-        message: "Selecciona un producto para promocion por producto",
-      });
-    }
-
-    if (value.scope === "bundle" && (!value.bundleItems || value.bundleItems.length < 2)) {
+    if ((!value.bundleItems || value.bundleItems.length === 0) && !value.productId?.trim()) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["bundleItems"],
-        message: "Selecciona al menos 2 productos para el combo",
+        message: "Selecciona al menos un producto para la promoción",
       });
     }
 
@@ -86,7 +78,7 @@ export const promotionFormSchema = z
         });
       }
 
-      if (value.scope !== "bundle" && (value.minQuantity === "" || value.minQuantity < 1)) {
+      if (value.scope !== "bundle" && (!value.bundleItems || value.bundleItems.length === 0) && (value.minQuantity === "" || value.minQuantity < 1)) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["minQuantity"],

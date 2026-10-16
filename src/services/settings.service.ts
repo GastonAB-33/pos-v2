@@ -84,6 +84,8 @@ const createDefaultCashSettings = (): CashSettings => ({
   default_opening_amount: 0,
   allow_manual_movements: true,
   require_notes_on_manual_movements: false,
+  blind_cash_closing: false,
+  cash_reconciliation_mode: "cash_only",
 });
 
 const createDefaultArcaSettings = (): ArcaSettings => ({

@@ -57,8 +57,8 @@ export const ProductsToolbar = ({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Catalogo de productos</h2>
-          <p className="text-sm text-slate-500">Gestion avanzada de productos y carga masiva</p>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Inventario de productos</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Gestión avanzada de productos y carga masiva</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">

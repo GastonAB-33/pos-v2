@@ -558,140 +558,145 @@ export const ProductFormModal = ({
 
   return (
     <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-3 sm:p-4 backdrop-blur-[1px]">
-      <div className="max-h-[88dvh] sm:max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl md:p-6 dark:border-slate-800 dark:bg-slate-900">
-        <div className="mb-5 flex items-center justify-between gap-3 border-b border-slate-200 pb-4">
+      <div className="flex flex-col max-h-[88dvh] sm:max-h-[90vh] w-full max-w-5xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-700">Gestión de productos</p>
-            <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-            <p className="mt-0.5 text-xs text-slate-500">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-700 dark:text-brand-400">Gestión de productos</p>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
               Cálculo automático en vivo. Guardado solo con el botón "Guardar".
             </p>
           </div>
           <ModalCloseButton label="Cerrar producto" onClick={onClose} disabled={disabled} />
         </div>
 
-        <form className="space-y-6" onSubmit={handleSubmit(handleFormSubmit)} onKeyDown={handlePreventEnterSubmit} autoComplete="off">
-          <div className="grid gap-5 xl:grid-cols-[1fr_280px]">
-            <div className="space-y-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5">
-              <div>
-                <h4 className="text-sm font-semibold text-slate-900">Datos básicos</h4>
-                <p className="mt-1 text-xs text-slate-500">
-                  Información principal del producto, identificación y stock.
-                </p>
-              </div>
-              <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-2 xl:grid-cols-3 dark:border-slate-700/80 dark:bg-slate-900/90">
-                <div className="xl:col-span-2">
-                  <div className="mb-1 flex min-h-[34px] items-center justify-between gap-2">
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">Nombre</label>
-                    <VoiceDictationButton
-                      value={nombre ?? ""}
-                      onValueChange={(nextValue) =>
-                        setValue("nombre", normalizeVoiceName(nextValue), {
-                          shouldDirty: true,
-                          shouldValidate: true,
+        <form className="flex flex-col flex-1 min-h-0 overflow-hidden" onSubmit={handleSubmit(handleFormSubmit)} onKeyDown={handlePreventEnterSubmit} autoComplete="off">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+            <div className="grid gap-5 xl:grid-cols-[1fr_280px]">
+              <div className="space-y-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5 dark:border-slate-800 dark:bg-slate-950/40">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Datos básicos</h4>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Información principal del producto, identificación y stock.
+                  </p>
+                </div>
+                <div className="grid gap-3.5 rounded-xl border border-slate-200 bg-white p-3.5 sm:grid-cols-2 dark:border-slate-700/80 dark:bg-slate-900/90">
+                  <div>
+                    <div className="mb-1 flex min-h-[34px] items-center justify-between gap-2">
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">Nombre</label>
+                      <div className="shrink-0">
+                        <VoiceDictationButton
+                          value={nombre ?? ""}
+                          onValueChange={(nextValue) =>
+                            setValue("nombre", normalizeVoiceName(nextValue), {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            })
+                          }
+                          insertMode="replace"
+                          fieldType="text"
+                          disabled={disabled}
+                          label="Dictar nombre"
+                        />
+                      </div>
+                    </div>
+                    <input
+                      {...register("nombre")}
+                      type="text"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-lpignore="true"
+                      data-form-type="other"
+                      className="ui-input"
+                      disabled={disabled}
+                    />
+                    {errors.nombre ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.nombre.message}</p> : null}
+                  </div>
+
+                  <div>
+                    <div className="mb-1 flex min-h-[34px] items-center justify-between gap-2">
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                        {saleMode === "weight" ? "Stock en gramos (g)" : "Stock (unidades)"}
+                      </label>
+                      <div className="shrink-0">
+                        <VoiceDictationButton
+                          value={String(stock ?? "")}
+                          onValueChange={handleStockVoiceChange}
+                          insertMode="replace"
+                          fieldType="number"
+                          disabled={disabled}
+                          label="Dictar stock"
+                        />
+                      </div>
+                    </div>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step={saleMode === "weight" ? "1" : "0.001"}
+                      placeholder="0"
+                      {...register("stock", {
+                        setValueAs: parseNumericField,
+                      })}
+                      onFocus={(e) =>
+                        handleNumericInputFocus(e, {
+                          isNew: mode === "create",
+                          onClear: () => setValue("stock", "" as any),
                         })
                       }
-                      insertMode="replace"
-                      fieldType="text"
+                      onBlur={(e) => {
+                        handleNumericInputBlur(e, "0", () => {
+                          setValue("stock", 0);
+                        });
+                      }}
+                      className="ui-input"
                       disabled={disabled}
-                      label="Dictar nombre"
                     />
+                    <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                      {saleMode === "weight"
+                        ? "Para pesables, el stock se gestiona en gramos. Ej: 1 kg disponible = 1000 g."
+                        : "Para unitarios, el stock se guarda como unidades."}
+                    </p>
+                    {errors.stock ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.stock.message}</p> : null}
                   </div>
-                  <input
-                    {...register("nombre")}
-                    type="text"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    data-lpignore="true"
-                    data-form-type="other"
-                    className="ui-input"
-                    disabled={disabled}
-                  />
-                  {errors.nombre ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.nombre.message}</p> : null}
-                </div>
 
-                <div>
-                  <div className="mb-1 flex min-h-[34px] items-center justify-between gap-2">
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                      {saleMode === "weight" ? "Stock en gramos (g)" : "Stock (unidades)"}
-                    </label>
-                    <VoiceDictationButton
-                      value={String(stock ?? "")}
-                      onValueChange={handleStockVoiceChange}
-                      insertMode="replace"
-                      fieldType="number"
-                      disabled={disabled}
-                      label="Dictar stock"
-                    />
-                  </div>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    step={saleMode === "weight" ? "1" : "0.001"}
-                    placeholder="0"
-                    {...register("stock", {
-                      setValueAs: parseNumericField,
-                    })}
-                    onFocus={(e) =>
-                      handleNumericInputFocus(e, {
-                        isNew: mode === "create",
-                        onClear: () => setValue("stock", "" as any),
-                      })
-                    }
-                    onBlur={(e) => {
-                      handleNumericInputBlur(e, "0", () => {
-                        setValue("stock", 0);
-                      });
-                    }}
-                    className="ui-input"
-                    disabled={disabled}
-                  />
-                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                    {saleMode === "weight"
-                      ? "Para pesables, el stock se gestiona en gramos. Ej: 1 kg disponible = 1000 g."
-                      : "Para unitarios, el stock se guarda como unidades."}
-                  </p>
-                  {errors.stock ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.stock.message}</p> : null}
-                </div>
-
-                <div className="xl:col-span-3">
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Tipo de venta</label>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm">
-                      <input
-                        type="radio"
-                        value="unit"
-                        {...register("saleMode")}
-                        disabled={disabled}
-                        className="mt-1"
-                      />
-                      <span>
-                        <span className="block font-semibold text-slate-900">Por unidad</span>
-                        <span className="block text-xs text-slate-500">
-                          Precio por unidad y stock en unidades.
+                  <div className="sm:col-span-2">
+                    <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Tipo de venta</label>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-800/80">
+                        <input
+                          type="radio"
+                          value="unit"
+                          {...register("saleMode")}
+                          disabled={disabled}
+                          className="mt-1"
+                        />
+                        <span>
+                          <span className="block font-semibold text-slate-900 dark:text-slate-100">Por unidad</span>
+                          <span className="block text-xs text-slate-500 dark:text-slate-400">
+                            Precio por unidad y stock en unidades.
+                          </span>
                         </span>
-                      </span>
-                    </label>
-                    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm">
-                      <input
-                        type="radio"
-                        value="weight"
-                        {...register("saleMode")}
-                        disabled={disabled}
-                        className="mt-1"
-                      />
-                      <span>
-                        <span className="block font-semibold text-slate-900">Pesable</span>
-                        <span className="block text-xs text-slate-500">
-                          Precio por kg, stock en gramos y ventas por gramos.
+                      </label>
+                      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-800/80">
+                        <input
+                          type="radio"
+                          value="weight"
+                          {...register("saleMode")}
+                          disabled={disabled}
+                          className="mt-1"
+                        />
+                        <span>
+                          <span className="block font-semibold text-slate-900 dark:text-slate-100">Pesable</span>
+                          <span className="block text-xs text-slate-500 dark:text-slate-400">
+                            Precio por kg, stock en gramos y ventas por gramos.
+                          </span>
                         </span>
-                      </span>
-                    </label>
+                      </label>
+                    </div>
                   </div>
-                </div>
 
                 <div>
                   <label className="mb-1 block whitespace-nowrap text-sm font-medium leading-5 text-slate-700 dark:text-slate-200">
@@ -798,10 +803,10 @@ export const ProductFormModal = ({
                 </div>
               </div>
 
-              <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3">
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700/80 dark:bg-slate-900/90">
                 <div>
-                  <h5 className="text-sm font-semibold text-slate-900">Clasificación</h5>
-                  <p className="mt-1 text-xs text-slate-500">Asigna categoría y subcategoría para organizar mejor el catálogo.</p>
+                  <h5 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Clasificación</h5>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Asigna categoría y subcategoría para organizar mejor el catálogo.</p>
                 </div>
 
                 <div className="grid gap-3 md:grid-cols-2">
@@ -886,16 +891,16 @@ export const ProductFormModal = ({
               </div>
             </div>
 
-            <aside className="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <aside className="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div>
-                <h4 className="text-sm font-semibold text-slate-900">Fotografía</h4>
-                <p className="mt-1 text-xs text-slate-500">Agrega una imagen para identificar el producto rápidamente en el catálogo y en POS.</p>
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Fotografía</h4>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Agrega una imagen para identificar el producto rápidamente en el catálogo y en POS.</p>
               </div>
-              <div className="mt-3 flex h-60 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-slate-50">
+              <div className="mt-3 flex h-60 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-950/40">
                 {imagenPreview ? (
                   <img src={imagenPreview} alt="Foto del producto" className="h-full w-full object-cover" />
                 ) : (
-                  <span className="px-3 text-center text-xs text-slate-500">Sin imagen cargada</span>
+                  <span className="px-3 text-center text-xs text-slate-500 dark:text-slate-400">Sin imagen cargada</span>
                 )}
               </div>
 
@@ -937,17 +942,17 @@ export const ProductFormModal = ({
             </aside>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5 dark:border-slate-800 dark:bg-slate-950/40">
             <div className="mb-3">
-              <h4 className="text-sm font-semibold text-slate-900">Precios y cálculo</h4>
-              <p className="mt-1 text-xs text-slate-500">
+              <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Precios y cálculo</h4>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 Modifica costo, ganancia, IVA o precio final y el sistema recalcula automáticamente.
               </p>
             </div>
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <label className="mb-1 block text-sm font-medium text-slate-700">
+              <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700/80 dark:bg-slate-900/90">
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
                   {saleMode === "weight" ? "Precio de costo por kg" : "Precio de costo"}
                 </label>
                 <input
@@ -974,12 +979,12 @@ export const ProductFormModal = ({
                   disabled={disabled}
                 />
                 {errors.precioCosto ? (
-                  <p className="mt-1 text-xs text-red-600">{errors.precioCosto.message}</p>
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.precioCosto.message}</p>
                 ) : null}
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <label className="mb-1 block text-sm font-medium text-slate-700">% Ganancia</label>
+              <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700/80 dark:bg-slate-900/90">
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">% Ganancia</label>
                 <input
                   type="number"
                   step="0.01"
@@ -1007,14 +1012,14 @@ export const ProductFormModal = ({
                   disabled={disabled}
                 />
                 {errors.porcentajeGanancia ? (
-                  <p className="mt-1 text-xs text-red-600">{errors.porcentajeGanancia.message}</p>
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.porcentajeGanancia.message}</p>
                 ) : null}
               </div>
 
-              <div className="rounded-xl border border-sky-200 bg-sky-50 p-3">
+              <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 dark:border-sky-800/80 dark:bg-sky-950/40">
                 <div className="mb-1 flex items-center gap-2">
-                  <label className="block text-sm font-medium text-slate-700">Precio sin IVA</label>
-                  <span className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-sky-700">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-sky-200">Precio sin IVA</label>
+                  <span className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-sky-700 dark:border-sky-700/80 dark:bg-sky-900/80 dark:text-sky-200">
                     Calculado
                   </span>
                 </div>
@@ -1023,16 +1028,16 @@ export const ProductFormModal = ({
                   step="0.01"
                   {...register("precioSinIva")}
                   readOnly
-                  className="ui-input bg-sky-50 font-semibold"
+                  className="ui-input bg-sky-50/60 dark:bg-sky-950/70 dark:border-sky-700/80 dark:text-sky-100 font-semibold"
                   disabled={disabled}
                 />
                 {errors.precioSinIva ? (
-                  <p className="mt-1 text-xs text-red-600">{errors.precioSinIva.message}</p>
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.precioSinIva.message}</p>
                 ) : null}
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-white p-3">
-                <label className="mb-1 block text-sm font-medium text-slate-700">% IVA</label>
+              <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700/80 dark:bg-slate-900/90">
+                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">% IVA</label>
                 <input
                   type="number"
                   step="0.01"
@@ -1056,16 +1061,16 @@ export const ProductFormModal = ({
                   disabled={disabled}
                 />
                 {errors.porcentajeIva ? (
-                  <p className="mt-1 text-xs text-red-600">{errors.porcentajeIva.message}</p>
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.porcentajeIva.message}</p>
                 ) : null}
               </div>
 
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800/80 dark:bg-emerald-950/40">
                 <div className="mb-1 flex items-center gap-2">
-                  <label className="block text-sm font-medium text-slate-700">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-emerald-200">
                     {saleMode === "weight" ? "Precio final por kg" : "Precio final"}
                   </label>
-                  <span className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-700">
+                  <span className="rounded-full border border-emerald-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-700 dark:border-emerald-700/80 dark:bg-emerald-900/80 dark:text-emerald-200">
                     Principal
                   </span>
                 </div>
@@ -1089,16 +1094,16 @@ export const ProductFormModal = ({
                     });
                     applyReversePricing();
                   }}
-                  className="ui-input border-emerald-200 bg-emerald-50 text-base font-semibold"
+                  className="ui-input border-emerald-300 bg-emerald-50/60 dark:border-emerald-600/80 dark:bg-emerald-950/70 dark:text-emerald-100 text-base font-semibold"
                   disabled={disabled}
                 />
                 {errors.precioFinal ? (
-                  <p className="mt-1 text-xs text-red-600">{errors.precioFinal.message}</p>
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.precioFinal.message}</p>
                 ) : null}
               </div>
             </div>
 
-            <p className="mt-3 text-xs text-slate-500">
+            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
               {saleMode === "weight"
                 ? "En productos pesables, costo, precio sin IVA y precio final se interpretan por kg."
                 : "El cálculo se actualiza automáticamente al escribir y al salir de cada campo."}
@@ -1166,13 +1171,13 @@ export const ProductFormModal = ({
             )}
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5">
-            <h4 className="mb-3 text-sm font-semibold text-slate-900">Estado y favorito</h4>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5 dark:border-slate-800 dark:bg-slate-950/40">
+            <h4 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Estado y favorito</h4>
             <div className="grid gap-3 md:grid-cols-2">
-              <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
+              <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200">
                 <div>
-                  <p className="font-medium text-slate-900">Favorito en POS</p>
-                  <p className="text-xs text-slate-500">Aparece destacado para acceso rápido en la venta.</p>
+                  <p className="font-medium text-slate-900 dark:text-slate-100">Favorito en POS</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Aparece destacado para acceso rápido en la venta.</p>
                 </div>
                 <span className="relative inline-flex h-6 w-11 shrink-0 items-center">
                   <input type="checkbox" className="peer sr-only" {...register("favorito")} disabled={disabled} />
@@ -1181,10 +1186,10 @@ export const ProductFormModal = ({
                 </span>
               </label>
 
-              <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700">
+              <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200">
                 <div>
-                  <p className="font-medium text-slate-900">Producto activo</p>
-                  <p className="text-xs text-slate-500">Controla si el producto está disponible en el sistema.</p>
+                  <p className="font-medium text-slate-900 dark:text-slate-100">Producto activo</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Controla si el producto está disponible en el sistema.</p>
                 </div>
                 <span className="relative inline-flex h-6 w-11 shrink-0 items-center">
                   <input type="checkbox" className="peer sr-only" {...register("estadoActivo")} disabled={disabled} />
@@ -1195,7 +1200,10 @@ export const ProductFormModal = ({
             </div>
           </div>
 
-          <div className="sticky bottom-0 -mx-4 -mb-4 flex items-center justify-end gap-2 border-t border-slate-200 bg-white/95 px-4 py-2.5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:-mx-6 md:-mb-6 md:px-6">
+          </div>
+
+          {/* Pie de modal: Pegado 100% abajo, sólido, sin transparencias ni paneles visibles detrás */}
+          <div className="shrink-0 flex items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-3.5 dark:border-slate-800 dark:bg-slate-900 md:px-6">
             <button
               type="button"
               className="ui-btn-ghost px-4 py-2 text-xs font-semibold"

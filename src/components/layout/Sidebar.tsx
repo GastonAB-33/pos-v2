@@ -59,7 +59,7 @@ const sidebarGroups: SidebarGroup[] = [
   },
   {
     id: "catalogo",
-    label: "Catalogo",
+    label: "Inventario",
     icon: Package,
     collapsible: true,
     defaultExpanded: true,

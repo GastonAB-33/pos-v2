@@ -129,10 +129,10 @@ export const PosCheckoutPanel = ({
   checkoutTotal,
   rawCheckoutTotal,
   roundingAdjustment = 0,
-  mercadoPagoIntent,
-  mercadoPagoSettings,
-  mercadoPagoStatus,
-  isMercadoPagoLoading,
+  mercadoPagoIntent: _mercadoPagoIntent,
+  mercadoPagoSettings: _mercadoPagoSettings,
+  mercadoPagoStatus: _mercadoPagoStatus,
+  isMercadoPagoLoading: _isMercadoPagoLoading,
   canWrite,
   currentAccountSnapshot,
   hasDebtPaymentInCart: _hasDebtPaymentInCart = false,
@@ -140,11 +140,11 @@ export const PosCheckoutPanel = ({
   onCustomerChange,
   onPaymentMethodChange,
   onOpenCustomerModal,
-  onStartMercadoPago,
-  onRefreshMercadoPago,
-  onApproveMercadoPago,
-  onRejectMercadoPago,
-  onCancelMercadoPago,
+  onStartMercadoPago: _onStartMercadoPago,
+  onRefreshMercadoPago: _onRefreshMercadoPago,
+  onApproveMercadoPago: _onApproveMercadoPago,
+  onRejectMercadoPago: _onRejectMercadoPago,
+  onCancelMercadoPago: _onCancelMercadoPago,
   onClose,
   onSubmit,
 }: PosCheckoutPanelProps) => {
@@ -242,23 +242,7 @@ export const PosCheckoutPanel = ({
       });
     }
 
-    // 5. Mercado Pago
-    const mpMethod = paymentMethods.find(
-      (m) => normalizePaymentMethodCode(m.code) === "mercado_pago"
-    );
-    if (mpMethod) {
-      options.push({
-        id: `method-${mpMethod.id}`,
-        paymentMethodId: mpMethod.id,
-        code: "mercado_pago",
-        name: mpMethod.name || "Mercado Pago",
-        subtitle: mercadoPagoSettings.enabled
-          ? "Terminal Point QR / Dinámico"
-          : "Transferencia / QR Estático",
-      });
-    }
-
-    // 6. Cheque
+    // 5. Cheque
     const chequeMethod = paymentMethods.find(
       (m) => normalizePaymentMethodCode(m.code) === "cheque"
     );
@@ -288,7 +272,7 @@ export const PosCheckoutPanel = ({
     }
 
     return options;
-  }, [paymentMethods, posBankAccounts, mercadoPagoSettings.enabled]);
+  }, [paymentMethods, posBankAccounts]);
 
   // Montos asignados a cada opción de pago { [optionId]: number }
   const [allocatedAmounts, setAllocatedAmounts] = useState<Record<string, number>>({});
@@ -937,8 +921,6 @@ export const PosCheckoutPanel = ({
     submitError,
   ]);
 
-  const isMpHighlighted = paymentOptions[highlightedIndex]?.code === "mercado_pago";
-
   return (
     <section
       ref={panelRef}
@@ -974,40 +956,6 @@ export const PosCheckoutPanel = ({
           </button>
         )}
       </div>
-
-      {/* Banner de integración Mercado Pago si está seleccionado */}
-      {isMpHighlighted && mercadoPagoSettings.enabled && (
-        <div className="rounded-xl border border-sky-300 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/40 p-2.5 text-xs flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <span className="font-bold text-sky-900 dark:text-sky-200 block">Terminal Mercado Pago Point</span>
-            <span className="text-[11px] text-sky-700 dark:text-sky-300">
-              {mercadoPagoIntent ? `Estado: ${mercadoPagoIntent.status}` : "Listo para iniciar cobro en terminal"}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={onStartMercadoPago}
-              disabled={isMercadoPagoLoading || !mercadoPagoStatus.can_start_payment}
-              className="px-3 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-bold text-xs shadow-xs disabled:opacity-50"
-            >
-              {isMercadoPagoLoading ? "Iniciando..." : "Cobrar en Terminal"}
-            </button>
-            {mercadoPagoIntent && (
-              <>
-                <button type="button" onClick={onRefreshMercadoPago} className="px-2 py-1 bg-sky-100 text-sky-800 rounded-lg text-xs font-semibold">Actualizar</button>
-                <button type="button" onClick={onCancelMercadoPago} className="px-2 py-1 bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold">Cancelar</button>
-              </>
-            )}
-            {mercadoPagoStatus.mode === "mock" && (
-              <>
-                <button type="button" onClick={onApproveMercadoPago} className="px-2 py-1 bg-emerald-100 text-emerald-800 rounded-lg text-xs font-bold">Aprobar mock</button>
-                <button type="button" onClick={onRejectMercadoPago} className="px-2 py-1 bg-rose-100 text-rose-800 rounded-lg text-xs font-bold">Rechazar mock</button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* 2 PANELES SUPERIORES MINIMALISTAS (CLIC PARA COPIAR MONTO) */}
       <div className="grid grid-cols-2 gap-3">

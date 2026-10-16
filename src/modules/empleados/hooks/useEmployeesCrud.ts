@@ -25,7 +25,19 @@ export const useEmployeesCrud = (tenantId: string | null, _userId: string | null
     setIsLoading(true);
     try {
       const data = await employeesService.getAllByTenant(tenantId);
-      if (data.length === 0) {
+
+      // Regla de oro: NUNCA auto-crear empleados ficticios en comercios reales ni sobreescribir la lista.
+      // Únicamente si es el tenant demo ('tenant-demo-ar') y es la primera vez absoluta que se abre:
+      const demoSeedKey = `pos_employees_demo_seeded_${tenantId}`;
+      const isDemoTenant = tenantId === "tenant-demo-ar";
+      const hasSeededDemo =
+        typeof window !== "undefined" && window.localStorage.getItem(demoSeedKey) === "true";
+
+      if (data.length === 0 && isDemoTenant && !hasSeededDemo) {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(demoSeedKey, "true");
+        }
+
         const emp1 = await employeesService.create(tenantId, {
           full_name: "Lucas Benítez",
           document_type: "dni",
@@ -132,6 +144,10 @@ export const useEmployeesCrud = (tenantId: string | null, _userId: string | null
         observations: values.observations || null,
         is_active: true,
       });
+
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(`pos_employees_demo_seeded_${tenantId}`, "true");
+      }
 
       setFeedback({ type: "success", message: "Empleado registrado exitosamente" });
       await loadEmployees();

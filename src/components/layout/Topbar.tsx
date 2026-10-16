@@ -9,9 +9,7 @@ import { useAuthStore } from "@/features/auth/store/auth.store";
 import { publicChangelogEntries } from "@/features/changelog/public-changelog";
 import { useOffline } from "@/features/offline/hooks/useOffline";
 import { usePwa } from "@/features/pwa/hooks/usePwa";
-import { supportCenterStorage, type SupportTicket } from "@/features/support/support-center.storage";
 import { SupportReportModal } from "@/features/support/components/SupportReportModal";
-import { isSupportOperator } from "@/features/support/support-operator";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { QuickPriceGlobalModal } from "@/modules/productos/components/QuickPriceGlobalModal";
 import { authService } from "@/services/auth.service";
@@ -74,7 +72,7 @@ const routeLabels: Array<{ path: string; label: string }> = [
   { path: routePaths.usuarios, label: "Usuarios" },
   { path: routePaths.configuracion, label: "Configuracion" },
   { path: routePaths.configuracionAgenda, label: "Config. Agenda" },
-  { path: routePaths.configuracionCatalogo, label: "Config. Catalogo" },
+  { path: routePaths.configuracionCatalogo, label: "Config. Inventario" },
   { path: routePaths.configuracionAnalisis, label: "Config. Analisis" },
   { path: routePaths.configuracionSistema, label: "Config. Sistema" },
   { path: routePaths.altaComercio, label: "Alta de comercio" },
@@ -177,7 +175,6 @@ export const Topbar = () => {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [presenceMap, setPresenceMap] = useState<PresenceMap>({});
-  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
   const [isQuickPriceModalOpen, setIsQuickPriceModalOpen] = useState(false);
 
@@ -219,7 +216,6 @@ export const Topbar = () => {
 
   const tenantName = tenant?.tradeName ?? "Sin comercio";
   const currentUserId = user?.id ?? "";
-  const isSupportProfile = isSupportOperator(user);
   const currentUserLabel = getDisplayName({
     fullName: user?.fullName,
     username: user?.username,
@@ -270,22 +266,7 @@ export const Topbar = () => {
     ).length;
   }, [chatMessages, currentUserId]);
 
-  const openSupportTickets = useMemo(
-    () =>
-      supportTickets.filter(
-        (ticket) => ticket.requesterUserId === currentUserId && ticket.status !== "cerrada"
-      ),
-    [currentUserId, supportTickets]
-  );
-  const supportInboxCount = useMemo(
-    () => supportTickets.filter((ticket) => ticket.status !== "cerrada").length,
-    [supportTickets]
-  );
-  const unreadSupportCount = useMemo(
-    () => (tenantId && currentUserId ? supportCenterStorage.getUnreadCountForUser(tenantId, currentUserId) : 0),
-    [activePanel, currentUserId, supportTickets, tenantId]
-  );
-  const notificationCount = lowStockProducts.length + openSupportTickets.length;
+  const notificationCount = lowStockProducts.length;
 
   const chatRecipient = useMemo(
     () => usersForAssignments.find((item) => item.id === chatRecipientId) ?? null,
@@ -309,7 +290,6 @@ export const Topbar = () => {
       setTasks([]);
       setChatMessages([]);
       setPresenceMap({});
-      setSupportTickets([]);
       return;
     }
 
@@ -321,7 +301,6 @@ export const Topbar = () => {
     setTasks(taskRows.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     setChatMessages(messageRows);
     setPresenceMap(readPresenceMap());
-    setSupportTickets(supportCenterStorage.getByTenant(tenantId));
   }, [tenantId]);
 
   useEffect(() => {
@@ -408,9 +387,7 @@ export const Topbar = () => {
       if (
         event.key === storageKeys.topbarTasks ||
         event.key === storageKeys.topbarChatMessages ||
-        event.key === storageKeys.topbarPresence ||
-        event.key === storageKeys.supportTickets ||
-        event.key === storageKeys.supportSeenByUser
+        event.key === storageKeys.topbarPresence
       ) {
         refreshTenantStreams();
       }
@@ -471,10 +448,6 @@ export const Topbar = () => {
 
   const togglePanel = (panel: TopbarPanel) => {
     setActivePanel((prev) => (prev === panel ? null : panel));
-
-    if (panel === "notifications" && tenantId && currentUserId) {
-      supportCenterStorage.markSeenForUser(tenantId, currentUserId);
-    }
   };
 
   const createTask = () => {
@@ -964,116 +937,62 @@ export const Topbar = () => {
 
       {activePanel === "notifications" ? (
         <div
-          className="ui-card fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[460px] space-y-3 shadow-2xl"
+          className="ui-card fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[420px] space-y-3 shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-2.5">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold text-slate-900">Notificaciones</p>
-              <span className="ui-badge ui-badge--info">Total: {notificationCount}</span>
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100">Alertas de Stock</p>
+              <span className="ui-badge ui-badge--warn font-mono font-bold">{lowStockProducts.length}</span>
             </div>
             <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => setActivePanel(null)}>
               Cerrar
             </button>
           </div>
 
-          <section className="space-y-2 rounded-lg border border-slate-200 p-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-900">Alertas de stock</p>
-              <span className="ui-badge ui-badge--warn">{lowStockProducts.length}</span>
-            </div>
-
+          <section className="space-y-2.5">
             {lowStockProducts.length === 0 ? (
-              <p className="text-xs text-slate-500">Sin alertas de stock por el momento.</p>
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 p-4 text-center">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Sin alertas de stock. Todos los productos tienen stock suficiente.
+                </p>
+              </div>
             ) : (
-              <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
+              <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
                 {lowStockProducts.map((product) => (
-                  <div key={product.id} className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs">
-                    <p className="font-semibold text-slate-900">{product.name}</p>
-                    <p className="text-slate-700">
-                      Stock: {product.stock_current}
-                      {typeof product.stock_min === "number" ? ` · Minimo: ${product.stock_min}` : ""}
-                    </p>
+                  <div
+                    key={product.id}
+                    className="rounded-xl border border-amber-300 dark:border-amber-600/70 bg-amber-50 dark:bg-amber-950/40 p-2.5 text-xs transition"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-bold text-slate-900 dark:text-slate-100 truncate">{product.name}</p>
+                      <span className="font-mono font-black text-rose-600 dark:text-rose-400 shrink-0">
+                        Stock: {product.stock_current}
+                      </span>
+                    </div>
+                    {typeof product.stock_min === "number" ? (
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
+                        Mínimo sugerido: {product.stock_min}
+                      </p>
+                    ) : null}
                   </div>
                 ))}
               </div>
             )}
 
-            <div className="flex justify-end">
+            <div className="flex justify-end pt-1">
               <button
                 type="button"
-                className="ui-btn-ghost text-xs"
+                className="ui-btn-primary text-xs"
                 onClick={() => {
                   navigate(routePaths.stock);
                   setActivePanel(null);
                 }}
               >
-                Ver modulo Stock
+                Ver módulo Stock
               </button>
             </div>
           </section>
-
-          <section className="space-y-2 rounded-lg border border-slate-200 p-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-900">Consultas abiertas</p>
-              <span className="ui-badge ui-badge--info">{openSupportTickets.length}</span>
-            </div>
-            {unreadSupportCount > 0 ? (
-              <p className="text-xs text-emerald-700">Tienes {unreadSupportCount} respuesta(s) sin leer en soporte.</p>
-            ) : null}
-
-            {openSupportTickets.length === 0 ? (
-              <p className="text-xs text-slate-500">No tienes consultas abiertas actualmente.</p>
-            ) : (
-              <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
-                {openSupportTickets.map((ticket) => (
-                  <div key={ticket.id} className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
-                    <p className="font-semibold text-slate-900">{ticket.subject}</p>
-                    <p className="text-slate-500">
-                      {ticket.type === "falla" ? "Reporte de falla" : "Sugerencia"} · Estado: {ticket.status}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="flex justify-end">
-              <button
-                type="button"
-                className="ui-btn-primary text-xs"
-                onClick={() => {
-                  navigate(routePaths.misConsultas);
-                  setActivePanel(null);
-                }}
-              >
-                Ir a Mis consultas
-              </button>
-            </div>
-          </section>
-
-          {isSupportProfile ? (
-            <section className="space-y-2 rounded-lg border border-slate-200 p-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-slate-900">Bandeja de soporte</p>
-                <span className="ui-badge ui-badge--warn">{supportInboxCount}</span>
-              </div>
-              <p className="text-xs text-slate-500">
-                Vista global para responder consultas de usuarios desde el sistema.
-              </p>
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  className="ui-btn-primary text-xs"
-                  onClick={() => {
-                    navigate(routePaths.centroSoporte);
-                    setActivePanel(null);
-                  }}
-                >
-                  Ir a Centro soporte
-                </button>
-              </div>
-            </section>
-          ) : null}
         </div>
       ) : null}
 
