@@ -3110,7 +3110,6 @@ export const usePosSale = (tenantId: string | null) => {
             );
             return Promise.all([itemPromise, promoStockPromise]);
           }
-
           const stockPromise = (async () => {
             try {
               return await stockService.create(tenantId, {
