@@ -8,6 +8,8 @@ export const openCashSchema = z.object({
 export const closeCashSchema = z.object({
   realAmount: z.coerce.number().min(0, "El monto real no puede ser negativo"),
   notes: z.string().max(240, "Maximo 240 caracteres").optional().or(z.literal("")),
+  billCounts: z.record(z.coerce.number(), z.number()).optional(),
+  coinsAmount: z.number().optional(),
 });
 
 export const cashMovementSchema = z.object({

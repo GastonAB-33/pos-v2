@@ -84,6 +84,8 @@ const createDefaultCashSettings = (): CashSettings => ({
   default_opening_amount: 0,
   allow_manual_movements: true,
   require_notes_on_manual_movements: false,
+  blind_cash_closing: false,
+  cash_reconciliation_mode: "cash_only",
 });
 
 const createDefaultArcaSettings = (): ArcaSettings => ({
@@ -184,6 +186,7 @@ const normalizeTenantSettings = (input: TenantSettings): TenantSettings => ({
     ...createDefaultPosSettings(),
     ...(input.pos ?? {}),
     default_customer_id: null,
+    default_payment_method_id: input.pos?.default_payment_method_id ?? null,
     cart_behavior: "merge_same_product",
     barcode_scan_quantity: 1,
     allow_sale_without_customer: true,

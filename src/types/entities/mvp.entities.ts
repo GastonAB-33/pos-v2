@@ -504,11 +504,15 @@ export interface StockSettings {
   allow_negative_stock: boolean;
 }
 
+export type CashReconciliationMode = "cash_only" | "full";
+
 export interface CashSettings {
   require_open_session_for_sale: boolean;
   default_opening_amount: number;
   allow_manual_movements: boolean;
   require_notes_on_manual_movements: boolean;
+  blind_cash_closing?: boolean;
+  cash_reconciliation_mode?: CashReconciliationMode;
 }
 
 export interface CustomerRequiredFieldsSettings {
@@ -720,6 +724,8 @@ export interface CashSession extends TenantScopedEntity {
   expected_closing_amount: number | null;
   closing_difference: number | null;
   notes: string | null;
+  closing_bill_counts?: Record<string, number> | null;
+  closing_coins_amount?: number | null;
 }
 
 export type CashMovementType = "income" | "expense" | "sale_payment" | "adjustment";

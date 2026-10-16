@@ -205,7 +205,6 @@ export const ProductsPage = () => {
             if (!ok) return;
             void products.deleteSelected();
           }}
-          onOpenQuickPriceCheck={() => setQuickPriceOpen(true)}
           onSelectAllFiltered={() => products.toggleSelectAllVisible(true)}
           onClearSelection={() => products.setSelectedIds([])}
       />

@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { useUiStore } from "@/store/ui.store";
+import { QuickPriceGlobalModal } from "@/modules/productos/components/QuickPriceGlobalModal";
 import type { Product } from "@/types/entities";
 import type {
   PosCartItem,
@@ -93,6 +94,7 @@ export interface PosSmartViewProps {
   onRefreshCatalog: () => void;
   onOpenReceipts: () => void;
   onOpenQuickProduct: () => void;
+  onOpenQuickPrice?: () => void;
 }
 
 export const PosSmartView = ({
@@ -136,9 +138,20 @@ export const PosSmartView = ({
   onRefreshCatalog,
   onOpenReceipts,
   onOpenQuickProduct,
+  onOpenQuickPrice,
 }: PosSmartViewProps) => {
   const theme = useUiStore((state) => state.theme);
   const cycleTheme = useUiStore((state) => state.cycleTheme);
+
+  const [isQuickPriceModalOpen, setIsQuickPriceModalOpen] = useState(false);
+
+  const handleOpenQuickPrice = () => {
+    if (onOpenQuickPrice) {
+      onOpenQuickPrice();
+    } else {
+      setIsQuickPriceModalOpen(true);
+    }
+  };
 
   const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
 
@@ -369,6 +382,12 @@ export const PosSmartView = ({
                         <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
                           {prod.name}
                         </p>
+                        {prod.id.startsWith("promo-") || prod.category === "Promociones" ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800/60">
+                            <Sparkles size={10} className="shrink-0" />
+                            <span>PROMO</span>
+                          </span>
+                        ) : null}
                         {prod.sale_mode === "weight" && (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60">
                             <Scale size={10} className="shrink-0" />
@@ -377,7 +396,10 @@ export const PosSmartView = ({
                         )}
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        {prod.category} {barcode ? `| Barcode: ${barcode}` : ""}
+                        {prod.id.startsWith("promo-")
+                          ? `Combo promocional • Disp: ${prod.stock_current} u.`
+                          : prod.category}{" "}
+                        {barcode ? `| Barcode: ${barcode}` : ""}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -507,6 +529,12 @@ export const PosSmartView = ({
                           Cobro Cta. Cte.
                         </span>
                       ) : null}
+                      {"is_promo_item" in item && item.is_promo_item ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-purple-100 dark:bg-purple-950/60 px-1.5 py-0.5 text-[10px] font-bold text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800/60">
+                          <Sparkles size={10} />
+                          PROMO
+                        </span>
+                      ) : null}
                       {"manual_discount" in item && (item as PosCartItemComputed).manual_discount ? (
                         <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/60">
                           <Percent size={10} />
@@ -531,9 +559,19 @@ export const PosSmartView = ({
                         <span>Cancelación de saldo pendiente</span>
                       ) : (
                         <>
+                          {"is_promo_item" in item && item.is_promo_item && item.base_unit_price > item.unit_price ? (
+                            <span className="line-through text-slate-400 dark:text-slate-500 text-[10px] mr-0.5">
+                              {currency.format(item.base_unit_price)}
+                            </span>
+                          ) : null}
                           <span className="font-medium text-slate-600 dark:text-slate-300">
                             {currency.format(item.unit_price)} / {item.sale_mode === "weight" ? "kg" : "u."}
                           </span>
+                          {"is_promo_item" in item && item.is_promo_item && item.base_unit_price > item.unit_price ? (
+                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.2 rounded border border-emerald-200 dark:border-emerald-800">
+                              Ahorro: {currency.format((item.base_unit_price - item.unit_price) * item.quantity)}
+                            </span>
+                          ) : null}
                           {item.category ? (
                             <>
                               <span className="text-slate-300 dark:text-slate-700">•</span>
@@ -543,6 +581,21 @@ export const PosSmartView = ({
                         </>
                       )}
                     </div>
+
+                    {/* Detalle de productos incluidos en el pack / combo de la promoción */}
+                    {"is_promo_item" in item && item.is_promo_item && item.promo_items?.length ? (
+                      <div className="flex items-center gap-1.5 mt-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 flex-wrap">
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">📦 Incluye:</span>
+                        {item.promo_items.map((sub) => (
+                          <span
+                            key={sub.product_id}
+                            className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-200/80 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-[10px] font-bold border border-slate-300/60 dark:border-slate-700"
+                          >
+                            {sub.quantity}x {sub.name}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
 
                     {/* Botón rápido de estado de envase retornable */}
                     {item.returnable_config?.enabled && onCycleReturnableStatus ? (
@@ -777,14 +830,14 @@ export const PosSmartView = ({
       <aside className="lg:col-span-4 flex flex-col gap-3.5">
         {/* Panel Superior Derecho: Botones y funciones */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-3.5 sm:p-4 space-y-3 shadow-sm">
-          {/* Fila 1: Operador y Tema */}
+          {/* Fila 1: Operador, Consulta rápida y Tema */}
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800/90 bg-slate-50 dark:bg-slate-900/80 px-2.5 py-1.5 h-8">
+            <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800/90 bg-slate-50 dark:bg-slate-900/80 px-2.5 py-1.5 h-8 shrink-0">
               <span className="flex h-5 w-5 items-center justify-center rounded-md bg-fuchsia-600 text-[10px] font-bold text-white shadow-sm shrink-0">
                 {operatorInitials}
               </span>
               <div className="leading-tight flex items-baseline gap-1.5 min-w-0">
-                <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate max-w-[110px]">
+                <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate max-w-[105px]">
                   {userName}
                 </p>
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 shrink-0">Operador</span>
@@ -793,8 +846,18 @@ export const PosSmartView = ({
 
             <button
               type="button"
+              onClick={handleOpenQuickPrice}
+              className="h-8 flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/70 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 px-2 text-xs font-semibold text-blue-700 dark:text-blue-300 transition shadow-2xs whitespace-nowrap min-w-0 cursor-pointer"
+              title="Consulta rápida de precios y stock (escanear o buscar)"
+            >
+              <Search size={14} className="text-blue-600 dark:text-sky-400 shrink-0" />
+              <span className="truncate">Consulta rápida</span>
+            </button>
+
+            <button
+              type="button"
               onClick={cycleTheme}
-              className="h-8 flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-2.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition shadow-2xs whitespace-nowrap shrink-0"
+              className="h-8 flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-2.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition shadow-2xs whitespace-nowrap shrink-0 cursor-pointer"
               title={`Tema actual: ${theme === "midnight" ? "Azul Medianoche" : theme === "dark" ? "Oscuro" : "Claro"}. Clic para cambiar.`}
             >
               {theme === "midnight" ? (
@@ -1063,6 +1126,16 @@ export const PosSmartView = ({
           </button>
         </div>
       </aside>
+
+      {isQuickPriceModalOpen ? (
+        <QuickPriceGlobalModal
+          open={isQuickPriceModalOpen}
+          onClose={() => {
+            setIsQuickPriceModalOpen(false);
+            onRefreshCatalog();
+          }}
+        />
+      ) : null}
     </div>
   );
 };

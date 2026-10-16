@@ -1948,6 +1948,7 @@ export const PosPage = () => {
               installmentPlans={installmentPlans}
               selectedCustomerId={selectedCustomerId}
               selectedPaymentMethodId={selectedPaymentMethodId}
+              defaultPaymentMethodId={getEffectiveDefaultPaymentMethodId()}
               isOnline={isOnline}
               checkoutTotal={checkoutSummary.total}
               rawCheckoutTotal={checkoutSummary.rawTotal}

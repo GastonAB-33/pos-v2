@@ -53,7 +53,7 @@ export const appModuleLabels: Record<AppModule, string> = {
   configuracion: "Configuracion",
   configuracion_agenda: "Config. Agenda",
   empleados: "Empleados",
-  configuracion_catalogo: "Config. Catalogo",
+  configuracion_catalogo: "Config. Inventario",
   configuracion_analisis: "Config. Analisis",
   configuracion_sistema: "Config. Sistema",
   configuracion_contable: "Config. Contable",
