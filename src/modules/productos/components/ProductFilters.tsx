@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Camera, Download, Ellipsis, FilterX, Plus, RefreshCw, Search, SlidersHorizontal, Tag, Upload, X } from "lucide-react";
+import { Camera, Download, Ellipsis, FilterX, Plus, RefreshCw, Search, SlidersHorizontal, Upload, X } from "lucide-react";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { IconButton } from "@/components/ui/IconButton";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
@@ -23,7 +23,6 @@ interface ProductFiltersProps {
   onOpenCreate: () => void;
   onOpenImport: () => void;
   onExportXlsx: () => void;
-  onOpenQuickPriceCheck?: () => void;
   onDeleteSelected: () => void;
   onSelectAllFiltered: () => void;
   onClearSelection: () => void;
@@ -45,7 +44,6 @@ export const ProductFilters = ({
   onOpenCreate,
   onOpenImport,
   onExportXlsx,
-  onOpenQuickPriceCheck,
   onDeleteSelected,
   onSelectAllFiltered,
   onClearSelection,
@@ -64,8 +62,8 @@ export const ProductFilters = ({
     <div className="workspace-toolbar space-y-3">
       <header className="workspace-toolbar__header">
         <div>
-          <p className="ui-section-label">Catalogo</p>
-          <h1 className="text-2xl font-semibold text-slate-900">Productos</h1>
+          <p className="ui-section-label">Inventario</p>
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Productos</h1>
           <p className="mt-1 text-sm text-slate-600">Busca, edita e incorpora productos al inventario.</p>
         </div>
 
@@ -111,37 +109,12 @@ export const ProductFilters = ({
                     onClick={(e) => {
                       e.stopPropagation();
                       setActionsOpen(false);
-                      onReload();
-                    }}
-                    disabled={loading}
-                  >
-                    <RefreshCw aria-hidden="true" className="h-4 w-4" />
-                    Recargar catalogo
-                  </button>
-                  <button
-                    type="button"
-                    className="ui-popover-action"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActionsOpen(false);
                       onOpenImport();
                     }}
                     disabled={!canWrite}
                   >
                     <Upload aria-hidden="true" className="h-4 w-4" />
                     Importar XLSX
-                  </button>
-                  <button
-                    type="button"
-                    className="ui-popover-action"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActionsOpen(false);
-                      onOpenQuickPriceCheck?.();
-                    }}
-                  >
-                    <Tag aria-hidden="true" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    Consulta rápida
                   </button>
                   <button
                     type="button"
