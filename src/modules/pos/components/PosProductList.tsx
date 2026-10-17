@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PaginationControls } from "@/components/ui/PaginationControls";
 import { usePagination } from "@/hooks/usePagination";
 import { Plus, ShoppingCart, X } from "lucide-react";
@@ -30,6 +30,7 @@ interface PosProductListProps {
   onCloseSaleTab?: (tabId: string) => void;
   disabled?: boolean;
   canWrite: boolean;
+  searchResetToken?: number;
   onAddProduct: (product: Product, quantity: number) => Promise<boolean | void> | boolean | void;
 }
 
@@ -58,6 +59,7 @@ export const PosProductList = ({
   onCloseSaleTab,
   disabled,
   canWrite,
+  searchResetToken,
   onAddProduct,
 }: PosProductListProps) => {
   const posWindowMode = useUiStore((state) => state.posWindowMode);
@@ -67,6 +69,12 @@ export const PosProductList = ({
   const [searchScope, setSearchScope] = useState<ProductSearchScope>("all");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [weightInputs, setWeightInputs] = useState<Record<string, string>>({});
+
+  // Limpiar búsquedas al finalizar venta o cambio de señal externa
+  useEffect(() => {
+    setFavoritesSearch("");
+    setProductsSearch("");
+  }, [searchResetToken]);
   const categories = useMemo(
     () =>
       Array.from(new Set(products.map((product) => product.category).filter(Boolean))).slice(0, 5),
@@ -144,6 +152,8 @@ export const PosProductList = ({
     if (disabled || !canWrite) return;
     const quantity = product.sale_mode === "weight" ? resolveWeightQuantity(product.id) : 1;
     await onAddProduct(product, quantity);
+    setFavoritesSearch("");
+    setProductsSearch("");
   };
 
   const renderAddProductAction = (product: Product, isFavoriteCard = false) => {
@@ -158,9 +168,11 @@ export const PosProductList = ({
             if (disabled || !canWrite) return;
             const qty = product.sale_mode === "weight" ? (weightQty > 0 ? weightQty : 1) : 1;
             void onAddProduct(product, qty);
+            setFavoritesSearch("");
+            setProductsSearch("");
           }}
           disabled={disabled || !canWrite}
-          className="ui-btn-primary w-full justify-center py-2 text-xs font-semibold shadow-sm"
+          className="ui-btn-primary w-full justify-center py-2 text-xs font-semibold shadow-sm cursor-pointer"
         >
           Agregar
         </button>
@@ -204,9 +216,11 @@ export const PosProductList = ({
           onClick={() => {
             if (disabled || !canWrite) return;
             void onAddProduct(product, product.sale_mode === "weight" ? weightQty : 1);
+            setFavoritesSearch("");
+            setProductsSearch("");
           }}
           disabled={disabled || !canWrite}
-          className="rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          className="rounded-xl bg-brand-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 cursor-pointer"
         >
           {product.sale_mode === "weight" ? "Agregar" : "+"}
         </button>
@@ -401,7 +415,12 @@ export const PosProductList = ({
               {paginatedFavorites.pageItems.map((product) => (
                 <article
                   key={`fav-${product.id}`}
-                  className="flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-3 shadow-sm transition hover:border-blue-400 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
+                  className="flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white p-3 shadow-sm transition hover:border-blue-400 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 cursor-pointer"
+                  onClick={(e) => {
+                    if (disabled || !canWrite) return;
+                    if ((e.target as HTMLElement).closest("button, input")) return;
+                    void quickAddProduct(product);
+                  }}
                 >
                   {/* Imagen y badges */}
                   <div className="relative mb-2.5 flex h-28 w-full items-center justify-center overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800">
@@ -510,7 +529,15 @@ export const PosProductList = ({
               const barcode = primaryBarcodes[product.id] ?? null;
 
               return (
-                <article key={product.id} className="pos-product-row">
+                <article
+                  key={product.id}
+                  className="pos-product-row cursor-pointer hover:border-brand-500/50 transition-colors"
+                  onClick={(e) => {
+                    if (disabled || !canWrite) return;
+                    if ((e.target as HTMLElement).closest("button, input")) return;
+                    void quickAddProduct(product);
+                  }}
+                >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">{product.name}</p>

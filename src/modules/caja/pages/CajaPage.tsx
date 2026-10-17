@@ -127,7 +127,41 @@ export const CajaPage = () => {
     }
   };
 
-  const isBlindModeActive = Boolean(cashSettings.blind_cash_closing && !revealBlindAmounts);
+  // Permiso para ver / desenmascarar montos de caja (solo administradores, dueños, supervisores o con permisos privilegiados)
+  const canRevealBlindCash = useMemo(() => {
+    if (!user) return false;
+
+    const role = (user.role || "").toLowerCase();
+    const isPrivilegedRole =
+      role === "admin" ||
+      role === "owner" ||
+      role === "manager" ||
+      role === "supervisor" ||
+      role === "encargado" ||
+      role === "superadmin" ||
+      role === "platform_admin";
+
+    const profileName = (user.permissionProfileName || "").toLowerCase();
+    const isPrivilegedProfile =
+      profileName.includes("admin") ||
+      profileName.includes("supervisor") ||
+      profileName.includes("encargad") ||
+      profileName.includes("gerente") ||
+      profileName.includes("dueño");
+
+    const hasPrivilegedPermissions =
+      canRead("caja_general") ||
+      canRead("auditoria") ||
+      canRead("reportes") ||
+      canWrite("configuracion") ||
+      canRead("usuarios");
+
+    return isPrivilegedRole || isPrivilegedProfile || hasPrivilegedPermissions;
+  }, [user, canRead, canWrite]);
+
+  const isBlindModeActive = Boolean(
+    cashSettings.blind_cash_closing && (!canRevealBlindCash || !revealBlindAmounts)
+  );
 
   const dailySession = useMemo(
     () => currentSession ?? sessionHistory[0] ?? null,
@@ -418,14 +452,14 @@ export const CajaPage = () => {
               </button>
             )}
 
-            {cashSettings.blind_cash_closing && canReadCaja && (
+            {cashSettings.blind_cash_closing && canRevealBlindCash && (
               <button
                 type="button"
                 onClick={() => setRevealBlindAmounts((prev) => !prev)}
                 title={
                   revealBlindAmounts
                     ? "Ocultar montos (Caja a ciegas activa)"
-                    : "Revelar montos protegidos (Administrador)"
+                    : "Revelar montos protegidos (Supervisor / Administrador)"
                 }
                 className="h-10 inline-flex items-center gap-1.5 px-3 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 border border-slate-300 dark:border-slate-700 rounded-xl transition-colors shadow-2xs cursor-pointer"
               >
@@ -764,24 +798,30 @@ export const CajaPage = () => {
                 <button
                   type="button"
                   onClick={() => setManualMovementTab("income")}
-                  className={`h-7 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                  className={`h-7 text-xs font-semibold rounded-md transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                     manualMovementTab === "income"
                       ? "bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-xs"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                   }`}
                 >
-                  + Ingreso
+                  <span>+ Ingreso</span>
+                  <kbd className="hidden sm:inline-block text-[10px] px-1 py-0.2 rounded font-mono font-medium opacity-60 border border-current">
+                    F2
+                  </kbd>
                 </button>
                 <button
                   type="button"
                   onClick={() => setManualMovementTab("expense")}
-                  className={`h-7 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                  className={`h-7 text-xs font-semibold rounded-md transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
                     manualMovementTab === "expense"
                       ? "bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-400 shadow-xs"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                   }`}
                 >
-                  - Retiro / Egreso
+                  <span>- Retiro / Egreso</span>
+                  <kbd className="hidden sm:inline-block text-[10px] px-1 py-0.2 rounded font-mono font-medium opacity-60 border border-current">
+                    F2
+                  </kbd>
                 </button>
               </div>
             </div>
@@ -792,6 +832,7 @@ export const CajaPage = () => {
                 <CashMovementForm
                   mode="income"
                   paymentMethods={paymentMethods}
+                  bankAccounts={bankAccounts}
                   canWrite={canWriteCaja}
                   disabled={isSubmitting}
                   onSubmit={async (values) => {
@@ -799,10 +840,14 @@ export const CajaPage = () => {
                     setIsManualMovementModalOpen(false);
                   }}
                   onSuccess={() => setIsManualMovementModalOpen(false)}
+                  onCancel={() => setIsManualMovementModalOpen(false)}
+                  onToggleMode={(next) => setManualMovementTab(next)}
                 />
               ) : (
                 <CashMovementForm
                   mode="expense"
+                  paymentMethods={paymentMethods}
+                  bankAccounts={bankAccounts}
                   canWrite={canWriteCaja}
                   disabled={isSubmitting}
                   onSubmit={async (values) => {
@@ -810,6 +855,8 @@ export const CajaPage = () => {
                     setIsManualMovementModalOpen(false);
                   }}
                   onSuccess={() => setIsManualMovementModalOpen(false)}
+                  onCancel={() => setIsManualMovementModalOpen(false)}
+                  onToggleMode={(next) => setManualMovementTab(next)}
                 />
               )}
             </div>

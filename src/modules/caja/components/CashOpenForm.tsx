@@ -212,24 +212,24 @@ export const CashOpenForm = ({
         />
       </div>
 
-      <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+      <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
         {onCancel && (
           <button
             type="button"
             onClick={onCancel}
             disabled={disabled}
-            className="h-8.5 px-3.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-xl transition-colors cursor-pointer"
+            className="h-10 sm:h-11 px-5 text-sm font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl transition-all shadow-xs disabled:opacity-50 cursor-pointer"
           >
             Cancelar
           </button>
         )}
         <button
           type="submit"
-          className="h-8.5 inline-flex items-center gap-1.5 px-4 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-500 rounded-xl transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
+          className="h-10 sm:h-11 inline-flex items-center justify-center gap-2 px-6 text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 dark:bg-blue-600 dark:hover:bg-blue-500 rounded-xl transition-all shadow-md shadow-blue-600/20 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           disabled={disabled || !canWrite}
         >
-          <LockOpen className="h-3.5 w-3.5" />
-          Confirmar y abrir caja
+          <LockOpen className="h-4 w-4 shrink-0" />
+          <span>Confirmar y abrir caja</span>
         </button>
       </div>
     </form>
