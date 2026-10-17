@@ -207,7 +207,7 @@ export const useUsersModule = (tenantId: string | null) => {
         modules: generalModules.map((module) => ({
           module,
           label: appModuleLabels[module],
-          isSubmodule: false,
+          isSubmodule: module === "compras_margen",
         })),
       },
       {

@@ -77,6 +77,7 @@ const createDefaultStockSettings = (): StockSettings => ({
   global_low_stock_threshold: 5,
   allow_manual_adjustments: true,
   allow_negative_stock: false,
+  allow_purchases_profit_margin_adjustment: true,
 });
 
 const createDefaultCashSettings = (): CashSettings => ({

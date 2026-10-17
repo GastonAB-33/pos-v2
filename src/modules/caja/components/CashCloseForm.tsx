@@ -14,7 +14,7 @@ import {
   closeCashSchema,
   type CloseCashValues,
 } from "@/modules/caja/schemas/cash.schemas";
-import type { CashCloseResult } from "@/modules/caja/hooks/useCashModule";
+import { parseCloseSnapshot, type CashCloseResult } from "@/modules/caja/hooks/useCashModule";
 import {
   handleNumericInputFocus,
   handleNumericInputBlur,
@@ -29,6 +29,8 @@ interface CashCloseFormProps {
   expectedFullBalance?: number;
   reconciliationMode?: "cash_only" | "full";
   blindMode?: boolean;
+  initialNotes?: string | null;
+  onUpdateNotes?: (sessionId: string, notes: string) => Promise<boolean>;
   onSubmit: (values: CloseCashValues) => Promise<CashCloseResult | null | void>;
   onCancel?: () => void;
 }
@@ -49,6 +51,8 @@ export const CashCloseForm = ({
   expectedFullBalance,
   reconciliationMode = "cash_only",
   blindMode = false,
+  initialNotes,
+  onUpdateNotes,
   onSubmit,
   onCancel,
 }: CashCloseFormProps) => {
@@ -68,6 +72,20 @@ export const CashCloseForm = ({
   const [closeResult, setCloseResult] = useState<CashCloseResult | null>(null);
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
 
+  const defaultCleanNotes = useMemo(
+    () => (initialNotes ? parseCloseSnapshot(initialNotes).cleanNotes : ""),
+    [initialNotes]
+  );
+  const [postCloseNotes, setPostCloseNotes] = useState<string>(defaultCleanNotes);
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [notesSavedMessage, setNotesSavedMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialNotes) {
+      setPostCloseNotes(parseCloseSnapshot(initialNotes).cleanNotes);
+    }
+  }, [initialNotes]);
+
   // Array de refs para navegación ágil por teclado (ArrowUp / ArrowDown / Enter)
   // Indices 0..6: Denominaciones de billetes
   // Index 7: Monedas
@@ -84,7 +102,7 @@ export const CashCloseForm = ({
     resolver: zodResolver(closeCashSchema),
     defaultValues: {
       realAmount: blindMode ? 0 : expectedBalance,
-      notes: "",
+      notes: defaultCleanNotes,
     },
   });
 
@@ -186,6 +204,7 @@ export const CashCloseForm = ({
 
   const submit = async (values: CloseCashValues) => {
     const finalAmount = activeTab === "bills" ? calculatedBillsTotal : values.realAmount;
+    setPostCloseNotes(values.notes?.trim() || "");
     const result = await onSubmit({
       ...values,
       realAmount: finalAmount,
@@ -195,6 +214,9 @@ export const CashCloseForm = ({
 
     if (result) {
       setCloseResult(result);
+      if (result.userNotes !== undefined) {
+        setPostCloseNotes(result.userNotes);
+      }
     } else {
       setCloseResult({
         session: null,
@@ -204,29 +226,71 @@ export const CashCloseForm = ({
         salePaymentsTotal: 0,
         cashSalesTotal: 0,
         totalIncomes: 0,
+        userNotes: values.notes?.trim() || "",
       });
     }
   };
 
-  // PANTALLA POST-CIERRE: Revelación de métricas y arqueo
+  const handleSavePostCloseNotes = async () => {
+    if (!closeResult?.session?.id || !onUpdateNotes) return;
+    setIsSavingNotes(true);
+    try {
+      const ok = await onUpdateNotes(closeResult.session.id, postCloseNotes);
+      if (ok) {
+        setNotesSavedMessage("Observación guardada correctamente");
+        setTimeout(() => setNotesSavedMessage(null), 3000);
+      }
+    } finally {
+      setIsSavingNotes(false);
+    }
+  };
+
+  // PANTALLA POST-CIERRE: Revelación de métricas, reporte de arqueo y observaciones
   if (closeResult) {
     const diff = closeResult.difference;
     return (
-      <div className="space-y-4 animate-in fade-in duration-200">
-        <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 text-center">
-          <div className="inline-flex p-2.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 mb-2">
-            <CheckCircle2 className="h-6 w-6" />
+      <div className="space-y-3.5 animate-in fade-in duration-200">
+        {/* Banner Informativo Superior: Faltante / Sobrante / Exacto */}
+        {diff < 0 ? (
+          <div className="p-4 rounded-2xl bg-rose-50/90 dark:bg-rose-950/40 border-2 border-rose-300 dark:border-rose-700/80 text-center">
+            <div className="inline-flex p-2.5 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300 mb-2">
+              <AlertCircle className="h-6 w-6" />
+            </div>
+            <h3 className="text-base font-bold text-rose-900 dark:text-rose-200">
+              Cierre registrado con FALTANTE de caja
+            </h3>
+            <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">
+              Faltó <span className="font-bold underline">{currency.format(Math.abs(diff))}</span> respecto al saldo teórico del sistema.
+            </p>
           </div>
-          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-            ¡Caja diaria cerrada exitosamente!
-          </h3>
-          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-            Se ha registrado el arqueo de cierre y el turno quedó formalmente asentado.
-          </p>
-        </div>
+        ) : diff > 0 ? (
+          <div className="p-4 rounded-2xl bg-blue-50/90 dark:bg-blue-950/40 border-2 border-blue-300 dark:border-blue-700/80 text-center">
+            <div className="inline-flex p-2.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 mb-2">
+              <TrendingUp className="h-6 w-6" />
+            </div>
+            <h3 className="text-base font-bold text-blue-900 dark:text-blue-200">
+              Cierre registrado con SOBRANTE de caja
+            </h3>
+            <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+              Sobró <span className="font-bold underline">+{currency.format(diff)}</span> de dinero a favor en el conteo físico.
+            </p>
+          </div>
+        ) : (
+          <div className="p-4 rounded-2xl bg-emerald-50/90 dark:bg-emerald-950/40 border-2 border-emerald-300 dark:border-emerald-700/80 text-center">
+            <div className="inline-flex p-2.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 mb-2">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <h3 className="text-base font-bold text-emerald-900 dark:text-emerald-200">
+              ¡Cierre de caja EXACTO!
+            </h3>
+            <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
+              El conteo físico de billetes y monedas coincide exactamente con el sistema ($0,00 de diferencia).
+            </p>
+          </div>
+        )}
 
         {/* Resumen Revelado: Ventas y Efectivo */}
-        <div className="space-y-2.5">
+        <div className="space-y-2">
           <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             Resultados de la Jornada
           </h4>
@@ -279,22 +343,22 @@ export const CashCloseForm = ({
           <div
             className={`p-3.5 rounded-xl border flex items-center justify-between ${
               diff === 0
-                ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800"
+                ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700"
                 : diff > 0
-                  ? "bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800"
-                  : "bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800"
+                  ? "bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700"
+                  : "bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-700"
             }`}
           >
             <div>
-              <span className="text-xs font-semibold block text-slate-700 dark:text-slate-200">
-                Balance del arqueo
+              <span className="text-xs font-bold block text-slate-800 dark:text-slate-100">
+                {diff === 0 ? "Balance: Cierre exacto" : diff > 0 ? "Balance: Sobrante en caja" : "Balance: Faltante en caja"}
               </span>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              <p className="text-[11px] text-slate-600 dark:text-slate-300">
                 {diff === 0
-                  ? "El efectivo coincide exactamente con el sistema."
+                  ? "El efectivo recontado coincide exactamente con el sistema."
                   : diff > 0
-                    ? "Hay un sobrante a favor en el cajón."
-                    : "Hay un faltante de efectivo respecto al teórico."}
+                    ? `Hay un excedente de ${currency.format(diff)} en el cajón físico.`
+                    : `Hay un faltante de ${currency.format(Math.abs(diff))} respecto al teórico.`}
               </p>
             </div>
             <div className="text-right">
@@ -316,11 +380,67 @@ export const CashCloseForm = ({
           </div>
         </div>
 
-        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+        {/* Observaciones o justificación de cierre / errores */}
+        <div className="space-y-2 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
+              Observaciones / Justificación de cierre
+            </label>
+            <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+              (por si hubo error, faltante o sobrante)
+            </span>
+          </div>
+          <textarea
+            value={postCloseNotes}
+            onChange={(e) => {
+              setPostCloseNotes(e.target.value);
+              setNotesSavedMessage(null);
+            }}
+            rows={2}
+            placeholder="Escribí aquí el motivo del error, faltante, sobrante o cualquier observación del cierre..."
+            className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 p-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 transition-colors"
+            disabled={isSavingNotes}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
+          />
+          <div className="flex items-center justify-between pt-0.5">
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+              {notesSavedMessage ? (
+                <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> {notesSavedMessage}
+                </span>
+              ) : (
+                "Podés modificar o asentar el motivo antes de finalizar."
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={handleSavePostCloseNotes}
+              disabled={isSavingNotes || !closeResult.session?.id}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+            >
+              {isSavingNotes ? "Guardando..." : "Guardar observación"}
+            </button>
+          </div>
+        </div>
+
+        <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex justify-end">
           <button
             type="button"
-            onClick={onCancel}
-            className="h-10 px-6 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-500 rounded-xl transition-colors cursor-pointer"
+            onClick={async () => {
+              if (
+                closeResult.session?.id &&
+                onUpdateNotes &&
+                postCloseNotes.trim() !== (closeResult.userNotes || "").trim()
+              ) {
+                await onUpdateNotes(closeResult.session.id, postCloseNotes.trim());
+              }
+              onCancel?.();
+            }}
+            className="h-10 px-6 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-500 rounded-xl transition-colors cursor-pointer shadow-sm"
           >
             Finalizar y volver a caja
           </button>

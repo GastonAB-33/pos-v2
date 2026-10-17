@@ -1450,6 +1450,28 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.stock.allow_negative_stock} onChange={(event) => updateSection("stock", { allow_negative_stock: event.target.checked })} disabled={!canWriteConfiguracion} />
                   <span>Permitir stock bajo cero</span>
                 </label>
+
+                <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 sm:col-span-2 lg:col-span-4">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 mt-0.5 rounded text-blue-600"
+                    checked={draft.stock.allow_purchases_profit_margin_adjustment ?? true}
+                    onChange={(event) =>
+                      updateSection("stock", {
+                        allow_purchases_profit_margin_adjustment: event.target.checked,
+                      })
+                    }
+                    disabled={!canWriteConfiguracion}
+                  />
+                  <div>
+                    <span className="font-semibold block text-slate-900 dark:text-slate-100">
+                      Permitir ajustar % de ganancias desde el módulo de compras a proveedores
+                    </span>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400 font-normal mt-0.5">
+                      Habilita la edición libre de márgenes de ganancia (%) y precio de venta final al cargar facturas de compra. Si se desactiva, se bloquea la modificación y se mantiene el margen del catálogo.
+                    </span>
+                  </div>
+                </label>
               </div>
             </div>
           </div>

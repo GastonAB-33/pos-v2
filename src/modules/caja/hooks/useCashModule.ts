@@ -113,6 +113,7 @@ export interface CashCloseResult {
   salePaymentsTotal: number;
   cashSalesTotal: number;
   totalIncomes: number;
+  userNotes?: string;
 }
 
 export interface CashBreakdownItem {
@@ -1236,12 +1237,46 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         salePaymentsTotal: currentSessionIncomeSummary.salePaymentsTotal,
         cashSalesTotal: currentSessionIncomeSummary.cashSalesTotal,
         totalIncomes: currentSessionIncomeSummary.totalIncomes,
+        userNotes: values.notes?.trim() || "",
       };
     } catch {
       setFeedback({ type: "error", message: "No se pudo cerrar la caja diaria" });
       return null;
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const updateSessionNotes = async (
+    sessionId: string,
+    notes: string
+  ): Promise<boolean> => {
+    if (!tenantId) return false;
+    try {
+      const existingSession =
+        sessions.find((s) => s.id === sessionId) ||
+        (await cashService.getById(tenantId, sessionId));
+      const parsed = parseCloseSnapshot(existingSession?.notes);
+      let serializedNotes: string;
+      if (parsed.snapshot) {
+        const updatedSnapshot: CashCloseSnapshot = {
+          ...parsed.snapshot,
+          userNotes: notes.trim(),
+        };
+        serializedNotes = serializeCloseSnapshot(updatedSnapshot, notes.trim());
+      } else {
+        serializedNotes = notes.trim();
+      }
+
+      await cashService.update(tenantId, sessionId, {
+        notes: serializedNotes,
+      });
+
+      await loadCashData();
+      return true;
+    } catch (err) {
+      console.error("Error al actualizar observaciones de caja:", err);
+      return false;
     }
   };
 
@@ -1519,6 +1554,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     reload: loadCashData,
     openCash,
     closeCash,
+    updateSessionNotes,
     registerIncome,
     registerExpense,
   };

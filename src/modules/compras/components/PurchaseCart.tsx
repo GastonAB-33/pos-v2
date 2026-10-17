@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Gift, Package, PackagePlus, Percent, Plus, ShoppingBag, Tag, Trash2 } from "lucide-react";
+import { ArrowRight, Gift, Lock, Package, PackagePlus, Percent, Plus, ShoppingBag, Tag, Trash2 } from "lucide-react";
 import { handleNumericInputFocus } from "@/utils/input-helpers";
 import { DualRateAmountInput, type RateAmountMode } from "@/components/ui/DualRateAmountInput";
 
@@ -35,6 +35,7 @@ interface PurchaseCartProps {
   items: PurchaseCartItemView[];
   summary: PurchaseSummary;
   canWrite: boolean;
+  canAdjustProfitMargin?: boolean;
   disabled?: boolean;
   formId?: string;
   vatPercent?: number;
@@ -75,6 +76,7 @@ export const PurchaseCart = ({
   items,
   summary,
   canWrite,
+  canAdjustProfitMargin = true,
   disabled,
   formId = "purchase-checkout-form",
   vatPercent = 0,
@@ -562,9 +564,12 @@ export const PurchaseCart = ({
 
                   {/* 5. % Ganancia */}
                   <div className="min-w-0">
-                    <label className="mb-0.5 flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-wider text-purple-700 dark:text-purple-400 truncate" title="Margen de ganancia (%)">
-                      <Percent className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400 shrink-0" />
-                      Ganancia (%)
+                    <label className="mb-0.5 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-purple-700 dark:text-purple-400 truncate" title="Margen de ganancia (%)">
+                      <span className="flex items-center gap-0.5 truncate">
+                        <Percent className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                        Ganancia (%)
+                      </span>
+                      {!canAdjustProfitMargin && <Lock className="h-2.5 w-2.5 text-slate-400 dark:text-slate-500 shrink-0 ml-1" />}
                     </label>
                     <input
                       type="number"
@@ -573,6 +578,7 @@ export const PurchaseCart = ({
                       placeholder="0"
                       value={profitDrafts[item.product_id] ?? String(item.profit_percent ?? 0)}
                       onChange={(event) => {
+                        if (!canAdjustProfitMargin) return;
                         const nextValue = event.target.value;
                         setProfitDrafts((current) => ({
                           ...current,
@@ -595,9 +601,13 @@ export const PurchaseCart = ({
                         })
                       }
                       onBlur={() => commitProfit(item)}
-                      className="w-full min-w-0 rounded-md border border-purple-300 bg-purple-50/30 px-2 py-1.5 text-xs font-bold text-purple-900 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 dark:border-purple-700/60 dark:bg-purple-950/40 dark:text-purple-200 dark:focus:border-purple-400"
-                      disabled={disabled || !canWrite}
-                      title="Margen de ganancia aplicado sobre el costo real"
+                      className={`w-full min-w-0 rounded-md border px-2 py-1.5 text-xs font-bold ${
+                        !canAdjustProfitMargin
+                          ? "border-slate-300 bg-slate-100 text-slate-400 cursor-not-allowed dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-500"
+                          : "border-purple-300 bg-purple-50/30 text-purple-900 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 dark:border-purple-700/60 dark:bg-purple-950/40 dark:text-purple-200 dark:focus:border-purple-400"
+                      }`}
+                      disabled={disabled || !canWrite || !canAdjustProfitMargin}
+                      title={!canAdjustProfitMargin ? "Ajuste de margen deshabilitado por configuración o permisos" : "Margen de ganancia aplicado sobre el costo real"}
                       autoComplete="off"
                       autoCorrect="off"
                       autoCapitalize="off"
@@ -627,8 +637,9 @@ export const PurchaseCart = ({
 
                   {/* 7. Precio final unitario: En móvil abarca las 2 columnas para no desbordar y brindar máxima claridad */}
                   <div className="col-span-2 sm:col-span-2 lg:col-span-1 min-w-0">
-                    <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-400 truncate" title={`Precio final unitario (${item.sale_mode === "weight" ? "$/kg" : "$/u"})`}>
-                      Precio final unit. ({item.sale_mode === "weight" ? "$/kg" : "$/u"})
+                    <label className="mb-0.5 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-400 truncate" title={`Precio final unitario (${item.sale_mode === "weight" ? "$/kg" : "$/u"})`}>
+                      <span className="truncate">Precio final unit. ({item.sale_mode === "weight" ? "$/kg" : "$/u"})</span>
+                      {!canAdjustProfitMargin && <Lock className="h-2.5 w-2.5 text-slate-400 dark:text-slate-500 shrink-0 ml-1" />}
                     </label>
                     <input
                       type="number"
@@ -636,6 +647,7 @@ export const PurchaseCart = ({
                       min="0"
                       value={salePriceDrafts[item.product_id] ?? String(item.new_sale_price || 0)}
                       onChange={(event) => {
+                        if (!canAdjustProfitMargin) return;
                         const nextValue = event.target.value;
                         setSalePriceDrafts((current) => ({
                           ...current,
@@ -658,9 +670,13 @@ export const PurchaseCart = ({
                         })
                       }
                       onBlur={() => commitSalePrice(item)}
-                      className="w-full min-w-0 rounded-md border border-blue-300 bg-blue-50/40 px-2 py-1.5 text-xs font-bold text-blue-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-blue-700/60 dark:bg-blue-950/40 dark:text-blue-200 dark:focus:border-blue-400"
-                      disabled={disabled || !canWrite}
-                      title="Precio de venta final al público (aplica ganancia e IVA sobre el costo real)"
+                      className={`w-full min-w-0 rounded-md border px-2 py-1.5 text-xs font-bold ${
+                        !canAdjustProfitMargin
+                          ? "border-slate-300 bg-slate-100 text-slate-400 cursor-not-allowed dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-500"
+                          : "border-blue-300 bg-blue-50/40 text-blue-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-blue-700/60 dark:bg-blue-950/40 dark:text-blue-200 dark:focus:border-blue-400"
+                      }`}
+                      disabled={disabled || !canWrite || !canAdjustProfitMargin}
+                      title={!canAdjustProfitMargin ? "Ajuste de precio/margen deshabilitado por configuración o permisos" : "Precio de venta final al público (aplica ganancia e IVA sobre el costo real)"}
                       autoComplete="off"
                       autoCorrect="off"
                       autoCapitalize="off"

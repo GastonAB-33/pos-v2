@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
 import { ArrowLeft, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { settingsService } from "@/services/settings.service";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -138,6 +139,23 @@ export const ComprasPage = () => {
   const { canRead, canWrite } = usePermissions();
   const canReadPurchases = canRead("compras");
   const canWritePurchases = canWrite("compras");
+  const canAdjustProfitMarginPerm = canWrite("compras_margen");
+  const [allowProfitMarginBySetting, setAllowProfitMarginBySetting] = useState(true);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let active = true;
+    void settingsService.getByTenant(tenantId).then((settings) => {
+      if (active && settings?.stock?.allow_purchases_profit_margin_adjustment !== undefined) {
+        setAllowProfitMarginBySetting(settings.stock.allow_purchases_profit_margin_adjustment);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [tenantId]);
+
+  const canAdjustProfitMargin = allowProfitMarginBySetting && canAdjustProfitMarginPerm;
 
   const [viewMode, setViewMode] = useState<"history" | "create">("history");
   const [isSelectProductModalOpen, setIsSelectProductModalOpen] = useState(false);
@@ -491,6 +509,7 @@ export const ComprasPage = () => {
               summary={summary}
               disabled={isSubmitting}
               canWrite={canWritePurchases}
+              canAdjustProfitMargin={canAdjustProfitMargin}
               formId="purchase-checkout-form"
               vatPercent={purchaseVatPercent}
               onVatPercentChange={setPurchaseVatPercent}

@@ -502,6 +502,7 @@ export interface StockSettings {
   global_low_stock_threshold: number;
   allow_manual_adjustments: boolean;
   allow_negative_stock: boolean;
+  allow_purchases_profit_margin_adjustment?: boolean;
 }
 
 export type CashReconciliationMode = "cash_only" | "full";

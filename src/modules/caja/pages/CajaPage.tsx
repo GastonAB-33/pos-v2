@@ -70,6 +70,14 @@ export const CajaPage = () => {
   const [isManualMovementModalOpen, setIsManualMovementModalOpen] = useState(false);
   const [manualMovementTab, setManualMovementTab] = useState<"income" | "expense">("income");
   const [isCloseCashModalOpen, setIsCloseCashModalOpen] = useState(false);
+  const [closingSessionSnapshot, setClosingSessionSnapshot] = useState<CashSession | null>(null);
+  const [closingSummarySnapshot, setClosingSummarySnapshot] = useState<{
+    expectedBalance: number;
+    expectedCashBalance: number;
+    expectedFullBalance: number;
+  } | null>(null);
+  const [closingIncomeSnapshot, setClosingIncomeSnapshot] = useState<typeof currentSessionIncomeSummary | null>(null);
+  const [isCashClosed, setIsCashClosed] = useState(false);
   const [isDailyDetailModalOpen, setIsDailyDetailModalOpen] = useState(false);
   const [openSummaryModal, setOpenSummaryModal] = useState<"incomes" | "expenses" | "total" | null>(
     null
@@ -112,6 +120,7 @@ export const CajaPage = () => {
     reload,
     openCash,
     closeCash,
+    updateSessionNotes,
     registerIncome,
     registerExpense,
   } = useCashModule(tenantId, user?.id ?? null);
@@ -452,7 +461,17 @@ export const CajaPage = () => {
               <button
                 type="button"
                 disabled={isSubmitting}
-                onClick={() => setIsCloseCashModalOpen(true)}
+                onClick={() => {
+                  setClosingSessionSnapshot(currentSession);
+                  setClosingSummarySnapshot({
+                    expectedBalance: currentSessionSummary.expectedBalance,
+                    expectedCashBalance: currentSessionSummary.expectedCashBalance,
+                    expectedFullBalance: currentSessionSummary.expectedFullBalance,
+                  });
+                  setClosingIncomeSnapshot(currentSessionIncomeSummary);
+                  setIsCashClosed(false);
+                  setIsCloseCashModalOpen(true);
+                }}
                 className="h-10 inline-flex items-center gap-2 px-3.5 text-sm font-bold text-rose-700 dark:text-rose-300 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/70 rounded-xl transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
               >
                 <Lock className="h-4 w-4" />
@@ -943,36 +962,44 @@ export const CajaPage = () => {
                 <Lock className="h-4 w-4 text-slate-500 dark:text-slate-400" />
                 <h3 className="text-xs font-bold text-slate-800 dark:text-slate-100">Cierre de Caja y Arqueo de Turno</h3>
               </div>
-              <ModalCloseButton onClick={() => setIsCloseCashModalOpen(false)} />
+              <ModalCloseButton
+                onClick={() => {
+                  setIsCloseCashModalOpen(false);
+                  setClosingSessionSnapshot(null);
+                  setClosingSummarySnapshot(null);
+                  setClosingIncomeSnapshot(null);
+                  setIsCashClosed(false);
+                }}
+              />
             </header>
 
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              {currentSession ? (
+              {(currentSession || closingSessionSnapshot) ? (
                 <>
-                  {!cashSettings.blind_cash_closing && (
+                  {!cashSettings.blind_cash_closing && !isCashClosed && (
                     <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-lg border border-slate-200/70 dark:border-slate-700">
                       <div>
                         <span className="text-slate-500 dark:text-slate-400 text-[11px]">Cobros por venta:</span>
                         <p className="font-semibold text-slate-900 dark:text-slate-100">
-                          {formatMoney(currentSessionIncomeSummary.salePaymentsTotal)}
+                          {formatMoney((closingIncomeSnapshot ?? currentSessionIncomeSummary).salePaymentsTotal)}
                         </p>
                       </div>
                       <div>
                         <span className="text-slate-500 dark:text-slate-400 text-[11px]">Ingresos manuales:</span>
                         <p className="font-semibold text-slate-900 dark:text-slate-100">
-                          {formatMoney(currentSessionIncomeSummary.manualIncomesTotal)}
+                          {formatMoney((closingIncomeSnapshot ?? currentSessionIncomeSummary).manualIncomesTotal)}
                         </p>
                       </div>
                       <div>
                         <span className="text-slate-500 dark:text-slate-400 text-[11px]">Ajustes positivos:</span>
                         <p className="font-semibold text-slate-900 dark:text-slate-100">
-                          {formatMoney(currentSessionIncomeSummary.positiveAdjustmentsTotal)}
+                          {formatMoney((closingIncomeSnapshot ?? currentSessionIncomeSummary).positiveAdjustmentsTotal)}
                         </p>
                       </div>
                       <div>
                         <span className="text-slate-500 dark:text-slate-400 text-[11px]">Total ingresos del turno:</span>
                         <p className="font-bold text-emerald-700 dark:text-emerald-400">
-                          {formatMoney(currentSessionIncomeSummary.totalIncomes)}
+                          {formatMoney((closingIncomeSnapshot ?? currentSessionIncomeSummary).totalIncomes)}
                         </p>
                       </div>
                     </div>
@@ -981,19 +1008,28 @@ export const CajaPage = () => {
                   <CashCloseForm
                     canWrite={canWriteCaja}
                     disabled={isSubmitting}
-                    expectedBalance={currentSessionSummary.expectedBalance}
-                    expectedCashBalance={currentSessionSummary.expectedCashBalance}
-                    expectedFullBalance={currentSessionSummary.expectedFullBalance}
+                    expectedBalance={closingSummarySnapshot?.expectedBalance ?? currentSessionSummary.expectedBalance}
+                    expectedCashBalance={closingSummarySnapshot?.expectedCashBalance ?? currentSessionSummary.expectedCashBalance}
+                    expectedFullBalance={closingSummarySnapshot?.expectedFullBalance ?? currentSessionSummary.expectedFullBalance}
                     reconciliationMode={cashSettings.cash_reconciliation_mode ?? "cash_only"}
                     blindMode={cashSettings.blind_cash_closing ?? false}
+                    initialNotes={closingSessionSnapshot?.notes ?? currentSession?.notes}
+                    onUpdateNotes={updateSessionNotes}
                     onSubmit={async (values) => {
                       const res = await closeCash(values);
                       if (res) {
+                        setIsCashClosed(true);
                         setActiveViewTab("history");
                       }
                       return res;
                     }}
-                    onCancel={() => setIsCloseCashModalOpen(false)}
+                    onCancel={() => {
+                      setIsCloseCashModalOpen(false);
+                      setClosingSessionSnapshot(null);
+                      setClosingSummarySnapshot(null);
+                      setClosingIncomeSnapshot(null);
+                      setIsCashClosed(false);
+                    }}
                   />
                 </>
               ) : (

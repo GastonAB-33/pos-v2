@@ -79,6 +79,9 @@ export const normalizePermissionProfile = (profile: PermissionProfile): Permissi
       ...(profile.clientes || profile.configuracion_agenda || profile.usuarios),
     };
   }
+  if (profile.compras && profile.compras_margen === undefined) {
+    base.compras_margen = { ...profile.compras };
+  }
 
   return base;
 };
@@ -115,6 +118,12 @@ export const hasModulePermission = (
         profile.configuracion_agenda?.[level] ||
         profile.usuarios?.[level]
     );
+  }
+  if (requirement.module === "compras_margen") {
+    if (profile.compras_margen?.[level] !== undefined) {
+      return Boolean(profile.compras_margen[level]);
+    }
+    return Boolean(profile.compras?.[level]);
   }
 
   const isScopedConfigModule = requirement.module.startsWith("configuracion_");
