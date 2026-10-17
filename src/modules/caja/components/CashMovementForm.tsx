@@ -391,21 +391,23 @@ export const CashMovementForm = ({
 
     if (e.key === "Enter") {
       e.preventDefault();
-      const isConfirmed = Boolean(lockedOptionIds[option.id] && currentAmount > 0);
-
-      // Si ya está confirmado y listo para enviar, el segundo Enter ejecuta el submit inmediatamente
-      if (isConfirmed && isReadyToSubmit && currentAmount > 0) {
-        void handleSubmit(submit)();
-        return;
-      }
-
-      // Si aún no estaba confirmado, confirmamos el monto
       const raw = amountInputs[option.id] ?? "";
       const clean = raw.replace(",", ".");
       const numeric = parseFloat(clean);
       if (!isNaN(numeric) && numeric > 0) {
         handleConfirmOption(option.id);
         setIsReadyToSubmit(true);
+        // Al confirmar monto con Enter: pasa a comprobante (si es transf) o a motivo
+        if (option.isBankTransfer) {
+          window.setTimeout(() => {
+            voucherRef.current?.focus();
+            voucherRef.current?.select();
+          }, 30);
+        } else {
+          window.setTimeout(() => {
+            notesRef.current?.focus();
+          }, 30);
+        }
       }
       return;
     }
@@ -418,50 +420,48 @@ export const CashMovementForm = ({
   };
 
   const handleKeyDownOnVoucher = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "ArrowUp") {
+    if (e.key === "Enter" || e.key === "ArrowDown") {
       e.preventDefault();
-      const targetOpt = activeOption ?? paymentOptions[paymentOptions.length - 1];
-      if (targetOpt) {
-        handleSelectOption(targetOpt);
-      }
-      return;
-    }
-    if (e.key === "ArrowDown" || e.key === "Enter") {
-      e.preventDefault();
+      // Enter en comprobante pasa a motivo
       notesRef.current?.focus();
       return;
     }
-    if (e.key === "Escape") {
+    if (e.key === "Escape" || e.key === "ArrowUp") {
       e.preventDefault();
-      onCancel?.();
+      // Esc retrocede al selector de método de pago y monto
+      const targetOpt = activeOption ?? paymentOptions[0];
+      if (targetOpt) {
+        const input = inputRefs.current[targetOpt.id];
+        input?.focus();
+        input?.select();
+      }
       return;
     }
   };
 
   const handleKeyDownOnNotes = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "ArrowUp" && e.currentTarget.selectionStart === 0) {
-      e.preventDefault();
-      if (activeOption?.isBankTransfer && voucherRef.current) {
-        voucherRef.current.focus();
-        voucherRef.current.select();
-      } else {
-        const targetOpt = activeOption ?? paymentOptions[paymentOptions.length - 1];
-        if (targetOpt) {
-          handleSelectOption(targetOpt);
-        }
-      }
-      return;
-    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+      // Enter en motivo guarda el movimiento directamente
       if (currentAmount > 0) {
         void handleSubmit(submit)();
       }
       return;
     }
-    if (e.key === "Escape") {
+    if (e.key === "Escape" || (e.key === "ArrowUp" && e.currentTarget.selectionStart === 0)) {
       e.preventDefault();
-      onCancel?.();
+      // Esc retrocede a comprobante (si es transf) o al método de pago
+      if (activeOption?.isBankTransfer && voucherRef.current) {
+        voucherRef.current.focus();
+        voucherRef.current.select();
+      } else {
+        const targetOpt = activeOption ?? paymentOptions[0];
+        if (targetOpt) {
+          const input = inputRefs.current[targetOpt.id];
+          input?.focus();
+          input?.select();
+        }
+      }
       return;
     }
   };
@@ -487,307 +487,288 @@ export const CashMovementForm = ({
 
   return (
     <form
-      className="space-y-3.5"
+      className="flex flex-col h-full justify-between"
       onSubmit={handleSubmit(submit)}
       autoComplete="off"
     >
-      {/* Encabezado de columnas: Medio de Pago / Cuenta vs Importe Asignado ($) */}
-      <div className="flex items-center justify-between px-1 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-        <span>Medio de Pago / Cuenta</span>
-        <span>Importe Asignado ($)</span>
-      </div>
+      <div className="space-y-2.5 flex-1 min-h-0 flex flex-col">
+        {/* Encabezado de columnas: Medio de Pago / Cuenta vs Importe Asignado ($) */}
+        <div className="flex items-center justify-between px-1 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 shrink-0">
+          <span>Medio de Pago / Cuenta</span>
+          <span>Importe Asignado ($)</span>
+        </div>
 
-      {/* Lista Unificada de Opciones (Idéntica a PosCheckoutPanel) */}
-      <div className="space-y-1.5 max-h-[46vh] overflow-y-auto pr-0.5">
-        {paymentOptions.map((option, index) => {
-          const isHighlighted = selectedOptionId === option.id;
-          const isConfirmed = Boolean(lockedOptionIds[option.id] && currentAmount > 0);
-          const rawAmount = amountInputs[option.id] ?? "";
-          const hasAmount = Boolean(rawAmount && parseFloat(rawAmount.replace(",", ".")) > 0);
-          const Icon = getMethodIcon(option.code);
+        {/* Lista Unificada de Opciones (Idéntica a PosCheckoutPanel) */}
+        <div className="space-y-1">
+          {paymentOptions.map((option, index) => {
+            const isHighlighted = selectedOptionId === option.id;
+            const isConfirmed = Boolean(lockedOptionIds[option.id] && currentAmount > 0);
+            const rawAmount = amountInputs[option.id] ?? "";
+            const hasAmount = Boolean(rawAmount && parseFloat(rawAmount.replace(",", ".")) > 0);
+            const Icon = getMethodIcon(option.code);
 
-          return (
-            <div
-              key={option.id}
-              onClick={() => handleSelectOption(option)}
-              className={`group flex items-center justify-between gap-3 py-1.5 px-3 rounded-xl border transition cursor-pointer ${
-                isConfirmed
-                  ? "border-emerald-500 dark:border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/40 ring-2 ring-emerald-500/60 shadow-xs"
-                  : isHighlighted
-                  ? "border-amber-400 dark:border-amber-400 bg-amber-500/15 dark:bg-amber-500/20 ring-2 ring-amber-400 dark:ring-amber-400/90 shadow-sm"
-                  : hasAmount
-                  ? "border-slate-300 dark:border-slate-600 bg-slate-100/70 dark:bg-slate-800/80 hover:border-slate-400 dark:hover:border-slate-500"
-                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/60 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/80"
-              }`}
-            >
-              {/* Lado izquierdo: Icono y Nombre */}
-              <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                <div
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition ${
-                    isConfirmed
-                      ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-slate-950 shadow-xs"
-                      : isHighlighted
-                      ? "bg-amber-400 dark:bg-amber-400 text-slate-950 font-black shadow-xs"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
-                  }`}
-                >
-                  <Icon size={15} />
-                </div>
+            return (
+              <div
+                key={option.id}
+                onClick={() => handleSelectOption(option)}
+                className={`group flex items-center justify-between gap-2.5 py-1 px-3 rounded-xl border transition cursor-pointer ${
+                  isConfirmed
+                    ? "border-emerald-500 dark:border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/40 ring-2 ring-emerald-500/60 shadow-xs"
+                    : isHighlighted
+                    ? "border-amber-400 dark:border-amber-400 bg-amber-500/15 dark:bg-amber-500/20 ring-2 ring-amber-400 dark:ring-amber-400/90 shadow-sm"
+                    : hasAmount
+                    ? "border-slate-300 dark:border-slate-600 bg-slate-100/70 dark:bg-slate-800/80 hover:border-slate-400 dark:hover:border-slate-500"
+                    : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/60 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/80"
+                }`}
+              >
+                {/* Lado izquierdo: Icono y Nombre */}
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <div
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg transition ${
+                      isConfirmed
+                        ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-slate-950 shadow-xs"
+                        : isHighlighted
+                        ? "bg-amber-400 dark:bg-amber-400 text-slate-950 font-black shadow-xs"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                    }`}
+                  >
+                    <Icon size={13} />
+                  </div>
 
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`font-bold text-xs sm:text-sm truncate ${
-                        isConfirmed
-                          ? "text-slate-900 dark:text-white"
-                          : isHighlighted
-                          ? "text-slate-950 dark:text-amber-100"
-                          : "text-slate-800 dark:text-slate-200"
-                      }`}
-                    >
-                      {option.name}
-                    </span>
-                    {isConfirmed && (
-                      <div className="flex items-center gap-1 shrink-0">
-                        <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-600 text-white">
-                          <Check size={9} strokeWidth={3} />
-                        </span>
-                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-950/90 px-1.5 py-0.2 rounded border border-emerald-300 dark:border-emerald-700">
-                          Confirmado
-                        </span>
-                      </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`font-bold text-xs truncate ${
+                          isConfirmed
+                            ? "text-slate-900 dark:text-white"
+                            : isHighlighted
+                            ? "text-slate-950 dark:text-amber-100"
+                            : "text-slate-800 dark:text-slate-200"
+                        }`}
+                      >
+                        {option.name}
+                      </span>
+                      {isConfirmed && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="flex h-3 w-3 items-center justify-center rounded-full bg-emerald-600 text-white">
+                            <Check size={8} strokeWidth={3} />
+                          </span>
+                          <span className="text-[9px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-950/90 px-1 py-0 rounded border border-emerald-300 dark:border-emerald-700">
+                            Confirmado
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {option.subtitle && (
+                      <p className="text-[9.5px] text-slate-500 dark:text-slate-400 truncate leading-tight">
+                        {option.subtitle}
+                      </p>
                     )}
                   </div>
-                  {option.subtitle && (
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                      {option.subtitle}
-                    </p>
+                </div>
+
+                {/* Lado derecho: Casilla de Importe ($) y Botones */}
+                <div
+                  className="flex items-center gap-1.5 shrink-0"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="relative w-28">
+                    <span
+                      className={`absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-black pointer-events-none transition ${
+                        isConfirmed
+                          ? "text-emerald-700 dark:text-emerald-300"
+                          : isHighlighted
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-slate-400 dark:text-slate-500"
+                      }`}
+                    >
+                      $
+                    </span>
+                    <input
+                      ref={(el) => {
+                        inputRefs.current[option.id] = el;
+                      }}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={amountInputs[option.id] ?? ""}
+                      onChange={(e) => handleAmountChange(option.id, e.target.value)}
+                      onFocus={(e) => {
+                        e.target.select();
+                        setSelectedOptionId(option.id);
+                        handleSelectOption(option);
+                      }}
+                      onClick={(e) => {
+                        (e.target as HTMLInputElement).select();
+                      }}
+                      onKeyDown={(e) => handleKeyDownOnOption(e, index, option)}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-lpignore="true"
+                      disabled={disabled || !canWrite}
+                      className={`w-full rounded-lg border py-0.5 pl-4 pr-1.5 text-right font-mono text-xs outline-none transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                        isConfirmed
+                          ? "border-emerald-500 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/90 text-emerald-950 dark:text-emerald-100 font-black ring-2 ring-emerald-500/50 shadow-xs"
+                          : isHighlighted
+                          ? "border-amber-400 dark:border-amber-400 bg-white dark:bg-slate-900 text-slate-950 dark:text-amber-100 font-bold ring-2 ring-amber-400/60 shadow-xs"
+                          : hasAmount
+                          ? "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"
+                          : "border-slate-300 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/90 text-slate-700 dark:text-slate-300 font-bold focus:bg-white dark:focus:bg-slate-900 focus:border-amber-400 dark:focus:border-amber-400"
+                      }`}
+                    />
+                  </div>
+
+                  {/* Botón Confirmar Monto si está resaltado con monto y aún no confirmado */}
+                  {!isConfirmed && hasAmount && isHighlighted && (
+                    <button
+                      type="button"
+                      onClick={() => handleConfirmOption(option.id)}
+                      className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-400 hover:bg-amber-500 dark:bg-amber-400 dark:hover:bg-amber-300 text-slate-950 font-bold text-[11px] shadow-xs transition cursor-pointer"
+                      title="Confirmar monto asignado (Enter)"
+                    >
+                      <Check size={11} strokeWidth={3} />
+                      <span className="inline">OK</span>
+                    </button>
+                  )}
+
+                  {/* Botón Limpiar Monto */}
+                  {hasAmount && (
+                    <button
+                      type="button"
+                      onClick={() => handleClearOption(option.id)}
+                      className="rounded-lg p-0.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
+                      title="Limpiar monto"
+                    >
+                      <X size={13} />
+                    </button>
                   )}
                 </div>
               </div>
-
-              {/* Lado derecho: Casilla de Importe ($) y Botones */}
-              <div
-                className="flex items-center gap-1.5 shrink-0"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="relative w-32">
-                  <span
-                    className={`absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-black pointer-events-none transition ${
-                      isConfirmed
-                        ? "text-emerald-700 dark:text-emerald-300"
-                        : isHighlighted
-                        ? "text-amber-600 dark:text-amber-400"
-                        : "text-slate-400 dark:text-slate-500"
-                    }`}
-                  >
-                    $
-                  </span>
-                  <input
-                    ref={(el) => {
-                      inputRefs.current[option.id] = el;
-                    }}
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={amountInputs[option.id] ?? ""}
-                    onChange={(e) => handleAmountChange(option.id, e.target.value)}
-                    onFocus={(e) => {
-                      e.target.select();
-                      setSelectedOptionId(option.id);
-                      handleSelectOption(option);
-                    }}
-                    onClick={(e) => {
-                      (e.target as HTMLInputElement).select();
-                    }}
-                    onKeyDown={(e) => handleKeyDownOnOption(e, index, option)}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    data-lpignore="true"
-                    disabled={disabled || !canWrite}
-                    className={`w-full rounded-lg border py-1 pl-5 pr-2 text-right font-mono text-sm outline-none transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                      isConfirmed
-                        ? "border-emerald-500 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/90 text-emerald-950 dark:text-emerald-100 font-black ring-2 ring-emerald-500/50 shadow-xs"
-                        : isHighlighted
-                        ? "border-amber-400 dark:border-amber-400 bg-white dark:bg-slate-900 text-slate-950 dark:text-amber-100 font-bold ring-2 ring-amber-400/60 shadow-xs"
-                        : hasAmount
-                        ? "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"
-                        : "border-slate-300 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/90 text-slate-700 dark:text-slate-300 font-bold focus:bg-white dark:focus:bg-slate-900 focus:border-amber-400 dark:focus:border-amber-400"
-                    }`}
-                  />
-                </div>
-
-                {/* Botón Confirmar Monto si está resaltado con monto y aún no confirmado */}
-                {!isConfirmed && hasAmount && isHighlighted && (
-                  <button
-                    type="button"
-                    onClick={() => handleConfirmOption(option.id)}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-400 hover:bg-amber-500 dark:bg-amber-400 dark:hover:bg-amber-300 text-slate-950 font-bold text-xs shadow-xs transition cursor-pointer"
-                    title="Confirmar monto asignado (Enter)"
-                  >
-                    <Check size={13} strokeWidth={3} />
-                    <span className="inline">OK</span>
-                  </button>
-                )}
-
-                {/* Botón Limpiar Monto */}
-                {hasAmount && (
-                  <button
-                    type="button"
-                    onClick={() => handleClearOption(option.id)}
-                    className="rounded-lg p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
-                    title="Limpiar monto"
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {errors.amount && (
-        <div className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 font-medium px-1">
-          <AlertCircle size={14} className="shrink-0" />
-          <span>{errors.amount.message}</span>
+            );
+          })}
         </div>
-      )}
 
-      {/* Si se selecciona una transferencia bancaria: Campo N° Comprobante */}
-      {activeOption?.isBankTransfer && (
-        <div className="p-2.5 rounded-xl border border-blue-200/90 dark:border-blue-900/60 bg-blue-50/40 dark:bg-blue-950/20 space-y-1">
-          <div className="flex items-center justify-between">
-            <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-              N° de Comprobante / Referencia de transferencia{" "}
-              <span className="text-slate-400 dark:text-slate-500 font-normal">(opcional)</span>
-            </label>
-            <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">
-              Banco destino/origen
-            </span>
+        {errors.amount && (
+          <div className="flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 font-medium px-1 shrink-0">
+            <AlertCircle size={14} className="shrink-0" />
+            <span>{errors.amount.message}</span>
           </div>
+        )}
+
+        {/* Si se selecciona una transferencia bancaria: Campo N° Comprobante */}
+        {activeOption?.isBankTransfer && (
+          <div className="p-2.5 rounded-xl border border-blue-200/90 dark:border-blue-900/60 bg-blue-50/40 dark:bg-blue-950/20 space-y-1 shrink-0 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between">
+              <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                N° de Comprobante / Referencia de transferencia{" "}
+                <span className="text-slate-400 dark:text-slate-500 font-normal">(opcional)</span>
+              </label>
+              <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">
+                Banco destino/origen
+              </span>
+            </div>
+            {(() => {
+              const { ref: formVoucherRef, ...voucherFieldProps } = register("voucherNumber");
+              return (
+                <input
+                  type="text"
+                  placeholder="Ej: Transf. 984321 / Código de operación..."
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                  {...voucherFieldProps}
+                  ref={(el) => {
+                    formVoucherRef(el);
+                    voucherRef.current = el;
+                  }}
+                  onKeyDown={handleKeyDownOnVoucher}
+                  className="h-8 w-full px-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:border-blue-400 transition-colors"
+                  disabled={disabled || !canWrite}
+                />
+              );
+            })()}
+          </div>
+        )}
+
+        {/* Concepto / Motivo */}
+        <div className="shrink-0">
+          <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1">
+            Concepto / Motivo
+          </label>
           {(() => {
-            const { ref: formVoucherRef, ...voucherFieldProps } = register("voucherNumber");
+            const { ref: formNotesRef, ...notesFieldProps } = register("notes");
             return (
-              <input
-                type="text"
-                placeholder="Ej: Transf. 984321 / Código de operación..."
+              <textarea
+                rows={2}
+                placeholder={
+                  isIncome
+                    ? "Ej: Aporte inicial adicional, cobro particular..."
+                    : "Ej: Pago de flete, compras menores, viáticos..."
+                }
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
                 spellCheck={false}
                 data-lpignore="true"
-                {...voucherFieldProps}
+                {...notesFieldProps}
                 ref={(el) => {
-                  formVoucherRef(el);
-                  voucherRef.current = el;
+                  formNotesRef(el);
+                  notesRef.current = el;
                 }}
-                onKeyDown={handleKeyDownOnVoucher}
-                className="h-8 w-full px-2.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:border-blue-400 transition-colors"
+                onKeyDown={handleKeyDownOnNotes}
+                className="w-full p-2 text-xs bg-white dark:bg-slate-900/90 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:border-blue-400 transition-colors"
                 disabled={disabled || !canWrite}
               />
             );
           })()}
+          {errors.notes && (
+            <p className="mt-1 text-[11px] text-rose-600 dark:text-rose-400">{errors.notes.message}</p>
+          )}
         </div>
-      )}
-
-      {/* Concepto / Motivo */}
-      <div>
-        <label className="block text-[11px] font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1">
-          Concepto / Motivo
-        </label>
-        {(() => {
-          const { ref: formNotesRef, ...notesFieldProps } = register("notes");
-          return (
-            <textarea
-              rows={2}
-              placeholder={
-                isIncome
-                  ? "Ej: Aporte inicial adicional, cobro particular..."
-                  : "Ej: Pago de flete, compras menores, viáticos..."
-              }
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              data-lpignore="true"
-              {...notesFieldProps}
-              ref={(el) => {
-                formNotesRef(el);
-                notesRef.current = el;
-              }}
-              onKeyDown={handleKeyDownOnNotes}
-              className="w-full p-2 text-xs bg-white dark:bg-slate-900/90 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:focus:border-blue-400 transition-colors"
-              disabled={disabled || !canWrite}
-            />
-          );
-        })()}
-        {errors.notes && (
-          <p className="mt-1 text-[11px] text-rose-600 dark:text-rose-400">{errors.notes.message}</p>
-        )}
       </div>
 
       {/* Botón de Acción Principal */}
-      <button
-        type="submit"
-        disabled={disabled || !canWrite || currentAmount <= 0}
-        className={`h-9 w-full inline-flex items-center justify-center gap-1.5 px-4 text-xs font-bold rounded-xl transition shadow-xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer ${
-          isIncome
-            ? "text-white bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500 shadow-emerald-600/20"
-            : "text-white bg-rose-600 hover:bg-rose-700 dark:bg-rose-600 dark:hover:bg-rose-500 shadow-rose-600/20"
-        } ${
-          isReadyToSubmit && currentAmount > 0
-            ? isIncome
-              ? "ring-2 ring-emerald-400 dark:ring-emerald-400 shadow-md animate-pulse"
-              : "ring-2 ring-rose-400 dark:ring-rose-400 shadow-md animate-pulse"
-            : ""
-        }`}
-      >
-        {isIncome ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
-        <span>
-          {isIncome
-            ? currentAmount > 0
-              ? `Guardar ingreso por $${currentAmount.toLocaleString("es-AR", {
+      <div className="pt-2 shrink-0">
+        <button
+          type="submit"
+          disabled={disabled || !canWrite || currentAmount <= 0}
+          className={`h-9.5 w-full inline-flex items-center justify-center gap-1.5 px-4 text-xs font-bold rounded-xl transition shadow-xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer ${
+            isIncome
+              ? "text-white bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500 shadow-emerald-600/20"
+              : "text-white bg-rose-600 hover:bg-rose-700 dark:bg-rose-600 dark:hover:bg-rose-500 shadow-rose-600/20"
+          } ${
+            isReadyToSubmit && currentAmount > 0
+              ? isIncome
+                ? "ring-2 ring-emerald-400 dark:ring-emerald-400 shadow-md animate-pulse"
+                : "ring-2 ring-rose-400 dark:ring-rose-400 shadow-md animate-pulse"
+              : ""
+          }`}
+        >
+          {isIncome ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
+          <span>
+            {isIncome
+              ? currentAmount > 0
+                ? `Guardar ingreso por $${currentAmount.toLocaleString("es-AR", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}`
+                : "Guardar ingreso"
+              : currentAmount > 0
+              ? `Guardar egreso por $${currentAmount.toLocaleString("es-AR", {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}`
-              : "Guardar ingreso"
-            : currentAmount > 0
-            ? `Guardar egreso por $${currentAmount.toLocaleString("es-AR", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}`
-            : "Guardar egreso"}
-        </span>
-        <kbd className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-black/20 text-white/90">
-          Enter ↵
-        </kbd>
-      </button>
-
-      {/* Barra de atajos ágiles inferior */}
-      <div className="flex items-center justify-center gap-2 pt-1 text-[10px] font-medium text-slate-400 dark:text-slate-500">
-        <span className="flex items-center gap-1">
-          <kbd className="px-1 py-0.5 rounded border border-slate-300 dark:border-slate-700 font-mono text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">↑/↓</kbd>
-          Navegar
-        </span>
-        <span>•</span>
-        <span className="flex items-center gap-1">
-          <kbd className="px-1 py-0.5 rounded border border-slate-300 dark:border-slate-700 font-mono text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">Enter</kbd>
-          {isReadyToSubmit ? "Guardar" : "Confirmar"}
-        </span>
-        <span>•</span>
-        <span className="flex items-center gap-1">
-          <kbd className="px-1 py-0.5 rounded border border-slate-300 dark:border-slate-700 font-mono text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">F2</kbd>
-          Tipo
-        </span>
-        <span>•</span>
-        <span className="flex items-center gap-1">
-          <kbd className="px-1 py-0.5 rounded border border-slate-300 dark:border-slate-700 font-mono text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">Esc</kbd>
-          Cerrar
-        </span>
+              : "Guardar egreso"}
+          </span>
+          <kbd className="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-black/20 text-white/90">
+            Enter ↵
+          </kbd>
+        </button>
       </div>
     </form>
   );

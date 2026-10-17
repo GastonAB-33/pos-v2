@@ -332,6 +332,7 @@ export const PosProductList = ({
             }
           }}
           placeholder={getSearchPlaceholder(searchScope)}
+          id="pos-search-input"
           className="pos-search-input flex-1 min-w-0"
           aria-label="Buscar productos en venta"
         />

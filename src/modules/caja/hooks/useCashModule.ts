@@ -994,7 +994,15 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         },
       };
     },
-    [bankAccounts, movements, paymentMethodsByCode, salePayments, sessions]
+    [
+      bankAccounts,
+      movements,
+      paymentMethodsByCode,
+      salePayments,
+      sessions,
+      sessionSummariesById,
+      cashSettings,
+    ]
   );
 
   const getCurrentAccountDailySummary = useCallback(
