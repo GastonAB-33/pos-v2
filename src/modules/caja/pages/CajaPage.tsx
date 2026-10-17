@@ -780,11 +780,11 @@ export const CajaPage = () => {
         )}
       </div>
 
-      {/* MODAL: Movimiento Manual (con altura máxima y scroll para evitar desbordes) */}
+      {/* MODAL: Movimiento Manual (sin scroll, visible en una sola pantalla) */}
       {isManualMovementModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="w-full max-w-lg max-h-[88vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
-            <header className="shrink-0 px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/70 dark:bg-slate-800/60">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-3 sm:p-4">
+          <div className="w-full max-w-lg flex flex-col bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <header className="shrink-0 px-4 py-2.5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/70 dark:bg-slate-800/60">
               <div className="flex items-center gap-2">
                 <ArrowLeftRight className="h-4 w-4 text-slate-500 dark:text-slate-400" />
                 <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-100">Movimiento Manual de Caja</h3>
@@ -793,7 +793,7 @@ export const CajaPage = () => {
             </header>
 
             {/* Selector de Pestañas Ingreso / Egreso */}
-            <div className="shrink-0 px-4 pt-3 pb-1">
+            <div className="shrink-0 px-4 pt-2.5 pb-1">
               <div className="grid grid-cols-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
                 <button
                   type="button"
@@ -826,8 +826,8 @@ export const CajaPage = () => {
               </div>
             </div>
 
-            {/* Contenido con scroll vertical seguro */}
-            <div className="flex-1 overflow-y-auto px-4 pb-4 pt-2">
+            {/* Contenido sin scroll */}
+            <div className="px-4 pb-4 pt-2">
               {manualMovementTab === "income" ? (
                 <CashMovementForm
                   mode="income"

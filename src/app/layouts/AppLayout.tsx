@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { routePaths } from "@/config/routes";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
@@ -10,6 +10,7 @@ import { cn } from "@/utils/cn";
 
 export const AppLayout = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { isDesktop, deviceKind } = useDeviceProfile();
   const sidebarOpen = useUiStore((state) => state.sidebarOpen);
   const setSidebarOpen = useUiStore((state) => state.setSidebarOpen);
@@ -25,6 +26,48 @@ export const AppLayout = () => {
       setSidebarOpen(false);
     }
   }, [isDesktop, location.pathname, setSidebarOpen]);
+
+  // Atajo F4 global fuera del POS: ir directo al POS si no hay datos sin guardar en pantalla
+  useEffect(() => {
+    if (isPosRoute) return;
+
+    const handleF4OutsidePos = (e: KeyboardEvent) => {
+      if (e.key === "F4") {
+        e.preventDefault();
+
+        // Detectar si hay un modal abierto con datos cargados
+        const openModal = document.querySelector('[role="dialog"], .fixed.inset-0');
+        if (openModal) {
+          const inputs = Array.from(
+            openModal.querySelectorAll('input:not([type="hidden"]):not([readonly]), textarea, select')
+          ) as (HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement)[];
+
+          const hasDirtyData = inputs.some((el) => {
+            if (
+              el instanceof HTMLInputElement &&
+              (el.type === "checkbox" || el.type === "radio" || el.type === "button" || el.type === "submit")
+            ) {
+              return false;
+            }
+            const val = el.value?.trim();
+            return Boolean(val && val !== "0" && val !== "0.00");
+          });
+
+          if (hasDirtyData) {
+            const confirmed = window.confirm(
+              "Hay un modal o formulario con datos cargados sin guardar. ¿Deseas salir e ir al POS de todos modos?"
+            );
+            if (!confirmed) return;
+          }
+        }
+
+        navigate(routePaths.pos);
+      }
+    };
+
+    window.addEventListener("keydown", handleF4OutsidePos);
+    return () => window.removeEventListener("keydown", handleF4OutsidePos);
+  }, [isPosRoute, navigate]);
 
   if (isPosRoute) {
     return (

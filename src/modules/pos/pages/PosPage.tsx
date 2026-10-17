@@ -914,6 +914,10 @@ export const PosPage = () => {
 
   const focusScannerCapture = useCallback(() => {
     if (isCheckoutModalOpen) return;
+    const searchInput = document.getElementById("pos-search-input") as HTMLInputElement | null;
+    if (searchInput && (document.activeElement === searchInput || searchInput.value.trim() !== "")) {
+      return;
+    }
     const input = scannerCaptureRef.current;
     if (!input) return;
     input.focus({ preventScroll: true });
@@ -962,6 +966,7 @@ export const PosPage = () => {
 
   const onBarcodeScannerScan = useCallback(
     (barcode: string) => {
+      setSearchResetToken((prev) => prev + 1);
       void handleBarcodeScan(barcode);
     },
     [handleBarcodeScan]
@@ -1424,10 +1429,29 @@ export const PosPage = () => {
     const handleCheckoutEnter = (event: KeyboardEvent) => {
       if (event.key !== "Enter") return;
       if (event.repeat || event.defaultPrevented) return;
-      if (customerModalState || receiptModal || isReceiptsListModalOpen || isCheckoutModalOpen) return;
+      if (
+        customerModalState ||
+        receiptModal ||
+        isReceiptsListModalOpen ||
+        isCheckoutModalOpen ||
+        isQuickProductModalOpen ||
+        isDebtPaymentModalOpen ||
+        isCartDiscountModalOpen
+      ) {
+        return;
+      }
       if (!canWritePos || isLoading || isSubmitting || isConfirmingSaleRef.current) return;
       if (isCashGateBlocking) return;
       if (!cart.length || !paymentMethods.length) return;
+
+      // REQUISITO ESTRICTO:
+      // "SI TENGO EL BUSCADOR ABIERTO NO DEBERIA ABRIR EL MODAL DE PAGO HASTA QUE SALGA DEL BUSCADOR"
+      const searchInput = document.getElementById("pos-search-input") as HTMLInputElement | null;
+      const isSearchActive = Boolean(
+        (searchInput && (document.activeElement === searchInput || searchInput.value.trim() !== "")) ||
+        document.querySelector('[data-search-open="true"]')
+      );
+      if (isSearchActive) return;
 
       const activeElement = document.activeElement;
       const scannerCaptureActive = Boolean(
@@ -1455,12 +1479,55 @@ export const PosPage = () => {
     canWritePos,
     cart.length,
     customerModalState,
+    isCartDiscountModalOpen,
     isCashGateBlocking,
-    isLoading,
     isCheckoutModalOpen,
+    isDebtPaymentModalOpen,
+    isLoading,
+    isQuickProductModalOpen,
     isReceiptsListModalOpen,
     isSubmitting,
     paymentMethods.length,
+    receiptModal,
+  ]);
+
+  // Atajos globales dentro del POS: F4 (Buscador) y F8 (Producto Rápido)
+  useEffect(() => {
+    const handlePosHotkeys = (e: KeyboardEvent) => {
+      if (
+        isCheckoutModalOpen ||
+        receiptModal ||
+        customerModalState ||
+        isDebtPaymentModalOpen ||
+        isQuickProductModalOpen ||
+        isReceiptsListModalOpen ||
+        isCartDiscountModalOpen
+      ) {
+        return;
+      }
+
+      if (e.key === "F4") {
+        e.preventDefault();
+        const searchInput = document.getElementById("pos-search-input") as HTMLInputElement | null;
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
+      } else if (e.key === "F8") {
+        e.preventDefault();
+        setIsQuickProductModalOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handlePosHotkeys);
+    return () => window.removeEventListener("keydown", handlePosHotkeys);
+  }, [
+    customerModalState,
+    isCartDiscountModalOpen,
+    isCheckoutModalOpen,
+    isDebtPaymentModalOpen,
+    isQuickProductModalOpen,
+    isReceiptsListModalOpen,
     receiptModal,
   ]);
 
@@ -1646,9 +1713,16 @@ export const PosPage = () => {
             const added = await addProductToCart(product, quantity);
             if (added) {
               triggerCartSuccessHighlight();
-              window.setTimeout(() => {
-                focusScannerCapture();
-              }, 0);
+              // Si el usuario está en el buscador de productos, NO mover el foco al escáner
+              const searchInput = document.getElementById("pos-search-input") as HTMLInputElement | null;
+              const isSearchActive = Boolean(
+                searchInput && (document.activeElement === searchInput || searchInput.value.trim() !== "")
+              );
+              if (!isSearchActive) {
+                window.setTimeout(() => {
+                  focusScannerCapture();
+                }, 0);
+              }
             }
             return added;
           }}
@@ -1774,9 +1848,13 @@ export const PosPage = () => {
                   <button
                     type="button"
                     onClick={() => setIsQuickProductModalOpen(true)}
-                    className="ui-btn-ghost text-xs"
+                    className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
+                    title="Producto rápido (F8)"
                   >
-                    Producto rápido
+                    <span>Producto rápido</span>
+                    <kbd className="rounded border border-fuchsia-200 bg-fuchsia-100/80 px-1.5 py-0.5 text-[10px] font-bold text-fuchsia-600 dark:border-fuchsia-800 dark:bg-fuchsia-950/60 dark:text-fuchsia-400">
+                      F8
+                    </kbd>
                   </button>
                 ) : null}
                 <button
