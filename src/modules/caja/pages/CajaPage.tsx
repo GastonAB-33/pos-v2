@@ -180,6 +180,14 @@ export const CajaPage = () => {
     expenses: 0,
     expectedBalance: dailySession?.opening_amount ?? 0,
   };
+
+  const totalIncomes = dailySessionBreakdown?.incomes.total ?? dailySessionTotals.incomes;
+  const cashIncomes = dailySessionTotals.incomes;
+  const digitalIncomes = Math.max(0, totalIncomes - cashIncomes);
+
+  const totalExpenses = dailySessionBreakdown?.expenses.total ?? dailySessionTotals.expenses;
+  const cashExpenses = dailySessionTotals.expenses;
+  const digitalExpenses = Math.max(0, totalExpenses - cashExpenses);
   const detailMovements = useMemo(
     () => getDailyMovements(activeDetailDate, "all"),
     [activeDetailDate, getDailyMovements]
@@ -542,11 +550,19 @@ export const CajaPage = () => {
                 <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-emerald-600 dark:text-emerald-400">
                   {isBlindModeActive ? "$ ••••••••" : formatMoney(dailySessionTotals.expectedBalance)}
                 </p>
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                  {isBlindModeActive
-                    ? "Saldo protegido para arqueo ciego. Se revelará al confirmar el cierre de turno."
-                    : "Monto que debe haber en el cajón de efectivo ahora mismo."}
-                </p>
+                {!isBlindModeActive ? (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                    <span>Apertura {formatMoney(dailySessionTotals.openingAmount)}</span>
+                    <span className="text-slate-300 dark:text-slate-600">+</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Efec. +{formatMoney(cashIncomes)}</span>
+                    <span className="text-slate-300 dark:text-slate-600">-</span>
+                    <span className="text-rose-600 dark:text-rose-400 font-semibold">Egresos -{formatMoney(cashExpenses)}</span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                    Saldo protegido para arqueo ciego. Se revelará al confirmar el cierre de turno.
+                  </p>
+                )}
               </div>
 
               <div className="pt-3 mt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
@@ -606,8 +622,20 @@ export const CajaPage = () => {
                   <p className="mt-2 text-lg font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
                     {isBlindModeActive
                       ? "+••••••••"
-                      : `+${formatMoney(dailySessionBreakdown?.incomes.total ?? dailySessionTotals.incomes)}`}
+                      : `+${formatMoney(totalIncomes)}`}
                   </p>
+                  {!isBlindModeActive && (
+                    <div className="mt-1 flex flex-col gap-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        En efectivo: +{formatMoney(cashIncomes)}
+                      </span>
+                      {digitalIncomes > 0 && (
+                        <span className="text-slate-400 dark:text-slate-500">
+                          Bancos / Digital: +{formatMoney(digitalIncomes)}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -638,8 +666,20 @@ export const CajaPage = () => {
                   <p className="mt-2 text-lg font-bold tracking-tight text-rose-600 dark:text-rose-400">
                     {isBlindModeActive
                       ? "-••••••••"
-                      : `-${formatMoney(dailySessionBreakdown?.expenses.total ?? dailySessionTotals.expenses)}`}
+                      : `-${formatMoney(totalExpenses)}`}
                   </p>
+                  {!isBlindModeActive && (
+                    <div className="mt-1 flex flex-col gap-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                      <span className="font-semibold text-rose-600 dark:text-rose-400">
+                        En efectivo: -{formatMoney(cashExpenses)}
+                      </span>
+                      {digitalExpenses > 0 && (
+                        <span className="text-slate-400 dark:text-slate-500">
+                          Bancos / Débito: -{formatMoney(digitalExpenses)}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -1042,36 +1082,56 @@ export const CajaPage = () => {
                     )}
                   </div>
                 ) : (
-                  <div className="space-y-2.5">
+                  <div className="space-y-3">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Cálculo de control para verificar el efectivo real en caja:
+                      Cálculo de control para verificar el efectivo real que debe haber en el cajón físico:
                     </p>
-                    <div className="space-y-2 rounded-lg border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60 p-3 text-xs">
+
+                    {/* Arqueo Efectivo Físico */}
+                    <div className="space-y-2 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60 p-3.5 text-xs">
                       <div className="flex justify-between text-slate-700 dark:text-slate-300">
-                        <span>Fondo de apertura:</span>
+                        <span>Fondo inicial de apertura:</span>
                         <span className="font-semibold text-slate-900 dark:text-slate-100">
                           {formatMoney(dailySessionBreakdown.totalCash.openingAmount)}
                         </span>
                       </div>
                       <div className="flex justify-between text-emerald-700 dark:text-emerald-400">
-                        <span>+ Total ingresos:</span>
+                        <span>+ Cobros en efectivo (cajón):</span>
                         <span className="font-semibold">
                           +{formatMoney(dailySessionBreakdown.totalCash.incomes)}
                         </span>
                       </div>
                       <div className="flex justify-between text-rose-700 dark:text-rose-400">
-                        <span>- Total egresos:</span>
+                        <span>- Egresos en efectivo (cajón):</span>
                         <span className="font-semibold">
                           -{formatMoney(dailySessionBreakdown.totalCash.expenses)}
                         </span>
                       </div>
-                      <div className="border-t border-slate-200 dark:border-slate-700 pt-2 flex justify-between text-xs font-bold text-slate-900 dark:text-slate-100">
-                        <span>Saldo esperado:</span>
-                        <span className="text-emerald-700 dark:text-emerald-400">
+                      <div className="border-t border-slate-200 dark:border-slate-700 pt-2.5 flex justify-between text-xs font-bold text-slate-900 dark:text-slate-100">
+                        <span>Efectivo en mano esperado:</span>
+                        <span className="text-emerald-700 dark:text-emerald-400 text-sm">
                           {formatMoney(dailySessionBreakdown.totalCash.expectedBalance)}
                         </span>
                       </div>
                     </div>
+
+                    {/* Cobros electrónicos / bancarios */}
+                    {((dailySessionBreakdown?.incomes.total ?? 0) - dailySessionBreakdown.totalCash.incomes) > 0 && (
+                      <div className="rounded-xl border border-blue-200/70 dark:border-blue-900/60 bg-blue-50/40 dark:bg-blue-950/20 p-3 text-xs space-y-1.5">
+                        <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                          <span>Cobros digitales / bancos (no ingresaron a la caja física):</span>
+                          <span className="font-semibold text-blue-700 dark:text-blue-300">
+                            +{formatMoney((dailySessionBreakdown.incomes.total ?? 0) - dailySessionBreakdown.totalCash.incomes)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between font-bold text-slate-800 dark:text-slate-200 pt-1.5 border-t border-blue-200/60 dark:border-blue-900/50">
+                          <span>Recaudación total consolidada (Efectivo + Bancos):</span>
+                          <span className="text-slate-900 dark:text-white">
+                            {formatMoney(dailySessionBreakdown.incomes.total)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               ) : (
