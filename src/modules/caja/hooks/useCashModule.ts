@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditService } from "@/services/audit.service";
 import { bankAccountsService } from "@/services/bank-accounts.service";
+import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
 import { cashService } from "@/services/cash.service";
 import { generalCashService } from "@/services/general-cash.service";
 import { currentAccountsService } from "@/services/current-accounts.service";
 import { customersService } from "@/services/customers.service";
-import { paymentMethodsService } from "@/services/payment-methods.service";
+import { paymentMethodsService, normalizePaymentMethodCode } from "@/services/payment-methods.service";
 import { salesService } from "@/services/sales.service";
 import { settingsService } from "@/services/settings.service";
 import { usersService } from "@/services/users.service";
@@ -190,6 +191,8 @@ const incomeReferenceLabels: Record<string, string> = {
 
 const expenseReferenceLabels: Record<string, string> = {
   manual_expense: "Egreso manual",
+  transfer: "Transferencia bancaria",
+  cash: "Efectivo",
   purchase: "Pago a proveedores",
   purchase_payment: "Pago a proveedores",
   supplier_payment: "Pago a proveedores",
@@ -1256,35 +1259,91 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
     setIsSubmitting(true);
     try {
-      const paymentMethod = paymentMethods.find((method) => method.id === values.paymentMethodId);
-      if (!paymentMethod) {
-        setFeedback({ type: "error", message: "Selecciona un medio de pago para el ingreso" });
+      const isTransfer = values.paymentType === "transfer" || Boolean(values.bankAccountId);
+      const selectedBank = isTransfer && values.bankAccountId
+        ? bankAccounts.find((b) => b.id === values.bankAccountId)
+        : null;
+
+      if (isTransfer && !selectedBank && bankAccounts.length > 0) {
+        setFeedback({ type: "error", message: "Seleccioná la cuenta bancaria de destino" });
         return false;
       }
-      const paymentMethodCode = normalizeKey(paymentMethod.code) || "manual_income";
+
+      let paymentMethod = values.paymentMethodId
+        ? paymentMethods.find((method) => method.id === values.paymentMethodId)
+        : null;
+
+      if (!paymentMethod) {
+        if (isTransfer) {
+          paymentMethod = paymentMethods.find((m) => normalizePaymentMethodCode(m.code) === "transfer") || null;
+        } else {
+          paymentMethod = paymentMethods.find((m) => normalizePaymentMethodCode(m.code) === "cash") || null;
+        }
+      }
+
+      const paymentMethodCode = isTransfer
+        ? "transfer"
+        : (paymentMethod ? normalizeKey(paymentMethod.code) : "cash") || "manual_income";
+
+      let noteText = values.notes?.trim() || "";
+      if (isTransfer && selectedBank) {
+        const bankDetails = `${selectedBank.bank_name}${selectedBank.alias ? ` (${selectedBank.alias})` : ""}${
+          values.voucherNumber?.trim() ? ` - Comp: ${values.voucherNumber.trim()}` : ""
+        }`;
+        if (!noteText) {
+          noteText = `Ingreso por transferencia: ${bankDetails}`;
+        }
+      } else if (!noteText && paymentMethod) {
+        noteText = `Ingreso manual - ${paymentMethod.name}`;
+      }
+
       const movement = await cashService.createMovement(tenantId, {
         cash_session_id: currentSession.id,
         movement_type: "income",
         amount: values.amount,
         currency_code: "ARS",
         reference_type: paymentMethodCode,
-        reference_id: paymentMethod.id,
-        notes: values.notes?.trim() || `Ingreso manual - ${paymentMethod.name}`,
+        reference_id: isTransfer ? (selectedBank?.id || null) : (paymentMethod?.id || null),
+        notes: noteText || null,
         created_by: userId,
       });
+
+      // Si es ingreso por transferencia bancaria, registrar el movimiento de entrada en la cuenta de banco propia
+      if (isTransfer && selectedBank) {
+        try {
+          await bankAccountMovementsService.createMovement(tenantId, {
+            bank_account_id: selectedBank.id,
+            type: "income",
+            origin_type: "manual_income",
+            concept: values.notes?.trim() || `Ingreso manual a cuenta (${selectedBank.bank_name})`,
+            amount: values.amount,
+            reference_id: movement.id,
+            voucher_number: values.voucherNumber?.trim() || null,
+            notes: `Ingreso de caja turno #${currentSession.id.slice(-6)}`,
+            created_by: userId,
+          });
+        } catch (bErr) {
+          console.error("Error al registrar ingreso en cuenta bancaria:", bErr);
+        }
+      }
+
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "caja",
         action: "income",
         entity_type: "cash_movement",
         entity_id: movement.id,
-        description: "Ingreso manual de caja",
+        description: isTransfer
+          ? `Ingreso manual por transferencia (${selectedBank?.bank_name || "Banco"})`
+          : `Ingreso manual de caja (${paymentMethod?.name || "Efectivo"})`,
         metadata: {
           cash_session_id: currentSession.id,
           amount: values.amount,
-          payment_method_id: paymentMethod.id,
+          payment_method_id: paymentMethod?.id || null,
           payment_method_code: paymentMethodCode,
-          payment_method_name: paymentMethod.name,
+          payment_method_name: paymentMethod?.name || (isTransfer ? "Transferencia bancaria" : "Efectivo"),
+          bank_account_id: selectedBank?.id || null,
+          voucher_number: values.voucherNumber?.trim() || null,
           notes: values.notes?.trim() || null,
         },
       });
@@ -1322,31 +1381,85 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
     setIsSubmitting(true);
     try {
+      const isTransfer = values.paymentType === "transfer";
+      const selectedBank = isTransfer && values.bankAccountId
+        ? bankAccounts.find((b) => b.id === values.bankAccountId)
+        : null;
+
+      if (isTransfer && !selectedBank) {
+        setFeedback({ type: "error", message: "Seleccioná la cuenta bancaria de débito" });
+        return false;
+      }
+
+      const referenceType = isTransfer ? "transfer" : "cash";
+      const referenceId = isTransfer ? selectedBank!.id : null;
+
+      let noteText = values.notes?.trim() || "";
+      if (isTransfer && selectedBank) {
+        const bankDetails = `${selectedBank.bank_name}${selectedBank.alias ? ` (${selectedBank.alias})` : ""}${
+          values.voucherNumber?.trim() ? ` - Comp: ${values.voucherNumber.trim()}` : ""
+        }`;
+        if (!noteText) {
+          noteText = `Egreso por transferencia: ${bankDetails}`;
+        }
+      }
+
       const movement = await cashService.createMovement(tenantId, {
         cash_session_id: currentSession.id,
         movement_type: "expense",
         amount: values.amount,
         currency_code: "ARS",
-        reference_type: "manual_expense",
-        reference_id: null,
-        notes: values.notes?.trim() || null,
+        reference_type: referenceType,
+        reference_id: referenceId,
+        notes: noteText || null,
         created_by: userId,
       });
+
+      // Si es egreso por transferencia bancaria, registrar el movimiento de salida en la cuenta de banco propia
+      if (isTransfer && selectedBank) {
+        try {
+          await bankAccountMovementsService.createMovement(tenantId, {
+            bank_account_id: selectedBank.id,
+            type: "expense",
+            origin_type: "manual_expense",
+            concept: values.notes?.trim() || `Egreso manual desde caja (${selectedBank.bank_name})`,
+            amount: values.amount,
+            reference_id: movement.id,
+            voucher_number: values.voucherNumber?.trim() || null,
+            notes: `Egreso de caja turno #${currentSession.id.slice(-6)}`,
+            created_by: userId,
+          });
+        } catch (bErr) {
+          console.error("Error al registrar egreso en cuenta bancaria:", bErr);
+        }
+      }
+
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "caja",
         action: "expense",
         entity_type: "cash_movement",
         entity_id: movement.id,
-        description: "Egreso manual de caja",
+        description: isTransfer
+          ? `Egreso manual por transferencia (${selectedBank?.bank_name})`
+          : "Egreso manual de caja (Efectivo)",
         metadata: {
           cash_session_id: currentSession.id,
           amount: values.amount,
+          payment_type: referenceType,
+          bank_account_id: referenceId,
+          bank_name: selectedBank?.bank_name ?? null,
+          voucher_number: values.voucherNumber?.trim() || null,
           notes: values.notes?.trim() || null,
         },
       });
 
-      setFeedback({ type: "success", message: "Egreso registrado" });
+      setFeedback({
+        type: "success",
+        message: isTransfer
+          ? `Egreso registrado y debitado de ${selectedBank?.bank_name}`
+          : "Egreso en efectivo registrado correctamente",
+      });
       await loadCashData();
       return true;
     } catch {

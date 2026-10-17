@@ -8,6 +8,7 @@ import {
   Edit2,
   FileText,
   Landmark,
+  Loader2,
   QrCode,
   Receipt,
   UserCheck,
@@ -151,6 +152,8 @@ export const PosCheckoutPanel = ({
   const [issueInvoice, setIssueInvoice] = useState(false);
   const [notes] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const isSubmittingLocalRef = useRef(false);
+  const [isSubmittingLocal, setIsSubmittingLocal] = useState(false);
 
   // Modal para selección ágil de cliente
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -535,100 +538,110 @@ export const PosCheckoutPanel = ({
 
   // Manejo de envío final de la venta
   const handleFinalSubmit = useCallback(async () => {
+    if (disabled || isSubmittingLocalRef.current) return;
+    isSubmittingLocalRef.current = true;
+    setIsSubmittingLocal(true);
     setSubmitError(null);
 
-    if (!canWrite) {
-      setSubmitError("No tenés permisos para registrar ventas.");
-      return;
-    }
-
-    if (!isFullyAssigned) {
-      if (totalPending > 0) {
-        setSubmitError(`Resta asignar ${currency.format(totalPending)} para completar el total.`);
-      } else if (isOverpaid) {
-        setSubmitError(
-          `El total asignado supera el monto a pagar por ${currency.format(
-            totalAssigned - checkoutTotal
-          )}.`
-        );
+    try {
+      if (!canWrite) {
+        setSubmitError("No tenés permisos para registrar ventas.");
+        return;
       }
-      return;
-    }
 
-    // Validar si cuenta corriente está usada y requiere cliente
-    if (isCurrentAccountUsed && !selectedCustomer) {
-      setSubmitError("Debes seleccionar un cliente para cobrar con cuenta corriente.");
-      setIsCustomerModalOpen(true);
-      return;
-    }
+      if (!isFullyAssigned) {
+        if (totalPending > 0) {
+          setSubmitError(`Resta asignar ${currency.format(totalPending)} para completar el total.`);
+        } else if (isOverpaid) {
+          setSubmitError(
+            `El total asignado supera el monto a pagar por ${currency.format(
+              totalAssigned - checkoutTotal
+            )}.`
+          );
+        }
+        return;
+      }
 
-    if (isCurrentAccountUsed && selectedCustomer && !currentAccountSnapshot?.enabled) {
-      setSubmitError(
-        `La cuenta corriente no está habilitada para ${selectedCustomer.full_name}. Habilitala desde "Habilitar Cta. Cte." para poder confirmar la venta.`
+      // Validar si cuenta corriente está usada y requiere cliente
+      if (isCurrentAccountUsed && !selectedCustomer) {
+        setSubmitError("Debes seleccionar un cliente para cobrar con cuenta corriente.");
+        setIsCustomerModalOpen(true);
+        return;
+      }
+
+      if (isCurrentAccountUsed && selectedCustomer && !currentAccountSnapshot?.enabled) {
+        setSubmitError(
+          `La cuenta corriente no está habilitada para ${selectedCustomer.full_name}. Habilitala desde "Habilitar Cta. Cte." para poder confirmar la venta.`
+        );
+        return;
+      }
+
+      // Obtener los métodos con monto asignado
+      const activeEntries = Object.entries(allocatedAmounts).filter(
+        ([, amount]) => typeof amount === "number" && amount > 0
       );
-      return;
-    }
 
-    // Obtener los métodos con monto asignado
-    const activeEntries = Object.entries(allocatedAmounts).filter(
-      ([, amount]) => typeof amount === "number" && amount > 0
-    );
+      if (activeEntries.length === 0) {
+        setSubmitError("Debes asignar el monto a al menos un medio de pago.");
+        return;
+      }
 
-    if (activeEntries.length === 0) {
-      setSubmitError("Debes asignar el monto a al menos un medio de pago.");
-      return;
-    }
+      // Preparar lista de pagos para el backend
+      const splitPaymentsList: PosPaymentSplitItem[] = activeEntries.map(([optId, amount]) => {
+        const option = paymentOptions.find((o) => o.id === optId)!;
+        let paymentDetails: Record<string, unknown> | null = null;
 
-    // Preparar lista de pagos para el backend
-    const splitPaymentsList: PosPaymentSplitItem[] = activeEntries.map(([optId, amount]) => {
-      const option = paymentOptions.find((o) => o.id === optId)!;
-      let paymentDetails: Record<string, unknown> | null = null;
+        if (option.bankAccountId) {
+          paymentDetails = {
+            kind: "transfer",
+            destination_account_id: option.bankAccountId,
+            destination_account_bank: option.bankName,
+            captured_at: new Date().toISOString(),
+          };
+        }
 
-      if (option.bankAccountId) {
-        paymentDetails = {
+        return {
+          id: `split-${option.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          paymentMethodId: option.paymentMethodId,
+          amount: Number(amount.toFixed(2)),
+          paymentDetails,
+        };
+      });
+
+      const isSplit = splitPaymentsList.length > 1;
+      const primaryOption = paymentOptions.find((o) => o.id === activeEntries[0][0])!;
+
+      let primaryDetails: Record<string, unknown> | null = null;
+      if (primaryOption.bankAccountId) {
+        primaryDetails = {
           kind: "transfer",
-          destination_account_id: option.bankAccountId,
-          destination_account_bank: option.bankName,
+          destination_account_id: primaryOption.bankAccountId,
+          destination_account_bank: primaryOption.bankName,
           captured_at: new Date().toISOString(),
         };
       }
 
-      return {
-        id: `split-${option.id}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        paymentMethodId: option.paymentMethodId,
-        amount: Number(amount.toFixed(2)),
-        paymentDetails,
+      const payload: PosCheckoutValues = {
+        customerId: selectedCustomerId || undefined,
+        paymentMethodId: primaryOption.paymentMethodId,
+        issueInvoice,
+        notes: notes.trim(),
+        isSplitPayment: isSplit,
+        payments: isSplit ? splitPaymentsList : undefined,
+        paymentDetails: isSplit ? null : primaryDetails,
       };
-    });
 
-    const isSplit = splitPaymentsList.length > 1;
-    const primaryOption = paymentOptions.find((o) => o.id === activeEntries[0][0])!;
-
-    let primaryDetails: Record<string, unknown> | null = null;
-    if (primaryOption.bankAccountId) {
-      primaryDetails = {
-        kind: "transfer",
-        destination_account_id: primaryOption.bankAccountId,
-        destination_account_bank: primaryOption.bankName,
-        captured_at: new Date().toISOString(),
-      };
+      await onSubmit(payload);
+    } finally {
+      isSubmittingLocalRef.current = false;
+      setIsSubmittingLocal(false);
     }
-
-    const payload: PosCheckoutValues = {
-      customerId: selectedCustomerId || undefined,
-      paymentMethodId: primaryOption.paymentMethodId,
-      issueInvoice,
-      notes: notes.trim(),
-      isSplitPayment: isSplit,
-      payments: isSplit ? splitPaymentsList : undefined,
-      paymentDetails: isSplit ? null : primaryDetails,
-    };
-
-    await onSubmit(payload);
   }, [
     allocatedAmounts,
     canWrite,
     checkoutTotal,
+    currentAccountSnapshot,
+    disabled,
     isCurrentAccountUsed,
     isFullyAssigned,
     isOverpaid,
@@ -690,6 +703,21 @@ export const PosCheckoutPanel = ({
   // Listener global de teclado para navegación ágil y flujo de Enter en 3 pasos
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Prevenir repetición por tecla mantenida apretada
+      if (e.repeat) {
+        e.preventDefault();
+        return;
+      }
+
+      // Si el modal está enviando o deshabilitado, bloquear acciones
+      if (disabled || isSubmittingLocalRef.current) {
+        if (e.key === "Enter" || e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
+
       // Si el modal de búsqueda de clientes está abierto
       if (isCustomerModalOpen) {
         if (e.key === "Escape") {
@@ -761,6 +789,7 @@ export const PosCheckoutPanel = ({
 
         // PASO 3: Ya se confirmó el monto (isReadyToSubmit) y el total está 100% asignado
         if (isReadyToSubmit && isFullyAssigned) {
+          e.stopPropagation();
           void handleFinalSubmit();
           return;
         }
@@ -1277,18 +1306,24 @@ export const PosCheckoutPanel = ({
         <button
           type="button"
           onClick={() => void handleFinalSubmit()}
-          disabled={disabled || !canWrite || !isFullyAssigned}
+          disabled={disabled || isSubmittingLocal || !canWrite || !isFullyAssigned}
           className={`inline-flex items-center justify-center gap-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 shadow-md shadow-emerald-600/20 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer ${
-            isReadyToSubmit && isFullyAssigned
+            !disabled && !isSubmittingLocal && isReadyToSubmit && isFullyAssigned
               ? "ring-2 ring-emerald-400 ring-offset-2 dark:ring-offset-slate-900 animate-pulse"
               : ""
           }`}
         >
           <div className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20">
-            <Check size={13} className="stroke-[3]" />
+            {disabled || isSubmittingLocal ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <Check size={13} className="stroke-[3]" />
+            )}
           </div>
           <span className="text-xs font-black uppercase tracking-wider">
-            {isFullyAssigned
+            {disabled || isSubmittingLocal
+              ? "Registrando..."
+              : isFullyAssigned
               ? isReadyToSubmit
                 ? "Confirmar Venta (Enter)"
                 : "Confirmar Venta"

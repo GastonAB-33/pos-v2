@@ -474,6 +474,7 @@ export const usePosSale = (tenantId: string | null) => {
   const [generatedInvoice, setGeneratedInvoice] = useState<Invoice | null>(null);
   const [mercadoPagoIntent, setMercadoPagoIntent] = useState<MercadoPagoPaymentIntent | null>(null);
   const cartRef = useRef<PosCartItem[]>([]);
+  const isConfirmingSaleRef = useRef(false);
 
   const toggleDiscounts = useCallback(() => {
     setDiscountsEnabled((prev) => !prev);
@@ -2630,12 +2631,20 @@ export const usePosSale = (tenantId: string | null) => {
   ): Promise<Sale | null> => {
     if (!tenantId) return null;
 
+    if (isConfirmingSaleRef.current || isSubmitting) {
+      return null;
+    }
+
     if (!cart.length) {
       setFeedback({ type: "error", message: "No hay items en el carrito" });
       return null;
     }
 
-    const hasZeroQuantity = cart.some((item) => item.quantity <= 0);
+    isConfirmingSaleRef.current = true;
+    setIsSubmitting(true);
+
+    try {
+      const hasZeroQuantity = cart.some((item) => item.quantity <= 0);
     if (hasZeroQuantity) {
       setFeedback({
         type: "error",
@@ -2858,7 +2867,6 @@ export const usePosSale = (tenantId: string | null) => {
     }
 
     if (!isOnline) {
-      setIsSubmitting(true);
       setGeneratedReceipt(null);
       setGeneratedInvoice(null);
 
@@ -2963,17 +2971,13 @@ export const usePosSale = (tenantId: string | null) => {
           message: "No se pudo guardar la venta offline",
         });
         return null;
-      } finally {
-        setIsSubmitting(false);
       }
     }
 
-    setIsSubmitting(true);
     setGeneratedReceipt(null);
     setGeneratedInvoice(null);
 
-    try {
-      const sale = await salesService.create(tenantId, {
+    const sale = await salesService.create(tenantId, {
         sale_number: saleNumber,
         customer_id: values.customerId?.trim() || null,
         cash_session_id: openSession?.id ?? null,
@@ -3811,6 +3815,7 @@ export const usePosSale = (tenantId: string | null) => {
       });
       return null;
     } finally {
+      isConfirmingSaleRef.current = false;
       setIsSubmitting(false);
     }
   };

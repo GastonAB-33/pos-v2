@@ -247,6 +247,7 @@ export const PosPage = () => {
 
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState("");
   const [visibleBarcodeValue, setVisibleBarcodeValue] = useState("");
+  const [searchResetToken, setSearchResetToken] = useState(0);
   const [isReceiptsListModalOpen, setIsReceiptsListModalOpen] = useState(false);
   const [recentReceipts, setRecentReceipts] = useState<PosRecentReceiptItem[]>([]);
   const [receiptsSearchTerm, setReceiptsSearchTerm] = useState("");
@@ -798,9 +799,12 @@ export const PosPage = () => {
     void loadRecentReceipts();
   }, [loadRecentReceipts]);
 
+  const isConfirmingSaleRef = useRef(false);
+
   const handleConfirmSale = useCallback(
     async (values: PosCheckoutValues) => {
       if (!canWritePos) return;
+      if (isSubmitting || isConfirmingSaleRef.current) return;
       if (isOpeningCashSession) {
         toastError("Estamos abriendo la caja. Intenta nuevamente en unos segundos.");
         return;
@@ -819,9 +823,18 @@ export const PosPage = () => {
         );
         return;
       }
-      clearFeedback();
-      await confirmSale(values, resolvedOperatorUserId, { openCashSessionId });
-      setIsCheckoutModalOpen(false);
+      isConfirmingSaleRef.current = true;
+      try {
+        clearFeedback();
+        const sale = await confirmSale(values, resolvedOperatorUserId, { openCashSessionId });
+        if (sale) {
+          setIsCheckoutModalOpen(false);
+          setSearchResetToken((prev) => prev + 1);
+          setVisibleBarcodeValue("");
+        }
+      } finally {
+        isConfirmingSaleRef.current = false;
+      }
     },
     [
       canWritePos,
@@ -829,6 +842,7 @@ export const PosPage = () => {
       confirmSale,
       isCashGateResolving,
       isOpeningCashSession,
+      isSubmitting,
       openCashSessionId,
       resolvedOperatorUserId,
       toastError,
@@ -899,14 +913,15 @@ export const PosPage = () => {
   );
 
   const focusScannerCapture = useCallback(() => {
+    if (isCheckoutModalOpen) return;
     const input = scannerCaptureRef.current;
     if (!input) return;
     input.focus({ preventScroll: true });
-  }, []);
+  }, [isCheckoutModalOpen]);
 
   const handleBarcodeScan = useCallback(
     async (barcode: string): Promise<boolean> => {
-      if (!canWritePos || isSubmitting || isCashGateBlocking) return false;
+      if (!canWritePos || isSubmitting || isCashGateBlocking || isCheckoutModalOpen) return false;
 
       const cleanBarcode = barcode.trim();
       try {
@@ -939,6 +954,7 @@ export const PosPage = () => {
       canWritePos,
       focusScannerCapture,
       isCashGateBlocking,
+      isCheckoutModalOpen,
       isSubmitting,
       triggerCartSuccessHighlight,
     ]
@@ -952,6 +968,7 @@ export const PosPage = () => {
   );
 
   const handleVisibleBarcodeSubmit = useCallback(() => {
+    if (isCheckoutModalOpen) return;
     const barcode = visibleBarcodeValue.trim();
     if (!barcode) return;
 
@@ -960,7 +977,7 @@ export const PosPage = () => {
         setVisibleBarcodeValue("");
       }
     });
-  }, [handleBarcodeScan, visibleBarcodeValue]);
+  }, [handleBarcodeScan, isCheckoutModalOpen, visibleBarcodeValue]);
 
   useBarcodeScanner({
     enabled: Boolean(
@@ -969,6 +986,7 @@ export const PosPage = () => {
         canWritePos &&
         !isCashGateBlocking &&
         !isSubmitting &&
+        !isCheckoutModalOpen &&
         !customerModalState &&
         !receiptModal &&
         !isCameraScannerOpen
@@ -977,6 +995,10 @@ export const PosPage = () => {
   });
 
   useEffect(() => {
+    if (isCheckoutModalOpen) {
+      scannerCaptureRef.current?.blur();
+      return;
+    }
     if (isCashGateBlocking) return;
     if (isSubmitting) return;
     if (customerModalState || receiptModal) return;
@@ -987,6 +1009,7 @@ export const PosPage = () => {
     focusScannerCapture,
     isCameraScannerOpen,
     isCashGateBlocking,
+    isCheckoutModalOpen,
     isSubmitting,
     receiptModal,
   ]);
@@ -1032,6 +1055,8 @@ export const PosPage = () => {
   const closeReceiptModal = useCallback(() => {
     setReceiptModal(null);
     setPrintMenuReceiptId(null);
+    setSearchResetToken((prev) => prev + 1);
+    setVisibleBarcodeValue("");
     window.setTimeout(() => {
       focusScannerCapture();
     }, 0);
@@ -1326,8 +1351,13 @@ export const PosPage = () => {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
+      if (event.repeat) {
+        event.preventDefault();
+        return;
+      }
 
       if (event.key === "Escape") {
+        if (isSubmitting || isConfirmingSaleRef.current) return;
         setIsCheckoutModalOpen(false);
         window.setTimeout(() => {
           focusScannerCapture();
@@ -1337,7 +1367,7 @@ export const PosPage = () => {
 
       if (event.key !== "Enter") return;
       if (!cart.length || !paymentMethods.length) return;
-      if (!canWritePos || isLoading || isSubmitting || isCashGateBlocking) return;
+      if (!canWritePos || isLoading || isSubmitting || isConfirmingSaleRef.current || isCashGateBlocking) return;
 
       const activeElement = document.activeElement;
       const isEditableElement =
@@ -1393,9 +1423,9 @@ export const PosPage = () => {
   useEffect(() => {
     const handleCheckoutEnter = (event: KeyboardEvent) => {
       if (event.key !== "Enter") return;
-      if (event.defaultPrevented) return;
+      if (event.repeat || event.defaultPrevented) return;
       if (customerModalState || receiptModal || isReceiptsListModalOpen || isCheckoutModalOpen) return;
-      if (!canWritePos || isLoading || isSubmitting) return;
+      if (!canWritePos || isLoading || isSubmitting || isConfirmingSaleRef.current) return;
       if (isCashGateBlocking) return;
       if (!cart.length || !paymentMethods.length) return;
 
@@ -1553,6 +1583,7 @@ export const PosPage = () => {
         autoCorrect="off"
         spellCheck={false}
         aria-label="Captura scanner"
+        disabled={isCheckoutModalOpen}
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             event.currentTarget.value = "";
@@ -1560,6 +1591,7 @@ export const PosPage = () => {
         }}
         onBlur={() => {
           window.setTimeout(() => {
+            if (isCheckoutModalOpen) return;
             const activeElement = document.activeElement;
             const isEditableElement =
               activeElement instanceof HTMLInputElement ||
@@ -1589,7 +1621,11 @@ export const PosPage = () => {
             }
           }}
           onRemove={removeFromCart}
-          onClearCart={clearCart}
+          onClearCart={() => {
+            clearCart();
+            setSearchResetToken((prev) => prev + 1);
+            setVisibleBarcodeValue("");
+          }}
           onCycleReturnableStatus={cycleReturnableStatus}
           onOpenDebtPaymentModal={() => setIsDebtPaymentModalOpen(true)}
           hasDebtPaymentInCart={Boolean(existingDebtItem)}
@@ -1600,12 +1636,13 @@ export const PosPage = () => {
           onOpenCartDiscountModal={() => setIsCartDiscountModalOpen(true)}
           onRemoveCartDiscount={() => applyCartDiscount(null)}
           onOpenItemPromoModal={(item) => setItemPromoModalTarget(item)}
-          disabled={isSubmitting || isCashGateBlocking}
+          disabled={isSubmitting || isCashGateBlocking || isCheckoutModalOpen}
           canWrite={canWritePos}
+          searchResetToken={searchResetToken}
           products={products}
           primaryBarcodes={primaryBarcodes}
           onAddProduct={async (product, quantity = 1) => {
-            if (!canWritePos || isCashGateBlocking) return false;
+            if (!canWritePos || isCashGateBlocking || isCheckoutModalOpen) return false;
             const added = await addProductToCart(product, quantity);
             if (added) {
               triggerCartSuccessHighlight();
@@ -1819,9 +1856,10 @@ export const PosPage = () => {
                 onCreateSaleTab={createNewSaleTab}
                 onCloseSaleTab={closeSaleTab}
                 canWrite={canWritePos}
-                disabled={isSubmitting || isCashGateBlocking}
+                disabled={isSubmitting || isCashGateBlocking || isCheckoutModalOpen}
+                searchResetToken={searchResetToken}
                 onAddProduct={async (product, quantity) => {
-                  if (!canWritePos || isCashGateBlocking) return;
+                  if (!canWritePos || isCashGateBlocking || isCheckoutModalOpen) return;
                   const added = await addProductToCart(product, quantity);
                   if (added) {
                     triggerCartSuccessHighlight();
@@ -1857,7 +1895,7 @@ export const PosPage = () => {
                   onRemoveCartDiscount={() => applyCartDiscount(null)}
                   onOpenItemPromoModal={(item) => setItemPromoModalTarget(item)}
                   canWrite={canWritePos}
-                  disabled={isSubmitting || isCashGateBlocking}
+                  disabled={isSubmitting || isCashGateBlocking || isCheckoutModalOpen}
                   onBarcodeChange={setVisibleBarcodeValue}
                   onBarcodeSubmit={handleVisibleBarcodeSubmit}
                   onIncrease={increaseQuantity}
@@ -1865,7 +1903,11 @@ export const PosPage = () => {
                   onSetQuantity={setCartItemQuantity}
                   onEdit={(item) => setEditingCartItemId(item.product_id)}
                   onRemove={removeFromCart}
-                  onClearCart={clearCart}
+                  onClearCart={() => {
+                    clearCart();
+                    setSearchResetToken((prev) => prev + 1);
+                    setVisibleBarcodeValue("");
+                  }}
                   onOpenQuickProduct={() => setIsQuickProductModalOpen(true)}
                   onCheckout={() => setIsCheckoutModalOpen(true)}
                 />
@@ -2023,10 +2065,10 @@ export const PosPage = () => {
       />
 
       <PosQuickProductModal
-        open={isQuickProductModalOpen}
+        open={isQuickProductModalOpen && !isCheckoutModalOpen}
         initialBarcode={lastNotFoundBarcode}
         categories={productCategories}
-        disabled={isSubmitting || isCashGateBlocking || !canWritePos}
+        disabled={isSubmitting || isCashGateBlocking || isCheckoutModalOpen || !canWritePos}
         onClose={() => {
           setIsQuickProductModalOpen(false);
           window.setTimeout(() => {
@@ -2057,7 +2099,7 @@ export const PosPage = () => {
 
       <PosCartItemEditModal
         item={editingCartItem}
-        disabled={isSubmitting || isCashGateBlocking || !canWritePos}
+        disabled={isSubmitting || isCashGateBlocking || isCheckoutModalOpen || !canWritePos}
         canEditCatalog={canWriteProducts}
         onClose={() => {
           setEditingCartItemId(null);
@@ -2150,7 +2192,7 @@ export const PosPage = () => {
       />
 
       <BarcodeScannerModal
-        open={isCameraScannerOpen}
+        open={isCameraScannerOpen && !isCheckoutModalOpen}
         title="Escanear producto con camara"
         description="Escanea un codigo para agregar el producto al carrito."
         onClose={() => {

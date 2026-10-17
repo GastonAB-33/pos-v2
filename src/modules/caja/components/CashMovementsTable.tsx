@@ -134,7 +134,9 @@ const getPaymentMethodInfo = (
       : undefined;
 
     let bankAccount: BankAccount | undefined;
-    if (bankAccountId) {
+    if (movement.reference_id && bankAccounts.some((b) => b.id === movement.reference_id)) {
+      bankAccount = bankAccounts.find((b) => b.id === movement.reference_id);
+    } else if (bankAccountId) {
       bankAccount = bankAccounts.find((b) => b.id === bankAccountId);
     } else {
       bankAccount = bankAccounts.find(

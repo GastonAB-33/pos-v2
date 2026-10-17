@@ -95,6 +95,7 @@ export interface PosSmartViewProps {
   onOpenReceipts: () => void;
   onOpenQuickProduct: () => void;
   onOpenQuickPrice?: () => void;
+  searchResetToken?: number;
 }
 
 export const PosSmartView = ({
@@ -109,6 +110,7 @@ export const PosSmartView = ({
   onCycleReturnableStatus,
   disabled = false,
   canWrite = true,
+  searchResetToken,
   onOpenDebtPaymentModal,
   hasDebtPaymentInCart = false,
   debtPaymentAmount = 0,
@@ -173,6 +175,12 @@ export const PosSmartView = ({
   const cartContainerRef = useRef<HTMLDivElement | null>(null);
   const lastItemRef = useRef<HTMLElement | null>(null);
   const prevItemsLengthRef = useRef(items.length);
+
+  // Limpiar buscador al finalizar venta o cambio de señal externa
+  useEffect(() => {
+    setSearchQuery("");
+    setIsSearchOpen(false);
+  }, [searchResetToken]);
 
   // Cerrar el menú de búsqueda al hacer clic en cualquier otra parte del sistema
   useEffect(() => {
