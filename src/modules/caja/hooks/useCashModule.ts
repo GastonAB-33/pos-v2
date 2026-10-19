@@ -53,6 +53,8 @@ export interface CashDailyTrackingRow {
 export interface CashCloseSnapshot {
   billCounts?: Record<number, number>;
   coinsAmount?: number;
+  openingBillCounts?: Record<number, number>;
+  openingCoinsAmount?: number;
   expectedAmount?: number;
   expectedCashAmount?: number;
   expectedFullAmount?: number;
@@ -1107,6 +1109,15 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         return;
       }
 
+      const openSnapshot: CashCloseSnapshot = {
+        openingBillCounts: values.billCounts,
+        openingCoinsAmount: values.coinsAmount,
+        userNotes: values.notes?.trim() || "",
+      };
+      const serializedNotes = values.billCounts
+        ? serializeCloseSnapshot(openSnapshot, values.notes?.trim() || null)
+        : values.notes?.trim() || null;
+
       const createdSession = await cashService.create(tenantId, {
         branch_id: null,
         opened_by_user_id: userId,
@@ -1118,7 +1129,9 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         closing_amount: null,
         expected_closing_amount: null,
         closing_difference: null,
-        notes: values.notes?.trim() || null,
+        notes: serializedNotes,
+        opening_bill_counts: (values.billCounts as Record<string, number>) ?? null,
+        opening_coins_amount: values.coinsAmount ?? null,
       });
       await auditService.createSafe(tenantId, {
         user_id: userId,
@@ -1130,6 +1143,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         metadata: {
           opening_amount: values.openingAmount,
           notes: values.notes?.trim() || null,
+          bill_counts: values.billCounts,
+          coins_amount: values.coinsAmount,
         },
       });
 
@@ -1169,9 +1184,16 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       const expectedAmount = currentSessionSummary.expectedBalance;
       const difference = roundAmount(values.realAmount - expectedAmount);
 
+      const existingSnapshot = parseCloseSnapshot(currentSession.notes).snapshot;
+
       const snapshot: CashCloseSnapshot = {
         billCounts: values.billCounts,
         coinsAmount: values.coinsAmount,
+        openingBillCounts:
+          existingSnapshot?.openingBillCounts ??
+          (currentSession.opening_bill_counts as Record<number, number> | undefined),
+        openingCoinsAmount:
+          existingSnapshot?.openingCoinsAmount ?? currentSession.opening_coins_amount ?? undefined,
         expectedAmount,
         expectedCashAmount: currentSessionSummary.expectedCashBalance,
         expectedFullAmount: currentSessionSummary.expectedFullBalance,

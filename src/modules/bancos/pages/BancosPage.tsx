@@ -240,15 +240,15 @@ export const BancosPage = () => {
     >
       <div className="bancos-workspace space-y-6">
         {/* Navigation Tabs */}
-        <div className="flex items-center justify-between border-b border-slate-200">
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => setActiveTab("accounts")}
-              className={`flex items-center gap-2 px-4 py-3 border-b-2 text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-4 py-3 border-b-2 text-sm font-semibold transition-colors ${
                 activeTab === "accounts"
-                  ? "border-slate-900 text-slate-900"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
+                  ? "border-sky-500 text-sky-600 dark:border-sky-400 dark:text-sky-300"
+                  : "border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
               }`}
             >
               <Building2 className="h-4 w-4" />
@@ -258,10 +258,10 @@ export const BancosPage = () => {
             <button
               type="button"
               onClick={() => setActiveTab("origin_banks")}
-              className={`flex items-center gap-2 px-4 py-3 border-b-2 text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-4 py-3 border-b-2 text-sm font-semibold transition-colors ${
                 activeTab === "origin_banks"
-                  ? "border-slate-900 text-slate-900"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
+                  ? "border-sky-500 text-sky-600 dark:border-sky-400 dark:text-sky-300"
+                  : "border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
               }`}
             >
               <CreditCard className="h-4 w-4" />
@@ -271,10 +271,10 @@ export const BancosPage = () => {
             <button
               type="button"
               onClick={() => setActiveTab("installment_plans")}
-              className={`flex items-center gap-2 px-4 py-3 border-b-2 text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-4 py-3 border-b-2 text-sm font-semibold transition-colors ${
                 activeTab === "installment_plans"
-                  ? "border-slate-900 text-slate-900"
-                  : "border-transparent text-slate-500 hover:text-slate-800"
+                  ? "border-sky-500 text-sky-600 dark:border-sky-400 dark:text-sky-300"
+                  : "border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
               }`}
             >
               <Layers className="h-4 w-4" />
@@ -296,7 +296,7 @@ export const BancosPage = () => {
                   <button
                     type="button"
                     onClick={() => openAccountModal()}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 dark:bg-sky-600 dark:hover:bg-sky-500 rounded-lg shadow-sm transition-colors"
                   >
                     <Plus className="h-4 w-4" />
                     Nueva Cuenta Bancaria
@@ -306,7 +306,7 @@ export const BancosPage = () => {
                   <button
                     type="button"
                     onClick={() => openPlanModal()}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 dark:bg-sky-600 dark:hover:bg-sky-500 rounded-lg shadow-sm transition-colors"
                   >
                     <Plus className="h-4 w-4" />
                     Nuevo Plan de Cuotas
@@ -319,23 +319,23 @@ export const BancosPage = () => {
 
         {/* Tab 1: Cuentas Bancarias */}
         {activeTab === "accounts" && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
             {isLoading ? (
               <div className="p-8">
                 <LoadingState message="Cargando cuentas bancarias..." />
               </div>
             ) : bankAccounts.length === 0 ? (
               <div className="p-12 text-center text-slate-400">
-                <Building2 className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm font-medium text-slate-700">Sin cuentas bancarias configuradas</p>
-                <p className="text-xs text-slate-500 mt-1">
+                <Building2 className="h-10 w-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Sin cuentas bancarias configuradas</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                   Agregá las cuentas bancarias o billeteras virtuales de tu negocio.
                 </p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-600 border-b border-slate-200">
+                  <thead className="bg-slate-50 dark:bg-slate-800/90 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
                     <tr>
                       <th className="py-3 px-4">Banco / Entidad</th>
                       <th className="py-3 px-4">Tipo</th>
@@ -348,23 +348,25 @@ export const BancosPage = () => {
                       <th className="py-3 px-4 text-right">Acciones</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {bankAccounts.map((acc) => (
-                      <tr key={acc.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-4 font-semibold text-slate-900">{acc.bank_name}</td>
-                        <td className="py-3 px-4 text-xs text-slate-600 capitalize">
+                      <tr key={acc.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                        <td className="py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">{acc.bank_name}</td>
+                        <td className="py-3 px-4 text-xs font-medium text-slate-700 dark:text-slate-300 capitalize">
                           {acc.account_type.replace("_", " ")}
                         </td>
-                        <td className="py-3 px-4 text-xs text-slate-700">{acc.holder_name}</td>
-                        <td className="py-3 px-4 text-xs font-mono text-slate-600">{acc.cbu || "-"}</td>
-                        <td className="py-3 px-4 text-xs font-mono text-slate-600">{acc.alias || "-"}</td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
+                        <td className="py-3 px-4 text-xs text-slate-700 dark:text-slate-200">{acc.holder_name}</td>
+                        <td className="py-3 px-4 text-xs font-mono text-slate-700 dark:text-slate-300">{acc.cbu || "-"}</td>
+                        <td className="py-3 px-4 text-xs font-mono text-slate-700 dark:text-slate-300">{acc.alias || "-"}</td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-slate-900 dark:text-slate-100">
                           {currency.format(accountBalances[acc.id] ?? 0)}
                         </td>
                         <td className="py-3 px-4 text-center">
                           <span
                             className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${
-                              acc.is_active ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"
+                              acc.is_active
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border dark:border-emerald-800"
+                                : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:border dark:border-slate-700"
                             }`}
                           >
                             {acc.is_active ? "Activa" : "Inactiva"}
@@ -377,8 +379,8 @@ export const BancosPage = () => {
                               onClick={() => toggleBankAccountPosAvailable(acc.id)}
                               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold transition cursor-pointer ${
                                 acc.is_pos_available !== false
-                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-700"
-                                  : "bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-700 dark:hover:bg-emerald-900/60"
+                                  : "bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 dark:hover:bg-slate-700"
                               }`}
                               title="Clic para cambiar disponibilidad de cobro en POS"
                             >
@@ -388,8 +390,8 @@ export const BancosPage = () => {
                             <span
                               className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${
                                 acc.is_pos_available !== false
-                                  ? "bg-emerald-100 text-emerald-800"
-                                  : "bg-slate-100 text-slate-500"
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border dark:border-emerald-800"
+                                  : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 dark:border dark:border-slate-700"
                               }`}
                             >
                               {acc.is_pos_available !== false ? "✓ En POS" : "No"}
@@ -400,10 +402,10 @@ export const BancosPage = () => {
                           <button
                             type="button"
                             onClick={() => setSelectedMovementsAccount(acc)}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200 rounded-lg transition-colors mr-2 shadow-xs"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-sky-800 bg-sky-50 hover:bg-sky-100 border border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800 dark:hover:bg-sky-900/60 rounded-lg transition-colors mr-2 shadow-xs"
                             title="Ver movimientos e ingresos/egresos"
                           >
-                            <ArrowLeftRight className="h-3.5 w-3.5 text-sky-600" />
+                            <ArrowLeftRight className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
                             Movimientos
                           </button>
                           {canWriteModule && (
@@ -411,7 +413,7 @@ export const BancosPage = () => {
                               <button
                                 type="button"
                                 onClick={() => openAccountModal(acc)}
-                                className="text-slate-600 hover:text-slate-900 p-1 rounded"
+                                className="text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                                 title="Editar cuenta"
                               >
                                 <Edit2 className="h-4 w-4" />
@@ -419,8 +421,10 @@ export const BancosPage = () => {
                               <button
                                 type="button"
                                 onClick={() => toggleBankAccount(acc.id)}
-                                className={`p-1 rounded ml-1 ${
-                                  acc.is_active ? "text-amber-600 hover:text-amber-800" : "text-emerald-600 hover:text-emerald-800"
+                                className={`p-1 rounded ml-1 transition-colors ${
+                                  acc.is_active
+                                    ? "text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                                    : "text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
                                 }`}
                                 title={acc.is_active ? "Desactivar cuenta" : "Activar cuenta"}
                               >
@@ -440,11 +444,11 @@ export const BancosPage = () => {
 
         {/* Tab 2: Bancos Emisores */}
         {activeTab === "origin_banks" && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 flex items-center justify-between">
               <div>
-                <h4 className="text-sm font-semibold text-slate-900">Bancos Emisores de Tarjetas</h4>
-                <p className="text-xs text-slate-500">
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Bancos Emisores de Tarjetas</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Catálogo de entidades bancarias habilitadas para transacciones con tarjeta.
                 </p>
               </div>
@@ -454,18 +458,20 @@ export const BancosPage = () => {
               {originBanks.map((bank) => (
                 <div
                   key={bank.id}
-                  className="flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:border-slate-300 transition-colors"
+                  className="flex items-center justify-between p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
                 >
                   <div>
-                    <p className="text-sm font-medium text-slate-900">{bank.name}</p>
-                    <p className="text-[10px] text-slate-400 uppercase font-mono">{bank.code}</p>
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{bank.name}</p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-mono">{bank.code}</p>
                   </div>
                   {canWriteModule && (
                     <button
                       type="button"
                       onClick={() => toggleOriginBank(bank.id)}
                       className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                        bank.is_active ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-500"
+                        bank.is_active
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border dark:border-emerald-800"
+                          : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:border dark:border-slate-700"
                       }`}
                     >
                       {bank.is_active ? "Activo" : "Inactivo"}
@@ -479,16 +485,16 @@ export const BancosPage = () => {
 
         {/* Tab 3: Planes de Cuotas */}
         {activeTab === "installment_plans" && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
             {installmentPlans.length === 0 ? (
               <div className="p-12 text-center text-slate-400">
-                <Layers className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm font-medium text-slate-700">Sin planes de cuotas</p>
+                <Layers className="h-10 w-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Sin planes de cuotas</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-600 border-b border-slate-200">
+                  <thead className="bg-slate-50 dark:bg-slate-800/90 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
                     <tr>
                       <th className="py-3 px-4">Nombre del Plan</th>
                       <th className="py-3 px-4">Código</th>
@@ -499,20 +505,22 @@ export const BancosPage = () => {
                       {canWriteModule && <th className="py-3 px-4 text-right">Acciones</th>}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {installmentPlans.map((plan) => (
-                      <tr key={plan.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3 px-4 font-semibold text-slate-900">{plan.name}</td>
-                        <td className="py-3 px-4 text-xs font-mono text-slate-500">{plan.code}</td>
-                        <td className="py-3 px-4 text-center font-bold text-slate-800">{plan.installments}</td>
-                        <td className="py-3 px-4 text-right font-medium text-slate-800">
+                      <tr key={plan.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                        <td className="py-3 px-4 font-semibold text-slate-900 dark:text-slate-100">{plan.name}</td>
+                        <td className="py-3 px-4 text-xs font-mono text-slate-600 dark:text-slate-300">{plan.code}</td>
+                        <td className="py-3 px-4 text-center font-bold text-slate-900 dark:text-slate-100">{plan.installments}</td>
+                        <td className="py-3 px-4 text-right font-medium text-slate-900 dark:text-slate-100">
                           {plan.interest_percent}%
                         </td>
-                        <td className="py-3 px-4 text-xs text-slate-600">{plan.card_brand || "Todas"}</td>
+                        <td className="py-3 px-4 text-xs font-medium text-slate-700 dark:text-slate-300">{plan.card_brand || "Todas"}</td>
                         <td className="py-3 px-4 text-center">
                           <span
                             className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium ${
-                              plan.is_active ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"
+                              plan.is_active
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border dark:border-emerald-800"
+                                : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:border dark:border-slate-700"
                             }`}
                           >
                             {plan.is_active ? "Activo" : "Inactivo"}
@@ -523,7 +531,7 @@ export const BancosPage = () => {
                             <button
                               type="button"
                               onClick={() => openPlanModal(plan)}
-                              className="text-slate-600 hover:text-slate-900 p-1 rounded"
+                              className="text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                               title="Editar plan"
                             >
                               <Edit2 className="h-4 w-4" />
@@ -531,8 +539,10 @@ export const BancosPage = () => {
                             <button
                               type="button"
                               onClick={() => toggleInstallmentPlan(plan.id)}
-                              className={`p-1 rounded ml-1 ${
-                                plan.is_active ? "text-amber-600 hover:text-amber-800" : "text-emerald-600 hover:text-emerald-800"
+                              className={`p-1 rounded ml-1 transition-colors ${
+                                plan.is_active
+                                  ? "text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40"
+                                  : "text-emerald-600 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
                               }`}
                               title={plan.is_active ? "Desactivar plan" : "Activar plan"}
                             >
@@ -551,39 +561,44 @@ export const BancosPage = () => {
 
         {/* Modal: Cuenta Bancaria */}
         {accountModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-            <div className="w-full max-w-md bg-white rounded-xl shadow-xl overflow-hidden">
-              <header className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                <h3 className="font-semibold text-slate-900">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+            <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
+              <header className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/80">
+                <h3 className="font-semibold text-slate-900 dark:text-slate-100">
                   {editingAccount ? "Editar Cuenta Bancaria" : "Nueva Cuenta Bancaria"}
                 </h3>
                 <ModalCloseButton onClick={() => setAccountModalOpen(false)} />
               </header>
 
-              <form onSubmit={handleSaveAccount} className="p-6 space-y-4">
+              <form onSubmit={handleSaveAccount} autoComplete="off" className="p-6 space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
                     Banco o Entidad *
                   </label>
                   <input
                     type="text"
                     required
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-lpignore="true"
                     value={accountForm.bank_name}
                     onChange={(e) => setAccountForm({ ...accountForm, bank_name: e.target.value })}
                     placeholder="Ej: Banco Galicia / Mercado Pago"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
                       Tipo de Cuenta
                     </label>
                     <select
                       value={accountForm.account_type}
                       onChange={(e) => setAccountForm({ ...accountForm, account_type: e.target.value as any })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     >
                       <option value="cuenta_corriente">Cuenta corriente</option>
                       <option value="caja_ahorro">Caja de ahorro</option>
@@ -593,57 +608,68 @@ export const BancosPage = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
                       Moneda
                     </label>
                     <input
                       type="text"
+                      autoComplete="off"
+                      data-lpignore="true"
                       value={accountForm.currency_code}
                       onChange={(e) => setAccountForm({ ...accountForm, currency_code: e.target.value })}
                       placeholder="ARS"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
                     Titular de la Cuenta *
                   </label>
                   <input
                     type="text"
                     required
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-lpignore="true"
                     value={accountForm.holder_name}
                     onChange={(e) => setAccountForm({ ...accountForm, holder_name: e.target.value })}
                     placeholder="Razón Social o Nombre del titular"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
                     CBU / CVU (22 dígitos)
                   </label>
                   <input
                     type="text"
                     maxLength={22}
+                    autoComplete="off"
+                    data-lpignore="true"
                     value={accountForm.cbu}
                     onChange={(e) => setAccountForm({ ...accountForm, cbu: e.target.value })}
                     placeholder="0070000000000000000000"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-mono bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
                     Alias
                   </label>
                   <input
                     type="text"
+                    autoComplete="off"
+                    data-lpignore="true"
                     value={accountForm.alias}
                     onChange={(e) => setAccountForm({ ...accountForm, alias: e.target.value })}
                     placeholder="mi.negocio.pos"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-mono bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
 
@@ -653,9 +679,9 @@ export const BancosPage = () => {
                     id="acc_is_active"
                     checked={accountForm.is_active}
                     onChange={(e) => setAccountForm({ ...accountForm, is_active: e.target.checked })}
-                    className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                    className="rounded border-slate-300 dark:border-slate-700 text-sky-600 focus:ring-sky-500 dark:bg-slate-900"
                   />
-                  <label htmlFor="acc_is_active" className="text-xs text-slate-700 font-medium">
+                  <label htmlFor="acc_is_active" className="text-xs text-slate-700 dark:text-slate-200 font-medium cursor-pointer">
                     Cuenta activa para cobros y pagos
                   </label>
                 </div>
@@ -666,9 +692,9 @@ export const BancosPage = () => {
                     id="acc_is_pos_available"
                     checked={accountForm.is_pos_available}
                     onChange={(e) => setAccountForm({ ...accountForm, is_pos_available: e.target.checked })}
-                    className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                    className="rounded border-slate-300 dark:border-slate-700 text-sky-600 focus:ring-sky-500 dark:bg-slate-900"
                   />
-                  <label htmlFor="acc_is_pos_available" className="text-xs text-slate-700 font-medium cursor-pointer">
+                  <label htmlFor="acc_is_pos_available" className="text-xs text-slate-700 dark:text-slate-200 font-medium cursor-pointer">
                     Disponible para recibir pagos desde el modal de cobro del POS
                   </label>
                 </div>
@@ -677,13 +703,13 @@ export const BancosPage = () => {
                   <button
                     type="button"
                     onClick={() => setAccountModalOpen(false)}
-                    className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg"
+                    className="px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg transition-colors"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg"
+                    className="px-4 py-2 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 dark:bg-sky-600 dark:hover:bg-sky-500 rounded-lg transition-colors shadow-sm"
                   >
                     Guardar Cuenta
                   </button>
@@ -695,33 +721,38 @@ export const BancosPage = () => {
 
         {/* Modal: Plan de Cuotas */}
         {installmentPlanModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-            <div className="w-full max-w-md bg-white rounded-xl shadow-xl overflow-hidden">
-              <header className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                <h3 className="font-semibold text-slate-900">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+            <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
+              <header className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/80">
+                <h3 className="font-semibold text-slate-900 dark:text-slate-100">
                   {editingPlan ? "Editar Plan de Cuotas" : "Nuevo Plan de Cuotas"}
                 </h3>
                 <ModalCloseButton onClick={() => setInstallmentPlanModalOpen(false)} />
               </header>
 
-              <form onSubmit={handleSavePlan} className="p-6 space-y-4">
+              <form onSubmit={handleSavePlan} autoComplete="off" className="p-6 space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
                     Nombre del Plan *
                   </label>
                   <input
                     type="text"
                     required
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-lpignore="true"
                     value={planForm.name}
                     onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
                     placeholder="Ej: 3 Cuotas sin interés / Ahora 6"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
                       Cantidad de Cuotas *
                     </label>
                     <input
@@ -731,12 +762,12 @@ export const BancosPage = () => {
                       required
                       value={planForm.installments}
                       onChange={(e) => setPlanForm({ ...planForm, installments: parseInt(e.target.value) || 1 })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-700 mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
                       Recargo / Interés (%) *
                     </label>
                     <input
@@ -747,21 +778,23 @@ export const BancosPage = () => {
                       value={planForm.interest_percent}
                       onChange={(e) => setPlanForm({ ...planForm, interest_percent: parseFloat(e.target.value) || 0 })}
                       placeholder="0.0"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                      className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
                     Marca de Tarjeta (Opcional)
                   </label>
                   <input
                     type="text"
+                    autoComplete="off"
+                    data-lpignore="true"
                     value={planForm.card_brand}
                     onChange={(e) => setPlanForm({ ...planForm, card_brand: e.target.value })}
                     placeholder="Visa, Mastercard, Cabal o dejar vacío para todas"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500"
                   />
                 </div>
 
@@ -771,9 +804,9 @@ export const BancosPage = () => {
                     id="plan_is_active"
                     checked={planForm.is_active}
                     onChange={(e) => setPlanForm({ ...planForm, is_active: e.target.checked })}
-                    className="rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                    className="rounded border-slate-300 dark:border-slate-700 text-sky-600 focus:ring-sky-500 dark:bg-slate-900"
                   />
-                  <label htmlFor="plan_is_active" className="text-xs text-slate-700 font-medium">
+                  <label htmlFor="plan_is_active" className="text-xs text-slate-700 dark:text-slate-200 font-medium cursor-pointer">
                     Plan activo para POS y cobros
                   </label>
                 </div>
@@ -782,13 +815,13 @@ export const BancosPage = () => {
                   <button
                     type="button"
                     onClick={() => setInstallmentPlanModalOpen(false)}
-                    className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg"
+                    className="px-4 py-2 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg transition-colors"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg"
+                    className="px-4 py-2 text-sm font-semibold text-white bg-slate-900 hover:bg-slate-800 dark:bg-sky-600 dark:hover:bg-sky-500 rounded-lg transition-colors shadow-sm"
                   >
                     Guardar Plan
                   </button>

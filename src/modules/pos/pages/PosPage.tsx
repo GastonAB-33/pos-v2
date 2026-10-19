@@ -4,7 +4,7 @@ import { cn } from "@/utils/cn";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
-import { Banknote, Camera, CreditCard, FileText, Landmark, Moon, MoonStar, RefreshCw, Search, ShoppingCart, Sun, User as UserIcon, X } from "lucide-react";
+import { Banknote, Camera, CreditCard, FileText, Landmark, LockOpen, Moon, MoonStar, RefreshCw, Search, ShoppingCart, Sun, User as UserIcon, X } from "lucide-react";
 import { useToast } from "@/components/ui/useToast";
 import { routePaths } from "@/config/routes";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -16,6 +16,7 @@ import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { PosCustomerModal, type PosCustomerModalValues } from "@/modules/pos/components/PosCustomerModal";
 import { getEditableDocumentNumber } from "@/modules/configuracion/hooks/useEntityRequirements";
 import { CashOpenForm } from "@/modules/caja/components/CashOpenForm";
+import { serializeCloseSnapshot, type CashCloseSnapshot } from "@/modules/caja/hooks/useCashModule";
 import { ReceiptTicketPanel } from "@/modules/comprobantes/components/ReceiptTicketPanel";
 import { PosCart } from "@/modules/pos/components/PosCart";
 import { PosCartDiscountModal } from "@/modules/pos/components/PosCartDiscountModal";
@@ -868,6 +869,15 @@ export const PosPage = () => {
           return;
         }
 
+        const openSnapshot: CashCloseSnapshot = {
+          openingBillCounts: values.billCounts,
+          openingCoinsAmount: values.coinsAmount,
+          userNotes: values.notes?.trim() || "",
+        };
+        const serializedNotes = values.billCounts
+          ? serializeCloseSnapshot(openSnapshot, values.notes?.trim() || null)
+          : values.notes?.trim() || null;
+
         const createdSession = await cashService.create(tenantId, {
           branch_id: null,
           opened_by_user_id: resolvedOperatorUserId,
@@ -879,7 +889,9 @@ export const PosPage = () => {
           closing_amount: null,
           expected_closing_amount: null,
           closing_difference: null,
-          notes: values.notes?.trim() || null,
+          notes: serializedNotes,
+          opening_bill_counts: (values.billCounts as Record<string, number>) ?? null,
+          opening_coins_amount: values.coinsAmount ?? null,
         });
 
         await auditService.createSafe(tenantId, {
@@ -892,6 +904,8 @@ export const PosPage = () => {
           metadata: {
             opening_amount: values.openingAmount,
             notes: values.notes?.trim() || null,
+            bill_counts: values.billCounts,
+            coins_amount: values.coinsAmount,
           },
         });
 
@@ -2016,29 +2030,36 @@ export const PosPage = () => {
       )}
 
       {shouldShowCashOpeningModal ? (
-        <section className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/55 p-4">
-          <div className="w-full max-w-xl space-y-3 rounded-2xl bg-white p-4 shadow-panel">
-            <div className="space-y-1">
-              <h2 className="text-base font-semibold text-slate-900">Apertura de caja obligatoria</h2>
-              <p className="text-sm text-slate-600">
-                Para iniciar el POS y registrar movimientos contables, primero debes abrir caja.
+        <section className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-3">
+          <div className="w-full max-w-lg max-h-[96vh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-panel overflow-hidden">
+            <header className="shrink-0 px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/60">
+              <div className="flex items-center gap-2">
+                <LockOpen className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  Apertura de caja obligatoria
+                </h2>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Para iniciar el POS y registrar ventas, primero debés asentar el fondo inicial.
               </p>
-            </div>
+            </header>
 
-            {resolvedOperatorUserId ? (
-              <CashOpenForm
-                canWrite={canWritePos}
-                disabled={isOpeningCashSession || isSubmitting}
-                defaultOpeningAmount={cashDefaultOpeningAmount}
-                onSubmit={handleOpenCashFromPos}
-              />
-            ) : (
-              <div className="ui-error-state">No hay usuario activo para abrir caja.</div>
-            )}
+            <div className="flex-1 overflow-y-auto p-3.5 space-y-3">
+              {resolvedOperatorUserId ? (
+                <CashOpenForm
+                  canWrite={canWritePos}
+                  disabled={isOpeningCashSession || isSubmitting}
+                  defaultOpeningAmount={cashDefaultOpeningAmount}
+                  onSubmit={handleOpenCashFromPos}
+                />
+              ) : (
+                <div className="ui-error-state">No hay usuario activo para abrir caja.</div>
+              )}
 
             {hasResolvedCashGate && !isResolvingOperatorUser && !isCheckingCashSession && cashGateFeedback ? (
               <div className="ui-error-state">{cashGateFeedback}</div>
             ) : null}
+            </div>
           </div>
         </section>
       ) : null}

@@ -414,7 +414,7 @@ export const BankAccountMovementsModal = ({
           ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 dark:bg-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+                <thead className="bg-slate-50 dark:bg-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-slate-700">
                   <tr>
                     <th className="py-2.5 px-3">Fecha y Hora</th>
                     <th className="py-2.5 px-3">Concepto</th>
@@ -433,21 +433,21 @@ export const BankAccountMovementsModal = ({
                         key={mov.id}
                         className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors"
                       >
-                        <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        <td className="py-2.5 px-3 font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
                           {formatDateTime(mov.created_at)}
                         </td>
                         <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-slate-100">
                           {mov.concept}
                           {mov.notes && (
-                            <p className="text-[10px] text-slate-400 font-normal">{mov.notes}</p>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">{mov.notes}</p>
                           )}
                         </td>
                         <td className="py-2.5 px-3 whitespace-nowrap">
                           <span
                             className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
                               isIncome
-                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                                : "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border dark:border-emerald-800"
+                                : "bg-rose-100 text-rose-800 dark:bg-rose-950/70 dark:text-rose-300 dark:border dark:border-rose-800"
                             }`}
                           >
                             {isIncome ? (
@@ -458,10 +458,10 @@ export const BankAccountMovementsModal = ({
                             {isIncome ? "Ingreso" : "Egreso"}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300 whitespace-nowrap">
                           {getOriginLabel(mov.origin_type)}
                         </td>
-                        <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-400">
+                        <td className="py-2.5 px-3 font-mono text-slate-700 dark:text-slate-300">
                           {mov.voucher_number || "-"}
                         </td>
                         <td
@@ -511,7 +511,7 @@ export const BankAccountMovementsModal = ({
                         ? "Registrar Ingreso Bancario"
                         : "Registrar Egreso Bancario / Pago"}
                     </h3>
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
                       Cuenta: {account.bank_name}
                     </p>
                   </div>
@@ -519,16 +519,16 @@ export const BankAccountMovementsModal = ({
                 <button
                   type="button"
                   onClick={() => setFormModalOpen(null)}
-                  className="text-slate-400 hover:text-slate-600 p-1"
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
                 >
                   <X size={16} />
                 </button>
               </div>
 
-              <form onSubmit={handleSaveMovement} className="space-y-3">
+              <form onSubmit={handleSaveMovement} autoComplete="off" className="space-y-3">
                 {/* Concepto Preset */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
                     Concepto / Motivo
                   </label>
                   <select
@@ -536,7 +536,7 @@ export const BankAccountMovementsModal = ({
                     onChange={(e) =>
                       setMovementForm((curr) => ({ ...curr, presetConcept: e.target.value }))
                     }
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-sky-500"
                   >
                     {(formModalOpen === "income"
                       ? COMMON_INCOME_CONCEPTS
@@ -555,62 +555,68 @@ export const BankAccountMovementsModal = ({
                   movementForm.presetConcept === "Pago de Luz / Electricidad" ||
                   movementForm.presetConcept === "Pago de Internet / Teléfono") && (
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
                       Detalle adicional (ej: Empresa, Factura, Mes)
                     </label>
                     <input
                       type="text"
+                      autoComplete="off"
+                      data-lpignore="true"
                       value={movementForm.customConcept}
                       onChange={(e) =>
                         setMovementForm((curr) => ({ ...curr, customConcept: e.target.value }))
                       }
                       placeholder="Ej: Edesur Factura 98412 - Mes Septiembre"
-                      className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+                      className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-sky-500"
                     />
                   </div>
                 )}
 
                 {/* Monto */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
                     Monto ($)
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-2 text-xs font-bold text-slate-500">$</span>
+                    <span className="absolute left-3 top-2 text-xs font-bold text-slate-500 dark:text-slate-400">$</span>
                     <input
                       type="number"
                       step="0.01"
                       min="0.01"
                       required
+                      autoComplete="off"
+                      data-lpignore="true"
                       value={movementForm.amount}
                       onChange={(e) =>
                         setMovementForm((curr) => ({ ...curr, amount: e.target.value }))
                       }
                       placeholder="0.00"
-                      className="w-full pl-7 pr-3 py-2 text-sm font-mono font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+                      className="w-full pl-7 pr-3 py-2 text-sm font-mono font-bold rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-sky-500"
                     />
                   </div>
                 </div>
 
                 {/* Nº Comprobante */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
                     Nº de Comprobante / Referencia (opcional)
                   </label>
                   <input
                     type="text"
+                    autoComplete="off"
+                    data-lpignore="true"
                     value={movementForm.voucherNumber}
                     onChange={(e) =>
                       setMovementForm((curr) => ({ ...curr, voucherNumber: e.target.value }))
                     }
                     placeholder="Ej: Transf. #849102"
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-sky-500"
                   />
                 </div>
 
                 {/* Notas */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">
                     Observaciones (opcional)
                   </label>
                   <textarea
@@ -620,7 +626,7 @@ export const BankAccountMovementsModal = ({
                       setMovementForm((curr) => ({ ...curr, notes: e.target.value }))
                     }
                     placeholder="Anotaciones internas..."
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-sky-500"
                   />
                 </div>
 
@@ -629,7 +635,7 @@ export const BankAccountMovementsModal = ({
                     type="button"
                     onClick={() => setFormModalOpen(null)}
                     disabled={isSubmitting}
-                    className="px-3 py-2 rounded-lg border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+                    className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
                   >
                     Cancelar
                   </button>

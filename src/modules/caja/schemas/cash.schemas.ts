@@ -3,6 +3,8 @@ import { z } from "zod";
 export const openCashSchema = z.object({
   openingAmount: z.coerce.number().min(0, "El monto inicial no puede ser negativo"),
   notes: z.string().max(240, "Maximo 240 caracteres").optional().or(z.literal("")),
+  billCounts: z.record(z.coerce.number(), z.number()).optional(),
+  coinsAmount: z.number().optional(),
 });
 
 export const closeCashSchema = z.object({

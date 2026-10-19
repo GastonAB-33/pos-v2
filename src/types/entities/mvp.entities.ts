@@ -727,6 +727,8 @@ export interface CashSession extends TenantScopedEntity {
   notes: string | null;
   closing_bill_counts?: Record<string, number> | null;
   closing_coins_amount?: number | null;
+  opening_bill_counts?: Record<string, number> | null;
+  opening_coins_amount?: number | null;
 }
 
 export type CashMovementType = "income" | "expense" | "sale_payment" | "adjustment";
