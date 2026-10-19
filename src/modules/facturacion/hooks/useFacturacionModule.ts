@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditService } from "@/services/audit.service";
 import { arcaInvoicesService } from "@/services/arca/arca-invoices.service";
-import { arcaService } from "@/services/arca.service";
+import { arcaService, ARCA_DOCUMENT_TYPE_CODES } from "@/services/arca.service";
+import { creditNotesService } from "@/services/credit-notes.service";
 import { customersService } from "@/services/customers.service";
 import { invoicesService } from "@/services/invoices.service";
 import { salesService } from "@/services/sales.service";
@@ -51,6 +52,7 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [arcaProcessingInvoiceId, setArcaProcessingInvoiceId] = useState<string | null>(null);
+  const [isCancellingWithCreditNote, setIsCancellingWithCreditNote] = useState(false);
   const [feedback, setFeedback] = useState<FacturacionFeedback | null>(null);
 
   const clearFeedback = () => setFeedback(null);
@@ -379,6 +381,139 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
     }
   };
 
+  const cancelInvoiceWithCreditNote = async (invoiceId: string): Promise<boolean> => {
+    if (!tenantId) return false;
+    const invoice = invoices.find((inv) => inv.id === invoiceId);
+    if (!invoice) {
+      setFeedback({ type: "error", message: "Comprobante no encontrado." });
+      return false;
+    }
+
+    if (invoice.arca_status !== "accepted") {
+      setFeedback({
+        type: "error",
+        message: "Solo se pueden anular con Nota de Crédito facturas aprobadas por ARCA.",
+      });
+      return false;
+    }
+
+    if (invoice.status === "cancelled") {
+      setFeedback({ type: "error", message: "La factura ya se encuentra anulada." });
+      return false;
+    }
+
+    setIsCancellingWithCreditNote(true);
+    setFeedback(null);
+
+    try {
+      const parts = invoice.document_number.split("-");
+      const puntoVenta = parts.length >= 3 ? parseInt(parts[1], 10) : arcaSettings.punto_venta;
+      const originalVoucherNumber = parts.length >= 3 ? parseInt(parts[2], 10) : 1;
+      const originalTipoCode = ARCA_DOCUMENT_TYPE_CODES[invoice.document_type] || 11;
+
+      const existingCreditNotes = await creditNotesService.getAllByTenant(tenantId);
+      const nextSeq = existingCreditNotes.length + 1;
+
+      const arcaResult = await arcaService.authorizeCreditNote(
+        arcaSettings,
+        {
+          tenantId,
+          documentType: invoice.document_type,
+          puntoVenta,
+          cuitEmisor: arcaSettings.cuit_emisor || "",
+          receiverDocType: invoice.customer_snapshot?.document_type ?? "dni",
+          receiverDocNumber: invoice.customer_snapshot?.document_number ?? "0",
+          subtotal: invoice.subtotal,
+          taxTotal: invoice.tax_total,
+          total: invoice.total,
+          associatedVoucher: {
+            tipo: originalTipoCode,
+            puntoVenta,
+            numero: originalVoucherNumber,
+            cuit: arcaSettings.cuit_emisor || undefined,
+          },
+        },
+        nextSeq
+      );
+
+      if (!arcaResult.success) {
+        setFeedback({
+          type: "error",
+          message: arcaResult.errorMessage || "ARCA no autorizó la Nota de Crédito.",
+        });
+        return false;
+      }
+
+      const ncDocumentNumber =
+        arcaResult.formattedDocumentNumber ||
+        `NC-${invoice.document_type}-${String(puntoVenta).padStart(4, "0")}-${String(
+          arcaResult.voucherNumber || nextSeq
+        ).padStart(8, "0")}`;
+
+      await creditNotesService.create(tenantId, {
+        invoice_id: invoice.id,
+        sale_id: invoice.sale_id,
+        customer_id: invoice.customer_id,
+        document_number: ncDocumentNumber,
+        issue_date: new Date().toISOString(),
+        reason: "cancellation",
+        subtotal: invoice.subtotal,
+        tax_total: invoice.tax_total,
+        total: invoice.total,
+        status: "issued",
+        arca_status: "accepted",
+        arca_reference: arcaResult.cae || null,
+        cae: arcaResult.cae || null,
+        cae_due_date: arcaResult.caeDueDate || null,
+        qr_data_url: arcaResult.qrUrl || null,
+        notes: `Nota de Crédito oficial que anula ${invoice.document_type} ${invoice.document_number} (CAE Original: ${invoice.cae || "N/A"})`,
+      });
+
+      const updatedInvoice = await invoicesService.update(tenantId, invoice.id, {
+        status: "cancelled",
+        notes: `${invoice.notes ? invoice.notes + " | " : ""}Anulada mediante Nota de Crédito ${ncDocumentNumber} (CAE NC: ${arcaResult.cae})`,
+      });
+
+      if (updatedInvoice) {
+        upsertInvoiceInState(updatedInvoice);
+      }
+
+      await auditService.createSafe(tenantId, {
+        user_id: userId,
+        module: "facturacion",
+        action: "credit_note_issued",
+        entity_type: "invoice",
+        entity_id: invoice.id,
+        description: `Nota de Crédito ${ncDocumentNumber} emitida para anular ${invoice.document_number}`,
+        metadata: {
+          invoice_id: invoice.id,
+          nc_document_number: ncDocumentNumber,
+          cae: arcaResult.cae,
+          cae_due_date: arcaResult.caeDueDate,
+          total: invoice.total,
+        },
+      });
+
+      setFeedback({
+        type: "success",
+        message: `Nota de Crédito oficial emitida con éxito (${ncDocumentNumber} - CAE: ${arcaResult.cae}). La factura quedó formalmente anulada en ARCA.`,
+      });
+
+      return true;
+    } catch (err) {
+      setFeedback({
+        type: "error",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Error al emitir la Nota de Crédito en ARCA.",
+      });
+      return false;
+    } finally {
+      setIsCancellingWithCreditNote(false);
+    }
+  };
+
   const salesCandidates = useMemo(
     () =>
       sales.filter((sale) => sale.status === "completed").map((sale) => {
@@ -424,6 +559,7 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
     isLoading,
     isSubmitting,
     arcaProcessingInvoiceId,
+    isCancellingWithCreditNote,
     feedback,
     clearFeedback,
     summary,
@@ -433,5 +569,6 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
     createBudget,
     generateFromSale,
     sendInvoiceToArca,
+    cancelInvoiceWithCreditNote,
   };
 };

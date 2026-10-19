@@ -29,6 +29,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { ArcaCertificateWizardModal } from "@/modules/configuracion/components/ArcaCertificateWizardModal";
+import { ArcaAccountantGuideModal } from "@/modules/configuracion/components/ArcaAccountantGuideModal";
 import { downloadFile } from "@/modules/configuracion/utils/arca-certificate-helper";
 import { arcaService } from "@/services/arca.service";
 import { broadcastEntityRequirementsChanged } from "@/modules/configuracion/hooks/useEntityRequirements";
@@ -360,6 +361,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
   }, [scaleTesterBarcode, draft?.codigos_balanza]);
 
   const [isArcaWizardOpen, setIsArcaWizardOpen] = useState(false);
+  const [isArcaGuideOpen, setIsArcaGuideOpen] = useState(false);
   const [isTestingArcaConnection, setIsTestingArcaConnection] = useState(false);
   const [arcaTestFeedback, setArcaTestFeedback] = useState<{
     status: "success" | "error";
@@ -1832,6 +1834,14 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
 
                     <button
                       type="button"
+                      onClick={() => setIsArcaGuideOpen(true)}
+                      className="px-3.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <FileText size={13} className="text-blue-500" />
+                      Instructivo PDF Contador
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setIsArcaWizardOpen(true)}
                       disabled={!canWriteConfiguracion}
                       className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
@@ -2521,6 +2531,15 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
             },
           });
         }}
+      />
+
+      {/* MODAL GUÍA PARA EL CONTADOR / INSTRUCTIVO PDF */}
+      <ArcaAccountantGuideModal
+        isOpen={isArcaGuideOpen}
+        onClose={() => setIsArcaGuideOpen(false)}
+        cuit={draft?.facturacion?.arca?.cuit_emisor || draft?.facturacion?.issuer_cuit || ""}
+        businessName={draft?.facturacion?.issuer_tax_name || draft?.negocio?.legal_name || ""}
+        alias={draft?.facturacion?.arca?.certificado_alias || "pos-v2"}
       />
     </PagePlaceholder>
   );

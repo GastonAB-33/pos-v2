@@ -14,6 +14,13 @@ export const ARCA_DOCUMENT_TYPE_CODES: Record<InvoiceDocumentType, number> = {
   PRESUPUESTO: 0, // No fiscal
 };
 
+export const ARCA_CREDIT_NOTE_CODES: Record<InvoiceDocumentType, number> = {
+  A: 3, // Nota de Crédito A
+  B: 8, // Nota de Crédito B
+  C: 13, // Nota de Crédito C
+  PRESUPUESTO: 0,
+};
+
 export const ARCA_RECEIVER_DOC_TYPE_CODES = {
   cuit: 80,
   cuil: 86,
@@ -50,6 +57,24 @@ export interface ArcaInvoicePayload {
     unitPrice: number;
     subtotal: number;
   }>;
+}
+
+export interface ArcaCreditNotePayload {
+  tenantId: string;
+  documentType: InvoiceDocumentType;
+  puntoVenta: number;
+  cuitEmisor: string;
+  subtotal: number;
+  taxTotal: number;
+  total: number;
+  associatedVoucher: {
+    tipo: number;
+    puntoVenta: number;
+    numero: number;
+    cuit?: string;
+  };
+  receiverDocType?: string | null;
+  receiverDocNumber?: string | null;
 }
 
 /**
@@ -283,6 +308,119 @@ export const arcaService = {
           err instanceof Error
             ? err.message
             : "No se pudo establecer conexión con los servidores de ARCA.",
+      };
+    }
+  },
+
+  /**
+   * Envía a autorizar una Nota de Crédito ante ARCA para anular una factura previa
+   */
+  async authorizeCreditNote(
+    arcaConfig: ArcaSettings,
+    payload: ArcaCreditNotePayload,
+    currentSequenceNumber = 1
+  ): Promise<ArcaAuthorizationResult> {
+    if (!arcaConfig.enabled) {
+      return {
+        success: false,
+        errorMessage: "La facturación con ARCA está deshabilitada en la configuración.",
+      };
+    }
+
+    // Modo Mock: Simulación local instantánea
+    if (arcaConfig.mode === "mock") {
+      const today = new Date();
+      const dueDate = new Date(today);
+      dueDate.setDate(dueDate.getDate() + 10);
+
+      const randomSuffix = Math.floor(100000000000 + Math.random() * 900000000000).toString();
+      const mockCae = `74${randomSuffix.slice(2)}`;
+      const caeDueDateStr = dueDate.toISOString().slice(0, 10);
+      const cmpCode = ARCA_CREDIT_NOTE_CODES[payload.documentType] || 13;
+
+      const qrUrl = buildArcaQrUrl({
+        cuitEmisor: payload.cuitEmisor,
+        puntoVenta: payload.puntoVenta,
+        tipoComprobanteCode: cmpCode,
+        numeroComprobante: currentSequenceNumber,
+        total: payload.total,
+        cae: mockCae,
+        fechaEmisionIso: today.toISOString(),
+        docReceptor: payload.receiverDocNumber ?? undefined,
+      });
+
+      const formattedDocNumber = `NC-${payload.documentType}-${String(payload.puntoVenta).padStart(
+        4,
+        "0"
+      )}-${String(currentSequenceNumber).padStart(8, "0")}`;
+
+      return {
+        success: true,
+        cae: mockCae,
+        caeDueDate: caeDueDateStr,
+        voucherNumber: currentSequenceNumber,
+        qrUrl,
+        formattedDocumentNumber: formattedDocNumber,
+      };
+    }
+
+    // Modo Sandbox o Real
+    try {
+      const { data, error } = await supabase.functions.invoke("arca-billing", {
+        body: {
+          action: "create-credit-note",
+          mode: arcaConfig.mode,
+          fiscal_environment: arcaConfig.fiscal_environment,
+          punto_venta: payload.puntoVenta,
+          cuit_emisor: payload.cuitEmisor,
+          certificate_crt: arcaConfig.certificate_crt,
+          certificate_key: arcaConfig.certificate_key,
+          document_type: payload.documentType,
+          subtotal: payload.subtotal,
+          tax_total: payload.taxTotal,
+          total: payload.total,
+          receiver_doc_type: payload.receiverDocType,
+          receiver_doc_number: payload.receiverDocNumber,
+          associated_voucher: {
+            tipo: payload.associatedVoucher.tipo,
+            punto_venta: payload.associatedVoucher.puntoVenta,
+            numero: payload.associatedVoucher.numero,
+            cuit: payload.associatedVoucher.cuit,
+          },
+        },
+      });
+
+      if (error) {
+        return {
+          success: false,
+          errorMessage: error.message || "Error al emitir Nota de Crédito en ARCA.",
+        };
+      }
+
+      if (data && data.success) {
+        return {
+          success: true,
+          cae: data.cae,
+          caeDueDate: data.cae_due_date,
+          voucherNumber: data.voucher_number,
+          qrUrl: data.qr_url,
+          formattedDocumentNumber: `NC-${payload.documentType}-${String(
+            payload.puntoVenta
+          ).padStart(4, "0")}-${String(data.voucher_number).padStart(8, "0")}`,
+        };
+      }
+
+      return {
+        success: false,
+        errorMessage: data?.error || "ARCA rechazó la Nota de Crédito.",
+      };
+    } catch (err) {
+      return {
+        success: false,
+        errorMessage:
+          err instanceof Error
+            ? err.message
+            : "Error de red al autorizar Nota de Crédito con ARCA.",
       };
     }
   },

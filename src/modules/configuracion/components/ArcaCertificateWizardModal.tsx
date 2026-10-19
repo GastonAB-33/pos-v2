@@ -13,8 +13,10 @@ import {
   Terminal,
   RefreshCw,
   Sparkles,
+  FileText,
 } from "lucide-react";
 import { useToast } from "@/components/ui/useToast";
+import { ArcaAccountantGuideModal } from "./ArcaAccountantGuideModal";
 import {
   generateArcaKeyPairAndCsr,
   generateOpenSslCommand,
@@ -56,9 +58,11 @@ export const ArcaCertificateWizardModal = ({
 
   // Estados locales para la clave y certificado
   const [generatedKey, setGeneratedKey] = useState<string>(currentKey || "");
+  const [generatedCsr, setGeneratedCsr] = useState<string>("");
   const [uploadedCrt, setUploadedCrt] = useState<string>(currentCrt || "");
   const [uploadedKey, setUploadedKey] = useState<string>(currentKey || "");
   const [customAlias, setCustomAlias] = useState<string>(alias || "pos-v2");
+  const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
 
   // Validación de formatos
   const crtValidation = uploadedCrt ? validateCertificateCrt(uploadedCrt) : null;
@@ -97,6 +101,7 @@ export const ArcaCertificateWizardModal = ({
       });
 
       setGeneratedKey(result.privateKeyPem);
+      setGeneratedCsr(result.csrPem);
       setUploadedKey(result.privateKeyPem);
 
       // Descargar el archivo .csr en la computadora del usuario
@@ -360,9 +365,18 @@ export const ArcaCertificateWizardModal = ({
                   ) : (
                     <>
                       <Terminal size={14} />
-                      Copiar comando OpenSSL (para contador)
+                      Copiar comando OpenSSL
                     </>
                   )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsGuideModalOpen(true)}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-blue-300 dark:border-blue-700/80 bg-blue-50/80 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 font-semibold text-xs transition cursor-pointer"
+                >
+                  <FileText size={14} />
+                  <span>Instructivo para mi Contador (PDF)</span>
                 </button>
               </div>
 
@@ -453,11 +467,20 @@ export const ArcaCertificateWizardModal = ({
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end">
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsGuideModalOpen(true)}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-blue-300 dark:border-blue-700/80 bg-blue-50/80 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/60 font-semibold text-xs transition cursor-pointer"
+                >
+                  <FileText size={14} />
+                  <span>Ver / Imprimir Instructivo para Contador (PDF)</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setActiveTab("step3")}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition cursor-pointer"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition cursor-pointer"
                 >
                   Ya descargué el .crt, ir al Paso 3
                   <ChevronRight size={14} />
@@ -581,6 +604,15 @@ export const ArcaCertificateWizardModal = ({
           )}
         </footer>
       </div>
+
+      <ArcaAccountantGuideModal
+        isOpen={isGuideModalOpen}
+        onClose={() => setIsGuideModalOpen(false)}
+        cuit={cuit}
+        businessName={businessName}
+        alias={customAlias}
+        csrPem={generatedCsr}
+      />
     </div>
   );
 };

@@ -34,6 +34,7 @@ export const FacturacionPage = () => {
     isLoading,
     isSubmitting,
     arcaProcessingInvoiceId,
+    isCancellingWithCreditNote,
     feedback,
     clearFeedback,
     summary,
@@ -43,6 +44,7 @@ export const FacturacionPage = () => {
     createBudget,
     generateFromSale,
     sendInvoiceToArca,
+    cancelInvoiceWithCreditNote,
   } = useFacturacionModule(tenantId, user?.id ?? null);
 
   const [showBudgetForm, setShowBudgetForm] = useState(false);
@@ -253,9 +255,14 @@ export const FacturacionPage = () => {
             invoice={selectedInvoice}
             canSendToArca={canWriteFacturacion && arcaOperationalStatus.available}
             isSendingToArca={arcaProcessingInvoiceId === selectedInvoice.id}
+            canCancelWithCreditNote={canWriteFacturacion}
+            isCancellingWithCreditNote={isCancellingWithCreditNote}
             arcaUnavailableReason={!arcaOperationalStatus.available ? arcaOperationalStatus.reason : null}
             onSendToArca={(invoice) => {
               void sendInvoiceToArca(invoice.id);
+            }}
+            onCancelWithCreditNote={(invoice) => {
+              void cancelInvoiceWithCreditNote(invoice.id);
             }}
             onClose={() => setSelectedInvoiceId(null)}
           />
