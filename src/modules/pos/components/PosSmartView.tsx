@@ -347,12 +347,27 @@ export const PosSmartView = ({
           isHighlighted && "ring-2 ring-emerald-500/60 border-emerald-500/80"
         )}
       >
-        {/* Encabezado: Carrito (N ítems) */}
-        <div className="flex items-center gap-2.5 mb-4">
-          <ShoppingCart className="text-blue-600 dark:text-sky-400" size={20} />
-          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-            Carrito ({items.length} {items.length === 1 ? "ítem" : "ítems"})
-          </h2>
+        {/* Encabezado: Carrito (N ítems) y botón Vaciar a la derecha */}
+        <div className="flex items-center justify-between gap-2.5 mb-4">
+          <div className="flex items-center gap-2.5">
+            <ShoppingCart className="text-blue-600 dark:text-sky-400" size={20} />
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              Carrito ({items.length} {items.length === 1 ? "ítem" : "ítems"})
+            </h2>
+          </div>
+
+          {items.length > 0 ? (
+            <button
+              type="button"
+              onClick={onClearCart}
+              disabled={disabled || !canWrite}
+              className="h-8 px-2.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 dark:hover:border-rose-800/80 transition disabled:opacity-50 whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+              title="Vaciar todos los productos del carrito"
+            >
+              <Trash2 size={13} className="text-slate-400 group-hover:text-rose-500" />
+              <span>Vaciar</span>
+            </button>
+          ) : null}
         </div>
 
         {/* Buscador general con filtro desplegable de categoría */}
@@ -1116,19 +1131,6 @@ export const PosSmartView = ({
                 >
                   <Coins size={14} className={hasDebtPaymentInCart ? "text-amber-600 dark:text-amber-400" : "text-indigo-600 dark:text-indigo-400"} />
                   <span>{hasDebtPaymentInCart ? "Editar deuda" : "Cobrar deuda"}</span>
-                </button>
-              ) : null}
-
-              {items.length > 0 ? (
-                <button
-                  type="button"
-                  onClick={onClearCart}
-                  disabled={disabled || !canWrite}
-                  className="h-8 px-2.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 dark:hover:border-rose-800/80 transition disabled:opacity-50 whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 shadow-2xs"
-                  title="Vaciar todos los productos del carrito"
-                >
-                  <Trash2 size={13} className="text-slate-400 group-hover:text-rose-500" />
-                  <span>Vaciar</span>
                 </button>
               ) : null}
             </div>

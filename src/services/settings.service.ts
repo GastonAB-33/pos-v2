@@ -98,6 +98,11 @@ const createDefaultArcaSettings = (): ArcaSettings => ({
   fiscal_environment: "homologacion",
   force_unavailable: false,
   allow_internal_fallback: true,
+  certificate_crt: null,
+  certificate_key: null,
+  certificate_expiration: null,
+  last_connection_status: "untested",
+  last_connection_message: null,
 });
 
 const createDefaultFacturacionSettings = (): FacturacionSettings => ({

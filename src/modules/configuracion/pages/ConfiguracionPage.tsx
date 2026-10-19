@@ -3,19 +3,24 @@ import { LoadingState } from "@/components/ui/UiStates";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
 import {
+  Activity,
   AlertTriangle,
   AppWindow,
   Building2,
   Calculator,
   CheckCircle2,
   Coins,
+  Download,
   ExternalLink,
   FileText,
+  Key,
   Package,
   Palette,
   RefreshCw,
   Scale,
   Settings,
+  ShieldAlert,
+  ShieldCheck,
   ShoppingCart,
   Sparkles,
   Store,
@@ -23,6 +28,9 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
+import { ArcaCertificateWizardModal } from "@/modules/configuracion/components/ArcaCertificateWizardModal";
+import { downloadFile } from "@/modules/configuracion/utils/arca-certificate-helper";
+import { arcaService } from "@/services/arca.service";
 import { broadcastEntityRequirementsChanged } from "@/modules/configuracion/hooks/useEntityRequirements";
 import { parseScaleBarcode } from "@/services/barcode/scale-barcode.service";
 import { useAuthStore } from "@/features/auth/store/auth.store";
@@ -351,6 +359,44 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     return parseScaleBarcode(scaleTesterBarcode, draft.codigos_balanza);
   }, [scaleTesterBarcode, draft?.codigos_balanza]);
 
+  const [isArcaWizardOpen, setIsArcaWizardOpen] = useState(false);
+  const [isTestingArcaConnection, setIsTestingArcaConnection] = useState(false);
+  const [arcaTestFeedback, setArcaTestFeedback] = useState<{
+    status: "success" | "error";
+    message: string;
+  } | null>(null);
+
+  const handleTestArcaConnection = async () => {
+    if (!draft?.facturacion?.arca) return;
+    const { cuit_emisor, punto_venta } = draft.facturacion.arca;
+    const cleanCuit = (cuit_emisor || draft.facturacion.issuer_cuit || "").replace(/\D/g, "");
+
+    if (!cleanCuit || cleanCuit.length < 11) {
+      setArcaTestFeedback({
+        status: "error",
+        message: "Ingresá un CUIT emisor válido de 11 dígitos para probar la conexión.",
+      });
+      return;
+    }
+
+    if (!punto_venta || punto_venta < 1) {
+      setArcaTestFeedback({
+        status: "error",
+        message: "Ingresá un Punto de Venta fiscal válido (mayor o igual a 1).",
+      });
+      return;
+    }
+
+    setIsTestingArcaConnection(true);
+    setArcaTestFeedback(null);
+
+    const result = await arcaService.testConnection(draft.facturacion.arca, cleanCuit, punto_venta);
+    setIsTestingArcaConnection(false);
+    setArcaTestFeedback({
+      status: result.success ? "success" : "error",
+      message: result.message,
+    });
+  };
 
   const visibleTabs = useMemo(
     () => configTabs.filter((tab) => scopePreset.visibleSections[tab.id]),
@@ -1497,73 +1543,168 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Tipo de Comprobante por Defecto</label>
-              <select className="ui-input" value={draft.facturacion.default_document_type} onChange={(event) => updateSection("facturacion", { default_document_type: event.target.value as FacturacionSettings["default_document_type"] })} disabled={!canWriteConfiguracion}>
-                <option value="A">Factura A</option>
-                <option value="B">Factura B</option>
-                <option value="C">Factura C</option>
-                <option value="PRESUPUESTO">Presupuesto Interno</option>
-              </select>
+          <div className="space-y-4">
+            {/* BLOQUE 1: DATOS FISCALES DEL COMERCIO */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4.5 dark:border-slate-800 dark:bg-slate-900 shadow-xs space-y-3">
+            <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
+              <Building2 className="text-blue-600 dark:text-blue-400 h-4 w-4" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                1. Datos Fiscales del Comercio Emisor
+              </h3>
             </div>
 
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Razón Social Emisor ARCA</label>
-              <input className="ui-input" value={draft.facturacion.issuer_tax_name} onChange={(event) => updateSection("facturacion", { issuer_tax_name: event.target.value })} placeholder="Razón social fiscal" disabled={!canWriteConfiguracion} />
-            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  CUIT del Comercio *
+                </label>
+                <input
+                  className="ui-input font-mono font-bold"
+                  value={draft.facturacion.issuer_cuit}
+                  onChange={(event) => {
+                    const clean = event.target.value.replace(/\D/g, "");
+                    updateSection("facturacion", {
+                      issuer_cuit: clean,
+                      arca: {
+                        ...draft.facturacion.arca,
+                        cuit_emisor: clean,
+                      },
+                    });
+                  }}
+                  maxLength={11}
+                  placeholder="20123456789"
+                  disabled={!canWriteConfiguracion}
+                />
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                  11 dígitos sin guiones
+                </span>
+              </div>
 
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">CUIT Emisor Fiscal</label>
-              <input className="ui-input" value={draft.facturacion.issuer_cuit} onChange={(event) => updateSection("facturacion", { issuer_cuit: event.target.value })} placeholder="CUIT de emisión" disabled={!canWriteConfiguracion} />
-            </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  Razón Social / Titular *
+                </label>
+                <input
+                  className="ui-input"
+                  value={draft.facturacion.issuer_tax_name}
+                  onChange={(event) =>
+                    updateSection("facturacion", {
+                      issuer_tax_name: event.target.value,
+                    })
+                  }
+                  placeholder="Nombre legal del negocio"
+                  disabled={!canWriteConfiguracion}
+                />
+              </div>
 
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Condición Fiscal Emisor</label>
-              <input className="ui-input" value={draft.facturacion.issuer_fiscal_condition} onChange={(event) => updateSection("facturacion", { issuer_fiscal_condition: event.target.value })} placeholder="Responsable Inscripto / Monotributo" disabled={!canWriteConfiguracion} />
-            </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  Condición Fiscal ante el IVA *
+                </label>
+                <select
+                  className="ui-input"
+                  value={draft.facturacion.issuer_fiscal_condition || "Monotributo"}
+                  onChange={(event) => {
+                    const cond = event.target.value;
+                    const suggestedDocType =
+                      cond === "Monotributo" ? "C" : cond === "Responsable Inscripto" ? "B" : "B";
+                    updateSection("facturacion", {
+                      issuer_fiscal_condition: cond,
+                      default_document_type: suggestedDocType as FacturacionSettings["default_document_type"],
+                    });
+                  }}
+                  disabled={!canWriteConfiguracion}
+                >
+                  <option value="Monotributo">Monotributo (Emite Factura C)</option>
+                  <option value="Responsable Inscripto">Responsable Inscripto (Facturas A y B)</option>
+                  <option value="IVA Exento">IVA Exento</option>
+                  <option value="Consumidor Final">Consumidor Final</option>
+                </select>
+              </div>
 
-            {/* PANEL ARCA */}
-            <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3 mb-3 dark:border-slate-700">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Parámetros de Integración ARCA</h3>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={[
-                      "ui-badge",
-                      draft.facturacion.arca.mode === "mock"
-                        ? "ui-badge--info"
-                        : draft.facturacion.arca.mode === "sandbox"
-                          ? "ui-badge--warn"
-                          : "ui-badge--success",
-                    ].join(" ")}
-                  >
-                    Modo {draft.facturacion.arca.mode.toUpperCase()}
-                  </span>
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  Comprobante por Defecto
+                </label>
+                <select
+                  className="ui-input font-semibold"
+                  value={draft.facturacion.default_document_type}
+                  onChange={(event) =>
+                    updateSection("facturacion", {
+                      default_document_type: event.target.value as FacturacionSettings["default_document_type"],
+                    })
+                  }
+                  disabled={!canWriteConfiguracion}
+                >
+                  <option value="B">Factura B (Consumidor Final / Monotributo)</option>
+                  <option value="C">Factura C (Régimen Simplificado)</option>
+                  <option value="A">Factura A (Con discriminación de IVA)</option>
+                  <option value="PRESUPUESTO">Presupuesto Interno (Sin valor fiscal)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* BLOQUE 2: PARÁMETROS ARCA Y FIRMA DIGITAL */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4.5 dark:border-slate-800 dark:bg-slate-800/40 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3 dark:border-slate-700">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="text-blue-600 dark:text-blue-400 h-5 w-5" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    2. Conexión Fiscal con ARCA (ex AFIP)
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Emisión electrónica de facturas con CAE y código QR oficial
+                  </p>
                 </div>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="flex items-center gap-2.5 text-sm font-medium text-slate-800 dark:text-slate-200">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded text-blue-600"
-                    checked={draft.facturacion.arca.enabled}
-                    onChange={(event) =>
-                      updateSection("facturacion", {
-                        arca: {
-                          ...draft.facturacion.arca,
-                          enabled: event.target.checked,
-                        },
-                      })
-                    }
-                    disabled={!canWriteConfiguracion}
-                  />
-                  Habilitar Facturación Electrónica ARCA
-                </label>
+              <div className="flex items-center gap-2">
+                <span
+                  className={[
+                    "ui-badge",
+                    draft.facturacion.arca.mode === "mock"
+                      ? "ui-badge--info"
+                      : draft.facturacion.arca.mode === "sandbox"
+                        ? "ui-badge--warn"
+                        : "ui-badge--success",
+                  ].join(" ")}
+                >
+                  {draft.facturacion.arca.mode === "mock"
+                    ? "Modo MOCK (Simulación)"
+                    : draft.facturacion.arca.mode === "sandbox"
+                      ? "Modo SANDBOX (Homologación)"
+                      : "Modo REAL (Producción)"}
+                </span>
+              </div>
+            </div>
 
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="flex items-center gap-2.5 sm:col-span-2 text-sm font-semibold text-slate-800 dark:text-slate-100 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500"
+                  checked={draft.facturacion.arca.enabled}
+                  onChange={(event) =>
+                    updateSection("facturacion", {
+                      arca: {
+                        ...draft.facturacion.arca,
+                        enabled: event.target.checked,
+                      },
+                    })
+                  }
+                  disabled={!canWriteConfiguracion}
+                />
+                <span>Habilitar Facturación Electrónica con ARCA</span>
+              </label>
+
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  Entorno de Facturación
+                </label>
                 <select
-                  className="ui-input"
+                  className="ui-input font-medium"
                   value={draft.facturacion.arca.mode}
                   onChange={(event) =>
                     updateSection("facturacion", {
@@ -1575,53 +1716,176 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   }
                   disabled={!canWriteConfiguracion}
                 >
-                  <option value="mock">Modo Mock (Pruebas Locales)</option>
-                  <option value="sandbox">Modo Sandbox (Homologación AFIP)</option>
-                  <option value="real">Modo Real (Producción AFIP)</option>
+                  <option value="mock">Modo Simulación Local (Sin internet / Mock de prueba)</option>
+                  <option value="sandbox">Modo Sandbox (Homologación / Pruebas con servidores de ARCA)</option>
+                  <option value="real">Modo Real (Producción Oficial / Facturas Reales de ARCA)</option>
                 </select>
+              </div>
 
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Punto de Venta Fiscal</label>
-                  <input
-                    className="ui-input"
-                    type="number"
-                    min="1"
-                    value={draft.facturacion.arca.punto_venta}
-                    onChange={(event) =>
-                      updateSection("facturacion", {
-                        arca: {
-                          ...draft.facturacion.arca,
-                          punto_venta: Math.max(
-                            1,
-                            Math.floor(toNumber(event.target.value, draft.facturacion.arca.punto_venta))
-                          ),
-                        },
-                      })
-                    }
-                    placeholder="1"
-                    disabled={!canWriteConfiguracion}
-                  />
-                </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  Punto de Venta de ARCA *
+                </label>
+                <input
+                  className="ui-input font-mono font-bold"
+                  type="number"
+                  min="1"
+                  value={draft.facturacion.arca.punto_venta}
+                  onChange={(event) =>
+                    updateSection("facturacion", {
+                      arca: {
+                        ...draft.facturacion.arca,
+                        punto_venta: Math.max(
+                          1,
+                          Math.floor(toNumber(event.target.value, draft.facturacion.arca.punto_venta))
+                        ),
+                      },
+                    })
+                  }
+                  placeholder="Ej: 1, 2, 3..."
+                  disabled={!canWriteConfiguracion}
+                />
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">
+                  Número de punto de venta dado de alta en ARCA bajo "Factura Electrónica - Web Services".
+                </span>
+              </div>
 
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Alias Certificado Digital</label>
-                  <input
-                    className="ui-input"
-                    value={draft.facturacion.arca.certificado_alias}
-                    onChange={(event) =>
-                      updateSection("facturacion", {
-                        arca: {
-                          ...draft.facturacion.arca,
-                          certificado_alias: event.target.value.trim(),
-                        },
-                      })
-                    }
-                    placeholder="Alias certificado AFIP"
-                    disabled={!canWriteConfiguracion}
-                  />
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  Nombre / Alias del Certificado
+                </label>
+                <input
+                  className="ui-input font-mono"
+                  value={draft.facturacion.arca.certificado_alias}
+                  onChange={(event) =>
+                    updateSection("facturacion", {
+                      arca: {
+                        ...draft.facturacion.arca,
+                        certificado_alias: event.target.value.trim(),
+                      },
+                    })
+                  }
+                  placeholder="Ej: pos-v2"
+                  disabled={!canWriteConfiguracion}
+                />
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">
+                  Identificador del alias registrado en "Administración de Certificados Digitales".
+                </span>
+              </div>
+
+              {/* TARJETA DE ESTADO DE LA FIRMA DIGITAL */}
+              <div className="sm:col-span-2 lg:col-span-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    {draft.facturacion.arca.certificate_crt && draft.facturacion.arca.certificate_key ? (
+                      <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                        <ShieldCheck className="h-5 w-5" />
+                      </div>
+                    ) : (
+                      <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                        <ShieldAlert className="h-5 w-5" />
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                          Firma Digital y Credenciales ARCA
+                        </h4>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            draft.facturacion.arca.certificate_crt && draft.facturacion.arca.certificate_key
+                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                              : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                          }`}
+                        >
+                          {draft.facturacion.arca.certificate_crt && draft.facturacion.arca.certificate_key
+                            ? "Vinculado y Activo"
+                            : "Pendiente de Carga"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        {draft.facturacion.arca.certificate_crt && draft.facturacion.arca.certificate_key
+                          ? "Tu negocio ya tiene cargadas sus credenciales para firmar facturas directamente con ARCA."
+                          : "Para emitir comprobantes oficiales en ARCA debés vincular tu certificado digital (.crt) y clave privada."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {draft.facturacion.arca.certificate_key && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          downloadFile(
+                            `clave_privada_${draft.facturacion.arca.cuit_emisor || "arca"}.key`,
+                            draft.facturacion.arca.certificate_key || ""
+                          )
+                        }
+                        className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1.5 transition cursor-pointer"
+                        title="Descargar copia de seguridad de la clave privada"
+                      >
+                        <Download size={13} />
+                        Respaldo .key
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setIsArcaWizardOpen(true)}
+                      disabled={!canWriteConfiguracion}
+                      className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Key size={13} />
+                      {draft.facturacion.arca.certificate_crt
+                        ? "Renovar / Reemplazar Certificado"
+                        : "Conectar con ARCA (Paso a Paso)"}
+                    </button>
+                  </div>
                 </div>
               </div>
+
+              {/* BOTÓN PROBAR CONEXIÓN CON ARCA */}
+              <div className="sm:col-span-2 lg:col-span-4 pt-3 border-t border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleTestArcaConnection}
+                    disabled={isTestingArcaConnection || !draft.facturacion.arca.enabled}
+                    className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-sky-600 dark:hover:bg-sky-500 text-white text-xs font-bold shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isTestingArcaConnection ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        Consultando ARCA...
+                      </>
+                    ) : (
+                      <>
+                        <Activity size={14} />
+                        Probar Conexión con ARCA
+                      </>
+                    )}
+                  </button>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Verifica la respuesta de los servidores de ARCA para este punto de venta.
+                  </span>
+                </div>
+
+                {arcaTestFeedback && (
+                  <div
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${
+                      arcaTestFeedback.status === "success"
+                        ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                        : "bg-rose-50 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                    }`}
+                  >
+                    {arcaTestFeedback.status === "success" ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+                    <span>{arcaTestFeedback.message}</span>
+                  </div>
+                )}
+              </div>
             </div>
+          </div>
 
             {/* CORRELATIVIDAD DE SECUENCIAS */}
             <div className="md:col-span-2 space-y-2">
@@ -2236,6 +2500,28 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
           </div>
         </section>
       </div>
+
+      {/* MODAL ASISTENTE DE CERTIFICADOS ARCA */}
+      <ArcaCertificateWizardModal
+        isOpen={isArcaWizardOpen}
+        onClose={() => setIsArcaWizardOpen(false)}
+        cuit={draft?.facturacion?.arca?.cuit_emisor || draft?.facturacion?.issuer_cuit || ""}
+        businessName={draft?.facturacion?.issuer_tax_name || draft?.negocio?.legal_name || ""}
+        alias={draft?.facturacion?.arca?.certificado_alias || "pos-v2"}
+        currentCrt={draft?.facturacion?.arca?.certificate_crt}
+        currentKey={draft?.facturacion?.arca?.certificate_key}
+        onSaveCredentials={({ certificate_crt, certificate_key, certificado_alias }) => {
+          if (!draft?.facturacion) return;
+          updateSection("facturacion", {
+            arca: {
+              ...draft.facturacion.arca,
+              certificate_crt,
+              certificate_key,
+              certificado_alias: certificado_alias || draft.facturacion.arca.certificado_alias,
+            },
+          });
+        }}
+      />
     </PagePlaceholder>
   );
 };

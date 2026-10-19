@@ -244,6 +244,9 @@ export const PosPage = () => {
     generatedReceipt,
     generatedInvoice,
     clearGeneratedReceipt,
+    arcaEnabledForPos,
+    arcaSettings,
+    defaultInvoiceDocumentType,
   } = usePosSale(tenantId);
 
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState("");
@@ -2094,6 +2097,7 @@ export const PosPage = () => {
               checkoutTotal={checkoutSummary.total}
               rawCheckoutTotal={checkoutSummary.rawTotal}
               roundingAdjustment={checkoutSummary.roundingAdjustment}
+              getCheckoutSummary={getCheckoutSummary}
               mercadoPagoIntent={mercadoPagoIntent}
               mercadoPagoSettings={mercadoPagoSettings}
               mercadoPagoStatus={mercadoPagoStatus}
@@ -2102,6 +2106,9 @@ export const PosPage = () => {
               canManageCustomers={canWriteCustomers}
               currentAccountSnapshot={currentAccountSnapshot}
               disabled={isSubmitting || isCashGateBlocking}
+              arcaEnabled={arcaEnabledForPos}
+              arcaMode={arcaSettings.mode}
+              defaultDocumentType={defaultInvoiceDocumentType}
               onCustomerChange={setSelectedCustomer}
               onPaymentMethodChange={setSelectedPaymentMethodId}
               onCreateOriginBank={handleCreateOriginBank}

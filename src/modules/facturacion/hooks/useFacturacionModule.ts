@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditService } from "@/services/audit.service";
 import { arcaInvoicesService } from "@/services/arca/arca-invoices.service";
+import { arcaService } from "@/services/arca.service";
 import { customersService } from "@/services/customers.service";
 import { invoicesService } from "@/services/invoices.service";
 import { salesService } from "@/services/sales.service";
@@ -285,41 +286,46 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
         },
       });
 
-      const sendResult = await arcaInvoicesService.sendInvoice(pending, {
-        forcedStatus: options?.forcedStatus,
-        settings: arcaSettings,
-      });
-      const statusResult = await arcaInvoicesService.checkInvoiceStatus(
-        sendResult.reference ?? `ARCA-MOCK-${Date.now()}`,
+      const currentSeq =
+        parseInt(pending.document_number.split("-").pop() || "1", 10) || 1;
+
+      const arcaResult = await arcaService.authorizeInvoice(
+        arcaSettings,
         {
-          forcedStatus:
-            options?.forcedStatus ??
-            (sendResult.status === "accepted" || sendResult.status === "rejected"
-              ? sendResult.status
-              : undefined),
-          settings: arcaSettings,
           tenantId,
-        }
+          documentType: pending.document_type,
+          puntoVenta: arcaSettings.punto_venta,
+          cuitEmisor: arcaSettings.cuit_emisor || "",
+          receiverDocType: pending.customer_snapshot?.document_type ?? "dni",
+          receiverDocNumber: pending.customer_snapshot?.document_number ?? "0",
+          subtotal: pending.subtotal,
+          taxTotal: pending.tax_total,
+          total: pending.total,
+          items: pending.items_snapshot.map((it) => ({
+            name: it.product_name,
+            quantity: it.quantity,
+            unitPrice: it.unit_price,
+            subtotal: it.subtotal,
+          })),
+        },
+        currentSeq
       );
 
       const finalStatus: ArcaInvoiceStatus =
-        statusResult.status === "accepted" || statusResult.status === "rejected"
-          ? statusResult.status
-          : sendResult.status === "accepted" || sendResult.status === "rejected"
-            ? sendResult.status
-            : "pending";
+        options?.forcedStatus ?? (arcaResult.success ? "accepted" : "rejected");
 
-      const finalMessage =
-        finalStatus === "accepted"
-          ? "Factura aprobada por ARCA"
-          : finalStatus === "rejected"
-            ? "Factura rechazada por ARCA"
-            : "Factura enviada a ARCA. Estado pendiente";
+      const finalMessage = arcaResult.success
+        ? "Factura aprobada por ARCA"
+        : arcaResult.errorMessage ?? "Factura rechazada por ARCA";
 
       const updated = await invoicesService.updateArcaStatus(tenantId, pending.id, {
         arca_status: finalStatus,
-        arca_reference: sendResult.reference,
+        arca_reference: arcaResult.cae ?? null,
         arca_message: finalMessage,
+        cae: arcaResult.cae ?? null,
+        cae_due_date: arcaResult.caeDueDate ?? null,
+        qr_data_url: arcaResult.qrUrl ?? null,
+        document_number: arcaResult.formattedDocumentNumber ?? pending.document_number,
       });
       upsertInvoiceInState(updated);
 
@@ -333,9 +339,9 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
         metadata: {
           previous_arca_status: "pending",
           next_arca_status: updated.arca_status,
-          arca_reference: updated.arca_reference,
-          arca_response: sendResult.rawResponse,
-          arca_status_check: statusResult.rawResponse,
+          cae: arcaResult.cae,
+          cae_due_date: arcaResult.caeDueDate,
+          qr_url: arcaResult.qrUrl,
           mode: arcaOperationalStatus.mode,
         },
       });

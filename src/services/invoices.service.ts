@@ -41,17 +41,27 @@ const buildFiscalCustomerSnapshot = (
   saleCustomerId: string | null,
   customer: Customer | null
 ): FiscalCustomerSnapshot | null => {
-  if (!customer && !saleCustomerId) return null;
+  if (!customer && !saleCustomerId) {
+    return {
+      customer_id: null,
+      full_name: "Consumidor Final",
+      business_name: "Consumidor Final",
+      document_type: "dni",
+      document_number: "0",
+      address: null,
+      fiscal_condition: "Consumidor final",
+    };
+  }
 
   if (!customer) {
     return {
       customer_id: saleCustomerId,
-      full_name: "Cliente sin datos",
-      business_name: null,
+      full_name: "Consumidor Final",
+      business_name: "Consumidor Final",
       document_type: "dni",
       document_number: "0",
       address: null,
-      fiscal_condition: null,
+      fiscal_condition: "Consumidor final",
     };
   }
 
@@ -108,10 +118,10 @@ const validateInvoiceGenerationFromSale = (
     return { valid: false, message: "Solo se puede facturar una venta completada" };
   }
 
-  if (!sale.customer_id && documentType !== "PRESUPUESTO") {
+  if (!sale.customer_id && documentType === "A") {
     return {
       valid: false,
-      message: "Sin cliente solo se puede generar PRESUPUESTO",
+      message: "Para emitir Factura A se requiere un cliente con CUIT registrado.",
     };
   }
 
@@ -131,13 +141,25 @@ export const invoicesService = {
       arca_status: ArcaInvoiceStatus;
       arca_reference?: string | null;
       arca_message?: string | null;
+      cae?: string | null;
+      cae_due_date?: string | null;
+      qr_data_url?: string | null;
+      document_number?: string | null;
     }
   ): Promise<Invoice> => {
-    const updated = await invoicesCrud.update(tenantId, id, {
+    const patchData: Partial<Invoice> = {
       arca_status: input.arca_status,
       arca_reference: input.arca_reference ?? null,
       arca_message: input.arca_message ?? null,
-    });
+    };
+    if (input.cae !== undefined) patchData.cae = input.cae;
+    if (input.cae_due_date !== undefined) patchData.cae_due_date = input.cae_due_date;
+    if (input.qr_data_url !== undefined) patchData.qr_data_url = input.qr_data_url;
+    if (input.document_number !== undefined && input.document_number !== null) {
+      patchData.document_number = input.document_number;
+    }
+
+    const updated = await invoicesCrud.update(tenantId, id, patchData as UpdateInvoiceInput);
 
     if (!updated) {
       throw new Error("Factura no encontrada");

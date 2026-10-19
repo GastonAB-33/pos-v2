@@ -7,6 +7,7 @@ import { customersService } from "@/services/customers.service";
 import { useOffline } from "@/features/offline/hooks/useOffline";
 import { offlineService } from "@/services/offline.service";
 import { arcaInvoicesService } from "@/services/arca/arca-invoices.service";
+import { arcaService } from "@/services/arca.service";
 import { parseScaleBarcode, type ParsedScaleBarcode } from "@/services/barcode/scale-barcode.service";
 import { invoicesService } from "@/services/invoices.service";
 import { installmentPlansService } from "@/services/installment-plans.service";
@@ -108,7 +109,7 @@ export interface PosCartItemComputed extends PosCartItem {
 
 import { calculatePosRounding } from "@/utils/pos-rounding";
 
-interface PosCheckoutSummary {
+export interface PosCheckoutSummary {
   subtotal: number;
   surchargeTotal: number;
   discountTotal: number;
@@ -282,8 +283,15 @@ const calculateSummaryByMethod = (
   const rawTotal = roundAmount(subtotal + paymentAdjustment);
 
   const isCash = normalizePaymentMethodCode(paymentMethod.code) === "cash";
+  const isCreditCard =
+    normalizePaymentMethodCode(paymentMethod.code) === "card_credit" ||
+    paymentMethod.type === "card_credit";
+
+  // En tarjeta de crédito no se aplica redondeo ya que sería un sobreprecio adicional sobre el interés
+  const shouldApplyRounding = isRoundingActive && !isCreditCard;
+
   const rounding = calculatePosRounding(rawTotal, {
-    enabled: isRoundingActive,
+    enabled: shouldApplyRounding,
     rule: posSettings?.rounding_rule || "integer",
     mode: posSettings?.rounding_mode,
     target: posSettings?.rounding_target,
@@ -3566,8 +3574,8 @@ export const usePosSale = (tenantId: string | null) => {
       const postSaleMessages: string[] = [];
 
       if (values.issueInvoice) {
-        if (!sale.customer_id) {
-          postSaleMessages.push("Sin cliente: no se emitio factura fiscal.");
+        if (!sale.customer_id && defaultInvoiceDocumentType === "A") {
+          postSaleMessages.push("Para Factura A se requiere cliente con CUIT registrado.");
         } else {
           try {
             generatedInvoiceFromSale = await invoicesService.createFromSale(tenantId, {
@@ -3591,110 +3599,119 @@ export const usePosSale = (tenantId: string | null) => {
             });
 
             if (arcaEnabledForPos && arcaOperationalStatus.available) {
-              const customerValidation = arcaInvoicesService.validateCustomerTaxData(
-                generatedInvoiceFromSale.customer_snapshot
+              const pendingInvoice = await invoicesService.updateArcaStatus(
+                tenantId,
+                generatedInvoiceFromSale.id,
+                {
+                  arca_status: "pending",
+                  arca_reference: generatedInvoiceFromSale.arca_reference,
+                  arca_message: `Enviando a ARCA (${arcaOperationalStatus.mode})...`,
+                }
               );
-              if (!customerValidation.valid) {
-                postSaleMessages.push(
-                  `Factura interna generada. No se envio a ARCA: ${customerValidation.errors.join(
-                    ". "
-                  )}`
-                );
-                await auditService.createSafe(tenantId, {
-                  user_id: resolvedCreatedBy,
-                  module: "facturacion",
-                  action: "arca_validation_error",
-                  entity_type: "invoice",
-                  entity_id: generatedInvoiceFromSale.id,
-                  description: `Validacion ARCA fallida desde POS: ${generatedInvoiceFromSale.document_number}`,
-                  metadata: {
-                    errors: customerValidation.errors,
-                    mode: arcaOperationalStatus.mode,
-                  },
-                });
-              } else {
-                const pendingInvoice = await invoicesService.updateArcaStatus(
+
+              await auditService.createSafe(tenantId, {
+                user_id: resolvedCreatedBy,
+                module: "facturacion",
+                action: "arca_send",
+                entity_type: "invoice",
+                entity_id: pendingInvoice.id,
+                description: `Envío ARCA desde POS: ${pendingInvoice.document_number}`,
+                metadata: {
+                  previous_arca_status: generatedInvoiceFromSale.arca_status,
+                  next_arca_status: "pending",
+                  mode: arcaOperationalStatus.mode,
+                },
+              });
+
+              const currentSeq =
+                parseInt(pendingInvoice.document_number.split("-").pop() || "1", 10) || 1;
+
+              const arcaResult = await arcaService.authorizeInvoice(
+                arcaSettings,
+                {
                   tenantId,
-                  generatedInvoiceFromSale.id,
-                  {
-                    arca_status: "pending",
-                    arca_reference: generatedInvoiceFromSale.arca_reference,
-                    arca_message: `Factura enviada a ARCA (${arcaOperationalStatus.mode}) desde POS. Procesando...`,
-                  }
-                );
+                  documentType: generatedInvoiceFromSale.document_type,
+                  puntoVenta: arcaSettings.punto_venta,
+                  cuitEmisor: arcaSettings.cuit_emisor || "",
+                  receiverDocType: generatedInvoiceFromSale.customer_snapshot?.document_type ?? "dni",
+                  receiverDocNumber: generatedInvoiceFromSale.customer_snapshot?.document_number ?? "0",
+                  subtotal: generatedInvoiceFromSale.subtotal,
+                  taxTotal: generatedInvoiceFromSale.tax_total,
+                  total: generatedInvoiceFromSale.total,
+                  items: generatedInvoiceFromSale.items_snapshot.map((item) => ({
+                    name: item.product_name,
+                    quantity: item.quantity,
+                    unitPrice: item.unit_price,
+                    subtotal: item.subtotal,
+                  })),
+                },
+                currentSeq
+              );
 
-                await auditService.createSafe(tenantId, {
-                  user_id: resolvedCreatedBy,
-                  module: "facturacion",
-                  action: "arca_send",
-                  entity_type: "invoice",
-                  entity_id: pendingInvoice.id,
-                  description: `Envio ARCA desde POS: ${pendingInvoice.document_number}`,
-                  metadata: {
-                    previous_arca_status: generatedInvoiceFromSale.arca_status,
-                    next_arca_status: "pending",
-                    mode: arcaOperationalStatus.mode,
-                  },
-                });
-
-                const sendResult = await arcaInvoicesService.sendInvoice(pendingInvoice, {
-                  settings: arcaSettings,
-                });
-                const statusResult = await arcaInvoicesService.checkInvoiceStatus(
-                  sendResult.reference ?? `ARCA-MOCK-${Date.now()}`,
-                  {
-                    forcedStatus:
-                      sendResult.status === "accepted" || sendResult.status === "rejected"
-                        ? sendResult.status
-                        : undefined,
-                    settings: arcaSettings,
-                    tenantId,
-                  }
-                );
-
-                const finalArcaStatus: Invoice["arca_status"] =
-                  statusResult.status === "accepted" || statusResult.status === "rejected"
-                    ? statusResult.status
-                    : sendResult.status === "accepted" || sendResult.status === "rejected"
-                      ? sendResult.status
-                      : "pending";
-
+              if (arcaResult.success) {
                 generatedInvoiceFromSale = await invoicesService.updateArcaStatus(
                   tenantId,
                   pendingInvoice.id,
                   {
-                    arca_status: finalArcaStatus,
-                    arca_reference: sendResult.reference,
-                    arca_message:
-                      finalArcaStatus === "accepted"
-                        ? "Factura aprobada por ARCA"
-                        : finalArcaStatus === "rejected"
-                          ? "Factura rechazada por ARCA"
-                          : "Factura enviada a ARCA. Estado pendiente",
+                    arca_status: "accepted",
+                    arca_reference: arcaResult.cae ?? null,
+                    arca_message: "Comprobante autorizado por ARCA",
+                    cae: arcaResult.cae ?? null,
+                    cae_due_date: arcaResult.caeDueDate ?? null,
+                    qr_data_url: arcaResult.qrUrl ?? null,
+                    document_number:
+                      arcaResult.formattedDocumentNumber ?? pendingInvoice.document_number,
                   }
                 );
 
                 await auditService.createSafe(tenantId, {
                   user_id: resolvedCreatedBy,
                   module: "facturacion",
-                  action: "arca_status_change",
+                  action: "arca_authorized",
                   entity_type: "invoice",
                   entity_id: generatedInvoiceFromSale.id,
-                  description: `Estado ARCA actualizado desde POS: ${generatedInvoiceFromSale.arca_status}`,
+                  description: `Factura autorizada por ARCA: ${generatedInvoiceFromSale.document_number} (CAE: ${arcaResult.cae})`,
                   metadata: {
-                    arca_reference: generatedInvoiceFromSale.arca_reference,
-                    arca_response: sendResult.rawResponse,
-                    arca_status_check: statusResult.rawResponse,
+                    cae: arcaResult.cae,
+                    cae_due_date: arcaResult.caeDueDate,
+                    voucher_number: arcaResult.voucherNumber,
+                    qr_url: arcaResult.qrUrl,
                     mode: arcaOperationalStatus.mode,
                   },
                 });
 
                 postSaleMessages.push(
-                  generatedInvoiceFromSale.arca_status === "accepted"
-                    ? "Factura aprobada por ARCA."
-                    : generatedInvoiceFromSale.arca_status === "rejected"
-                      ? "Factura rechazada por ARCA."
-                      : "Factura enviada a ARCA. Pendiente."
+                  `Factura ${generatedInvoiceFromSale.document_number} autorizada por ARCA (CAE: ${arcaResult.cae}).`
+                );
+              } else {
+                const isFallback = arcaSettings.allow_internal_fallback;
+                generatedInvoiceFromSale = await invoicesService.updateArcaStatus(
+                  tenantId,
+                  pendingInvoice.id,
+                  {
+                    arca_status: isFallback ? "not_sent" : "rejected",
+                    arca_message: arcaResult.errorMessage ?? "No se pudo autorizar con ARCA",
+                  }
+                );
+
+                await auditService.createSafe(tenantId, {
+                  user_id: resolvedCreatedBy,
+                  module: "facturacion",
+                  action: isFallback ? "arca_fallback_contingency" : "arca_rejected",
+                  entity_type: "invoice",
+                  entity_id: generatedInvoiceFromSale.id,
+                  description: `ARCA no autorizado (${isFallback ? "Contingencia" : "Rechazado"}): ${arcaResult.errorMessage}`,
+                  metadata: {
+                    error: arcaResult.errorMessage,
+                    mode: arcaOperationalStatus.mode,
+                    fallback: isFallback,
+                  },
+                });
+
+                postSaleMessages.push(
+                  isFallback
+                    ? `Factura generada en contingencia interna (ARCA: ${arcaResult.errorMessage || "ARCA no disponible"}).`
+                    : `ARCA rechazó el comprobante: ${arcaResult.errorMessage || "Error al autorizar"}.`
                 );
               }
             } else if (arcaEnabledForPos && !arcaOperationalStatus.available) {
@@ -3709,7 +3726,7 @@ export const usePosSale = (tenantId: string | null) => {
                 action: "arca_send_blocked",
                 entity_type: "invoice",
                 entity_id: generatedInvoiceFromSale.id,
-                description: `Envio ARCA bloqueado desde POS: ${generatedInvoiceFromSale.document_number}`,
+                description: `Envío ARCA bloqueado desde POS: ${generatedInvoiceFromSale.document_number}`,
                 metadata: {
                   mode: arcaOperationalStatus.mode,
                   reason: arcaOperationalStatus.reason,
@@ -3839,6 +3856,7 @@ export const usePosSale = (tenantId: string | null) => {
     requireOpenSessionForSale,
     arcaEnabledForPos,
     isArcaConnected,
+    defaultInvoiceDocumentType,
     saleTabs,
     activeTabId,
     switchSaleTab,

@@ -564,6 +564,11 @@ export interface ArcaSettings {
   fiscal_environment: ArcaFiscalEnvironment;
   force_unavailable: boolean;
   allow_internal_fallback: boolean;
+  certificate_crt?: string | null;
+  certificate_key?: string | null;
+  certificate_expiration?: string | null;
+  last_connection_status?: "connected" | "error" | "untested";
+  last_connection_message?: string | null;
 }
 
 export type BarcodeScaleMode = "weight" | "total_price";
@@ -677,6 +682,9 @@ export interface Invoice extends TenantScopedEntity {
   arca_status: ArcaInvoiceStatus;
   arca_reference: string | null;
   arca_message: string | null;
+  cae?: string | null;
+  cae_due_date?: string | null;
+  qr_data_url?: string | null;
   notes: string | null;
 }
 
@@ -696,6 +704,9 @@ export interface CreditNote extends TenantScopedEntity {
   status: CreditNoteStatus;
   arca_status: ArcaInvoiceStatus;
   arca_reference: string | null;
+  cae?: string | null;
+  cae_due_date?: string | null;
+  qr_data_url?: string | null;
   notes: string | null;
 }
 

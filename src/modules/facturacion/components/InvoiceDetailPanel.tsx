@@ -1,5 +1,7 @@
 import type { Invoice } from "@/types/entities";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { ExternalLink } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 
 interface InvoiceDetailPanelProps {
   invoice: Invoice;
@@ -84,14 +86,21 @@ export const InvoiceDetailPanel = ({
         </div>
 
         <div className="space-y-1">
-          <p className="text-xs uppercase tracking-[0.08em] text-slate-500">Estado</p>
+          <p className="text-xs uppercase tracking-[0.08em] text-slate-500">Estado Fiscal</p>
           <div className="flex flex-wrap items-center gap-2">
             <span className={statusBadgeClass(invoice.status)}>{invoice.status}</span>
             <span className={statusBadgeClass(invoice.arca_status)}>ARCA {invoice.arca_status}</span>
           </div>
           <p className="text-xs text-slate-600">
-            Referencia ARCA: {invoice.arca_reference ?? "No informada"}
+            <span className="font-semibold">CAE / Ref:</span>{" "}
+            <span className="font-mono font-bold text-slate-900">{invoice.cae || invoice.arca_reference || "No asignado"}</span>
           </p>
+          {invoice.cae_due_date ? (
+            <p className="text-xs text-slate-600">
+              <span className="font-semibold">Vto. CAE:</span>{" "}
+              <span className="font-mono">{invoice.cae_due_date}</span>
+            </p>
+          ) : null}
           <p className="text-xs text-slate-600">
             Mensaje ARCA: {invoice.arca_message ?? "Sin respuesta registrada"}
           </p>
@@ -100,6 +109,22 @@ export const InvoiceDetailPanel = ({
           ) : (
             <p className="text-xs text-slate-600">Sin venta origen</p>
           )}
+
+          {invoice.qr_data_url ? (
+            <div className="pt-2 flex items-center gap-3">
+              <div className="bg-white p-1 rounded border border-slate-200 shadow-xs shrink-0">
+                <QRCodeSVG value={invoice.qr_data_url} size={70} level="M" />
+              </div>
+              <a
+                href={invoice.qr_data_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+              >
+                <ExternalLink size={12} /> Verificar en ARCA
+              </a>
+            </div>
+          ) : null}
         </div>
       </div>
 
