@@ -10,7 +10,7 @@ import {
   WalletCards,
   type LucideIcon,
 } from "lucide-react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { routePaths } from "@/config/routes";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
@@ -155,7 +155,7 @@ export const Sidebar = () => {
     setExpandedGroupId(activeGroup.id);
   }, [location.pathname]);
 
-  const { openPos, posWindowMode } = usePosNavigation();
+  const { openPos, getPosUrl, posWindowMode } = usePosNavigation();
 
   const handleOpenPos = () => {
     openPos();
@@ -231,9 +231,15 @@ export const Sidebar = () => {
             >
               Acceso rapido
             </p>
-            <button
-              type="button"
-              onClick={handleOpenPos}
+            <Link
+              to={getPosUrl()}
+              onClick={(e) => {
+                // Si el usuario hace clic izquierdo normal (sin Ctrl/Cmd/Shift/Alt)
+                if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+                  e.preventDefault();
+                  handleOpenPos();
+                }
+              }}
               className={cn(
                 "app-sidebar-pos flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm font-semibold transition",
                 isSidebarDark
@@ -256,7 +262,7 @@ export const Sidebar = () => {
               {posWindowMode === "new_window" ? (
                 <ExternalLink aria-hidden="true" size={14} className="opacity-60" />
               ) : null}
-            </button>
+            </Link>
           </section>
         ) : null}
 
