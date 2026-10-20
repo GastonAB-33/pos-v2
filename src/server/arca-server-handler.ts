@@ -166,9 +166,16 @@ async function getWsaaAuth(
     throw new Error(`WSAA Rechazó la autenticación: ${faultMsg}`);
   }
 
-  const tokenMatch = responseXml.match(/<token>(.*?)<\/token>/);
-  const signMatch = responseXml.match(/<sign>(.*?)<\/sign>/);
-  const expMatch = responseXml.match(/<expirationTime>(.*?)<\/expirationTime>/);
+  // Desescapar entidades XML (&lt; &gt; &quot; &amp;) que devuelve loginCmsReturn
+  const unescapedXml = responseXml
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&");
+
+  const tokenMatch = unescapedXml.match(/<token>(.*?)<\/token>/i);
+  const signMatch = unescapedXml.match(/<sign>(.*?)<\/sign>/i);
+  const expMatch = unescapedXml.match(/<expirationTime>(.*?)<\/expirationTime>/i);
 
   if (!tokenMatch || !signMatch) {
     throw new Error("WSAA no devolvió token o sign válidos.");

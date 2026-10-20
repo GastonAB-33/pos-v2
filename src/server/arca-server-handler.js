@@ -103,7 +103,7 @@ function signTraXml(traXml, certPem, keyPem) {
 }
 function getWsaaAuth(env, cuit, certPem, keyPem) {
     return __awaiter(this, void 0, void 0, function () {
-        var cacheKey, now, cached, wsaaUrl, genTime, expTime, uniqueId, traXml, cmsB64, soapEnvelope, response, responseXml, faultMatch, faultMsg, tokenMatch, signMatch, expMatch, token, sign, expiresAt;
+        var cacheKey, now, cached, wsaaUrl, genTime, expTime, uniqueId, traXml, cmsB64, soapEnvelope, response, responseXml, faultMatch, faultMsg, unescapedXml, tokenMatch, signMatch, expMatch, token, sign, expiresAt;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
@@ -138,9 +138,14 @@ function getWsaaAuth(env, cuit, certPem, keyPem) {
                         faultMsg = faultMatch ? faultMatch[1] : "HTTP ".concat(response.status);
                         throw new Error("WSAA Rechaz\u00F3 la autenticaci\u00F3n: ".concat(faultMsg));
                     }
-                    tokenMatch = responseXml.match(/<token>(.*?)<\/token>/);
-                    signMatch = responseXml.match(/<sign>(.*?)<\/sign>/);
-                    expMatch = responseXml.match(/<expirationTime>(.*?)<\/expirationTime>/);
+                    unescapedXml = responseXml
+                        .replace(/&lt;/g, "<")
+                        .replace(/&gt;/g, ">")
+                        .replace(/&quot;/g, '"')
+                        .replace(/&amp;/g, "&");
+                    tokenMatch = unescapedXml.match(/<token>(.*?)<\/token>/i);
+                    signMatch = unescapedXml.match(/<sign>(.*?)<\/sign>/i);
+                    expMatch = unescapedXml.match(/<expirationTime>(.*?)<\/expirationTime>/i);
                     if (!tokenMatch || !signMatch) {
                         throw new Error("WSAA no devolvió token o sign válidos.");
                     }
