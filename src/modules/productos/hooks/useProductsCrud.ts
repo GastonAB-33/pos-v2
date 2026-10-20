@@ -16,6 +16,7 @@ import {
   roundPercent,
 } from "@/modules/productos/utils/product-pricing";
 import { serializeReturnableConfig } from "@/utils/returnable-packages";
+import { isStockTrackingEnabled, serializeStockTracking } from "@/utils/stock-tracking";
 
 type FeedbackType = "success" | "error";
 
@@ -109,15 +110,18 @@ const toServiceInput = (
     brand: options?.existingBrand ?? null,
     supplier: options?.existingSupplier ?? null,
     is_favorite: options?.isFavorite ?? false,
-    description: serializeReturnableConfig(
-      options?.existingDescription,
-      values.isReturnable
-        ? {
-            enabled: true,
-            packageName: values.returnablePackageName?.trim() || "Envase Retornable",
-            packagePrice: values.returnablePackagePrice ?? 0,
-          }
-        : null
+    description: serializeStockTracking(
+      serializeReturnableConfig(
+        options?.existingDescription,
+        values.isReturnable
+          ? {
+              enabled: true,
+              packageName: values.returnablePackageName?.trim() || "Envase Retornable",
+              packagePrice: values.returnablePackagePrice ?? 0,
+            }
+          : null
+      ),
+      values.trackStock ?? true
     ),
     price: roundMoney(values.precioFinal),
     cost_price: roundMoney(values.precioCosto),
@@ -793,6 +797,43 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
     }
   };
 
+  const toggleProductStockTracking = async (productId: string) => {
+    if (!tenantId) return;
+
+    const product = products.find((item) => item.id === productId);
+    if (!product) return;
+    const currentTracking = isStockTrackingEnabled(product.description);
+    const nextTracking = !currentTracking;
+    const nextDescription = serializeStockTracking(product.description, nextTracking);
+
+    setIsSubmitting(true);
+    try {
+      const updated = await productsService.update(tenantId, productId, { description: nextDescription });
+      upsertProductInState(updated ?? { ...product, description: nextDescription });
+      await auditService.createSafe(tenantId, {
+        user_id: userId,
+        module: "productos",
+        action: "update",
+        entity_type: "product",
+        entity_id: productId,
+        description: `Seguimiento de stock ${nextTracking ? "activado" : "desactivado"} para: ${product.name}`,
+        metadata: {
+          previous_track_stock: currentTracking,
+          next_track_stock: nextTracking,
+        },
+      });
+      setFeedback({
+        type: "success",
+        message: nextTracking ? "Seguimiento de stock activado" : "Seguimiento de stock desactivado",
+      });
+      await loadProducts();
+    } catch {
+      setFeedback({ type: "error", message: "Error al actualizar seguimiento de stock" });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const toggleProductActive = async (productId: string) => {
     if (!tenantId) return;
 
@@ -1335,6 +1376,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
     deleteProductsBulk,
     toggleProductActive,
     toggleProductFavorite,
+    toggleProductStockTracking,
     downloadImportTemplate,
     downloadImportErrors,
     parseImportFile,

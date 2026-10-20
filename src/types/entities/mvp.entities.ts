@@ -80,6 +80,7 @@ export interface Customer extends TenantScopedEntity {
   current_balance: number;
   current_account_enabled?: boolean | null;
   current_account_limit?: number | null;
+  discount_percent?: number | null;
   current_account_pricing_mode?: CurrentAccountPricingMode | null;
   current_account_surcharge_percent?: number | null;
   current_account_surcharge_amount?: number | null;
@@ -114,6 +115,7 @@ export interface Employee extends TenantScopedEntity {
   current_balance: number;
   current_account_enabled: boolean;
   current_account_limit?: number | null;
+  discount_percent?: number | null;
   observations: string | null;
   is_active: boolean;
 }
@@ -494,6 +496,7 @@ export interface PosSettings {
   rounding_rule?: PosRoundingRule;
   rounding_mode?: PosRoundingMode;
   rounding_target?: PosRoundingTarget;
+  employee_discount_percent?: number;
 }
 
 export interface StockSettings {

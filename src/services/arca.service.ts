@@ -162,6 +162,56 @@ function generateMockAuthorization(
   };
 }
 
+/**
+ * Invoca el servicio de facturación ARCA:
+ * 1. Intenta vía Supabase Edge Function si está desplegada.
+ * 2. Si falla o estamos en entorno local, utiliza el endpoint local (/functions/v1/arca-billing)
+ *    atendido por el servidor de desarrollo, eliminando problemas de CORS o falta de Edge Function remota.
+ */
+async function callArcaBillingFunction(payload: Record<string, unknown>): Promise<{
+  data: any;
+  error: { message: string } | null;
+}> {
+  try {
+    const { data, error } = await supabase.functions.invoke("arca-billing", {
+      body: payload,
+    });
+    if (!error && data) {
+      return { data, error: null };
+    }
+  } catch {
+    // Continuar al fallback local
+  }
+
+  try {
+    const res = await fetch("/functions/v1/arca-billing", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (res.ok && data?.success !== false) {
+      return { data, error: null };
+    }
+    return {
+      data,
+      error: {
+        message: data?.error || `Error en servidor ARCA (HTTP ${res.status})`,
+      },
+    };
+  } catch (err) {
+    return {
+      data: null,
+      error: {
+        message:
+          err instanceof Error
+            ? err.message
+            : "No se pudo comunicar con el servicio de facturación ARCA.",
+      },
+    };
+  }
+}
+
 export const arcaService = {
   /**
    * Envía a autorizar una factura ante ARCA (o la simula si está en modo mock)
@@ -183,32 +233,28 @@ export const arcaService = {
       return generateMockAuthorization(payload, currentSequenceNumber);
     }
 
-    // Modo Sandbox o Real: Llamada a Supabase Edge Function
+    // Modo Sandbox o Real
     try {
-      const { data, error } = await supabase.functions.invoke("arca-billing", {
-        body: {
-          action: "create-invoice",
-          mode: arcaConfig.mode,
-          fiscal_environment: arcaConfig.fiscal_environment,
-          punto_venta: payload.puntoVenta,
-          cuit_emisor: payload.cuitEmisor,
-          certificate_crt: arcaConfig.certificate_crt,
-          certificate_key: arcaConfig.certificate_key,
-          document_type: payload.documentType,
-          subtotal: payload.subtotal,
-          tax_total: payload.taxTotal,
-          total: payload.total,
-          receiver_doc_type: payload.receiverDocType,
-          receiver_doc_number: payload.receiverDocNumber,
-          items: payload.items,
-        },
+      const { data, error } = await callArcaBillingFunction({
+        action: "create-invoice",
+        mode: arcaConfig.mode,
+        fiscal_environment: arcaConfig.fiscal_environment,
+        punto_venta: payload.puntoVenta,
+        cuit_emisor: payload.cuitEmisor,
+        certificate_crt: arcaConfig.certificate_crt,
+        certificate_key: arcaConfig.certificate_key,
+        document_type: payload.documentType,
+        subtotal: payload.subtotal,
+        tax_total: payload.taxTotal,
+        total: payload.total,
+        receiver_doc_type: payload.receiverDocType,
+        receiver_doc_number: payload.receiverDocNumber,
+        items: payload.items,
       });
 
       if (error) {
-        // Si la Edge Function falló o no está desplegada aún, proveer mensaje descriptivo
-        console.warn("Fallo al conectar con Edge Function arca-billing:", error);
+        console.warn("Fallo al conectar con servicio arca-billing:", error);
         if (arcaConfig.allow_internal_fallback) {
-          // Fallback controlado
           return {
             success: false,
             errorMessage: `No se pudo conectar con ARCA (${error.message}). Podés emitir comprobante interno de contingencia.`,
@@ -272,15 +318,13 @@ export const arcaService = {
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke("arca-billing", {
-        body: {
-          action: "test-connection",
-          mode: arcaConfig.mode,
-          cuit,
-          punto_venta: puntoVenta,
-          certificate_crt: arcaConfig.certificate_crt,
-          certificate_key: arcaConfig.certificate_key,
-        },
+      const { data, error } = await callArcaBillingFunction({
+        action: "test-connection",
+        mode: arcaConfig.mode,
+        cuit,
+        punto_venta: puntoVenta,
+        certificate_crt: arcaConfig.certificate_crt,
+        certificate_key: arcaConfig.certificate_key,
       });
 
       if (error) {
@@ -366,27 +410,25 @@ export const arcaService = {
 
     // Modo Sandbox o Real
     try {
-      const { data, error } = await supabase.functions.invoke("arca-billing", {
-        body: {
-          action: "create-credit-note",
-          mode: arcaConfig.mode,
-          fiscal_environment: arcaConfig.fiscal_environment,
-          punto_venta: payload.puntoVenta,
-          cuit_emisor: payload.cuitEmisor,
-          certificate_crt: arcaConfig.certificate_crt,
-          certificate_key: arcaConfig.certificate_key,
-          document_type: payload.documentType,
-          subtotal: payload.subtotal,
-          tax_total: payload.taxTotal,
-          total: payload.total,
-          receiver_doc_type: payload.receiverDocType,
-          receiver_doc_number: payload.receiverDocNumber,
-          associated_voucher: {
-            tipo: payload.associatedVoucher.tipo,
-            punto_venta: payload.associatedVoucher.puntoVenta,
-            numero: payload.associatedVoucher.numero,
-            cuit: payload.associatedVoucher.cuit,
-          },
+      const { data, error } = await callArcaBillingFunction({
+        action: "create-credit-note",
+        mode: arcaConfig.mode,
+        fiscal_environment: arcaConfig.fiscal_environment,
+        punto_venta: payload.puntoVenta,
+        cuit_emisor: payload.cuitEmisor,
+        certificate_crt: arcaConfig.certificate_crt,
+        certificate_key: arcaConfig.certificate_key,
+        document_type: payload.documentType,
+        subtotal: payload.subtotal,
+        tax_total: payload.taxTotal,
+        total: payload.total,
+        receiver_doc_type: payload.receiverDocType,
+        receiver_doc_number: payload.receiverDocNumber,
+        associated_voucher: {
+          tipo: payload.associatedVoucher.tipo,
+          punto_venta: payload.associatedVoucher.puntoVenta,
+          numero: payload.associatedVoucher.numero,
+          cuit: payload.associatedVoucher.cuit,
         },
       });
 

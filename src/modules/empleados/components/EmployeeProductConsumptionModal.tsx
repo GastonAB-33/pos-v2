@@ -1,12 +1,14 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useToast } from "@/components/ui/useToast";
 import { productsService } from "@/services/products.service";
+import { settingsService } from "@/services/settings.service";
 import { useProductsStore } from "@/features/products/store/products.store";
+import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
 import { PosQuickProductModal } from "@/modules/pos/components/PosQuickProductModal";
 import type { PosQuickProductInput } from "@/modules/pos/hooks/usePosSale";
 import type { Employee, Product } from "@/types/entities";
-import { Search, ShoppingBag, Plus, Minus, Trash2 } from "lucide-react";
+import { Search, ShoppingBag, Plus, Minus, Trash2, Barcode, Tag } from "lucide-react";
 
 interface EmployeeProductConsumptionModalProps {
   open: boolean;
@@ -43,25 +45,31 @@ export const EmployeeProductConsumptionModal = ({
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customNotes, setCustomNotes] = useState("");
+  const [discountPercent, setDiscountPercent] = useState<number>(employee.discount_percent ?? 10);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isQuickProductModalOpen, setIsQuickProductModalOpen] = useState(false);
   const [quickProductInitialName, setQuickProductInitialName] = useState("");
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!open || !tenantId) return;
 
     let isMounted = true;
     setIsLoading(true);
-    productsService
-      .getAllByTenant(tenantId)
-      .then((data) => {
-        if (isMounted) {
-          setProducts(data.filter((p) => p.is_active));
-        }
+
+    Promise.all([
+      productsService.getAllByTenant(tenantId),
+      settingsService.getByTenant(tenantId).catch(() => null),
+    ])
+      .then(([productsData, tenantSettings]) => {
+        if (!isMounted) return;
+        setProducts((productsData as Product[]).filter((p) => p.is_active));
+        const defaultDiscount = tenantSettings?.pos?.employee_discount_percent ?? 10;
+        setDiscountPercent(employee.discount_percent ?? defaultDiscount);
       })
       .catch(() => {
-        toast.error("Error al cargar productos del comercio");
+        toast.error("Error al cargar productos o configuración");
       })
       .finally(() => {
         if (isMounted) setIsLoading(false);
@@ -70,7 +78,56 @@ export const EmployeeProductConsumptionModal = ({
     return () => {
       isMounted = false;
     };
-  }, [open, tenantId, toast]);
+  }, [open, tenantId, employee.discount_percent, toast]);
+
+  useEffect(() => {
+    if (open) {
+      window.setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 100);
+    }
+  }, [open]);
+
+  const addToCart = useCallback((product: Product) => {
+    setCart((prev) => {
+      const existing = prev.find((item) => item.product.id === product.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.product.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      }
+      return [...prev, { product, quantity: 1 }];
+    });
+  }, []);
+
+  // Listener para pistola lectora de código de barras USB
+  const handleBarcodeScan = useCallback(
+    (scannedBarcode: string) => {
+      const term = scannedBarcode.trim().toLowerCase();
+      if (!term) return;
+
+      const found = products.find(
+        (p) =>
+          (p.code && p.code.toLowerCase() === term) ||
+          p.name.toLowerCase() === term
+      );
+
+      if (found) {
+        addToCart(found);
+        toast.success(`"${found.name}" agregado por lector`);
+      } else {
+        toast.error(`No se encontró producto con código "${scannedBarcode}"`);
+      }
+    },
+    [products, addToCart, toast]
+  );
+
+  useBarcodeScanner({
+    enabled: open && !isQuickProductModalOpen,
+    onScan: handleBarcodeScan,
+  });
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -94,20 +151,6 @@ export const EmployeeProductConsumptionModal = ({
       )
       .slice(0, 20);
   }, [products, search]);
-
-  const addToCart = (product: Product) => {
-    setCart((prev) => {
-      const existing = prev.find((item) => item.product.id === product.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.product.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
-      }
-      return [...prev, { product, quantity: 1 }];
-    });
-  };
 
   const handleAddManualProduct = (input: PosQuickProductInput): boolean => {
     const name = input.name.trim();
@@ -264,9 +307,44 @@ export const EmployeeProductConsumptionModal = ({
     setCart((prev) => prev.filter((item) => item.product.id !== productId));
   };
 
-  const totalAmount = useMemo(() => {
+  const subtotalAmount = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   }, [cart]);
+
+  const discountAmount = useMemo(() => {
+    return Number(((subtotalAmount * discountPercent) / 100).toFixed(2));
+  }, [subtotalAmount, discountPercent]);
+
+  const totalAmount = useMemo(() => {
+    return Math.max(0, Number((subtotalAmount - discountAmount).toFixed(2)));
+  }, [subtotalAmount, discountAmount]);
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const term = search.trim().toLowerCase();
+      if (!term) return;
+
+      const exact = products.find(
+        (p) =>
+          (p.code && p.code.toLowerCase() === term) ||
+          p.name.toLowerCase() === term
+      );
+      if (exact) {
+        addToCart(exact);
+        setSearch("");
+        toast.success(`"${exact.name}" agregado`);
+        return;
+      }
+
+      if (filteredProducts.length === 1) {
+        addToCart(filteredProducts[0]);
+        setSearch("");
+        toast.success(`"${filteredProducts[0].name}" agregado`);
+        return;
+      }
+    }
+  };
 
   if (!open) return null;
 
@@ -299,9 +377,16 @@ export const EmployeeProductConsumptionModal = ({
       )
       .join(", ");
 
+    const discountSummary =
+      discountPercent > 0
+        ? ` • Subtotal: ${currency.format(subtotalAmount)} • Descuento (${discountPercent}%): -${currency.format(
+            discountAmount
+          )} • Total adeudado: ${currency.format(totalAmount)}`
+        : ` • Total adeudado: ${currency.format(totalAmount)}`;
+
     const notes = customNotes.trim()
-      ? `Retiro de mercadería: ${itemsSummary} • Nota: ${customNotes.trim()}`
-      : `Retiro de mercadería: ${itemsSummary}`;
+      ? `Retiro de mercadería: ${itemsSummary}${discountSummary} • Nota: ${customNotes.trim()}`
+      : `Retiro de mercadería: ${itemsSummary}${discountSummary}`;
 
     setIsSubmitting(true);
     try {
@@ -312,8 +397,21 @@ export const EmployeeProductConsumptionModal = ({
       });
 
       if (success) {
+        // Descontar stock acumulado de cada producto
+        for (const item of cart) {
+          if (!item.product.id.startsWith("manual-") && !item.product.id.startsWith("temp-")) {
+            const currentStock = item.product.stock_current ?? 0;
+            const nextStock = Math.max(0, Number((currentStock - item.quantity).toFixed(3)));
+            try {
+              await productsService.updateStock(tenantId, item.product.id, nextStock);
+            } catch (err) {
+              console.warn("No se pudo actualizar stock en consumo de empleado:", err);
+            }
+          }
+        }
+
         toast.success(
-          `Retiro de productos registrado por ${currency.format(totalAmount)}. Se cargó a su cuenta corriente.`
+          `Retiro registrado por ${currency.format(totalAmount)} (${discountPercent}% desc.). Se cargó a su cuenta corriente.`
         );
         setCart([]);
         setCustomNotes("");
@@ -367,12 +465,18 @@ export const EmployeeProductConsumptionModal = ({
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                 <input
+                  ref={searchInputRef}
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar por nombre, código o marca..."
-                  className="w-full rounded-xl border border-slate-300 pl-9 pr-3 py-2 text-xs focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder="Buscar o escanear código de barras..."
+                  className="w-full rounded-xl border border-slate-300 pl-9 pr-24 py-2 text-xs focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 />
+                <span className="absolute right-2.5 top-2 flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                  <Barcode size={12} />
+                  <span>Lector activo</span>
+                </span>
               </div>
 
               {isLoading ? (
@@ -519,13 +623,43 @@ export const EmployeeProductConsumptionModal = ({
                   />
                 </div>
 
-                <div className="flex items-center justify-between rounded-xl bg-indigo-50 p-3 dark:bg-indigo-950/40">
-                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-200">
-                    Total a Cargar a Cuenta Corriente:
-                  </span>
-                  <span className="text-xl font-bold text-indigo-900 dark:text-indigo-100">
-                    {currency.format(totalAmount)}
-                  </span>
+                <div className="space-y-1.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/60 p-3 border border-slate-200 dark:border-slate-700/80">
+                  <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+                    <span>Subtotal productos:</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">{currency.format(subtotalAmount)}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-emerald-700 dark:text-emerald-400">
+                    <div className="flex items-center gap-1.5">
+                      <Tag size={13} />
+                      <span>Descuento de Empleado:</span>
+                      <div className="inline-flex items-center rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 px-1 py-0.5 text-[11px] font-bold">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={discountPercent}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            setDiscountPercent(isNaN(val) ? 0 : Math.max(0, Math.min(100, val)));
+                          }}
+                          className="w-9 text-center bg-transparent outline-none font-mono text-emerald-700 dark:text-emerald-300"
+                        />
+                        <span className="text-[10px]">%</span>
+                      </div>
+                    </div>
+                    <span className="font-bold">-{currency.format(discountAmount)}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-700 pt-2 text-indigo-900 dark:text-indigo-200">
+                    <span className="text-xs font-bold uppercase tracking-wider">
+                      Total Neto a Cargar:
+                    </span>
+                    <span className="text-xl font-bold font-mono text-indigo-900 dark:text-indigo-100">
+                      {currency.format(totalAmount)}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

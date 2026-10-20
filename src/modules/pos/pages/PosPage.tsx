@@ -193,6 +193,10 @@ export const PosPage = () => {
     closeSaleTab,
     selectedCustomerId,
     selectedCustomer,
+    employees,
+    selectedEmployeeId,
+    selectedEmployee,
+    selectEmployee,
     appliedPriceList,
     cart,
     cartManualDiscount,
@@ -1892,7 +1896,21 @@ export const PosPage = () => {
                   onClick={() => setIsCameraScannerOpen(true)}
                   disabled={!canWritePos}
                 />
-                {canWritePos && selectedCustomerId ? (
+                {canWritePos && selectedEmployee ? (
+                  <div className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 shadow-2xs">
+                    <span className="font-semibold truncate max-w-[170px]" title={selectedEmployee.full_name}>
+                      👔 {selectedEmployee.full_name} ({selectedEmployee.discount_percent ?? (posSettings.employee_discount_percent ?? 10)}% OFF)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => selectEmployee(null)}
+                      className="p-0.5 hover:text-rose-600 rounded transition cursor-pointer"
+                      title="Quitar empleado de la venta"
+                    >
+                      <X size={12} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                ) : canWritePos && selectedCustomerId ? (
                   <IconButton
                     icon={ShoppingCart}
                     label="Ver perfil del cliente"
@@ -2086,11 +2104,15 @@ export const PosPage = () => {
               formId={checkoutFormId}
               layout="modal"
               customers={customers}
+              employees={employees}
               paymentMethods={paymentMethods}
               bankAccounts={bankAccounts}
               originBanks={originBanks}
               installmentPlans={installmentPlans}
               selectedCustomerId={selectedCustomerId}
+              selectedEmployeeId={selectedEmployeeId}
+              onSelectEmployee={selectEmployee}
+              employeeDiscountPercent={posSettings.employee_discount_percent ?? 10}
               selectedPaymentMethodId={selectedPaymentMethodId}
               defaultPaymentMethodId={getEffectiveDefaultPaymentMethodId()}
               isOnline={isOnline}

@@ -28,6 +28,7 @@ export const productFormSchema = z.object({
   isReturnable: z.boolean().default(false),
   returnablePackageName: z.string().optional().or(z.literal("")),
   returnablePackagePrice: z.coerce.number().min(0).optional(),
+  trackStock: z.boolean().default(true),
 });
 
 export type ProductFormValues = z.infer<typeof productFormSchema>;

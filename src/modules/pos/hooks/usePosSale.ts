@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { auditService } from "@/services/audit.service";
 import { bankAccountsService } from "@/services/bank-accounts.service";
 import { currentAccountsService } from "@/services/current-accounts.service";
+import { employeeCurrentAccountsService } from "@/services/employee-current-accounts.service";
+import { employeesService } from "@/services/employees.service";
 import { cashService } from "@/services/cash.service";
 import { customersService } from "@/services/customers.service";
 import { useOffline } from "@/features/offline/hooks/useOffline";
@@ -32,7 +34,7 @@ import { salesService } from "@/services/sales.service";
 import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
 import { settingsService } from "@/services/settings.service";
 import { stockService } from "@/services/stock.service";
-import type { ArcaSettings, BankAccount, BarcodeScaleSettings, Customer, InstallmentPlan, Invoice, InvoiceDocumentType, MercadoPagoSettings, OriginBank, PaymentMethod, PaymentMethodType, PosSettings, PriceList, Product, ProductBarcode, Receipt, Sale } from "@/types/entities";
+import type { ArcaSettings, BankAccount, BarcodeScaleSettings, Customer, Employee, InstallmentPlan, Invoice, InvoiceDocumentType, MercadoPagoSettings, OriginBank, PaymentMethod, PaymentMethodType, PosSettings, PriceList, Product, ProductBarcode, Receipt, Sale } from "@/types/entities";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
 import {
   parseReturnableConfig,
@@ -342,6 +344,7 @@ export const usePosSale = (tenantId: string | null) => {
   }, [productBarcodes]);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [originBanks, setOriginBanks] = useState<OriginBank[]>([]);
@@ -465,6 +468,11 @@ export const usePosSale = (tenantId: string | null) => {
   const [defaultInvoiceDocumentType, setDefaultInvoiceDocumentType] =
     useState<InvoiceDocumentType>("B");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const selectedEmployee = useMemo(
+    () => employees.find((e) => e.id === selectedEmployeeId) ?? null,
+    [employees, selectedEmployeeId]
+  );
   const [cartState, setCartState] = useState<PosCartItem[]>([]);
   const [cartManualDiscount, setCartManualDiscount] = useState<CartManualDiscount | null>(null);
   const [discountsEnabled, setDiscountsEnabled] = useState(true);
@@ -732,6 +740,7 @@ export const usePosSale = (tenantId: string | null) => {
           allActiveInstallmentPlansResult,
           allActivePromotionsResult,
           tenantSettingsResult,
+          allEmployeesResult,
         ] = await Promise.allSettled([
           shouldFetchCatalog
             ? productsService.getAllByTenant(tenantId)
@@ -749,6 +758,7 @@ export const usePosSale = (tenantId: string | null) => {
           installmentPlansService.getActiveByTenant(tenantId),
           promotionsService.getActiveByTenantWithDetails(tenantId),
           settingsService.getByTenant(tenantId),
+          employeesService.getAllByTenant(tenantId),
         ]);
 
         const allProducts =
@@ -787,6 +797,8 @@ export const usePosSale = (tenantId: string | null) => {
             : [];
         const tenantSettings =
           tenantSettingsResult.status === "fulfilled" ? tenantSettingsResult.value : null;
+        const allEmployees =
+          allEmployeesResult.status === "fulfilled" ? allEmployeesResult.value : [];
 
         const hasPartialErrors =
           (shouldFetchCatalog && allProductsResult.status === "rejected") ||
@@ -848,6 +860,7 @@ export const usePosSale = (tenantId: string | null) => {
         }
 
       setCustomers(activeCustomers);
+      setEmployees(allEmployees.filter((emp) => emp.is_active));
       setPaymentMethods(
         [...allActivePaymentMethods].sort((a, b) => {
           const priorityDiff = paymentMethodPriority(a) - paymentMethodPriority(b);
@@ -2364,10 +2377,40 @@ export const usePosSale = (tenantId: string | null) => {
   const setSelectedCustomer = useCallback((customerId: string) => {
     const normalized = customerId.trim();
     setSelectedCustomerId(normalized);
+    if (normalized) {
+      setSelectedEmployeeId(null);
+      setCartManualDiscount((current) => (current?.reason === "Descuento Empleado" ? null : current));
+    }
     setSaleTabs((prevTabs) =>
       prevTabs.map((tab) => (tab.id === activeTabId ? { ...tab, selectedCustomerId: normalized } : tab))
     );
   }, [activeTabId]);
+
+  const selectEmployee = useCallback(
+    (employee: Employee | null) => {
+      if (!employee) {
+        setSelectedEmployeeId(null);
+        setCartManualDiscount((current) => (current?.reason === "Descuento Empleado" ? null : current));
+        return;
+      }
+
+      setSelectedCustomerId("");
+      setSelectedEmployeeId(employee.id);
+      setSaleTabs((prevTabs) =>
+        prevTabs.map((tab) => (tab.id === activeTabId ? { ...tab, selectedCustomerId: "" } : tab))
+      );
+
+      const discountPercent = employee.discount_percent ?? (posSettings.employee_discount_percent ?? 10);
+      if (discountPercent > 0) {
+        setCartManualDiscount({
+          type: "percent",
+          value: discountPercent,
+          reason: "Descuento Empleado",
+        });
+      }
+    },
+    [activeTabId, posSettings.employee_discount_percent]
+  );
 
   const upsertCustomer = useCallback((customer: Customer) => {
     setCustomers((prev) => {
@@ -2707,8 +2750,8 @@ export const usePosSale = (tenantId: string | null) => {
     const isMercadoPagoManual =
       isMercadoPagoMethod && !mercadoPagoSettings.enabled;
 
-    if (hasCurrentAccount && !values.customerId) {
-      setFeedback({ type: "error", message: "Cliente obligatorio para cuenta corriente" });
+    if (hasCurrentAccount && !values.customerId && !values.employeeId) {
+      setFeedback({ type: "error", message: "Cliente o empleado obligatorio para cuenta corriente" });
       return null;
     }
 
@@ -2748,8 +2791,8 @@ export const usePosSale = (tenantId: string | null) => {
       }
     }
 
-    if (!posSettings.allow_sale_without_customer && !values.customerId?.trim()) {
-      setFeedback({ type: "error", message: "La configuracion requiere cliente para vender" });
+    if (!posSettings.allow_sale_without_customer && !values.customerId?.trim() && !values.employeeId?.trim()) {
+      setFeedback({ type: "error", message: "La configuracion requiere cliente o empleado para vender" });
       return null;
     }
 
@@ -2827,6 +2870,36 @@ export const usePosSale = (tenantId: string | null) => {
             message: "El importe supera el limite de cuenta corriente del cliente",
           });
           return null;
+        }
+      }
+    }
+
+    const normalizedEmployeeId = values.employeeId?.trim() ?? "";
+    if (currentAccountDebtAmount > 0 && normalizedEmployeeId) {
+      const selectedEmployeeForSale = employees.find((e) => e.id === normalizedEmployeeId);
+      if (selectedEmployeeForSale) {
+        if (!selectedEmployeeForSale.current_account_enabled) {
+          setFeedback({
+            type: "error",
+            message: `La cuenta corriente está deshabilitada para el empleado ${selectedEmployeeForSale.full_name}`,
+          });
+          return null;
+        }
+
+        if (
+          selectedEmployeeForSale.current_account_limit != null &&
+          selectedEmployeeForSale.current_account_limit > 0
+        ) {
+          const projectedBalance = roundAmount(
+            (selectedEmployeeForSale.current_balance ?? 0) + currentAccountDebtAmount
+          );
+          if (projectedBalance > selectedEmployeeForSale.current_account_limit) {
+            setFeedback({
+              type: "error",
+              message: `El importe supera el límite de cuenta corriente del empleado (${selectedEmployeeForSale.full_name})`,
+            });
+            return null;
+          }
         }
       }
     }
@@ -2971,6 +3044,7 @@ export const usePosSale = (tenantId: string | null) => {
 
         clearCart();
         setSelectedCustomerId("");
+        setSelectedEmployeeId(null);
         refreshPending();
         return null;
       } catch {
@@ -2985,6 +3059,11 @@ export const usePosSale = (tenantId: string | null) => {
     setGeneratedReceipt(null);
     setGeneratedInvoice(null);
 
+    const employeeForSale = values.employeeId ? employees.find((e) => e.id === values.employeeId) : null;
+    const notesWithEmployee = employeeForSale
+      ? `[Empleado: ${employeeForSale.full_name}] ${values.notes?.trim() || ""}`.trim()
+      : values.notes?.trim() || null;
+
     const sale = await salesService.create(tenantId, {
         sale_number: saleNumber,
         customer_id: values.customerId?.trim() || null,
@@ -2995,7 +3074,7 @@ export const usePosSale = (tenantId: string | null) => {
         tax_total: 0,
         total: summary.total,
         currency_code: "ARS",
-        notes: values.notes?.trim() || null,
+        notes: notesWithEmployee,
         current_account_id: null,
         arca_document_id: null,
         mercado_pago_preference_id:
@@ -3239,7 +3318,17 @@ export const usePosSale = (tenantId: string | null) => {
               });
 
               const currentAccountPromise =
-                pIsCurrentAccount && values.customerId
+                pIsCurrentAccount && values.employeeId
+                  ? employeeCurrentAccountsService.createMovement(tenantId, {
+                      employee_id: values.employeeId,
+                      sale_id: sale.id,
+                      type: "debt",
+                      amount: p.amount,
+                      category: "product_purchase",
+                      notes: `Venta POS #${sale.sale_number} (Parcial cta. cte. empleado)`,
+                      created_by: resolvedCreatedBy,
+                    })
+                  : pIsCurrentAccount && values.customerId
                   ? currentAccountsService.createMovement(tenantId, {
                       customer_id: values.customerId,
                       sale_id: sale.id,
@@ -3460,16 +3549,27 @@ export const usePosSale = (tenantId: string | null) => {
             });
           }
 
-          const singleCurrentAccountPromise = isCurrentAccountMethod
-            ? currentAccountsService.createMovement(tenantId, {
-                customer_id: values.customerId!,
-                sale_id: sale.id,
-                type: "debt",
-                amount: summary.total,
-                notes: `Venta ${sale.sale_number}`,
-                created_by: resolvedCreatedBy,
-              })
-            : Promise.resolve();
+          const singleCurrentAccountPromise =
+            isCurrentAccountMethod && values.employeeId
+              ? employeeCurrentAccountsService.createMovement(tenantId, {
+                  employee_id: values.employeeId,
+                  sale_id: sale.id,
+                  type: "debt",
+                  amount: summary.total,
+                  category: "product_purchase",
+                  notes: `Venta POS #${sale.sale_number} (Cta. Cte. Empleado)`,
+                  created_by: resolvedCreatedBy,
+                })
+              : isCurrentAccountMethod && values.customerId
+              ? currentAccountsService.createMovement(tenantId, {
+                  customer_id: values.customerId!,
+                  sale_id: sale.id,
+                  type: "debt",
+                  amount: summary.total,
+                  notes: `Venta ${sale.sale_number}`,
+                  created_by: resolvedCreatedBy,
+                })
+              : Promise.resolve();
 
           const singleCashMovementPromise =
             requiresCashMovementRegistration && openSession
@@ -3777,6 +3877,7 @@ export const usePosSale = (tenantId: string | null) => {
 
       setMercadoPagoIntent(null);
       setCartManualDiscount(null);
+      setSelectedEmployeeId(null);
       setRoundingEnabled(posSettings?.rounding_enabled ?? true);
       closeSaleTab(activeTabId);
       if (updatedStockByProductId.size) {
@@ -3798,6 +3899,18 @@ export const usePosSale = (tenantId: string | null) => {
               : {
                   ...customer,
                   current_balance: roundAmount(customer.current_balance + summary.total),
+                }
+          )
+        );
+      }
+      if (isCurrentAccountMethod && normalizedEmployeeId) {
+        setEmployees((previous) =>
+          previous.map((emp) =>
+            emp.id !== normalizedEmployeeId
+              ? emp
+              : {
+                  ...emp,
+                  current_balance: roundAmount((emp.current_balance ?? 0) + summary.total),
                 }
           )
         );
@@ -3864,6 +3977,11 @@ export const usePosSale = (tenantId: string | null) => {
     closeSaleTab,
     selectedCustomerId,
     selectedCustomer,
+    employees,
+    selectedEmployeeId,
+    selectedEmployee,
+    selectEmployee,
+    setSelectedEmployeeId,
     appliedPriceList,
     promotions,
     cart,

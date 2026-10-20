@@ -49,6 +49,7 @@ const defaultValues: ProductFormValues = {
   isReturnable: false,
   returnablePackageName: "",
   returnablePackagePrice: 0,
+  trackStock: true,
 };
 
 export const ProductForm = ({

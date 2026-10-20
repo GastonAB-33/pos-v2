@@ -1092,6 +1092,55 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                 </div>
               )}
             </div>
+
+            {/* DESCUENTO PARA EMPLEADOS EN CUENTA CORRIENTE */}
+            <div className="md:col-span-2 space-y-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-indigo-100 dark:bg-indigo-950/70 p-2.5 text-indigo-700 dark:text-indigo-400">
+                    <Users size={18} />
+                  </div>
+                  <div>
+                    <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                      Descuento en compras a cuenta corriente de empleados
+                    </span>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Porcentaje de bonificación que se aplica automáticamente cuando un empleado compra o retira productos a su cuenta corriente.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <div className="relative w-32">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      value={draft.pos.employee_discount_percent ?? 10}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        updateSection("pos", {
+                          employee_discount_percent: isNaN(val) ? 0 : Math.max(0, Math.min(100, val)),
+                        });
+                      }}
+                      className="ui-input pr-8 text-right font-bold font-mono"
+                      disabled={!canWriteConfiguracion}
+                    />
+                    <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-500 dark:text-slate-400 pointer-events-none">
+                      %
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 p-2.5 text-xs text-indigo-800 dark:text-indigo-300">
+                <CheckCircle2 size={15} className="shrink-0 text-indigo-600 dark:text-indigo-400" />
+                <span>
+                  Cada comercio puede definir su porcentaje (ej. 10%). Si un empleado tiene un porcentaje particular cargado en su ficha, prevalecerá su porcentaje individual.
+                </span>
+              </div>
+            </div>
           </div>
         </section>
 

@@ -8,6 +8,7 @@ import { purchasesService } from "@/services/purchases.service";
 import { salesService } from "@/services/sales.service";
 import { stockService } from "@/services/stock.service";
 import { suppliersService } from "@/services/suppliers.service";
+import { isStockTrackingEnabled } from "@/utils/stock-tracking";
 import type {
   CashMovement,
   CashSession,
@@ -203,6 +204,7 @@ const calculateSignedCashAmount = (
 };
 
 const getStockAlertLevel = (product: Product): StockAlertLevel => {
+  if (!isStockTrackingEnabled(product.description)) return "ok";
   if (product.stock_current <= 0) return "no_stock";
   if (product.stock_min != null && product.stock_current <= product.stock_min) return "low_stock";
   if (product.stock_max != null && product.stock_current > product.stock_max) return "over_max";

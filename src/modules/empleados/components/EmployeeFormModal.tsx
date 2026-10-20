@@ -45,6 +45,7 @@ export const EmployeeFormModal = ({
       hireDate: new Date().toISOString().split("T")[0],
       currentAccountEnabled: true,
       currentAccountLimit: "",
+      discountPercent: "",
       observations: "",
     },
   });
@@ -68,6 +69,7 @@ export const EmployeeFormModal = ({
         currentAccountLimit: employee.current_account_limit
           ? String(employee.current_account_limit)
           : "",
+        discountPercent: employee.discount_percent != null ? String(employee.discount_percent) : "",
         observations: employee.observations || "",
       });
     } else {
@@ -84,6 +86,7 @@ export const EmployeeFormModal = ({
         hireDate: new Date().toISOString().split("T")[0],
         currentAccountEnabled: true,
         currentAccountLimit: "",
+        discountPercent: "",
         observations: "",
       });
     }
@@ -282,16 +285,30 @@ export const EmployeeFormModal = ({
                 Permite registrar retiros de productos o consumos a descontar posteriormente del sueldo.
               </p>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Límite de Cuenta Corriente ($) (Dejar vacío para ilimitado)
-                </label>
-                <input
-                  {...register("currentAccountLimit")}
-                  type="text"
-                  placeholder="Ej: 50000"
-                  className="w-full max-w-xs rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Límite de Cuenta Corriente ($) (Vacío = sin límite)
+                  </label>
+                  <input
+                    {...register("currentAccountLimit")}
+                    type="text"
+                    placeholder="Ej: 50000"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Descuento especial (%) (Vacío = default comercio)
+                  </label>
+                  <input
+                    {...register("discountPercent")}
+                    type="text"
+                    placeholder="Ej: 15"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  />
+                </div>
               </div>
             </div>
           </div>

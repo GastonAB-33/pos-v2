@@ -6,6 +6,7 @@ import { productsService } from "@/services/products.service";
 import { purchasesService } from "@/services/purchases.service";
 import { salesService } from "@/services/sales.service";
 import type { CashMovement, Product } from "@/types/entities";
+import { isStockTrackingEnabled } from "@/utils/stock-tracking";
 
 interface DashboardKpis {
   salesToday: number;
@@ -135,7 +136,7 @@ const getCashSignedAmount = (movement: CashMovement): number => {
 
 const buildStockCriticalRows = (products: Product[]): StockCriticalRow[] => {
   return products
-    .filter((product) => product.is_active)
+    .filter((product) => product.is_active && isStockTrackingEnabled(product.description))
     .map((product) => {
       const isNoStock = product.stock_current <= 0;
       const isLow = !isNoStock && product.stock_min != null && product.stock_current <= product.stock_min;
@@ -207,7 +208,7 @@ export const useDashboardAnalytics = (tenantId: string | null): DashboardAnalyti
 
       const activeProducts = products.filter((product) => product.is_active).length;
       const lowStockProducts = products.filter(
-        (product) => product.is_active && (product.stock_current <= 0 || (product.stock_min != null && product.stock_current <= product.stock_min))
+        (product) => product.is_active && isStockTrackingEnabled(product.description) && (product.stock_current <= 0 || (product.stock_min != null && product.stock_current <= product.stock_min))
       ).length;
       const customersInDebt = customers.filter((customer) => customer.current_balance > 0).length;
 

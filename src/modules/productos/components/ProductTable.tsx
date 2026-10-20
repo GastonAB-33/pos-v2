@@ -1,6 +1,6 @@
 import { ProductActions } from "@/modules/productos/components/ProductActions";
 import type { ProductViewModel } from "@/modules/productos/types/product.types";
-import { CheckCircle2, CircleX, Star } from "lucide-react";
+import { CheckCircle2, CircleX, PackageCheck, PackageX } from "lucide-react";
 
 interface ProductTableProps {
   products: ProductViewModel[];
@@ -9,7 +9,8 @@ interface ProductTableProps {
   canDelete: boolean;
   onToggleSelect: (productId: string, selected: boolean) => void;
   onToggleSelectAll: (selected: boolean) => void;
-  onToggleFavorite: (product: ProductViewModel) => void;
+  onToggleStockTracking?: (product: ProductViewModel) => void;
+  onToggleFavorite?: (product: ProductViewModel) => void;
   onOpenBarcode: (product: ProductViewModel) => void;
   onEdit: (product: ProductViewModel) => void;
   onDelete: (product: ProductViewModel) => void;
@@ -28,6 +29,7 @@ export const ProductTable = ({
   canDelete,
   onToggleSelect,
   onToggleSelectAll,
+  onToggleStockTracking,
   onToggleFavorite,
   onOpenBarcode,
   onEdit,
@@ -40,6 +42,14 @@ export const ProductTable = ({
   if (!products.length) {
     return <div className="ui-empty-state">No hay productos para los filtros seleccionados.</div>;
   }
+
+  const handleToggleTracking = (product: ProductViewModel) => {
+    if (onToggleStockTracking) {
+      onToggleStockTracking(product);
+    } else if (onToggleFavorite) {
+      onToggleFavorite(product);
+    }
+  };
 
   return (
     <div className="ui-table-wrap">
@@ -59,7 +69,7 @@ export const ProductTable = ({
             <th className="px-3 py-3 text-left">Subcategoría</th>
             <th className="px-3 py-3 text-left">Precio Final</th>
             <th className="px-3 py-3 text-left">Stock</th>
-            <th className="px-3 py-3 text-left">Favorito</th>
+            <th className="px-3 py-3 text-left">Seguimiento</th>
             <th className="px-3 py-3 text-left">Acciones</th>
           </tr>
         </thead>
@@ -67,7 +77,7 @@ export const ProductTable = ({
         <tbody>
           {products.map((product) => {
             const isSelected = selectedSet.has(product.entity.id);
-            const isFavorite = product.favorito;
+            const isTracking = product.trackStock ?? true;
             const isWeight = product.saleMode === "weight";
 
             return (
@@ -81,32 +91,37 @@ export const ProductTable = ({
                   />
                 </td>
                 <td className="px-3 py-3">
-                  <p className="font-medium text-slate-900">{product.nombre}</p>
+                  <p className="font-medium text-slate-900 dark:text-slate-100">{product.nombre}</p>
                   {product.codigoProducto ? (
-                    <p className="text-xs text-slate-500">Código: {product.codigoProducto}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Código: {product.codigoProducto}</p>
                   ) : null}
                 </td>
-                <td className="px-3 py-3">{product.categoria}</td>
-                <td className="px-3 py-3">{product.subcategoria || "-"}</td>
-                <td className="px-3 py-3 font-medium text-slate-900">
+                <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{product.categoria}</td>
+                <td className="px-3 py-3 text-slate-700 dark:text-slate-300">{product.subcategoria || "-"}</td>
+                <td className="px-3 py-3 font-medium text-slate-900 dark:text-slate-100">
                   {currency.format(product.precioFinal)}
                   {isWeight ? " / kg" : ""}
                 </td>
-                <td className="px-3 py-3">
+                <td className="px-3 py-3 text-slate-700 dark:text-slate-300">
                   {(isWeight ? product.stock * 1000 : product.stock).toLocaleString("es-AR")} {isWeight ? "g" : "u."}
                 </td>
                 <td className="px-3 py-3">
                   <div className="inline-flex items-center gap-2">
                     <button
                       type="button"
-                      title={isFavorite ? "Quitar de favoritos" : "Marcar como favorito"}
-                      aria-label={isFavorite ? "Quitar de favoritos" : "Marcar como favorito"}
-                      onClick={() => onToggleFavorite(product)}
+                      title={isTracking ? "Seguimiento de stock activo (clic para desactivar)" : "Sin seguimiento de stock (clic para activar)"}
+                      aria-label={isTracking ? "Desactivar seguimiento de stock" : "Activar seguimiento de stock"}
+                      onClick={() => handleToggleTracking(product)}
                       disabled={!canWrite}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                      style={{ color: isFavorite ? "var(--ui-accent)" : "var(--ui-muted)" }}
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-slate-100 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40 ${
+                        isTracking ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400 dark:text-slate-500"
+                      }`}
                     >
-                      <Star aria-hidden="true" className="h-4 w-4" fill={isFavorite ? "currentColor" : "none"} />
+                      {isTracking ? (
+                        <PackageCheck aria-hidden="true" className="h-4 w-4" />
+                      ) : (
+                        <PackageX aria-hidden="true" className="h-4 w-4" />
+                      )}
                     </button>
                     <span
                       aria-label={product.activo ? "Producto activo" : "Producto inactivo"}

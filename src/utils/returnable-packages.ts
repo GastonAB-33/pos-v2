@@ -70,6 +70,7 @@ export const getCleanDescription = (description: string | null | undefined): str
   if (!description) return "";
   return description
     .replace(/\s*\[ENV_RETORNABLE:[^\]]+\]\s*/g, " ")
+    .replace(/\s*\[NO_STOCK_TRACK\]\s*/g, " ")
     .replace(/\s*__ARCHIVED_DELETED__\s*/g, " ")
     .trim();
 };

@@ -69,6 +69,7 @@ const createDefaultPosSettings = (): PosSettings => ({
   rounding_rule: "none",
   rounding_mode: "nearest",
   rounding_target: "cash_only",
+  employee_discount_percent: 10,
 });
 
 const createDefaultStockSettings = (): StockSettings => ({
@@ -200,6 +201,7 @@ const normalizeTenantSettings = (input: TenantSettings): TenantSettings => ({
     rounding_rule: input.pos?.rounding_rule ?? "none",
     rounding_mode: input.pos?.rounding_mode ?? "nearest",
     rounding_target: input.pos?.rounding_target ?? "cash_only",
+    employee_discount_percent: input.pos?.employee_discount_percent ?? 10,
   },
   stock: {
     ...createDefaultStockSettings(),

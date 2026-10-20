@@ -18,6 +18,7 @@ import {
 } from "@/modules/productos/schemas/product-form.schema";
 import type { ProductFormModalValues, ProductViewModel } from "@/modules/productos/types/product.types";
 import { parseReturnableConfig, COMMON_RETURNABLE_PACKAGES } from "@/utils/returnable-packages";
+import { isStockTrackingEnabled } from "@/utils/stock-tracking";
 import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
 import { useProductsStore } from "@/features/products/store/products.store";
 import { cn } from "@/utils/cn";
@@ -61,18 +62,21 @@ const createBaseDefaults = (): ProductFormValues => ({
   isReturnable: false,
   returnablePackageName: "",
   returnablePackagePrice: 0,
+  trackStock: true,
 });
 
 const createDefaults = (): ProductFormModalValues => ({
   ...createBaseDefaults(),
   favorito: false,
+  trackStock: true,
   estadoActivo: true,
   imagenFile: null,
   imagenEliminada: false,
 });
 
 const productFormModalSchema = productFormSchema.extend({
-  favorito: z.boolean(),
+  favorito: z.boolean().optional().default(false),
+  trackStock: z.boolean().default(true),
   estadoActivo: z.boolean(),
 });
 
@@ -274,6 +278,7 @@ export const ProductFormModal = ({
       porcentajeIva: product.porcentajeIva,
       precioFinal: product.precioFinal,
       favorito: product.favorito,
+      trackStock: isStockTrackingEnabled(product.entity?.description),
       estadoActivo: product.activo,
       imagenUrl: product.imagenUrl,
       imagenFile: null,
@@ -1172,15 +1177,15 @@ export const ProductFormModal = ({
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5 dark:border-slate-800 dark:bg-slate-950/40">
-            <h4 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Estado y favorito</h4>
+            <h4 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Estado y seguimiento de inventario</h4>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200">
                 <div>
-                  <p className="font-medium text-slate-900 dark:text-slate-100">Favorito en POS</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Aparece destacado para acceso rápido en la venta.</p>
+                  <p className="font-medium text-slate-900 dark:text-slate-100">Realizar seguimiento de stock</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Controla existencias y genera alertas cuando el stock es bajo o nulo.</p>
                 </div>
                 <span className="relative inline-flex h-6 w-11 shrink-0 items-center">
-                  <input type="checkbox" className="peer sr-only" {...register("favorito")} disabled={disabled} />
+                  <input type="checkbox" className="peer sr-only" {...register("trackStock")} disabled={disabled} />
                   <span className="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-brand-600 peer-disabled:opacity-50" />
                   <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
                 </span>

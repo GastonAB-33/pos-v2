@@ -23,6 +23,7 @@ import type {
 import type {
   BankAccount,
   Customer,
+  Employee,
   InstallmentPlan,
   MercadoPagoSettings,
   OriginBank,
@@ -42,11 +43,13 @@ interface PosCheckoutPanelProps {
   formId?: string;
   layout?: "panel" | "modal";
   customers: Customer[];
+  employees?: Employee[];
   paymentMethods: PaymentMethod[];
   bankAccounts: BankAccount[];
   originBanks: OriginBank[];
   installmentPlans: InstallmentPlan[];
   selectedCustomerId: string;
+  selectedEmployeeId?: string | null;
   selectedPaymentMethodId: string;
   defaultPaymentMethodId?: string;
   isOnline: boolean;
@@ -69,6 +72,8 @@ interface PosCheckoutPanelProps {
   hasDebtPaymentInCart?: boolean;
   disabled?: boolean;
   onCustomerChange: (customerId: string) => void;
+  onSelectEmployee?: (employee: Employee | null) => void;
+  employeeDiscountPercent?: number;
   onPaymentMethodChange: (paymentMethodId: string) => void;
   onCreateOriginBank: (name: string) => Promise<OriginBank | null>;
   onOpenCustomerModal: (customer: Customer | null, defaultTab?: "personal" | "fiscal" | "account") => void;
@@ -126,9 +131,11 @@ interface PosPaymentOption {
 export const PosCheckoutPanel = ({
   formId,
   customers,
+  employees = [],
   paymentMethods,
   bankAccounts,
   selectedCustomerId,
+  selectedEmployeeId,
   selectedPaymentMethodId,
   defaultPaymentMethodId,
   isOnline,
@@ -145,6 +152,8 @@ export const PosCheckoutPanel = ({
   hasDebtPaymentInCart: _hasDebtPaymentInCart = false,
   disabled,
   onCustomerChange,
+  onSelectEmployee,
+  employeeDiscountPercent = 10,
   onPaymentMethodChange,
   onOpenCustomerModal,
   onStartMercadoPago: _onStartMercadoPago,
@@ -273,18 +282,22 @@ export const PosCheckoutPanel = ({
       (m) => normalizePaymentMethodCode(m.code) === "current_account"
     );
     if (ccMethod) {
+      const isEmp = Boolean(selectedEmployeeId);
+      const emp = isEmp ? employees.find((e) => e.id === selectedEmployeeId) : null;
       options.push({
         id: `method-${ccMethod.id}`,
         paymentMethodId: ccMethod.id,
         code: "current_account",
-        name: ccMethod.name || "Cuenta Corriente",
-        subtitle: "A crédito / saldo fiado al cliente",
+        name: emp ? "Cuenta Corriente Empleado" : ccMethod.name || "Cuenta Corriente",
+        subtitle: emp
+          ? `A crédito de empleado (${emp.full_name})`
+          : "A crédito / saldo fiado al cliente",
         isCurrentAccount: true,
       });
     }
 
     return options;
-  }, [paymentMethods, posBankAccounts]);
+  }, [paymentMethods, posBankAccounts, selectedEmployeeId, employees]);
 
   // Montos asignados a cada opción de pago { [optionId]: number }
   const [allocatedAmounts, setAllocatedAmounts] = useState<Record<string, number>>({});
@@ -357,6 +370,12 @@ export const PosCheckoutPanel = ({
     [customers, selectedCustomerId]
   );
 
+  // Empleado seleccionado actual
+  const selectedEmployee = useMemo(
+    () => employees.find((e) => e.id === selectedEmployeeId) ?? null,
+    [employees, selectedEmployeeId]
+  );
+
   const isCurrentAccountUsed = useMemo(() => {
     const ccOption = paymentOptions.find((opt) => opt.isCurrentAccount);
     if (!ccOption) return false;
@@ -423,7 +442,7 @@ export const PosCheckoutPanel = ({
       const targetOption = paymentOptions.find((o) => o.id === optionId);
       if (!targetOption) return;
 
-      if (targetOption.isCurrentAccount && !selectedCustomer) {
+      if (targetOption.isCurrentAccount && !selectedCustomer && !selectedEmployee) {
         setIsCustomerModalOpen(true);
         return;
       }
@@ -634,9 +653,9 @@ export const PosCheckoutPanel = ({
         return;
       }
 
-      // Validar si cuenta corriente está usada y requiere cliente
-      if (isCurrentAccountUsed && !selectedCustomer) {
-        setSubmitError("Debes seleccionar un cliente para cobrar con cuenta corriente.");
+      // Validar si cuenta corriente está usada y requiere cliente o empleado
+      if (isCurrentAccountUsed && !selectedCustomer && !selectedEmployee) {
+        setSubmitError("Debes seleccionar un cliente o empleado para cobrar con cuenta corriente.");
         setIsCustomerModalOpen(true);
         return;
       }
@@ -646,6 +665,27 @@ export const PosCheckoutPanel = ({
           `La cuenta corriente no está habilitada para ${selectedCustomer.full_name}. Habilitala desde "Habilitar Cta. Cte." para poder confirmar la venta.`
         );
         return;
+      }
+
+      if (isCurrentAccountUsed && selectedEmployee && !selectedEmployee.current_account_enabled) {
+        setSubmitError(
+          `La cuenta corriente no está habilitada para el empleado ${selectedEmployee.full_name}.`
+        );
+        return;
+      }
+
+      if (isCurrentAccountUsed && selectedEmployee && selectedEmployee.current_account_limit != null && selectedEmployee.current_account_limit > 0) {
+        const ccOption = paymentOptions.find((opt) => opt.isCurrentAccount);
+        const debtPart = ccOption ? (allocatedAmounts[ccOption.id] || 0) : totalAssigned;
+        const projected = (selectedEmployee.current_balance ?? 0) + debtPart;
+        if (projected > selectedEmployee.current_account_limit) {
+          const proceed = window.confirm(
+            `Atención: El importe supera el límite de cuenta corriente del empleado (${currency.format(
+              selectedEmployee.current_account_limit
+            )}). Saldo proyectado: ${currency.format(projected)}. ¿Deseás confirmar igualmente?`
+          );
+          if (!proceed) return;
+        }
       }
 
       // Obtener los métodos con monto asignado
@@ -695,6 +735,7 @@ export const PosCheckoutPanel = ({
 
       const payload: PosCheckoutValues = {
         customerId: selectedCustomerId || undefined,
+        employeeId: selectedEmployeeId || undefined,
         paymentMethodId: primaryOption.paymentMethodId,
         issueInvoice,
         notes: notes.trim(),
@@ -856,8 +897,8 @@ export const PosCheckoutPanel = ({
         const activeOption = paymentOptions[highlightedIndex];
         if (!activeOption) return;
 
-        // Si es cuenta corriente y falta cliente, abrir selector de cliente
-        if (activeOption.isCurrentAccount && !selectedCustomer) {
+        // Si es cuenta corriente y falta cliente o empleado, abrir selector
+        if (activeOption.isCurrentAccount && !selectedCustomer && !selectedEmployee) {
           setIsCustomerModalOpen(true);
           return;
         }
@@ -1130,9 +1171,47 @@ export const PosCheckoutPanel = ({
       {/* PANEL UNIFICADO DE CLIENTE Y FACTURA AFIP (COMPACTO Y MISMO TAMAÑO ASIGNADO O NO) */}
       <div className="flex items-center justify-between gap-2.5 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 min-h-[42px]">
         <div className="flex items-center gap-1.5 text-xs min-w-0 flex-1">
-          <span className="font-bold text-slate-700 dark:text-slate-200 shrink-0">Cliente:</span>
-          {selectedCustomer ? (
+          {selectedEmployee ? (
             <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <span className="font-bold text-slate-700 dark:text-slate-200 shrink-0">Empleado:</span>
+              <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-lg px-2 py-0.5 shadow-2xs min-w-0">
+                <span className="font-bold text-indigo-900 dark:text-indigo-200 truncate max-w-[130px] sm:max-w-[170px]" title={selectedEmployee.full_name}>
+                  {selectedEmployee.full_name}
+                </span>
+                <span className="rounded bg-indigo-100 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 px-1 py-0.2 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 shrink-0">
+                  {selectedEmployee.discount_percent ?? employeeDiscountPercent}% OFF
+                </span>
+                {selectedEmployee.code && (
+                  <span className="rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1 py-0.2 text-[10px] font-mono text-slate-700 dark:text-slate-300 shrink-0 hidden md:inline-block">
+                    {selectedEmployee.code}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsCustomerModalOpen(true)}
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition cursor-pointer shadow-2xs"
+                  title="Cambiar empleado o cliente"
+                  aria-label="Cambiar cliente o empleado"
+                >
+                  <Users size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSelectEmployee?.(null)}
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/80 transition cursor-pointer shadow-2xs"
+                  title="Quitar empleado seleccionado"
+                  aria-label="Quitar empleado"
+                >
+                  <X size={13} strokeWidth={2.5} />
+                </button>
+              </div>
+            </div>
+          ) : selectedCustomer ? (
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <span className="font-bold text-slate-700 dark:text-slate-200 shrink-0">Cliente:</span>
               <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-0.5 shadow-2xs min-w-0">
                 <span className="font-bold text-slate-900 dark:text-slate-100 truncate max-w-[130px] sm:max-w-[170px]" title={selectedCustomer.full_name}>
                   {selectedCustomer.full_name}
@@ -1177,6 +1256,7 @@ export const PosCheckoutPanel = ({
             </div>
           ) : (
             <div className="flex items-center gap-2 min-w-0">
+              <span className="font-bold text-slate-700 dark:text-slate-200 shrink-0">Cliente / Empleado:</span>
               <span className="text-slate-500 dark:text-slate-400 font-medium truncate">
                 Consumidor Final (Venta mostrador)
               </span>
@@ -1470,14 +1550,22 @@ export const PosCheckoutPanel = ({
         </button>
       </div>
 
-      {/* Modal Ágil de Búsqueda y Selección de Cliente */}
+      {/* Modal Ágil de Búsqueda y Selección de Cliente / Empleado */}
       <PosCustomerSelectModal
         isOpen={isCustomerModalOpen}
         customers={customers}
+        employees={employees}
         selectedCustomerId={selectedCustomerId}
+        selectedEmployeeId={selectedEmployeeId}
         onClose={() => setIsCustomerModalOpen(false)}
         onSelect={(cust) => {
+          onSelectEmployee?.(null);
           onCustomerChange(cust.id);
+          setIsCustomerModalOpen(false);
+        }}
+        onSelectEmployee={(emp) => {
+          onCustomerChange("");
+          onSelectEmployee?.(emp);
           setIsCustomerModalOpen(false);
         }}
         onOpenCreateCustomer={() => {
@@ -1488,6 +1576,7 @@ export const PosCheckoutPanel = ({
           setIsCustomerModalOpen(false);
           onOpenCustomerModal(cust, defaultTab ?? "account");
         }}
+        employeeDiscountPercent={employeeDiscountPercent}
       />
     </section>
   );

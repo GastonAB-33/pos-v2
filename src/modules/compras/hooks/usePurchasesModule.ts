@@ -80,7 +80,7 @@ const toProductCreateInput = (values: ProductFormModalValues) => ({
   image_url: values.imagenUrl?.trim() || null,
   brand: null,
   supplier: null,
-  is_favorite: values.favorito,
+  is_favorite: values.favorito ?? false,
   description: null,
   price: roundAmount(values.precioFinal),
   cost_price: roundAmount(values.precioCosto),

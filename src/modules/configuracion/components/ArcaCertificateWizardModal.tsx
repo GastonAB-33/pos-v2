@@ -56,11 +56,18 @@ export const ArcaCertificateWizardModal = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [copiedOpenSsl, setCopiedOpenSsl] = useState(false);
 
+  const cleanCuit = cuit.replace(/\D/g, "");
+
+  // Recuperar clave pendiente de localStorage si no viene guardada previamente
+  const pendingKey = typeof window !== "undefined" && cleanCuit
+    ? localStorage.getItem(`arca_pending_key_${cleanCuit}`) || ""
+    : "";
+
   // Estados locales para la clave y certificado
-  const [generatedKey, setGeneratedKey] = useState<string>(currentKey || "");
+  const [generatedKey, setGeneratedKey] = useState<string>(currentKey || pendingKey);
   const [generatedCsr, setGeneratedCsr] = useState<string>("");
   const [uploadedCrt, setUploadedCrt] = useState<string>(currentCrt || "");
-  const [uploadedKey, setUploadedKey] = useState<string>(currentKey || "");
+  const [uploadedKey, setUploadedKey] = useState<string>(currentKey || pendingKey);
   const [customAlias, setCustomAlias] = useState<string>(alias || "pos-v2");
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
 
@@ -83,8 +90,6 @@ export const ArcaCertificateWizardModal = ({
 
   if (!isOpen) return null;
 
-  const cleanCuit = cuit.replace(/\D/g, "");
-
   // Paso 1: Generar Claves y Descargar CSR
   const handleGenerateCsr = async () => {
     if (!cleanCuit || cleanCuit.length < 11) {
@@ -104,6 +109,13 @@ export const ArcaCertificateWizardModal = ({
       setGeneratedCsr(result.csrPem);
       setUploadedKey(result.privateKeyPem);
 
+      // Guardar clave en localStorage para persistencia segura contra cierres de ventana
+      try {
+        localStorage.setItem(`arca_pending_key_${cleanCuit}`, result.privateKeyPem);
+      } catch (err) {
+        console.warn("No se pudo persistir clave en localStorage:", err);
+      }
+
       // Descargar el archivo .csr en la computadora del usuario
       downloadFile(
         `pedido_arca_${cleanCuit}.csr`,
@@ -111,7 +123,16 @@ export const ArcaCertificateWizardModal = ({
         "application/x-x509-ca-cert"
       );
 
-      toast.success("¡Pedido de Certificado (.csr) generado y descargado! La clave privada quedó vinculada de forma segura.");
+      // Descargar también automáticamente el archivo .key
+      downloadFile(
+        `clave_privada_${cleanCuit}.key`,
+        result.privateKeyPem,
+        "application/x-pem-file"
+      );
+
+      toast.success(
+        "¡Pedido (.csr) y Clave Privada (.key) descargados! Tu clave quedó vinculada."
+      );
       setActiveTab("step2");
     } catch (err) {
       console.error("Error al generar CSR:", err);
@@ -192,6 +213,10 @@ export const ArcaCertificateWizardModal = ({
       certificate_key: uploadedKey.trim(),
       certificado_alias: customAlias.trim(),
     });
+
+    try {
+      localStorage.removeItem(`arca_pending_key_${cleanCuit}`);
+    } catch {}
 
     toast.success("¡Certificado y Clave Privada de ARCA guardados exitosamente!");
     onClose();

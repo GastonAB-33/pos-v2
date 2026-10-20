@@ -227,8 +227,8 @@ export const ProductsPage = () => {
           onToggleSelectAll={(selected) => {
             pageProductIds.forEach((productId) => products.toggleSelected(productId, selected));
           }}
-          onToggleFavorite={(product) => {
-            void products.toggleFavorite(product);
+          onToggleStockTracking={(product) => {
+            void products.toggleStockTracking(product);
           }}
           onOpenBarcode={(product) => setBarcodeProduct(product)}
           onEdit={(product) => setFormModal({ mode: "edit", product })}

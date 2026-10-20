@@ -126,6 +126,9 @@ export const useEmployeesCrud = (tenantId: string | null, _userId: string | null
       const currentAccountLimit = values.currentAccountLimit
         ? parseFloat(values.currentAccountLimit.replace(",", "."))
         : null;
+      const discountPercent = values.discountPercent
+        ? parseFloat(values.discountPercent.replace(",", "."))
+        : null;
 
       const created = await employeesService.create(tenantId, {
         full_name: values.fullName,
@@ -141,6 +144,7 @@ export const useEmployeesCrud = (tenantId: string | null, _userId: string | null
         current_balance: 0,
         current_account_enabled: values.currentAccountEnabled,
         current_account_limit: currentAccountLimit,
+        discount_percent: discountPercent,
         observations: values.observations || null,
         is_active: true,
       });
@@ -170,6 +174,9 @@ export const useEmployeesCrud = (tenantId: string | null, _userId: string | null
       const currentAccountLimit = values.currentAccountLimit
         ? parseFloat(values.currentAccountLimit.replace(",", "."))
         : null;
+      const discountPercent = values.discountPercent
+        ? parseFloat(values.discountPercent.replace(",", "."))
+        : null;
 
       await employeesService.update(tenantId, id, {
         full_name: values.fullName.trim(),
@@ -184,6 +191,7 @@ export const useEmployeesCrud = (tenantId: string | null, _userId: string | null
         hire_date: values.hireDate || null,
         current_account_enabled: values.currentAccountEnabled,
         current_account_limit: currentAccountLimit,
+        discount_percent: discountPercent,
         observations: values.observations?.trim() || null,
       });
 

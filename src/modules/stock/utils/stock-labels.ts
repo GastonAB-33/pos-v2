@@ -1,4 +1,5 @@
 import type { Product, StockMovementType } from "@/types/entities";
+import { isStockTrackingEnabled } from "@/utils/stock-tracking";
 
 export type StockStatus = "low" | "normal" | "over" | "unassigned";
 export type StockStatusFilter = "all" | StockStatus;
@@ -45,4 +46,6 @@ export const getStockStatusFromValues = (
 };
 
 export const getStockStatus = (product: Product): StockStatus =>
-  getStockStatusFromValues(product.stock_current, product.stock_min, product.stock_max);
+  !isStockTrackingEnabled(product.description)
+    ? "unassigned"
+    : getStockStatusFromValues(product.stock_current, product.stock_min, product.stock_max);

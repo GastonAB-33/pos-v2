@@ -212,6 +212,11 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
     await reloadAudit();
   };
 
+  const toggleStockTracking = async (product: ProductViewModel) => {
+    await crud.toggleProductStockTracking(product.entity.id);
+    await reloadAudit();
+  };
+
   const toggleActive = async (product: ProductViewModel) => {
     await crud.toggleProductActive(product.entity.id);
     await reloadAudit();
@@ -259,6 +264,7 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
     deleteSelected,
     deleteOne,
     toggleFavorite,
+    toggleStockTracking,
     toggleActive,
     productsView,
     barcodesByProductId,
