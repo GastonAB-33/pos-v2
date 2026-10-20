@@ -248,6 +248,21 @@ const normalizeTenantSettings = (input: TenantSettings): TenantSettings => ({
       allow_internal_fallback:
         input.facturacion?.arca?.allow_internal_fallback ??
         createDefaultFacturacionSettings().arca.allow_internal_fallback,
+      certificate_crt:
+        input.facturacion?.arca?.certificate_crt ??
+        createDefaultFacturacionSettings().arca.certificate_crt,
+      certificate_key:
+        input.facturacion?.arca?.certificate_key ??
+        createDefaultFacturacionSettings().arca.certificate_key,
+      certificate_expiration:
+        input.facturacion?.arca?.certificate_expiration ??
+        createDefaultFacturacionSettings().arca.certificate_expiration,
+      last_connection_status:
+        input.facturacion?.arca?.last_connection_status ??
+        createDefaultFacturacionSettings().arca.last_connection_status,
+      last_connection_message:
+        input.facturacion?.arca?.last_connection_message ??
+        createDefaultFacturacionSettings().arca.last_connection_message,
     },
     entity_requirements: {
       customer: {

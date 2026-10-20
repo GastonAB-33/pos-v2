@@ -2569,7 +2569,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
         alias={draft?.facturacion?.arca?.certificado_alias || "pos-v2"}
         currentCrt={draft?.facturacion?.arca?.certificate_crt}
         currentKey={draft?.facturacion?.arca?.certificate_key}
-        onSaveCredentials={({ certificate_crt, certificate_key, certificado_alias }) => {
+        onSaveCredentials={async ({ certificate_crt, certificate_key, certificado_alias }) => {
           if (!draft?.facturacion) return;
           updateSection("facturacion", {
             arca: {
@@ -2579,6 +2579,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               certificado_alias: certificado_alias || draft.facturacion.arca.certificado_alias,
             },
           });
+          await handleSaveSection("facturacion");
         }}
       />
 

@@ -188,20 +188,8 @@ const resolveOperationalStatus = (input?: {
       available: false,
       can_send: false,
       requires_backend: true,
-      backend_ready: Boolean(backendBaseUrl),
+      backend_ready: true,
       reason: "ARCA no configurado: falta referencia de certificado",
-    };
-  }
-
-  if (!backendBaseUrl) {
-    return {
-      mode: settings.mode,
-      configured: true,
-      available: false,
-      can_send: false,
-      requires_backend: true,
-      backend_ready: false,
-      reason: "Modo sandbox/real preparado. Configura backend o edge function",
     };
   }
 
