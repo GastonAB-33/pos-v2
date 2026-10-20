@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, Gift, Lock, Package, PackagePlus, Percent, Plus, ShoppingBag, Tag, Trash2 } from "lucide-react";
+import { ArrowRight, DollarSign, Gift, Lock, Package, PackagePlus, Percent, Plus, ShoppingBag, Tag, Trash2 } from "lucide-react";
 import { handleNumericInputFocus } from "@/utils/input-helpers";
 import { DualRateAmountInput, type RateAmountMode } from "@/components/ui/DualRateAmountInput";
 
@@ -26,6 +26,8 @@ export interface PurchaseSummary {
   vatTotal: number;
   iibbPercent?: number;
   iibbTotal?: number;
+  extraTaxAmount?: number;
+  extraTaxTotal?: number;
   total: number;
   totalUnits: number;
   totalDiscountAmount?: number;
@@ -44,6 +46,8 @@ interface PurchaseCartProps {
   onIibbPercentChange?: (iibb: number) => void;
   iibbAmount?: number;
   onIibbAmountChange?: (amount: number) => void;
+  extraTaxAmount?: number;
+  onExtraTaxAmountChange?: (amount: number) => void;
   onSetQuantity: (productId: string, quantity: number) => void;
   onSetUnitCost: (productId: string, unitCost: number) => void;
   onSetDiscountPercent?: (productId: string, discountPercent: number) => void;
@@ -85,6 +89,8 @@ export const PurchaseCart = ({
   onIibbPercentChange,
   iibbAmount = 0,
   onIibbAmountChange,
+  extraTaxAmount = 0,
+  onExtraTaxAmountChange,
   onSetQuantity,
   onSetUnitCost,
   onSetDiscountPercent,
@@ -104,6 +110,7 @@ export const PurchaseCart = ({
   const [salePriceDrafts, setSalePriceDrafts] = useState<Record<string, string>>({});
   const [bonifiedDrafts, setBonifiedDrafts] = useState<Record<string, string>>({});
   const [vatDraft, setVatDraft] = useState<string | null>(null);
+  const [extraTaxDraft, setExtraTaxDraft] = useState<string | null>(null);
   const [iibbMode, setIibbMode] = useState<RateAmountMode>(
     iibbAmount > 0 ? "amount" : "percent"
   );
@@ -111,6 +118,10 @@ export const PurchaseCart = ({
   useEffect(() => {
     setVatDraft(null);
   }, [vatPercent]);
+
+  useEffect(() => {
+    setExtraTaxDraft(null);
+  }, [extraTaxAmount]);
 
   const getUnitLabel = (item: PurchaseCartItemView) =>
     item.sale_mode === "weight" ? "g" : "u.";
@@ -780,15 +791,18 @@ export const PurchaseCart = ({
       {/* Resumen Total y Botón de Confirmación Responsivo para Móvil (al final de la compra) */}
       <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/90 p-3.5 sm:p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/80 w-full max-w-full overflow-hidden">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between w-full max-w-full">
-          {/* Grid de Totales e Impuestos: fila 1 (IVA y Neto), fila 2 (IIBB y Total) */}
-          <div className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_auto] items-center gap-x-2.5 sm:gap-x-4 gap-y-1.5 text-xs w-full max-w-full">
+          {/* Grid de Totales e Impuestos: fila 1 (IVA y Neto), fila 2 (IIBB), fila 3 (Imp. Agregado y Total) */}
+          <div className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_auto] items-center gap-x-2.5 sm:gap-x-4 gap-y-2 text-xs w-full max-w-full">
             {/* Fila 1, Columna 1: % IVA */}
-            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-0.5 dark:border-slate-700 dark:bg-slate-900/90">
+            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/90">
+              <span className="flex items-center justify-center rounded bg-blue-50 dark:bg-blue-950/60 p-1 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50" title="Porcentaje de IVA">
+                <Percent className="h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={2.5} />
+              </span>
               <label
                 htmlFor="purchase-vat-input"
-                className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200"
+                className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 cursor-pointer"
               >
-                % IVA:
+                IVA:
               </label>
               <div className="flex items-center">
                 <input
@@ -821,10 +835,10 @@ export const PurchaseCart = ({
                   onBlur={() => setVatDraft(null)}
                   disabled={disabled || !canWrite}
                   placeholder="0"
-                  className="w-12 sm:w-14 rounded border border-slate-300 bg-white px-1 py-0.5 text-center text-xs font-bold text-slate-900 transition focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
+                  className="w-14 sm:w-16 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-center text-xs sm:text-sm font-bold text-slate-900 transition focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
                 />
               </div>
-              <span className="font-bold text-[10px] sm:text-[11px] text-blue-700 dark:text-blue-400 whitespace-nowrap">
+              <span className="font-bold text-[11px] sm:text-xs text-blue-700 dark:text-blue-400 whitespace-nowrap">
                 ({currency.format(summary.vatTotal)})
               </span>
             </div>
@@ -832,7 +846,7 @@ export const PurchaseCart = ({
             {/* Fila 1, Columna 2: Subtotal neto */}
             <div className="flex items-center justify-end gap-1.5 whitespace-nowrap justify-self-end">
               <span className="text-slate-500 dark:text-slate-400">Neto:</span>
-              <strong className="text-sm font-bold text-slate-800 dark:text-slate-100">
+              <strong className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
                 {currency.format(summary.subtotal)}
               </strong>
             </div>
@@ -859,19 +873,75 @@ export const PurchaseCart = ({
               accentColor="amber"
             />
 
-            {/* Fila 2, Columna 2: Total a pagar */}
+            {/* Fila 2, Columna 2: Descuentos / Ahorro */}
+            <div className="flex items-center justify-end justify-self-end">
+              {summary.totalDiscountAmount != null && summary.totalDiscountAmount > 0 ? (
+                <div className="rounded-md border border-amber-300 bg-amber-100/80 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                  Ahorro: +{currency.format(summary.totalDiscountAmount)}
+                </div>
+              ) : null}
+            </div>
+
+            {/* Fila 3, Columna 1: Impuesto Agregado (solo por monto) */}
+            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/90">
+              <span
+                className="flex items-center justify-center rounded bg-purple-50 dark:bg-purple-950/60 p-1 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-900/50"
+                title="Impuesto por monto fijo"
+              >
+                <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={2.5} />
+              </span>
+              <label
+                htmlFor="purchase-extra-tax-input"
+                className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 cursor-pointer"
+                title="Impuesto agregado o percepción adicional por monto fijo"
+              >
+                Imp. Agregado:
+              </label>
+              <div className="flex items-center">
+                <input
+                  id="purchase-extra-tax-input"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                  value={extraTaxDraft ?? (extraTaxAmount === 0 ? "0" : extraTaxAmount.toString())}
+                  onFocus={handleNumericInputFocus}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setExtraTaxDraft(raw);
+                    const val = raw.trim().replace(",", ".");
+                    if (val === "") {
+                      onExtraTaxAmountChange?.(0);
+                    } else {
+                      const parsed = Number(val);
+                      if (!isNaN(parsed) && parsed >= 0) {
+                        onExtraTaxAmountChange?.(Math.round(parsed * 100) / 100);
+                      }
+                    }
+                  }}
+                  onBlur={() => setExtraTaxDraft(null)}
+                  disabled={disabled || !canWrite}
+                  placeholder="0"
+                  className="w-14 sm:w-16 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-center text-xs sm:text-sm font-bold text-slate-900 transition focus:border-purple-500 focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
+                />
+              </div>
+              <span className="font-bold text-[11px] sm:text-xs text-purple-700 dark:text-purple-400 whitespace-nowrap">
+                ({currency.format(summary.extraTaxTotal ?? 0)})
+              </span>
+            </div>
+
+            {/* Fila 3, Columna 2: Total a pagar */}
             <div className="flex items-center justify-end gap-1.5 whitespace-nowrap justify-self-end">
               <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Total:</span>
               <strong className="text-base sm:text-lg font-black text-brand-700 dark:text-brand-400">
                 {currency.format(summary.total)}
               </strong>
             </div>
-
-            {summary.totalDiscountAmount != null && summary.totalDiscountAmount > 0 && (
-              <div className="col-span-2 rounded-md border border-amber-300 bg-amber-100/80 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                Ahorro: +{currency.format(summary.totalDiscountAmount)}
-              </div>
-            )}
           </div>
 
           {/* Botón de confirmación / pago */}
@@ -883,7 +953,7 @@ export const PurchaseCart = ({
             className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-brand-500 dark:hover:bg-brand-600"
           >
             <span>Proceder al pago</span>
-            <ArrowRight className="h-4 w-4" />
+            <ArrowRight className="h-5 w-5" strokeWidth={2.5} />
           </button>
         </div>
       </div>

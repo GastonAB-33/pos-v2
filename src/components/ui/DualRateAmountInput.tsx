@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { DollarSign, Percent } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { handleNumericInputFocus } from "@/utils/input-helpers";
 
@@ -158,7 +159,7 @@ export const DualRateAmountInput: React.FC<DualRateAmountInputProps> = ({
   return (
     <div
       className={cn(
-        "flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-0.5 transition-colors dark:border-slate-700 dark:bg-slate-900/90",
+        "flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 transition-colors dark:border-slate-700 dark:bg-slate-900/90",
         className
       )}
     >
@@ -176,7 +177,7 @@ export const DualRateAmountInput: React.FC<DualRateAmountInputProps> = ({
       >
         <span
           className={cn(
-            "rounded px-1.5 py-0.5 text-[10px] font-bold leading-none transition select-none pointer-events-none",
+            "flex items-center justify-center rounded px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs sm:text-sm font-black leading-none transition select-none pointer-events-none gap-0.5",
             mode === "percent"
               ? cn(
                   "bg-white shadow-xs dark:bg-slate-900",
@@ -185,11 +186,11 @@ export const DualRateAmountInput: React.FC<DualRateAmountInputProps> = ({
               : "text-slate-400 dark:text-slate-500"
           )}
         >
-          %
+          <Percent className="h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={2.5} />
         </span>
         <span
           className={cn(
-            "rounded px-1.5 py-0.5 text-[10px] font-bold leading-none transition select-none pointer-events-none",
+            "flex items-center justify-center rounded px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs sm:text-sm font-black leading-none transition select-none pointer-events-none gap-0.5",
             mode === "amount"
               ? cn(
                   "bg-white shadow-xs dark:bg-slate-900",
@@ -198,14 +199,14 @@ export const DualRateAmountInput: React.FC<DualRateAmountInputProps> = ({
               : "text-slate-400 dark:text-slate-500"
           )}
         >
-          $
+          <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={2.5} />
         </span>
       </button>
 
       {/* Etiqueta del concepto */}
       <label
         htmlFor={id}
-        className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 cursor-pointer"
+        className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 cursor-pointer"
       >
         {label}:
       </label>
@@ -231,14 +232,14 @@ export const DualRateAmountInput: React.FC<DualRateAmountInputProps> = ({
           disabled={disabled}
           placeholder="0"
           className={cn(
-            "w-12 sm:w-14 rounded border border-slate-300 bg-white px-1 py-0.5 text-center text-xs font-bold text-slate-900 transition focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100",
+            "w-14 sm:w-16 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-center text-xs sm:text-sm font-bold text-slate-900 transition focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100",
             accentColorStyles.focusBorder
           )}
         />
       </div>
 
       {/* Valor complementario calculado entre paréntesis */}
-      <span className={cn("font-bold text-[10px] sm:text-[11px] whitespace-nowrap", accentColorStyles.text)}>
+      <span className={cn("font-bold text-[11px] sm:text-xs whitespace-nowrap", accentColorStyles.text)}>
         {mode === "percent"
           ? `(${currency.format(calculatedAmount)})`
           : `(${equivalentPercent.toFixed(2)} %)`}

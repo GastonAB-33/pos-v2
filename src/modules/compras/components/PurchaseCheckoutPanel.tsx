@@ -37,6 +37,7 @@ interface PurchaseCheckoutPanelProps {
   onVatPercentChange: (vat: number) => void;
   iibbPercent: number;
   iibbAmount: number;
+  extraTaxAmount?: number;
   onCreateSupplier: (initialName?: string) => void;
   onSubmit: (values: PurchaseHeaderValues) => Promise<boolean | void> | boolean | void;
 }
@@ -54,6 +55,7 @@ export const PurchaseCheckoutPanel = ({
   onVatPercentChange,
   iibbPercent,
   iibbAmount,
+  extraTaxAmount = 0,
   onCreateSupplier,
   onSubmit,
 }: PurchaseCheckoutPanelProps) => {
@@ -74,6 +76,7 @@ export const PurchaseCheckoutPanel = ({
       vatPercent: vatPercent ?? 0,
       iibbPercent: iibbPercent ?? 0,
       iibbAmount: iibbAmount ?? 0,
+      extraTaxAmount: extraTaxAmount ?? 0,
       notes: "",
       invoicePhotoUrl: "",
     },
@@ -248,6 +251,7 @@ export const PurchaseCheckoutPanel = ({
         vatPercent: 0,
         iibbPercent: 0,
         iibbAmount: 0,
+        extraTaxAmount: 0,
         notes: "",
         invoicePhotoUrl: "",
       });
@@ -267,6 +271,7 @@ export const PurchaseCheckoutPanel = ({
       vatPercent,
       iibbPercent,
       iibbAmount,
+      extraTaxAmount,
     });
   };
 
@@ -288,6 +293,7 @@ export const PurchaseCheckoutPanel = ({
         <input type="hidden" {...register("vatPercent", { valueAsNumber: true })} />
         <input type="hidden" {...register("iibbPercent", { valueAsNumber: true })} />
         <input type="hidden" {...register("iibbAmount", { valueAsNumber: true })} />
+        <input type="hidden" {...register("extraTaxAmount", { valueAsNumber: true })} />
 
         {/* Grid principal de datos */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">

@@ -3,7 +3,7 @@ import { auditService } from "@/services/audit.service";
 import { cashService } from "@/services/cash.service";
 import { productsService } from "@/services/products.service";
 import { useProductsStore } from "@/features/products/store/products.store";
-import { bankAccountsService } from "@/services/bank-accounts.service";
+import { usePurchasesStore } from "@/modules/compras/store/purchases.store";
 import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
 import { generalCashService } from "@/services/general-cash.service";
 import { purchasesService } from "@/services/purchases.service";
@@ -12,12 +12,8 @@ import { suppliersService } from "@/services/suppliers.service";
 import { supplierCurrentAccountsService } from "@/services/supplier-current-accounts.service";
 import { dataProvider } from "@/services/config/data-provider";
 import type {
-  BankAccount,
-  CashSession,
   Product,
-  ProductBarcode,
   Purchase,
-  PurchaseItem,
   Supplier,
 } from "@/types/entities";
 import type { ProductFormModalValues } from "@/modules/productos/types/product.types";
@@ -100,102 +96,47 @@ const toProductCreateInput = (values: ProductFormModalValues) => ({
 });
 
 export const usePurchasesModule = (tenantId: string | null, userId: string | null) => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [productBarcodes, setProductBarcodes] = useState<ProductBarcode[]>([]);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [purchases, setPurchases] = useState<Purchase[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [openCashSession, setOpenCashSession] = useState<CashSession | null>(null);
+  const {
+    products,
+    productBarcodes,
+    suppliers,
+    purchases,
+    bankAccounts,
+    openCashSession,
+    isLoading,
+    isBackgroundRefreshing,
+    setSuppliers,
+    setProducts,
+    setProductBarcodes,
+  } = usePurchasesStore();
+
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<PurchaseCartItemView[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<PurchaseFeedback | null>(null);
   const [purchaseVatPercent, setPurchaseVatPercent] = useState<number>(0);
   const [purchaseIibbPercent, setPurchaseIibbPercent] = useState<number>(0);
   const [purchaseIibbAmount, setPurchaseIibbAmount] = useState<number>(0);
+  const [purchaseExtraTaxAmount, setPurchaseExtraTaxAmount] = useState<number>(0);
 
   const clearFeedback = () => setFeedback(null);
 
-  const loadData = useCallback(async () => {
-    if (!tenantId) {
-      setProducts([]);
-      setProductBarcodes([]);
-      setSuppliers([]);
-      setPurchases([]);
-      setBankAccounts([]);
-      setOpenCashSession(null);
-      setCart([]);
-      return;
-    }
+  const loadData = useCallback(
+    async (force = false) => {
+      if (!tenantId) {
+        usePurchasesStore.getState().clearCache();
+        setCart([]);
+        return;
+      }
 
-    const cachedStore = useProductsStore.getState();
-    if (cachedStore.loadedTenantId === tenantId && cachedStore.products.length > 0) {
-      setProducts(cachedStore.products);
-      setProductBarcodes(cachedStore.allBarcodes);
-    } else {
-      setIsLoading(true);
-    }
-
-    try {
-      const [
-        allProducts,
-        allProductBarcodes,
-        allSuppliers,
-        allPurchases,
-        allPurchaseItems,
-        allBankAccounts,
-        activeCashSession,
-      ] = await Promise.all([
-        productsService.getAllByTenant(tenantId),
-        productsService.getBarcodesByTenant(tenantId),
-        suppliersService.getAllByTenant(tenantId),
-        purchasesService.getAllByTenant(tenantId),
-        purchasesService.getAllItemsByTenant(tenantId),
-        bankAccountsService.getActiveByTenant(tenantId),
-        userId != null
-          ? cashService.getOpenSessionByUser(tenantId, userId).then((s) => s ?? cashService.getOpenSession(tenantId))
-          : cashService.getOpenSession(tenantId),
-      ]);
-
-      const purchaseItemsByPurchaseId = allPurchaseItems.reduce<Map<string, PurchaseItem[]>>(
-        (acc, item) => {
-          const list = acc.get(item.purchase_id) ?? [];
-          list.push(item);
-          acc.set(item.purchase_id, list);
-          return acc;
-        },
-        new Map<string, PurchaseItem[]>()
-      );
-
-      const productsByIdMap = new Map(allProducts.map((p) => [p.id, p]));
-
-      setProducts(allProducts);
-      setProductBarcodes(allProductBarcodes);
-      setBankAccounts(allBankAccounts);
-      setOpenCashSession(activeCashSession);
-      setSuppliers(allSuppliers.filter((supplier) => supplier.is_active));
-      setPurchases(
-        allPurchases
-          .map((purchase) => ({
-            ...purchase,
-            items: (purchaseItemsByPurchaseId.get(purchase.id) ?? []).map((item) => {
-              const matchedProd = productsByIdMap.get(item.product_id);
-              return {
-                ...item,
-                product: matchedProd ?? null,
-                sale_price: matchedProd?.price ?? undefined,
-              };
-            }),
-          }))
-          .sort((a, b) => b.created_at.localeCompare(a.created_at))
-      );
-    } catch {
-      setFeedback({ type: "error", message: "No se pudieron cargar datos de compras" });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [tenantId]);
+      try {
+        await usePurchasesStore.getState().loadPurchasesData(tenantId, userId, force);
+      } catch {
+        setFeedback({ type: "error", message: "No se pudieron cargar datos de compras" });
+      }
+    },
+    [tenantId, userId]
+  );
 
   useEffect(() => {
     void loadData();
@@ -546,6 +487,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       vatPercent: headerOrCheckoutValues.vatPercent ?? purchaseVatPercent,
       iibbPercent: headerOrCheckoutValues.iibbPercent ?? purchaseIibbPercent,
       iibbAmount: headerOrCheckoutValues.iibbAmount ?? purchaseIibbAmount,
+      extraTaxAmount: headerOrCheckoutValues.extraTaxAmount ?? purchaseExtraTaxAmount,
       notes: headerOrCheckoutValues.notes,
       invoicePhotoUrl: headerOrCheckoutValues.invoicePhotoUrl,
     };
@@ -970,7 +912,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       });
       clearCart();
       useProductsStore.getState().loadCatalog(tenantId, true).catch(() => {});
-      await loadData();
+      await loadData(true);
       return purchase;
     } catch (error) {
       console.error("[usePurchasesModule] confirmPurchase failed:", error);
@@ -1123,7 +1065,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
           payload.refundToCash ? " y acreditada en la caja diaria" : ""
         }`,
       });
-      await loadData();
+      await loadData(true);
       return true;
     } catch {
       setFeedback({ type: "error", message: "No se pudo procesar la devolución" });
@@ -1359,10 +1301,11 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     search,
     setSearch,
     isLoading,
+    isBackgroundRefreshing,
     isSubmitting,
     feedback,
     clearFeedback,
-    reload: loadData,
+    reload: (force = true) => loadData(force),
     addProductToCart,
     addProductByBarcode,
     setItemQuantity,
@@ -1386,6 +1329,8 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     setPurchaseIibbPercent,
     purchaseIibbAmount,
     setPurchaseIibbAmount,
+    purchaseExtraTaxAmount,
+    setPurchaseExtraTaxAmount,
   };
 };
 

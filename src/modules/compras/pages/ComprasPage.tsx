@@ -220,6 +220,7 @@ export const ComprasPage = () => {
     setPurchaseIibbPercent,
     purchaseIibbAmount,
     setPurchaseIibbAmount,
+    purchaseExtraTaxAmount,
   } = usePurchasesModule(tenantId, user?.id ?? null);
   const toast = useToast();
   const [backgroundSavingProduct, setBackgroundSavingProduct] = useState<string | null>(null);
@@ -396,7 +397,10 @@ export const ComprasPage = () => {
           <div className="space-y-4 w-full max-w-full overflow-x-hidden">
             <section className="workspace-toolbar workspace-toolbar--inline">
               <div className="workspace-meta">
-                <span className="font-semibold text-slate-800 dark:text-slate-200">{purchases.length} compras registradas</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{purchases.length} compras registradas</span>
+
+                </div>
                 <span className="text-slate-500 dark:text-slate-400">El historial se ordena desde la compra más reciente</span>
               </div>
               <div className="workspace-toolbar__actions">
@@ -430,7 +434,7 @@ export const ComprasPage = () => {
                 <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Historial de compras</h2>
                 <span className="ui-badge ui-badge--info">{purchases.length}</span>
               </div>
-              {isLoading ? (
+              {isLoading && purchases.length === 0 ? (
                 <div className="rounded-lg border border-slate-200 dark:border-slate-800 p-8 text-center text-sm text-slate-600 dark:text-slate-400">
                   Cargando historial...
                 </div>
@@ -496,6 +500,7 @@ export const ComprasPage = () => {
               onVatPercentChange={setPurchaseVatPercent}
               iibbPercent={purchaseIibbPercent}
               iibbAmount={purchaseIibbAmount}
+              extraTaxAmount={purchaseExtraTaxAmount}
               onCreateSupplier={(initialName) => {
                 setNewSupplierInitialName(initialName?.trim() || "");
                 setIsSupplierModalOpen(true);
