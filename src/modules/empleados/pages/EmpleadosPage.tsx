@@ -23,6 +23,8 @@ import { EmployeesTable } from "@/modules/empleados/components/EmployeesTable";
 import { AttendanceSection } from "@/modules/empleados/components/AttendanceSection";
 import { EmployeeCurrentAccountsSection } from "@/modules/empleados/components/EmployeeCurrentAccountsSection";
 import { SalaryPaymentsSection } from "@/modules/empleados/components/SalaryPaymentsSection";
+import { EmployeeProductConsumptionModal } from "@/modules/empleados/components/EmployeeProductConsumptionModal";
+import { employeeCurrentAccountsService } from "@/services/employee-current-accounts.service";
 
 type ActiveTab = "personal" | "horarios" | "cuentas-corrientes" | "sueldos";
 
@@ -109,6 +111,33 @@ export const EmpleadosPage = () => {
 
   // Empleado seleccionado para Liquidación de Sueldo directa
   const [disbursementEmployee, setDisbursementEmployee] = useState<Employee | null>(null);
+
+  // Empleado seleccionado para Carga Directa de Productos
+  const [productConsumptionEmployee, setProductConsumptionEmployee] = useState<Employee | null>(null);
+
+  const handleProductSubmitFromPage = async (values: {
+    amount: number;
+    notes: string;
+    category: "product_purchase";
+  }) => {
+    if (!productConsumptionEmployee || !tenantId) return false;
+    try {
+      await employeeCurrentAccountsService.createMovement(tenantId, {
+        employee_id: productConsumptionEmployee.id,
+        type: "debt",
+        amount: values.amount,
+        category: values.category,
+        notes: values.notes,
+        created_by: user?.id ?? null,
+      });
+      await reloadEmployees();
+      setProductConsumptionEmployee(null);
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  };
 
   // Sincronizar parámetro inicial de empleadoId
   useEffect(() => {
@@ -300,6 +329,7 @@ export const EmpleadosPage = () => {
               todayActiveByEmployee={todayActiveByEmployee}
               canWrite={canWriteEmpleados}
               onOpenCurrentAccount={handleOpenCurrentAccount}
+              onOpenProductConsumption={setProductConsumptionEmployee}
               onEdit={(emp) => {
                 clearEmployeesFeedback();
                 setFormMode("edit");
@@ -406,6 +436,16 @@ export const EmpleadosPage = () => {
               setFormModalOpen(false);
               setSelectedEmployeeForEdit(undefined);
             }}
+          />
+        )}
+        {/* Modal de Carga de Productos desde pestaña Personal */}
+        {productConsumptionEmployee && tenantId && (
+          <EmployeeProductConsumptionModal
+            open={Boolean(productConsumptionEmployee)}
+            tenantId={tenantId}
+            employee={productConsumptionEmployee}
+            onClose={() => setProductConsumptionEmployee(null)}
+            onSubmit={handleProductSubmitFromPage}
           />
         )}
       </div>

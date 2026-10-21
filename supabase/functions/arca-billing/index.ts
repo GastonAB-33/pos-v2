@@ -327,14 +327,31 @@ async function solicitarCae(params: {
     docNro = cleanReceiverDoc;
   }
 
-  const isFacturaC = params.cbteTipo === 11 || params.cbteTipo === 13;
-  const impTotal = Number(params.total.toFixed(2));
-  const impNeto = isFacturaC ? impTotal : Number(params.subtotal.toFixed(2));
-  const impIva = isFacturaC ? 0 : Number(params.taxTotal.toFixed(2));
-
-  // Bloque IVA (solo para comprobantes A y B; ARCA rechaza IVA en comprobantes C)
+  const isFacturaC = params.cbteTipo === 11 || params.cbteTipo === 12 || params.cbteTipo === 13;
+  let impTotal = Number(params.total.toFixed(2));
+  let impNeto = 0;
+  let impIva = 0;
   let ivaXml = "";
-  if (!isFacturaC && impIva > 0) {
+
+  if (isFacturaC) {
+    // Factura C (Monotributo): no discrimina IVA, todo es neto/total sin bloque IVA
+    impNeto = impTotal;
+    impIva = 0;
+    ivaXml = "";
+  } else {
+    // Factura A o B (Responsable Inscripto): IVA es OBLIGATORIO si hay importe neto
+    if (params.taxTotal && params.taxTotal > 0) {
+      impIva = Number(params.taxTotal.toFixed(2));
+      impNeto = Number((impTotal - impIva).toFixed(2));
+    } else {
+      // Si el POS o venta registró el importe final con IVA incluido (21% estándar)
+      impNeto = Number((impTotal / 1.21).toFixed(2));
+      impIva = Number((impTotal - impNeto).toFixed(2));
+    }
+
+    // Asegurar que impTotal coincida exactamente con la suma
+    impTotal = Number((impNeto + impIva).toFixed(2));
+
     ivaXml = `<Iva>
       <AlicIva>
         <Id>5</Id>

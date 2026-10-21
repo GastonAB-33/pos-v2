@@ -114,6 +114,7 @@ export const CajaPage = () => {
     getCurrentAccountDailySummary,
     getDailyMovements,
     isLoading,
+    isBackgroundRefreshing,
     isSubmitting,
     feedback,
     clearFeedback,
@@ -310,7 +311,7 @@ export const CajaPage = () => {
     clearFeedback();
     setIsRefreshing(true);
     try {
-      await reload();
+      await reload(true);
       setLastUpdatedAt(new Date().toISOString());
       setIsRefreshConfirmed(true);
     } finally {
@@ -506,22 +507,22 @@ export const CajaPage = () => {
               onClick={() => {
                 void handleRefresh();
               }}
-              disabled={isLoading || isSubmitting || isRefreshing}
+              disabled={isLoading || isSubmitting || isRefreshing || isBackgroundRefreshing}
               title="Recargar caja diaria"
               className="h-10 w-10 inline-flex items-center justify-center text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700/80 border border-slate-300 dark:border-slate-700 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
             >
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-4 w-4 ${isRefreshing || isBackgroundRefreshing ? "animate-spin" : ""}`} />
             </button>
           </div>
         </div>
 
         {/* Feedback / Notifications */}
-        {(isRefreshing || lastUpdatedAt || isRefreshConfirmed) && (
+        {(isRefreshing || isBackgroundRefreshing || lastUpdatedAt || isRefreshConfirmed) && (
           <div className="flex items-center gap-1.5 text-xs px-1">
-            {isRefreshing ? (
+            {isRefreshing || isBackgroundRefreshing ? (
               <>
                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700 dark:border-slate-600 dark:border-t-slate-200" />
-                <span className="text-slate-500 dark:text-slate-400">Actualizando datos de caja...</span>
+                <span className="text-slate-500 dark:text-slate-400">Actualizando datos de caja en segundo plano...</span>
               </>
             ) : (
               <span className={`inline-flex items-center gap-1 ${isRefreshConfirmed ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-slate-500"}`}>
@@ -820,7 +821,7 @@ export const CajaPage = () => {
             </div>
           )
         ) : (
-          isLoading ? (
+          isLoading && dailyTracking.length === 0 ? (
             <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
               <RefreshCw className="h-6 w-6 text-slate-400 animate-spin mx-auto mb-2" />
               <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Cargando historial de cajas diarias...</p>
@@ -1321,7 +1322,7 @@ export const CajaPage = () => {
             </header>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {isLoading ? (
+              {isLoading && detailMovements.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-500 dark:text-slate-400">
                   Cargando movimientos...
                 </div>

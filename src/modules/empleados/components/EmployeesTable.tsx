@@ -8,6 +8,7 @@ import {
   LogIn,
   CheckCircle,
   AlertTriangle,
+  ShoppingBag,
 } from "lucide-react";
 import type { Employee, EmployeeAttendance } from "@/types/entities";
 
@@ -16,6 +17,7 @@ interface EmployeesTableProps {
   todayActiveByEmployee: Map<string, EmployeeAttendance>;
   canWrite: boolean;
   onOpenCurrentAccount: (employee: Employee) => void;
+  onOpenProductConsumption?: (employee: Employee) => void;
   onEdit: (employee: Employee) => void;
   onDelete: (employee: Employee) => void;
   onToggleActive: (employee: Employee) => void;
@@ -34,6 +36,7 @@ export const EmployeesTable = ({
   todayActiveByEmployee,
   canWrite,
   onOpenCurrentAccount,
+  onOpenProductConsumption,
   onEdit,
   onDelete,
   onToggleActive,
@@ -185,6 +188,19 @@ export const EmployeesTable = ({
                             <span>Ingreso</span>
                           </button>
                         )
+                      )}
+
+                      {/* Botón Cargar Productos */}
+                      {canWrite && employee.is_active && onOpenProductConsumption && (
+                        <button
+                          type="button"
+                          title="Cargar productos a cuenta corriente"
+                          onClick={() => onOpenProductConsumption(employee)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/70 dark:text-indigo-300"
+                        >
+                          <ShoppingBag size={12} />
+                          <span>Productos</span>
+                        </button>
                       )}
 
                       {/* Botón Cuenta Corriente */}

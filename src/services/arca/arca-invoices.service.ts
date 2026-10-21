@@ -169,7 +169,8 @@ const resolveOperationalStatus = (input?: {
     };
   }
 
-  if (!hasMeaningfulValue(settings.cuit_emisor) || settings.punto_venta <= 0) {
+  const cleanCuit = (settings.cuit_emisor || "").replace(/\D/g, "");
+  if (!cleanCuit || settings.punto_venta <= 0) {
     return {
       mode: settings.mode,
       configured: false,
@@ -181,7 +182,8 @@ const resolveOperationalStatus = (input?: {
     };
   }
 
-  if (!hasMeaningfulValue(settings.certificado_alias)) {
+  const cleanAlias = (settings.certificado_alias || "").trim() || "pos-v2";
+  if (!hasMeaningfulValue(cleanAlias)) {
     return {
       mode: settings.mode,
       configured: false,

@@ -497,6 +497,7 @@ export interface PosSettings {
   rounding_mode?: PosRoundingMode;
   rounding_target?: PosRoundingTarget;
   employee_discount_percent?: number;
+  employee_discount_excluded_categories?: string[];
 }
 
 export interface StockSettings {

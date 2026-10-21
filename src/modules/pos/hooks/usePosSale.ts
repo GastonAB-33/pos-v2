@@ -824,9 +824,27 @@ export const usePosSale = (tenantId: string | null) => {
           ...defaultMercadoPagoSettings,
           ...(tenantSettings?.sistema?.mercado_pago ?? {}),
         };
+        const cleanArcaCuit = (
+          tenantSettings?.facturacion?.arca?.cuit_emisor ||
+          tenantSettings?.facturacion?.issuer_cuit ||
+          ""
+        ).replace(/\D/g, "");
+        const localCrt =
+          typeof window !== "undefined" && cleanArcaCuit
+            ? localStorage.getItem(`arca_saved_crt_${cleanArcaCuit}`)
+            : null;
+        const localKey =
+          typeof window !== "undefined" && cleanArcaCuit
+            ? localStorage.getItem(`arca_saved_key_${cleanArcaCuit}`)
+            : null;
+
         const resolvedArcaSettings = {
           ...defaultArcaSettings,
           ...(tenantSettings?.facturacion?.arca ?? {}),
+          certificate_crt:
+            tenantSettings?.facturacion?.arca?.certificate_crt || localCrt,
+          certificate_key:
+            tenantSettings?.facturacion?.arca?.certificate_key || localKey,
         };
 
         const activeProducts = allProducts.filter((product) => product.is_active !== false);

@@ -78,10 +78,10 @@ export const ArcaAccountantGuideModal = ({
       {/* Contenedor Modal */}
       <div
         ref={printContainerRef}
-        className="relative w-full max-w-4xl rounded-2xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-2xl flex flex-col max-h-[94vh] print:max-h-none print:shadow-none print:border-none print:w-full print:bg-white print:text-black"
+        className="relative w-full max-w-4xl rounded-2xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-2xl flex flex-col max-h-[90vh] print:max-h-none print:shadow-none print:border-none print:w-full print:bg-white print:text-black overflow-hidden my-auto"
       >
         {/* ENCABEZADO MODAL (Oculto al imprimir) */}
-        <header className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0 print:hidden bg-slate-50 dark:bg-slate-800/60 rounded-t-2xl">
+        <header className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 shrink-0 print:hidden bg-slate-50 dark:bg-slate-800/80 rounded-t-2xl">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-blue-600/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
               <FileText size={22} />
@@ -394,7 +394,7 @@ export const ArcaAccountantGuideModal = ({
         </div>
 
         {/* PIE MODAL (Oculto al imprimir) */}
-        <footer className="p-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0 print:hidden bg-slate-50 dark:bg-slate-800/60 rounded-b-2xl">
+        <footer className="p-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between gap-3 shrink-0 print:hidden bg-slate-50 dark:bg-slate-800/80 rounded-b-2xl">
           <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
             <Sparkles size={14} className="text-amber-500" />
             Al presionar "Descargar PDF", elegí la opción "Guardar como PDF" en tu navegador.

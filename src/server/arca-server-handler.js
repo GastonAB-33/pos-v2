@@ -238,12 +238,30 @@ function solicitarCae(params) {
                         docTipo = 96;
                         docNro = cleanReceiverDoc;
                     }
-                    isFacturaC = params.cbteTipo === 11 || params.cbteTipo === 13;
+                    isFacturaC = params.cbteTipo === 11 || params.cbteTipo === 12 || params.cbteTipo === 13;
                     impTotal = Number(params.total.toFixed(2));
-                    impNeto = isFacturaC ? impTotal : Number(params.subtotal.toFixed(2));
-                    impIva = isFacturaC ? 0 : Number(params.taxTotal.toFixed(2));
+                    impNeto = 0;
+                    impIva = 0;
                     ivaXml = "";
-                    if (!isFacturaC && impIva > 0) {
+                    if (isFacturaC) {
+                        // Factura C (Monotributo): no discrimina IVA, todo es neto/total sin bloque IVA
+                        impNeto = impTotal;
+                        impIva = 0;
+                        ivaXml = "";
+                    }
+                    else {
+                        // Factura A o B (Responsable Inscripto): IVA es OBLIGATORIO si hay importe neto
+                        if (params.taxTotal && params.taxTotal > 0) {
+                            impIva = Number(params.taxTotal.toFixed(2));
+                            impNeto = Number((impTotal - impIva).toFixed(2));
+                        }
+                        else {
+                            // Si el POS o venta registró el importe final con IVA incluido (21% estándar)
+                            impNeto = Number((impTotal / 1.21).toFixed(2));
+                            impIva = Number((impTotal - impNeto).toFixed(2));
+                        }
+                        // Asegurar que impTotal coincida exactamente con la suma
+                        impTotal = Number((impNeto + impIva).toFixed(2));
                         ivaXml = "<Iva>\n      <AlicIva>\n        <Id>5</Id>\n        <BaseImp>".concat(impNeto.toFixed(2), "</BaseImp>\n        <Importe>").concat(impIva.toFixed(2), "</Importe>\n      </AlicIva>\n    </Iva>");
                     }
                     cbtesAsocXml = "";

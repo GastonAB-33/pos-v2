@@ -193,6 +193,7 @@ export const ComprasPage = () => {
     search,
     setSearch,
     isLoading,
+    isBackgroundRefreshing,
     isSubmitting,
     feedback,
     clearFeedback,
@@ -268,9 +269,9 @@ export const ComprasPage = () => {
     }
   };
 
-  const handleOpenCreateProduct = (query?: string, returnToSelect: boolean = true) => {
+  const handleOpenCreateProduct = (query?: string, returnToSelect: boolean = false) => {
     const trimmed = query?.trim() ?? "";
-    const isBarcodeLike = trimmed.length >= 6 && /^\d+$/.test(trimmed);
+    const isBarcodeLike = /^\d+$/.test(trimmed) || (trimmed.length >= 3 && /^[A-Z0-9_-]+$/i.test(trimmed));
     setNewProductPrefill({
       initialBarcode: isBarcodeLike ? trimmed : null,
       initialName: !isBarcodeLike && trimmed ? trimmed : null,
@@ -399,7 +400,12 @@ export const ComprasPage = () => {
               <div className="workspace-meta">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-slate-800 dark:text-slate-200">{purchases.length} compras registradas</span>
-
+                  {isBackgroundRefreshing ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                      Sincronizando en segundo plano...
+                    </span>
+                  ) : null}
                 </div>
                 <span className="text-slate-500 dark:text-slate-400">El historial se ordena desde la compra más reciente</span>
               </div>
@@ -421,9 +427,9 @@ export const ComprasPage = () => {
                   label="Recargar compras"
                   onClick={() => {
                     clearFeedback();
-                    void reload();
+                    void reload(true);
                   }}
-                  loading={isLoading}
+                  loading={isLoading || isBackgroundRefreshing}
                   disabled={isSubmitting}
                 />
               </div>
@@ -512,7 +518,7 @@ export const ComprasPage = () => {
             <PurchaseCart
               items={cart}
               summary={summary}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isProductModalOpen || isSupplierModalOpen || isPaymentModalOpen}
               canWrite={canWritePurchases}
               canAdjustProfitMargin={canAdjustProfitMargin}
               formId="purchase-checkout-form"
@@ -531,11 +537,14 @@ export const ComprasPage = () => {
               onSetBonifiedQuantity={setItemBonifiedQuantity}
               onSetUpdateSalePrice={setItemUpdateSalePrice}
               onRemove={removeItem}
-              onOpenAddProductModal={() => {
-                setSearch("");
-                setIsSelectProductModalOpen(true);
+              products={allProducts}
+              barcodesByProductId={barcodesByProductId}
+              onAddProduct={(product, quantity) => {
+                if (!canWritePurchases) return;
+                addProductToCart(product, quantity);
               }}
-              onOpenCreateProductModal={() => handleOpenCreateProduct("")}
+              onBarcodeScan={addProductByBarcode}
+              onOpenCreateProductModal={(initialCode) => handleOpenCreateProduct(initialCode, false)}
             />
           </div>
         )}

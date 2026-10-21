@@ -1,25 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditService } from "@/services/audit.service";
-import { bankAccountsService } from "@/services/bank-accounts.service";
 import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
 import { cashService } from "@/services/cash.service";
 import { generalCashService } from "@/services/general-cash.service";
-import { currentAccountsService } from "@/services/current-accounts.service";
-import { customersService } from "@/services/customers.service";
-import { paymentMethodsService, normalizePaymentMethodCode } from "@/services/payment-methods.service";
-import { salesService } from "@/services/sales.service";
-import { settingsService } from "@/services/settings.service";
-import { usersService } from "@/services/users.service";
+import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
+import { useCashStore } from "@/modules/caja/store/cash.store";
 import type {
-  BankAccount,
   CashMovement,
   CashSession,
-  CashSettings,
-  CurrentAccountMovement,
-  Customer,
-  PaymentMethod,
-  Sale,
-  SalePayment,
 } from "@/types/entities";
 import type {
   CashMovementValues,
@@ -201,130 +189,48 @@ const expenseReferenceLabels: Record<string, string> = {
   supplier_payment: "Pago a proveedores",
 };
 
-const defaultCashSettings: CashSettings = {
-  require_open_session_for_sale: false,
-  default_opening_amount: 0,
-  allow_manual_movements: true,
-  require_notes_on_manual_movements: false,
-  blind_cash_closing: false,
-  cash_reconciliation_mode: "cash_only",
-};
-
 export const useCashModule = (tenantId: string | null, userId: string | null) => {
-  const [sessions, setSessions] = useState<CashSession[]>([]);
-  const [movements, setMovements] = useState<CashMovement[]>([]);
-  const [currentAccountMovements, setCurrentAccountMovements] = useState<CurrentAccountMovement[]>(
-    []
-  );
-  const [customersById, setCustomersById] = useState<Record<string, Customer>>({});
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
-  const [paymentMethodsByCode, setPaymentMethodsByCode] = useState<Record<string, string>>({});
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [salePayments, setSalePayments] = useState<SalePayment[]>([]);
-  const [salesById, setSalesById] = useState<Record<string, Sale>>({});
-  const [usersById, setUsersById] = useState<Record<string, string>>({});
-  const [cashSettings, setCashSettings] = useState<CashSettings>(defaultCashSettings);
+  const {
+    sessions,
+    movements,
+    currentAccountMovements,
+    customersById,
+    paymentMethods,
+    paymentMethodsByCode,
+    bankAccounts,
+    salePayments,
+    salesById,
+    usersById,
+    cashSettings,
+    isLoading,
+    isBackgroundRefreshing,
+  } = useCashStore();
+
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [movementTypeFilter, setMovementTypeFilter] = useState<CashMovementFilter>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<CashFeedback | null>(null);
 
   const clearFeedback = () => setFeedback(null);
 
-  const loadCashData = useCallback(async () => {
-    if (!tenantId) {
-      setSessions([]);
-      setMovements([]);
-      setCurrentAccountMovements([]);
-      setCustomersById({});
-      setPaymentMethods([]);
-      setPaymentMethodsByCode({});
-      setBankAccounts([]);
-      setSalePayments([]);
-      setSalesById({});
-      setUsersById({});
-      setCashSettings(defaultCashSettings);
-      setSelectedSessionId("");
-      return;
-    }
+  const loadCashData = useCallback(
+    async (force = false) => {
+      if (!tenantId) {
+        useCashStore.getState().clearCache();
+        setSelectedSessionId("");
+        return;
+      }
 
-    setIsLoading(true);
-    try {
-      const [
-        allSessions,
-        allMovements,
-        tenantSettings,
-        allUsers,
-        allPaymentMethods,
-        allCurrentAccountMovements,
-        allCustomers,
-        allSales,
-        allBankAccounts,
-        allSalePayments,
-      ] = await Promise.all([
-        cashService.getAllByTenant(tenantId),
-        cashService.getAllMovementsByTenant(tenantId),
-        settingsService.getByTenant(tenantId),
-        usersService.getAllByTenant(tenantId),
-        paymentMethodsService.getAllByTenant(tenantId),
-        currentAccountsService.getAllByTenant(tenantId),
-        customersService.getAllByTenant(tenantId),
-        salesService.getAllByTenant(tenantId),
-        bankAccountsService.getActiveByTenant(tenantId).catch(() => []),
-        salesService.getAllPaymentsByTenant(tenantId).catch(() => []),
-      ]);
-
-      setSessions(allSessions.sort((a, b) => b.opened_at.localeCompare(a.opened_at)));
-      setMovements(allMovements.sort((a, b) => b.created_at.localeCompare(a.created_at)));
-      setBankAccounts(allBankAccounts);
-      setSalePayments(allSalePayments);
-      setCurrentAccountMovements(
-        allCurrentAccountMovements.sort((a, b) => b.created_at.localeCompare(a.created_at))
-      );
-      setCustomersById(
-        allCustomers.reduce<Record<string, Customer>>((acc, customer) => {
-          acc[customer.id] = customer;
-          return acc;
-        }, {})
-      );
-      setPaymentMethodsByCode(
-        allPaymentMethods.reduce<Record<string, string>>((acc, method) => {
-          const key = normalizeKey(method.code);
-          if (!key) return acc;
-          acc[key] = method.name;
-          return acc;
-        }, {})
-      );
-      setPaymentMethods(allPaymentMethods);
-      setSalesById(
-        allSales.reduce<Record<string, Sale>>((acc, sale) => {
-          acc[sale.id] = sale;
-          return acc;
-        }, {})
-      );
-      setUsersById(
-        allUsers.reduce<Record<string, string>>((acc, user) => {
-          const fullName = user.full_name?.trim() ?? "";
-          if (fullName) {
-            acc[user.id] = fullName;
-            return acc;
-          }
-
-          const fallback = user.email?.trim() || user.username?.trim() || user.id;
-          acc[user.id] = fallback;
-          return acc;
-        }, {})
-      );
-      setCashSettings(tenantSettings.caja ?? defaultCashSettings);
-    } catch {
-      setFeedback({ type: "error", message: "No se pudo cargar informacion de caja" });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [tenantId]);
+      try {
+        await useCashStore.getState().loadCashData(tenantId, force);
+      } catch {
+        setFeedback({ type: "error", message: "No se pudo cargar informacion de caja" });
+      }
+    },
+    [tenantId]
+  );
 
   useEffect(() => {
     void loadCashData();
@@ -1163,7 +1069,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         }
       }
       setFeedback({ type: "success", message: "Caja diaria abierta" });
-      await loadCashData();
+      await loadCashData(true);
       setSelectedSessionId(createdSession.id);
     } catch {
       setFeedback({ type: "error", message: "No se pudo abrir la caja diaria" });
@@ -1250,7 +1156,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         }
       }
       setFeedback({ type: "success", message: "Caja diaria cerrada" });
-      await loadCashData();
+      await loadCashData(true);
       return {
         session: closedSession,
         expectedAmount: currentSessionSummary.expectedBalance,
@@ -1294,7 +1200,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         notes: serializedNotes,
       });
 
-      await loadCashData();
+      await loadCashData(true);
       return true;
     } catch (err) {
       console.error("Error al actualizar observaciones de caja:", err);
@@ -1414,7 +1320,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       });
 
       setFeedback({ type: "success", message: "Ingreso registrado" });
-      await loadCashData();
+      await loadCashData(true);
       return true;
     } catch {
       setFeedback({ type: "error", message: "No se pudo registrar el ingreso" });
@@ -1525,7 +1431,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
           ? `Egreso registrado y debitado de ${selectedBank?.bank_name}`
           : "Egreso en efectivo registrado correctamente",
       });
-      await loadCashData();
+      await loadCashData(true);
       return true;
     } catch {
       setFeedback({ type: "error", message: "No se pudo registrar el egreso" });
@@ -1570,10 +1476,11 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     dateTo,
     setDateTo,
     isLoading,
+    isBackgroundRefreshing,
     isSubmitting,
     feedback,
     clearFeedback,
-    reload: loadCashData,
+    reload: (force = true) => loadCashData(force),
     openCash,
     closeCash,
     updateSessionNotes,

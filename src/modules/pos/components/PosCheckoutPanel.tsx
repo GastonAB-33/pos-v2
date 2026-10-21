@@ -1174,15 +1174,15 @@ export const PosCheckoutPanel = ({
           {selectedEmployee ? (
             <div className="flex items-center gap-1.5 min-w-0 flex-1">
               <span className="font-bold text-slate-700 dark:text-slate-200 shrink-0">Empleado:</span>
-              <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-lg px-2 py-0.5 shadow-2xs min-w-0">
-                <span className="font-bold text-indigo-900 dark:text-indigo-200 truncate max-w-[130px] sm:max-w-[170px]" title={selectedEmployee.full_name}>
+              <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-600 rounded-lg px-2 py-0.5 shadow-2xs min-w-0">
+                <span className="font-bold text-indigo-900 dark:text-indigo-100 truncate max-w-[130px] sm:max-w-[170px]" title={selectedEmployee.full_name}>
                   {selectedEmployee.full_name}
                 </span>
-                <span className="rounded bg-indigo-100 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 px-1 py-0.2 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 shrink-0">
+                <span className="rounded bg-indigo-100 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-700 px-1 py-0.2 text-[10px] font-bold text-indigo-800 dark:text-indigo-200 shrink-0">
                   {selectedEmployee.discount_percent ?? employeeDiscountPercent}% OFF
                 </span>
                 {selectedEmployee.code && (
-                  <span className="rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1 py-0.2 text-[10px] font-mono text-slate-700 dark:text-slate-300 shrink-0 hidden md:inline-block">
+                  <span className="rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1 py-0.2 text-[10px] font-mono text-slate-700 dark:text-slate-200 shrink-0 hidden md:inline-block">
                     {selectedEmployee.code}
                   </span>
                 )}
@@ -1257,13 +1257,13 @@ export const PosCheckoutPanel = ({
           ) : (
             <div className="flex items-center gap-2 min-w-0">
               <span className="font-bold text-slate-700 dark:text-slate-200 shrink-0">Cliente / Empleado:</span>
-              <span className="text-slate-500 dark:text-slate-400 font-medium truncate">
+              <span className="text-slate-600 dark:text-slate-300 font-medium truncate">
                 Consumidor Final (Venta mostrador)
               </span>
               <button
                 type="button"
                 onClick={() => setIsCustomerModalOpen(true)}
-                className="inline-flex items-center gap-1 rounded-md border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition cursor-pointer shrink-0"
+                className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/80 px-2.5 py-1 text-xs font-bold text-indigo-700 dark:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition cursor-pointer shrink-0 shadow-2xs"
               >
                 Asignar
               </button>
@@ -1330,7 +1330,7 @@ export const PosCheckoutPanel = ({
                   ? "border-amber-400 dark:border-amber-400 bg-amber-500/15 dark:bg-amber-500/20 ring-2 ring-amber-400 dark:ring-amber-400/90 shadow-sm"
                   : hasAmount
                   ? "border-slate-300 dark:border-slate-600 bg-slate-100/70 dark:bg-slate-800/80 hover:border-slate-400 dark:hover:border-slate-500"
-                  : "border-slate-300 dark:border-slate-600/90 bg-white dark:bg-slate-800/60 hover:border-slate-400 dark:hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/90"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/70"
               }`}
             >
               {/* Lado izquierdo: Icono y Nombre */}

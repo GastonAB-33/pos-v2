@@ -80,7 +80,32 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
       setInvoices(invoiceRows.sort((a, b) => b.issue_date.localeCompare(a.issue_date)));
       setSales(saleRows.sort((a, b) => b.created_at.localeCompare(a.created_at)));
       setCustomers(customerRows.sort((a, b) => a.full_name.localeCompare(b.full_name)));
-      setArcaSettings(tenantSettings.facturacion.arca);
+      const rawArca = tenantSettings.facturacion?.arca ?? defaultArcaSettings;
+      const cleanCuit = (
+        rawArca.cuit_emisor ||
+        tenantSettings.facturacion?.issuer_cuit ||
+        ""
+      ).replace(/\D/g, "");
+
+      const localCrt =
+        typeof window !== "undefined" && cleanCuit
+          ? localStorage.getItem(`arca_saved_crt_${cleanCuit}`)
+          : null;
+      const localKey =
+        typeof window !== "undefined" && cleanCuit
+          ? localStorage.getItem(`arca_saved_key_${cleanCuit}`)
+          : null;
+
+      const resolvedArca: ArcaSettings = {
+        ...defaultArcaSettings,
+        ...rawArca,
+        cuit_emisor: cleanCuit || rawArca.cuit_emisor || "",
+        punto_venta: rawArca.punto_venta > 0 ? rawArca.punto_venta : 1,
+        certificate_crt: rawArca.certificate_crt || localCrt,
+        certificate_key: rawArca.certificate_key || localKey,
+      };
+
+      setArcaSettings(resolvedArca);
     } catch {
       setFeedback({ type: "error", message: "No se pudo cargar facturacion" });
     } finally {

@@ -218,10 +218,10 @@ export const EmployeeCurrentAccountPanel = ({
             type="button"
             onClick={() => setProductModalOpen(true)}
             disabled={isSubmitting}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition dark:bg-indigo-600 dark:hover:bg-indigo-500"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition dark:bg-indigo-600 dark:hover:bg-indigo-500 cursor-pointer"
           >
             <ShoppingBag size={14} />
-            <span>Retiro de productos</span>
+            <span>+ Cargar / Retiro de productos</span>
           </button>
 
           {/* Botón Adeudar manual / Anticipo */}

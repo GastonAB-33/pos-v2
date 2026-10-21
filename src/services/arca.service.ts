@@ -212,6 +212,32 @@ async function callArcaBillingFunction(payload: Record<string, unknown>): Promis
   }
 }
 
+const resolveEffectiveCredentials = (
+  cuit: string,
+  crt?: string | null,
+  key?: string | null
+): { certificate_crt: string | null; certificate_key: string | null } => {
+  const clean = (cuit || "").replace(/\D/g, "");
+  let resolvedCrt = crt || null;
+  let resolvedKey = key || null;
+
+  if (typeof window !== "undefined" && clean) {
+    try {
+      if (!resolvedCrt) {
+        resolvedCrt = localStorage.getItem(`arca_saved_crt_${clean}`) || null;
+      }
+      if (!resolvedKey) {
+        resolvedKey =
+          localStorage.getItem(`arca_saved_key_${clean}`) ||
+          localStorage.getItem(`arca_pending_key_${clean}`) ||
+          null;
+      }
+    } catch {}
+  }
+
+  return { certificate_crt: resolvedCrt, certificate_key: resolvedKey };
+};
+
 export const arcaService = {
   /**
    * Envía a autorizar una factura ante ARCA (o la simula si está en modo mock)
@@ -235,14 +261,20 @@ export const arcaService = {
 
     // Modo Sandbox o Real
     try {
+      const creds = resolveEffectiveCredentials(
+        payload.cuitEmisor,
+        arcaConfig.certificate_crt,
+        arcaConfig.certificate_key
+      );
+
       const { data, error } = await callArcaBillingFunction({
         action: "create-invoice",
         mode: arcaConfig.mode,
         fiscal_environment: arcaConfig.fiscal_environment,
         punto_venta: payload.puntoVenta,
         cuit_emisor: payload.cuitEmisor,
-        certificate_crt: arcaConfig.certificate_crt,
-        certificate_key: arcaConfig.certificate_key,
+        certificate_crt: creds.certificate_crt,
+        certificate_key: creds.certificate_key,
         document_type: payload.documentType,
         subtotal: payload.subtotal,
         tax_total: payload.taxTotal,
@@ -310,7 +342,13 @@ export const arcaService = {
       };
     }
 
-    if (!arcaConfig.certificate_crt || !arcaConfig.certificate_key) {
+    const creds = resolveEffectiveCredentials(
+      cuit,
+      arcaConfig.certificate_crt,
+      arcaConfig.certificate_key
+    );
+
+    if (!creds.certificate_crt || !creds.certificate_key) {
       return {
         success: false,
         message: "Falta vincular el Certificado Digital (.crt) y la Clave Privada (.key).",
@@ -323,8 +361,8 @@ export const arcaService = {
         mode: arcaConfig.mode,
         cuit,
         punto_venta: puntoVenta,
-        certificate_crt: arcaConfig.certificate_crt,
-        certificate_key: arcaConfig.certificate_key,
+        certificate_crt: creds.certificate_crt,
+        certificate_key: creds.certificate_key,
       });
 
       if (error) {
@@ -410,14 +448,20 @@ export const arcaService = {
 
     // Modo Sandbox o Real
     try {
+      const creds = resolveEffectiveCredentials(
+        payload.cuitEmisor,
+        arcaConfig.certificate_crt,
+        arcaConfig.certificate_key
+      );
+
       const { data, error } = await callArcaBillingFunction({
         action: "create-credit-note",
         mode: arcaConfig.mode,
         fiscal_environment: arcaConfig.fiscal_environment,
         punto_venta: payload.puntoVenta,
         cuit_emisor: payload.cuitEmisor,
-        certificate_crt: arcaConfig.certificate_crt,
-        certificate_key: arcaConfig.certificate_key,
+        certificate_crt: creds.certificate_crt,
+        certificate_key: creds.certificate_key,
         document_type: payload.documentType,
         subtotal: payload.subtotal,
         tax_total: payload.taxTotal,

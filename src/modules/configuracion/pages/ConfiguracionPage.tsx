@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { LoadingState } from "@/components/ui/UiStates";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
@@ -17,6 +17,7 @@ import {
   Package,
   Palette,
   RefreshCw,
+  Save,
   Scale,
   Settings,
   ShieldAlert,
@@ -398,6 +399,20 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
       status: result.success ? "success" : "error",
       message: result.message,
     });
+
+    if (result.success) {
+      const updatedFacturacion: FacturacionSettings = {
+        ...draft.facturacion,
+        issuer_cuit: cleanCuit,
+        arca: {
+          ...draft.facturacion.arca,
+          enabled: true,
+          cuit_emisor: cleanCuit,
+          punto_venta,
+        },
+      };
+      await handleSaveSection("facturacion", updatedFacturacion);
+    }
   };
 
   const visibleTabs = useMemo(
@@ -440,6 +455,22 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
       };
     });
   };
+
+  const updateArca = useCallback((patch: Partial<FacturacionSettings["arca"]>) => {
+    setDraft((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        facturacion: {
+          ...current.facturacion,
+          arca: {
+            ...current.facturacion.arca,
+            ...patch,
+          },
+        },
+      };
+    });
+  }, []);
 
   const updateEntityRequirements = (
     entity: "customer" | "supplier",
@@ -501,11 +532,14 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     }
   };
 
-  const handleSaveSection = async (section: TenantSettingsSectionKey) => {
+  const handleSaveSection = async (
+    section: TenantSettingsSectionKey,
+    customSectionData?: TenantSettings[TenantSettingsSectionKey]
+  ) => {
     if (!draft) return;
 
     const appearanceBeforeSave = draft.apariencia;
-    await saveSection(section);
+    await saveSection(section, customSectionData);
 
     if (section === "apariencia") {
       applyAppearance(appearanceBeforeSave);
@@ -1614,12 +1648,19 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   value={draft.facturacion.issuer_cuit}
                   onChange={(event) => {
                     const clean = event.target.value.replace(/\D/g, "");
-                    updateSection("facturacion", {
-                      issuer_cuit: clean,
-                      arca: {
-                        ...draft.facturacion.arca,
-                        cuit_emisor: clean,
-                      },
+                    setDraft((current) => {
+                      if (!current) return current;
+                      return {
+                        ...current,
+                        facturacion: {
+                          ...current.facturacion,
+                          issuer_cuit: clean,
+                          arca: {
+                            ...current.facturacion.arca,
+                            cuit_emisor: clean,
+                          },
+                        },
+                      };
                     });
                   }}
                   maxLength={11}
@@ -1732,38 +1773,57 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <label className="flex items-center gap-2.5 sm:col-span-2 text-sm font-semibold text-slate-800 dark:text-slate-100 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500"
-                  checked={draft.facturacion.arca.enabled}
-                  onChange={(event) =>
-                    updateSection("facturacion", {
-                      arca: {
-                        ...draft.facturacion.arca,
-                        enabled: event.target.checked,
-                      },
-                    })
-                  }
-                  disabled={!canWriteConfiguracion}
-                />
-                <span>Habilitar Facturación Electrónica con ARCA</span>
-              </label>
+              {/* SWITCH DE HABILITACIÓN ARCA */}
+              <div className="sm:col-span-2 flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xs">
+                <div className="space-y-0.5 pr-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                      Facturación con ARCA
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        draft.facturacion.arca.enabled
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                          : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-300 dark:border-slate-700"
+                      }`}
+                    >
+                      {draft.facturacion.arca.enabled ? "Activo" : "Inactivo"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Emitir comprobantes fiscales electrónicos con CAE y código QR
+                  </p>
+                </div>
 
-              <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
-                  Entorno de Facturación
+                <label className="pos-switch relative inline-flex shrink-0 cursor-pointer items-center" title="Habilitar o deshabilitar facturación electrónica con ARCA">
+                  <input
+                    type="checkbox"
+                    checked={draft.facturacion.arca.enabled}
+                    onChange={(event) => updateArca({ enabled: event.target.checked })}
+                    className="peer sr-only"
+                    disabled={!canWriteConfiguracion}
+                  />
+                  <span className="pos-switch-track">
+                    <span className="pos-switch-thumb" />
+                  </span>
                 </label>
+              </div>
+
+              {/* ENTORNO DE FACTURACIÓN */}
+              <div className="sm:col-span-2 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xs flex flex-col justify-between">
+                <div>
+                  <label className="mb-0.5 block text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                    Entorno de Facturación
+                  </label>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+                    Servidores fiscales a los que se enviarán las facturas
+                  </p>
+                </div>
                 <select
                   className="ui-input font-medium"
                   value={draft.facturacion.arca.mode}
                   onChange={(event) =>
-                    updateSection("facturacion", {
-                      arca: {
-                        ...draft.facturacion.arca,
-                        mode: event.target.value as FacturacionSettings["arca"]["mode"],
-                      },
-                    })
+                    updateArca({ mode: event.target.value as FacturacionSettings["arca"]["mode"] })
                   }
                   disabled={!canWriteConfiguracion}
                 >
@@ -1783,14 +1843,11 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   min="1"
                   value={draft.facturacion.arca.punto_venta}
                   onChange={(event) =>
-                    updateSection("facturacion", {
-                      arca: {
-                        ...draft.facturacion.arca,
-                        punto_venta: Math.max(
-                          1,
-                          Math.floor(toNumber(event.target.value, draft.facturacion.arca.punto_venta))
-                        ),
-                      },
+                    updateArca({
+                      punto_venta: Math.max(
+                        1,
+                        Math.floor(toNumber(event.target.value, draft.facturacion.arca.punto_venta))
+                      ),
                     })
                   }
                   placeholder="Ej: 1, 2, 3..."
@@ -1809,12 +1866,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   className="ui-input font-mono"
                   value={draft.facturacion.arca.certificado_alias}
                   onChange={(event) =>
-                    updateSection("facturacion", {
-                      arca: {
-                        ...draft.facturacion.arca,
-                        certificado_alias: event.target.value.trim(),
-                      },
-                    })
+                    updateArca({ certificado_alias: event.target.value.trim() })
                   }
                   placeholder="Ej: pos-v2"
                   disabled={!canWriteConfiguracion}
@@ -1910,7 +1962,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   <button
                     type="button"
                     onClick={handleTestArcaConnection}
-                    disabled={isTestingArcaConnection || !draft.facturacion.arca.enabled}
+                    disabled={isTestingArcaConnection}
                     className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-sky-600 dark:hover:bg-sky-500 text-white text-xs font-bold shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     {isTestingArcaConnection ? (
@@ -1925,6 +1977,17 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                       </>
                     )}
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { void handleSaveSection("facturacion"); }}
+                    disabled={!canWriteConfiguracion || savingSection.facturacion}
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Save size={14} />
+                    {savingSection.facturacion ? "Guardando..." : "Guardar Facturación"}
+                  </button>
+
                   <span className="text-[11px] text-slate-500 dark:text-slate-400">
                     Verifica la respuesta de los servidores de ARCA para este punto de venta.
                   </span>
@@ -1947,24 +2010,32 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
           </div>
 
             {/* CORRELATIVIDAD DE SECUENCIAS */}
-            <div className="md:col-span-2 space-y-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Próximos Números de Secuencia</span>
-              <div className="grid gap-3 md:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-white p-4.5 dark:border-slate-800 dark:bg-slate-900 shadow-xs space-y-3">
+              <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                <Calculator className="text-blue-600 dark:text-blue-400 h-4 w-4" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                  3. Correlatividad y Próximos Números de Secuencia
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Próximo número correlativo a emitir por tipo de comprobante. Al facturar en modo oficial, ARCA asigna el número oficial correlativo automáticamente.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 pt-1">
                 <div>
-                  <label className="mb-1 block text-xs text-slate-600 dark:text-slate-400">Factura A</label>
-                  <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.A} onChange={(event) => updateDocumentSequence("A", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.A))))} disabled={!canWriteConfiguracion} />
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">Factura A</label>
+                  <input className="ui-input font-mono font-bold" type="number" min="1" value={draft.facturacion.document_sequences.A} onChange={(event) => updateDocumentSequence("A", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.A))))} disabled={!canWriteConfiguracion} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-slate-600 dark:text-slate-400">Factura B</label>
-                  <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.B} onChange={(event) => updateDocumentSequence("B", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.B))))} disabled={!canWriteConfiguracion} />
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">Factura B</label>
+                  <input className="ui-input font-mono font-bold" type="number" min="1" value={draft.facturacion.document_sequences.B} onChange={(event) => updateDocumentSequence("B", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.B))))} disabled={!canWriteConfiguracion} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-slate-600 dark:text-slate-400">Factura C</label>
-                  <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.C} onChange={(event) => updateDocumentSequence("C", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.C))))} disabled={!canWriteConfiguracion} />
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">Factura C</label>
+                  <input className="ui-input font-mono font-bold" type="number" min="1" value={draft.facturacion.document_sequences.C} onChange={(event) => updateDocumentSequence("C", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.C))))} disabled={!canWriteConfiguracion} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-slate-600 dark:text-slate-400">Presupuesto</label>
-                  <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.PRESUPUESTO} onChange={(event) => updateDocumentSequence("PRESUPUESTO", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.PRESUPUESTO))))} disabled={!canWriteConfiguracion} />
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">Presupuesto</label>
+                  <input className="ui-input font-mono font-bold" type="number" min="1" value={draft.facturacion.document_sequences.PRESUPUESTO} onChange={(event) => updateDocumentSequence("PRESUPUESTO", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.PRESUPUESTO))))} disabled={!canWriteConfiguracion} />
                 </div>
               </div>
             </div>
@@ -2571,15 +2642,19 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
         currentKey={draft?.facturacion?.arca?.certificate_key}
         onSaveCredentials={async ({ certificate_crt, certificate_key, certificado_alias }) => {
           if (!draft?.facturacion) return;
-          updateSection("facturacion", {
+          const updatedFacturacion: FacturacionSettings = {
+            ...draft.facturacion,
             arca: {
               ...draft.facturacion.arca,
+              enabled: true,
+              mode: draft.facturacion.arca.mode === "mock" ? "real" : draft.facturacion.arca.mode,
               certificate_crt,
               certificate_key,
-              certificado_alias: certificado_alias || draft.facturacion.arca.certificado_alias,
+              certificado_alias: certificado_alias || draft.facturacion.arca.certificado_alias || "pos-v2",
             },
-          });
-          await handleSaveSection("facturacion");
+          };
+          updateSection("facturacion", updatedFacturacion);
+          await handleSaveSection("facturacion", updatedFacturacion);
         }}
       />
 

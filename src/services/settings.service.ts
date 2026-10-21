@@ -70,6 +70,7 @@ const createDefaultPosSettings = (): PosSettings => ({
   rounding_mode: "nearest",
   rounding_target: "cash_only",
   employee_discount_percent: 10,
+  employee_discount_excluded_categories: [],
 });
 
 const createDefaultStockSettings = (): StockSettings => ({
@@ -202,6 +203,7 @@ const normalizeTenantSettings = (input: TenantSettings): TenantSettings => ({
     rounding_mode: input.pos?.rounding_mode ?? "nearest",
     rounding_target: input.pos?.rounding_target ?? "cash_only",
     employee_discount_percent: input.pos?.employee_discount_percent ?? 10,
+    employee_discount_excluded_categories: input.pos?.employee_discount_excluded_categories ?? [],
   },
   stock: {
     ...createDefaultStockSettings(),
@@ -228,12 +230,13 @@ const normalizeTenantSettings = (input: TenantSettings): TenantSettings => ({
         input.facturacion?.arca?.mode ??
         createDefaultFacturacionSettings().arca.mode,
       cuit_emisor:
-        input.facturacion?.arca?.cuit_emisor ??
-        input.facturacion?.issuer_cuit ??
+        (input.facturacion?.arca?.cuit_emisor || "").trim() ||
+        (input.facturacion?.issuer_cuit || "").trim() ||
         createDefaultFacturacionSettings().arca.cuit_emisor,
       punto_venta:
-        input.facturacion?.arca?.punto_venta ??
-        createDefaultFacturacionSettings().arca.punto_venta,
+        input.facturacion?.arca?.punto_venta && input.facturacion.arca.punto_venta > 0
+          ? input.facturacion.arca.punto_venta
+          : createDefaultFacturacionSettings().arca.punto_venta,
       certificado_alias:
         input.facturacion?.arca?.certificado_alias ??
         createDefaultFacturacionSettings().arca.certificado_alias,
@@ -324,6 +327,16 @@ const mergeSettingsPayload = (
       ...createDefaultArcaSettings(),
       ...current.facturacion.arca,
       ...(patch.facturacion?.arca ?? {}),
+      cuit_emisor:
+        (patch.facturacion?.arca?.cuit_emisor || "").trim() ||
+        (patch.facturacion?.issuer_cuit || "").trim() ||
+        (current.facturacion.arca.cuit_emisor || "").trim() ||
+        (current.facturacion.issuer_cuit || "").trim() ||
+        "",
+      punto_venta:
+        (patch.facturacion?.arca?.punto_venta && patch.facturacion.arca.punto_venta > 0)
+          ? patch.facturacion.arca.punto_venta
+          : (current.facturacion.arca.punto_venta || 1),
     },
     entity_requirements: {
       customer: {

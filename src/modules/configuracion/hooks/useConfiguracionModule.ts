@@ -106,15 +106,38 @@ export const useConfiguracionModule = (
         paymentMethodsService.getActiveByTenant(tenantId).catch(() => []),
       ]);
 
-      if (resolvedSettings) {
-        setSettings(resolvedSettings);
-        setDraft(resolvedSettings);
-      } else {
-        // Cargar fallback de configuración básica por si falla backend o RLS
-        const fallbackSettings = await settingsService.getByTenant(tenantId);
-        setSettings(fallbackSettings);
-        setDraft(fallbackSettings);
+      let finalSettings = resolvedSettings;
+      if (!finalSettings) {
+        finalSettings = await settingsService.getByTenant(tenantId);
       }
+
+      if (finalSettings?.facturacion?.arca) {
+        const cleanCuit = (
+          finalSettings.facturacion.arca.cuit_emisor ||
+          finalSettings.facturacion.issuer_cuit ||
+          ""
+        ).replace(/\D/g, "");
+
+        if (cleanCuit && typeof window !== "undefined") {
+          try {
+            const savedCrt = localStorage.getItem(`arca_saved_crt_${cleanCuit}`);
+            const savedKey = localStorage.getItem(`arca_saved_key_${cleanCuit}`);
+            const savedAlias = localStorage.getItem(`arca_saved_alias_${cleanCuit}`);
+            if (savedCrt && !finalSettings.facturacion.arca.certificate_crt) {
+              finalSettings.facturacion.arca.certificate_crt = savedCrt;
+            }
+            if (savedKey && !finalSettings.facturacion.arca.certificate_key) {
+              finalSettings.facturacion.arca.certificate_key = savedKey;
+            }
+            if (savedAlias && !finalSettings.facturacion.arca.certificado_alias) {
+              finalSettings.facturacion.arca.certificado_alias = savedAlias;
+            }
+          } catch {}
+        }
+      }
+
+      setSettings(finalSettings);
+      setDraft(finalSettings);
 
       setCustomers(
         (customerRows ?? [])
@@ -153,13 +176,16 @@ export const useConfiguracionModule = (
   );
 
   const saveSection = useCallback(
-    async (section: TenantSettingsSectionKey) => {
+    async (
+      section: TenantSettingsSectionKey,
+      customSectionData?: TenantSettings[TenantSettingsSectionKey]
+    ) => {
       if (!tenantId || !draft) return;
 
       setSavingSection((prev) => ({ ...prev, [section]: true }));
 
       try {
-        const sectionDraft = draft[section];
+        const sectionDraft = customSectionData ?? draft[section];
         const patch = {
           [section]:
             section === "pos"

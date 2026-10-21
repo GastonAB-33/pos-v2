@@ -63,7 +63,10 @@ export const InvoiceDetailPanel = ({
         </div>
         <div className="flex items-center gap-2">
           {/* BOTÓN ENVIAR A ARCA */}
-          {(invoice.arca_status === "pending" || canTriggerArca || isSendingToArca) && (
+          {(invoice.arca_status === "not_sent" ||
+            invoice.arca_status === "rejected" ||
+            invoice.arca_status === "pending" ||
+            isSendingToArca) && (
             <button
               type="button"
               className="ui-btn-primary"
