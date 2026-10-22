@@ -7,6 +7,8 @@ import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { VoiceDictationButton } from "@/components/form/VoiceDictationButton";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { ProductImageEditorModal } from "@/modules/productos/components/ProductImageEditorModal";
+import { ReturnablePackagesModal } from "@/modules/productos/components/ReturnablePackagesModal";
+import { Package } from "lucide-react";
 import {
   computePricingForward,
   computePricingReverse,
@@ -17,7 +19,7 @@ import {
   type ProductFormValues,
 } from "@/modules/productos/schemas/product-form.schema";
 import type { ProductFormModalValues, ProductViewModel } from "@/modules/productos/types/product.types";
-import { parseReturnableConfig, COMMON_RETURNABLE_PACKAGES, useTenantReturnablePackages } from "@/utils/returnable-packages";
+import { parseReturnableConfig, useTenantReturnablePackages } from "@/utils/returnable-packages";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { isStockTrackingEnabled } from "@/utils/stock-tracking";
 import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
@@ -200,6 +202,9 @@ export const ProductFormModal = ({
   const [imageDraftFile, setImageDraftFile] = useState<File | null>(null);
   const [imageRemoved, setImageRemoved] = useState(false);
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
+  const [isPackagesManagerOpen, setIsPackagesManagerOpen] = useState(false);
+  const [isCustomPackageMode, setIsCustomPackageMode] = useState(false);
+  const [customPackageInput, setCustomPackageInput] = useState("");
   const [localCategories, setLocalCategories] = useState<string[]>(() => normalizeToUniqueSorted(categoryOptions));
   const [localSubcategories, setLocalSubcategories] = useState<string[]>(() =>
     normalizeToUniqueSorted(subcategoryOptions)
@@ -311,7 +316,6 @@ export const ProductFormModal = ({
   const isReturnable = watch("isReturnable");
   const { tenantId } = useTenant();
   const { packages: tenantPackages } = useTenantReturnablePackages(tenantId);
-  const availableReturnables = tenantPackages.length > 0 ? tenantPackages : COMMON_RETURNABLE_PACKAGES;
 
   const imagenPreview = useMemo(() => {
     if (localPreviewUrl) return localPreviewUrl;
@@ -1143,38 +1147,98 @@ export const ProductFormModal = ({
             </div>
 
             {isReturnable && (
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 pt-3 border-t border-slate-200 dark:border-slate-800">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
-                    Tipo de envase
-                  </label>
-                  <input
-                    list="package-name-suggestions-modal"
-                    type="text"
-                    {...register("returnablePackageName")}
-                    placeholder="Ej. Garrafa 10kg, Bidón 20L..."
-                    className="ui-input w-full text-xs"
-                    disabled={disabled}
-                  />
-                  <datalist id="package-name-suggestions-modal">
-                    {availableReturnables.map((pkg) => (
-                      <option key={pkg.name} value={pkg.name} />
-                    ))}
-                  </datalist>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
-                    Precio del envase (si no trae el vacío)
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    {...register("returnablePackagePrice", { valueAsNumber: true })}
-                    placeholder="0"
-                    className="ui-input w-full text-xs"
-                    disabled={disabled}
-                  />
+              <div className="mt-4 space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <div className="mb-1 flex items-center justify-between">
+                      <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        Tipo de envase configurado
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setIsPackagesManagerOpen(true)}
+                        className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 underline"
+                      >
+                        <Package className="h-3 w-3" />
+                        <span>Ver envases ({tenantPackages.length})</span>
+                      </button>
+                    </div>
+
+                    <select
+                      value={
+                        isCustomPackageMode
+                          ? "__custom__"
+                          : (watch("returnablePackageName") || "")
+                      }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "__custom__") {
+                          setIsCustomPackageMode(true);
+                        } else if (val === "") {
+                          setIsCustomPackageMode(false);
+                          setValue("returnablePackageName", "");
+                        } else {
+                          setIsCustomPackageMode(false);
+                          setValue("returnablePackageName", val);
+                          const found = tenantPackages.find(
+                            (p) => p.name.toLowerCase() === val.toLowerCase()
+                          );
+                          if (found && typeof found.suggestedPrice === "number") {
+                            setValue("returnablePackagePrice", found.suggestedPrice);
+                          }
+                        }
+                      }}
+                      className="ui-select w-full text-xs"
+                      disabled={disabled}
+                    >
+                      <option value="">-- Seleccionar tipo de envase --</option>
+                      {tenantPackages.map((pkg) => (
+                        <option key={pkg.name} value={pkg.name}>
+                          {pkg.name} {pkg.suggestedPrice ? `(${pkg.suggestedPrice.toLocaleString("es-AR")})` : ""}
+                        </option>
+                      ))}
+                      <option value="__custom__">+ Crear nuevo tipo de envase...</option>
+                    </select>
+
+                    {isCustomPackageMode && (
+                      <div className="mt-2 space-y-1">
+                        <input
+                          type="text"
+                          autoFocus
+                          value={customPackageInput}
+                          onChange={(e) => {
+                            setCustomPackageInput(e.target.value);
+                            setValue("returnablePackageName", e.target.value);
+                          }}
+                          placeholder="Nombre del nuevo envase (ej: ENVASE DE COCA)"
+                          className="ui-input w-full text-xs"
+                          disabled={disabled}
+                          required
+                        />
+                        <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                          💡 Se guardará como tipo de envase para futuros productos y Cuentas Corrientes.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                      Precio del envase (si no trae el vacío)
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      {...register("returnablePackagePrice", { valueAsNumber: true })}
+                      placeholder="0"
+                      className="ui-input w-full text-xs"
+                      disabled={disabled}
+                    />
+                    <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                      Monto a cobrar si el cliente no entrega el envase vacío.
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
@@ -1245,6 +1309,12 @@ export const ProductFormModal = ({
           setValue("imagenUrl", previewUrl, { shouldDirty: true, shouldValidate: true });
           setPhotoError(null);
         }}
+      />
+
+      <ReturnablePackagesModal
+        isOpen={isPackagesManagerOpen}
+        onClose={() => setIsPackagesManagerOpen(false)}
+        canWrite={!disabled}
       />
 
       <BarcodeScannerModal

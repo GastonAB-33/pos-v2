@@ -1,3 +1,4 @@
+import { ensureTenantReturnablePackage } from "@/utils/returnable-packages";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Product } from "@/types/entities";
 import { useProductsCrud } from "@/modules/productos/hooks/useProductsCrud";
@@ -173,6 +174,10 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
       codigoBarras: values.codigoBarras?.trim() ?? "",
       imagenUrl: values.imagenUrl?.trim() ?? "",
     };
+
+    if (tenantId && payload.isReturnable && payload.returnablePackageName?.trim()) {
+      void ensureTenantReturnablePackage(tenantId, payload.returnablePackageName.trim(), payload.returnablePackagePrice);
+    }
 
     if (mode === "create") {
       await crud.createProduct(payload, {

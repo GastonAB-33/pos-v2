@@ -215,3 +215,31 @@ export const useTenantReturnablePackages = (tenantId: string | null) => {
     reload: load,
   };
 };
+
+/**
+ * Registra automáticamente un nuevo tipo de envase en la configuración de stock si no existe aún.
+ */
+export const ensureTenantReturnablePackage = async (
+  tenantId: string,
+  packageName: string,
+  suggestedPrice?: number
+): Promise<void> => {
+  const clean = packageName.trim();
+  if (!clean || !tenantId) return;
+
+  try {
+    const settings = await settingsService.getByTenant(tenantId);
+    const existing = settings?.stock?.returnable_packages ?? [];
+    const lower = clean.toLowerCase();
+
+    if (!existing.some((p) => p.name.toLowerCase() === lower)) {
+      const price = typeof suggestedPrice === "number" ? Math.max(0, suggestedPrice) : 0;
+      const updated = [...existing, { name: clean, suggestedPrice: price }];
+      await settingsService.updateSection(tenantId, "stock", {
+        returnable_packages: updated,
+      });
+    }
+  } catch (err) {
+    console.error("Error al registrar automáticamente tipo de envase:", err);
+  }
+};

@@ -12,6 +12,7 @@ import { ProductAuditLog } from "@/modules/productos/components/ProductAuditLog"
 import { ProductFilters } from "@/modules/productos/components/ProductFilters";
 import { ProductFormModal } from "@/modules/productos/components/ProductFormModal";
 import { ProductImportModal } from "@/modules/productos/components/ProductImportModal";
+import { ReturnablePackagesModal } from "@/modules/productos/components/ReturnablePackagesModal";
 import { ProductQuickPriceModal } from "@/modules/productos/components/ProductQuickPriceModal";
 import { ProductTable } from "@/modules/productos/components/ProductTable";
 import { useProducts } from "@/modules/productos/hooks/useProducts";
@@ -42,6 +43,7 @@ export const ProductsPage = () => {
   const [quickPriceOpen, setQuickPriceOpen] = useState(false);
   const [quickPriceInitialQuery, setQuickPriceInitialQuery] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [returnableModalOpen, setReturnableModalOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefreshCatalog = async () => {
@@ -189,6 +191,7 @@ export const ProductsPage = () => {
           }}
           onOpenCreate={() => setFormModal({ mode: "create", product: null })}
           onOpenImport={() => setImportOpen(true)}
+          onOpenReturnablePackages={() => setReturnableModalOpen(true)}
           onExportXlsx={() => {
             const idsToExport = products.selectedIds.length > 0
               ? products.selectedIds
@@ -251,6 +254,12 @@ export const ProductsPage = () => {
           onPageChange={paginatedProducts.setCurrentPage}
         />
       ) : null}
+
+      <ReturnablePackagesModal
+        isOpen={returnableModalOpen}
+        onClose={() => setReturnableModalOpen(false)}
+        canWrite={canWriteProductos}
+      />
 
       <ProductAuditLog
         loading={products.isLoadingAudit}
