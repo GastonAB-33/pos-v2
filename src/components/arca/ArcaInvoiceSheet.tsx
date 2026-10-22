@@ -288,7 +288,7 @@ const ArcaInvoiceSingleSheet: React.FC<{
       >
         {/* Cuadro central con Letra y Código de comprobante */}
         <div
-          className="absolute left-1/2 -top-[1px] -translate-x-1/2 border-b border-x border-black px-4 py-1 flex flex-col items-center justify-center z-10 w-24"
+          className="absolute left-1/2 -top-[1px] -translate-x-1/2 border border-black flex flex-col items-center justify-center z-10 w-14 sm:w-16"
           style={{ height: "48px", backgroundColor: "#ffffff", color: "#000000" }}
         >
           <span className="text-2xl font-black font-sans leading-none" style={{ color: "#000000" }}>
@@ -302,7 +302,7 @@ const ArcaInvoiceSingleSheet: React.FC<{
         <div className="grid grid-cols-2">
           {/* Lado izquierdo: Emisor */}
           <div
-            className="p-3 pr-8 space-y-1.5 border-r border-black flex flex-col justify-between"
+            className="p-3 pr-10 sm:pr-12 space-y-1.5 border-r border-black flex flex-col justify-between"
             style={{ backgroundColor: "#ffffff", color: "#000000" }}
           >
             <div className="text-center pt-1 pb-2">
@@ -325,7 +325,7 @@ const ArcaInvoiceSingleSheet: React.FC<{
 
           {/* Lado derecho: Datos de Comprobante */}
           <div
-            className="p-3 pl-8 space-y-1 text-[11px] leading-snug"
+            className="p-3 pl-10 sm:pl-12 space-y-1 text-[11px] leading-snug"
             style={{ backgroundColor: "#ffffff", color: "#000000" }}
           >
             <h2 className="text-xl sm:text-2xl font-black tracking-wide mb-2" style={{ color: "#000000" }}>
