@@ -122,6 +122,10 @@ const createDefaultFacturacionSettings = (): FacturacionSettings => ({
   issuer_fiscal_condition: "",
   arca: createDefaultArcaSettings(),
   entity_requirements: createDefaultEntityRequirements(),
+  payment_method_rules: {
+    mandatory_methods: [],
+    disabled_methods: [],
+  },
 });
 
 const createDefaultBarcodeScaleSettings = (): BarcodeScaleSettings => ({
@@ -266,6 +270,14 @@ const normalizeTenantSettings = (input: TenantSettings): TenantSettings => ({
       last_connection_message:
         input.facturacion?.arca?.last_connection_message ??
         createDefaultFacturacionSettings().arca.last_connection_message,
+    },
+    payment_method_rules: {
+      mandatory_methods: Array.isArray(input.facturacion?.payment_method_rules?.mandatory_methods)
+        ? input.facturacion.payment_method_rules.mandatory_methods
+        : [],
+      disabled_methods: Array.isArray(input.facturacion?.payment_method_rules?.disabled_methods)
+        ? input.facturacion.payment_method_rules.disabled_methods
+        : [],
     },
     entity_requirements: {
       customer: {

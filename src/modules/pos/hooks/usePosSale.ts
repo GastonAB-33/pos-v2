@@ -34,7 +34,8 @@ import { salesService } from "@/services/sales.service";
 import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
 import { settingsService } from "@/services/settings.service";
 import { stockService } from "@/services/stock.service";
-import type { ArcaSettings, BankAccount, BarcodeScaleSettings, Customer, Employee, InstallmentPlan, Invoice, InvoiceDocumentType, MercadoPagoSettings, OriginBank, PaymentMethod, PaymentMethodType, PosSettings, PriceList, Product, ProductBarcode, Receipt, Sale } from "@/types/entities";
+import type { ArcaSettings, BankAccount, BarcodeScaleSettings, Customer, Employee, InstallmentPlan, Invoice, InvoiceDocumentType,
+  PaymentMethodInvoiceRules, MercadoPagoSettings, OriginBank, PaymentMethod, PaymentMethodType, PosSettings, PriceList, Product, ProductBarcode, Receipt, Sale } from "@/types/entities";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
 import {
   parseReturnableConfig,
@@ -465,6 +466,7 @@ export const usePosSale = (tenantId: string | null) => {
   );
   const [arcaSettings, setArcaSettings] = useState<ArcaSettings>(defaultArcaSettings);
   const [requireOpenSessionForSale, setRequireOpenSessionForSale] = useState(false);
+  const [paymentMethodInvoiceRules, setPaymentMethodInvoiceRules] = useState<PaymentMethodInvoiceRules | null>(null);
   const [defaultInvoiceDocumentType, setDefaultInvoiceDocumentType] =
     useState<InvoiceDocumentType>("B");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
@@ -906,6 +908,7 @@ export const usePosSale = (tenantId: string | null) => {
       setArcaSettings(resolvedArcaSettings);
       setRequireOpenSessionForSale(tenantSettings?.caja?.require_open_session_for_sale ?? false);
       setDefaultInvoiceDocumentType(tenantSettings?.facturacion?.default_document_type ?? "B");
+      setPaymentMethodInvoiceRules(tenantSettings?.facturacion?.payment_method_rules ?? null);
       setSelectedCustomerId((current) =>
         current && activeCustomers.some((customer) => customer.id === current)
           ? current
@@ -4014,6 +4017,7 @@ export const usePosSale = (tenantId: string | null) => {
     arcaEnabledForPos,
     isArcaConnected,
     defaultInvoiceDocumentType,
+    paymentMethodInvoiceRules,
     saleTabs,
     activeTabId,
     switchSaleTab,

@@ -251,6 +251,7 @@ export const PosPage = () => {
     arcaEnabledForPos,
     arcaSettings,
     defaultInvoiceDocumentType,
+    paymentMethodInvoiceRules,
   } = usePosSale(tenantId);
 
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState("");
@@ -2131,6 +2132,7 @@ export const PosPage = () => {
               arcaEnabled={arcaEnabledForPos}
               arcaMode={arcaSettings.mode}
               defaultDocumentType={defaultInvoiceDocumentType}
+              paymentMethodInvoiceRules={paymentMethodInvoiceRules}
               onCustomerChange={setSelectedCustomer}
               onPaymentMethodChange={setSelectedPaymentMethodId}
               onCreateOriginBank={handleCreateOriginBank}

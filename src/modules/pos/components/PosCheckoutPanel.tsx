@@ -28,6 +28,7 @@ import type {
   MercadoPagoSettings,
   OriginBank,
   PaymentMethod,
+  PaymentMethodInvoiceRules,
 } from "@/types/entities";
 import { formatCustomerDocument } from "@/modules/configuracion/hooks/useEntityRequirements";
 import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
@@ -87,6 +88,7 @@ interface PosCheckoutPanelProps {
   arcaEnabled?: boolean;
   arcaMode?: string;
   defaultDocumentType?: string;
+  paymentMethodInvoiceRules?: PaymentMethodInvoiceRules | null;
 }
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -166,8 +168,28 @@ export const PosCheckoutPanel = ({
   arcaEnabled,
   arcaMode,
   defaultDocumentType,
+  paymentMethodInvoiceRules,
 }: PosCheckoutPanelProps) => {
   const [issueInvoice, setIssueInvoice] = useState(false);
+
+  // Evalúa si una opción de pago exige emisión fiscal obligatoria
+  const isOptionInvoiceMandatory = useCallback((option: PosPaymentOption): boolean => {
+    if (!paymentMethodInvoiceRules?.mandatory_methods?.length) return false;
+    const list = paymentMethodInvoiceRules.mandatory_methods;
+    if (option.bankAccountId && list.includes(`bank_account:${option.bankAccountId}`)) return true;
+    if (option.code && list.includes(option.code)) return true;
+    return false;
+  }, [paymentMethodInvoiceRules]);
+
+  // Evalúa si una opción de pago tiene la facturación deshabilitada completamente
+  const isOptionInvoiceDisabled = useCallback((option: PosPaymentOption): boolean => {
+    if (!paymentMethodInvoiceRules?.disabled_methods?.length) return false;
+    const list = paymentMethodInvoiceRules.disabled_methods;
+    if (option.bankAccountId && list.includes(`bank_account:${option.bankAccountId}`)) return true;
+    if (option.code && list.includes(option.code)) return true;
+    return false;
+  }, [paymentMethodInvoiceRules]);
+
   const [notes] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const isSubmittingLocalRef = useRef(false);
@@ -307,6 +329,58 @@ export const PosCheckoutPanel = ({
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [isReadyToSubmit, setIsReadyToSubmit] = useState(false);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Política fiscal activa calculada a partir de los métodos con importe asignado o del método seleccionado
+  const activeInvoiceRule = useMemo<{
+    status: "mandatory" | "disabled" | "normal";
+    reason?: string;
+  }>(() => {
+    if (!paymentMethodInvoiceRules) return { status: "normal" };
+
+    const allocatedOptions = paymentOptions.filter(
+      (opt) => (allocatedAmounts[opt.id] || 0) > 0
+    );
+
+    const targetOptions =
+      allocatedOptions.length > 0
+        ? allocatedOptions
+        : paymentOptions[highlightedIndex]
+        ? [paymentOptions[highlightedIndex]]
+        : [];
+
+    if (targetOptions.length === 0) return { status: "normal" };
+
+    // 1. Si alguna de las opciones activas es OBLIGATORIA
+    const mandatoryMatch = targetOptions.find((opt) => isOptionInvoiceMandatory(opt));
+    if (mandatoryMatch) {
+      return {
+        status: "mandatory",
+        reason: `Facturación obligatoria para ${mandatoryMatch.name}`,
+      };
+    }
+
+    // 2. Si TODAS las opciones activas están DESHABILITADAS
+    const allDisabled =
+      targetOptions.length > 0 &&
+      targetOptions.every((opt) => isOptionInvoiceDisabled(opt));
+    if (allDisabled) {
+      return {
+        status: "disabled",
+        reason: `Facturación deshabilitada para ${targetOptions.map((o) => o.name).join(", ")}`,
+      };
+    }
+
+    return { status: "normal" };
+  }, [paymentMethodInvoiceRules, paymentOptions, allocatedAmounts, highlightedIndex, isOptionInvoiceMandatory, isOptionInvoiceDisabled]);
+
+  // Activa o desactiva automáticamente el switch de facturación fiscal según la regla del medio de pago
+  useEffect(() => {
+    if (activeInvoiceRule.status === "mandatory") {
+      setIssueInvoice(true);
+    } else if (activeInvoiceRule.status === "disabled") {
+      setIssueInvoice(false);
+    }
+  }, [activeInvoiceRule.status]);
 
   // Inicializar con el medio de pago predeterminado o efectivo
   const isInitializedRef = useRef(false);
@@ -1289,14 +1363,40 @@ export const PosCheckoutPanel = ({
                 {defaultDocumentType || "B"} {arcaEnabled ? `(${arcaMode === "mock" ? "MOCK" : "OFICIAL"})` : ""}
               </span>
             )}
+            {activeInvoiceRule.status === "mandatory" && (
+              <span
+                className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-300 dark:border-blue-800 shadow-2xs"
+                title={activeInvoiceRule.reason}
+              >
+                Obligatoria
+              </span>
+            )}
+            {activeInvoiceRule.status === "disabled" && (
+              <span
+                className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800 shadow-2xs"
+                title={activeInvoiceRule.reason}
+              >
+                Deshabilitada
+              </span>
+            )}
           </div>
-          <label className="pos-switch relative inline-flex shrink-0 cursor-pointer items-center" title="Emitir comprobante fiscal con CAE y código QR oficial">
+          <label
+            className={`pos-switch relative inline-flex shrink-0 items-center ${
+              activeInvoiceRule.status === "disabled"
+                ? "opacity-40 cursor-not-allowed"
+                : "cursor-pointer"
+            }`}
+            title={activeInvoiceRule.reason || "Emitir comprobante fiscal con CAE y código QR oficial"}
+          >
             <input
               type="checkbox"
               checked={issueInvoice}
-              onChange={(e) => setIssueInvoice(e.target.checked)}
+              onChange={(e) => {
+                if (activeInvoiceRule.status === "disabled") return;
+                setIssueInvoice(e.target.checked);
+              }}
               className="peer sr-only"
-              disabled={disabled || !canWrite || !isOnline}
+              disabled={disabled || !canWrite || !isOnline || activeInvoiceRule.status === "disabled"}
             />
             <span className="pos-switch-track">
               <span className="pos-switch-thumb" />
@@ -1359,6 +1459,16 @@ export const PosCheckoutPanel = ({
                   >
                     {option.name}
                   </span>
+                  {isOptionInvoiceMandatory(option) && (
+                    <span className="rounded bg-blue-50 dark:bg-blue-950/70 px-1.5 py-0.2 text-[9px] font-bold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 shrink-0">
+                      Factura obligatoria
+                    </span>
+                  )}
+                  {isOptionInvoiceDisabled(option) && (
+                    <span className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.2 text-[9px] font-medium text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 shrink-0">
+                      Sin factura
+                    </span>
+                  )}
                   {(() => {
                     const methodEntity = paymentMethods.find((m) => m.id === option.paymentMethodId);
                     const surchargePercent = methodEntity?.surcharge_percent ?? 0;

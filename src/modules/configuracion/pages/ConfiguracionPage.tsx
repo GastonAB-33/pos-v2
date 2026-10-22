@@ -11,14 +11,18 @@ import {
   Calculator,
   CheckCircle2,
   Coins,
+  CreditCard,
   Download,
   ExternalLink,
+  FileCheck2,
   FileText,
   Key,
+  Landmark,
   Lock,
   Package,
   Palette,
   Plus,
+  QrCode,
   RefreshCw,
   Save,
   Scale,
@@ -600,6 +604,102 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
       };
     });
   };
+
+  const togglePaymentMethodInvoiceRule = (
+    key: string,
+    ruleType: "mandatory" | "disabled"
+  ) => {
+    setDraft((current) => {
+      if (!current) return current;
+
+      const currentRules = current.facturacion.payment_method_rules || {
+        mandatory_methods: [],
+        disabled_methods: [],
+      };
+
+      const currentMandatory = new Set(currentRules.mandatory_methods || []);
+      const currentDisabled = new Set(currentRules.disabled_methods || []);
+
+      if (ruleType === "mandatory") {
+        if (currentMandatory.has(key)) {
+          currentMandatory.delete(key);
+        } else {
+          currentMandatory.add(key);
+          currentDisabled.delete(key); // Mutuamente excluyente
+        }
+      } else {
+        if (currentDisabled.has(key)) {
+          currentDisabled.delete(key);
+        } else {
+          currentDisabled.add(key);
+          currentMandatory.delete(key); // Mutuamente excluyente
+        }
+      }
+
+      return {
+        ...current,
+        facturacion: {
+          ...current.facturacion,
+          payment_method_rules: {
+            mandatory_methods: Array.from(currentMandatory),
+            disabled_methods: Array.from(currentDisabled),
+          },
+        },
+      };
+    });
+  };
+
+  const standardPaymentMethodOptions = useMemo(
+    () => [
+      {
+        key: "cash",
+        label: "Efectivo",
+        subtitle: "Cobro inmediato en caja física",
+        icon: Coins,
+      },
+      {
+        key: "card_debit",
+        label: "Tarjeta de Débito",
+        subtitle: "Cobro posnet / terminal de débito",
+        icon: CreditCard,
+      },
+      {
+        key: "card_credit",
+        label: "Tarjeta de Crédito",
+        subtitle: "Cobro financiado / tarjeta de crédito",
+        icon: CreditCard,
+      },
+      {
+        key: "transfer",
+        label: "Transferencias (Generales / Sin banco)",
+        subtitle: "Acreditaciones bancarias genéricas",
+        icon: Landmark,
+      },
+      {
+        key: "mercado_pago",
+        label: "Mercado Pago",
+        subtitle: "Cobro vía QR o link de pago",
+        icon: QrCode,
+      },
+      {
+        key: "cheque",
+        label: "Cheque",
+        subtitle: "Cheques físicos o eCheq",
+        icon: FileText,
+      },
+      {
+        key: "current_account",
+        label: "Cuenta Corriente",
+        subtitle: "Ventas a crédito de clientes o empleados",
+        icon: Wallet,
+      },
+    ],
+    []
+  );
+
+  const activeBankAccounts = useMemo(() => {
+    return (bankAccounts || []).filter((b) => b.is_active);
+  }, [bankAccounts]);
 
   const updateMercadoPagoSettings = (
     patch: Partial<TenantSettings["sistema"]["mercado_pago"]>
@@ -2426,13 +2526,363 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               </div>
             </div>
 
+            {/* BLOQUE 4: REGLAS FISCALES POR MEDIO DE PAGO Y BANCOS */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4.5 dark:border-slate-800 dark:bg-slate-900 shadow-xs space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <FileCheck2 className="text-blue-600 dark:text-blue-400 h-5 w-5" />
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                      4. Automatización y Reglas Fiscales por Medio de Pago y Bancos
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Configurá qué cobros activan automáticamente la emisión de factura fiscal y cuáles la deshabilitan por completo en el POS.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    {(draft.facturacion.payment_method_rules?.mandatory_methods || []).length} obligatorios
+                  </span>
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                    {(draft.facturacion.payment_method_rules?.disabled_methods || []).length} deshabilitados
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-2">
+                {/* COLUMNA 1: FACTURACIÓN OBLIGATORIA */}
+                <div className="rounded-xl border border-emerald-200/90 bg-emerald-50/20 p-4 dark:border-emerald-800/60 dark:bg-emerald-950/20 space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-emerald-100 dark:border-emerald-900/40 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="text-emerald-600 dark:text-emerald-400 h-4 w-4" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-200">
+                        Facturación Obligatoria
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                      Auto-activa switch en POS
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Al seleccionar o asignar monto a estos medios o cuentas bancarias, el switch fiscal de facturación se activará automáticamente.
+                  </p>
+
+                  {/* Medios de Pago Estándar */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block px-0.5">
+                      Medios de Pago Estándar
+                    </span>
+                    <div className="space-y-1.5">
+                      {standardPaymentMethodOptions.map((item) => {
+                        const Icon = item.icon;
+                        const isMandatory = (draft.facturacion.payment_method_rules?.mandatory_methods || []).includes(item.key);
+                        const isDisabled = (draft.facturacion.payment_method_rules?.disabled_methods || []).includes(item.key);
+
+                        return (
+                          <div
+                            key={item.key}
+                            onClick={() => togglePaymentMethodInvoiceRule(item.key, "mandatory")}
+                            className={cn(
+                              "flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer select-none",
+                              isMandatory
+                                ? "border-emerald-500 bg-emerald-50 dark:border-emerald-500/80 dark:bg-emerald-950/40 shadow-xs ring-1 ring-emerald-500/30"
+                                : isDisabled
+                                  ? "border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 opacity-60 hover:opacity-100"
+                                  : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-emerald-300 dark:hover:border-emerald-700/60"
+                            )}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                              <div
+                                className={cn(
+                                  "p-1.5 rounded-md shrink-0",
+                                  isMandatory
+                                    ? "bg-emerald-600 text-white"
+                                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                                )}
+                              >
+                                <Icon className="h-3.5 w-3.5" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
+                                    {item.label}
+                                  </span>
+                                  {isDisabled && (
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                                      En deshabilitados
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                  {item.subtitle}
+                                </p>
+                              </div>
+                            </div>
+
+                            <input
+                              type="checkbox"
+                              checked={isMandatory}
+                              onChange={() => togglePaymentMethodInvoiceRule(item.key, "mandatory")}
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 dark:border-slate-600 dark:bg-slate-800 cursor-pointer shrink-0"
+                              disabled={!canWriteConfiguracion}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Cuentas Bancarias Receptoras Dinámicas */}
+                  <div className="space-y-1.5 pt-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block px-0.5">
+                      Bancos Receptores Registrados (Dinámicos)
+                    </span>
+                    {activeBankAccounts.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 p-3 text-center">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          No hay cuentas bancarias activas registradas en el catálogo contable.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {activeBankAccounts.map((account) => {
+                          const accountKey = `bank_account:${account.id}`;
+                          const isMandatory = (draft.facturacion.payment_method_rules?.mandatory_methods || []).includes(accountKey);
+                          const isDisabled = (draft.facturacion.payment_method_rules?.disabled_methods || []).includes(accountKey);
+                          const holderText = account.holder_name ? ` • Titular: ${account.holder_name}` : "";
+                          const detailText = account.alias ? `Alias: ${account.alias}` : account.cbu ? `CBU: ...${account.cbu.slice(-6)}` : account.account_type.replace("_", " ");
+
+                          return (
+                            <div
+                              key={accountKey}
+                              onClick={() => togglePaymentMethodInvoiceRule(accountKey, "mandatory")}
+                              className={cn(
+                                "flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer select-none",
+                                isMandatory
+                                  ? "border-emerald-500 bg-emerald-50 dark:border-emerald-500/80 dark:bg-emerald-950/40 shadow-xs ring-1 ring-emerald-500/30"
+                                  : isDisabled
+                                    ? "border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 opacity-60 hover:opacity-100"
+                                    : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-emerald-300 dark:hover:border-emerald-700/60"
+                              )}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                <div
+                                  className={cn(
+                                    "p-1.5 rounded-md shrink-0",
+                                    isMandatory
+                                      ? "bg-emerald-600 text-white"
+                                      : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                                  )}
+                                >
+                                  <Landmark className="h-3.5 w-3.5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
+                                      Transferencia: {account.bank_name}
+                                    </span>
+                                    {isDisabled && (
+                                      <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                                        En deshabilitados
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                    {detailText}{holderText}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <input
+                                type="checkbox"
+                                checked={isMandatory}
+                                onChange={() => togglePaymentMethodInvoiceRule(accountKey, "mandatory")}
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 dark:border-slate-600 dark:bg-slate-800 cursor-pointer shrink-0"
+                                disabled={!canWriteConfiguracion}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* COLUMNA 2: FACTURACIÓN DESHABILITADA */}
+                <div className="rounded-xl border border-rose-200/90 bg-rose-50/20 p-4 dark:border-rose-800/60 dark:bg-rose-950/20 space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-rose-100 dark:border-rose-900/40 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Ban className="text-rose-600 dark:text-rose-400 h-4 w-4" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-rose-900 dark:text-rose-200">
+                        Facturación Deshabilitada
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-semibold text-rose-700 dark:text-rose-300">
+                      Apaga y bloquea switch en POS
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Al cobrar con estos medios o cuentas bancarias, el switch de Facturación se apagará y bloqueará para impedir comprobantes no deseados.
+                  </p>
+
+                  {/* Medios de Pago Estándar */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block px-0.5">
+                      Medios de Pago Estándar
+                    </span>
+                    <div className="space-y-1.5">
+                      {standardPaymentMethodOptions.map((item) => {
+                        const Icon = item.icon;
+                        const isMandatory = (draft.facturacion.payment_method_rules?.mandatory_methods || []).includes(item.key);
+                        const isDisabled = (draft.facturacion.payment_method_rules?.disabled_methods || []).includes(item.key);
+
+                        return (
+                          <div
+                            key={item.key}
+                            onClick={() => togglePaymentMethodInvoiceRule(item.key, "disabled")}
+                            className={cn(
+                              "flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer select-none",
+                              isDisabled
+                                ? "border-rose-500 bg-rose-50 dark:border-rose-500/80 dark:bg-rose-950/40 shadow-xs ring-1 ring-rose-500/30"
+                                : isMandatory
+                                  ? "border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 opacity-60 hover:opacity-100"
+                                  : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-rose-300 dark:hover:border-rose-700/60"
+                            )}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                              <div
+                                className={cn(
+                                  "p-1.5 rounded-md shrink-0",
+                                  isDisabled
+                                    ? "bg-rose-600 text-white"
+                                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                                )}
+                              >
+                                <Icon className="h-3.5 w-3.5" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
+                                    {item.label}
+                                  </span>
+                                  {isMandatory && (
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                      En obligatorios
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                  {item.subtitle}
+                                </p>
+                              </div>
+                            </div>
+
+                            <input
+                              type="checkbox"
+                              checked={isDisabled}
+                              onChange={() => togglePaymentMethodInvoiceRule(item.key, "disabled")}
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-4 w-4 rounded text-rose-600 focus:ring-rose-500 dark:border-slate-600 dark:bg-slate-800 cursor-pointer shrink-0"
+                              disabled={!canWriteConfiguracion}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Cuentas Bancarias Receptoras Dinámicas */}
+                  <div className="space-y-1.5 pt-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block px-0.5">
+                      Bancos Receptores Registrados (Dinámicos)
+                    </span>
+                    {activeBankAccounts.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 p-3 text-center">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          No hay cuentas bancarias activas registradas en el catálogo contable.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {activeBankAccounts.map((account) => {
+                          const accountKey = `bank_account:${account.id}`;
+                          const isMandatory = (draft.facturacion.payment_method_rules?.mandatory_methods || []).includes(accountKey);
+                          const isDisabled = (draft.facturacion.payment_method_rules?.disabled_methods || []).includes(accountKey);
+                          const holderText = account.holder_name ? ` • Titular: ${account.holder_name}` : "";
+                          const detailText = account.alias ? `Alias: ${account.alias}` : account.cbu ? `CBU: ...${account.cbu.slice(-6)}` : account.account_type.replace("_", " ");
+
+                          return (
+                            <div
+                              key={accountKey}
+                              onClick={() => togglePaymentMethodInvoiceRule(accountKey, "disabled")}
+                              className={cn(
+                                "flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer select-none",
+                                isDisabled
+                                  ? "border-rose-500 bg-rose-50 dark:border-rose-500/80 dark:bg-rose-950/40 shadow-xs ring-1 ring-rose-500/30"
+                                  : isMandatory
+                                    ? "border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 opacity-60 hover:opacity-100"
+                                    : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-rose-300 dark:hover:border-rose-700/60"
+                              )}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                <div
+                                  className={cn(
+                                    "p-1.5 rounded-md shrink-0",
+                                    isDisabled
+                                      ? "bg-rose-600 text-white"
+                                      : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                                  )}
+                                >
+                                  <Landmark className="h-3.5 w-3.5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
+                                      Transferencia: {account.bank_name}
+                                    </span>
+                                    {isMandatory && (
+                                      <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                        En obligatorios
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                    {detailText}{holderText}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <input
+                                type="checkbox"
+                                checked={isDisabled}
+                                onChange={() => togglePaymentMethodInvoiceRule(accountKey, "disabled")}
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-4 w-4 rounded text-rose-600 focus:ring-rose-500 dark:border-slate-600 dark:bg-slate-800 cursor-pointer shrink-0"
+                                disabled={!canWriteConfiguracion}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* REQUISITOS OBLIGATORIOS PARA CLIENTES Y PROVEEDORES */}
             <div className="md:col-span-2 space-y-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-700/80 dark:bg-slate-800/40">
               <div className="flex items-center gap-2">
                 <Users className="text-blue-600 dark:text-blue-400" size={18} />
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                    Requisitos de Registro de Clientes y Proveedores
+                    5. Requisitos de Registro de Clientes y Proveedores
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     Configurá qué campos son obligatorios al crear o editar clientes y proveedores (desde POS, Clientes, Cuentas Corrientes y Proveedores).

@@ -51,6 +51,7 @@ export type {
   CustomerRequiredFieldsSettings,
   SupplierRequiredFieldsSettings,
   EntityRequirementsSettings,
+  PaymentMethodInvoiceRules,
   FacturacionSettings,
   ArcaMode,
   ArcaFiscalEnvironment,
