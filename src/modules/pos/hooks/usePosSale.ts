@@ -74,6 +74,8 @@ export interface PosCartItem {
   debt_customer_name?: string | null;
   returnable_config?: ReturnableConfig | null;
   returnable_status?: ReturnableCartStatus;
+  is_returnable_package_item?: boolean;
+  parent_product_id?: string | null;
   code?: string | null;
   barcode?: string | null;
   manual_discount?: {
@@ -1141,10 +1143,8 @@ export const usePosSale = (tenantId: string | null) => {
         };
       }
 
-      const returnableSurcharge =
-        item.returnable_status === "charge" && item.returnable_config
-          ? roundAmount(item.returnable_config.packagePrice * item.quantity)
-          : 0;
+      // Los cobros de envase se agregan como ítems independientes en el carrito
+      const returnableSurcharge = 0;
 
       const grossLine = roundAmount(item.quantity * item.unit_price);
 
@@ -1328,16 +1328,23 @@ export const usePosSale = (tenantId: string | null) => {
     [cartState]
   );
 
+  const hasOwedReturnables = useMemo(
+    () => cart.some((i) => i.returnable_config?.enabled && i.returnable_status === "owe"),
+    [cart]
+  );
+
+  const owedReturnablesCount = useMemo(
+    () =>
+      cart
+        .filter((i) => i.returnable_config?.enabled && i.returnable_status === "owe")
+        .reduce((sum, i) => sum + i.quantity, 0),
+    [cart]
+  );
+
   const subtotalBeforePromotions = useMemo(
     () =>
       roundAmount(
-        cartState.reduce((acc, item) => {
-          const returnableSurcharge =
-            item.returnable_status === "charge" && item.returnable_config
-              ? roundAmount(item.returnable_config.packagePrice * item.quantity)
-              : 0;
-          return acc + item.unit_price * item.quantity + returnableSurcharge;
-        }, 0)
+        cartState.reduce((acc, item) => acc + item.unit_price * item.quantity, 0)
       ),
     [cartState]
   );
@@ -1575,7 +1582,14 @@ export const usePosSale = (tenantId: string | null) => {
         };
 
         // El producto recién escaneado se mueve arriba de todo para visibilidad inmediata
-        return [updatedItem, ...prev.filter((item) => item.product_id !== product.id)];
+        const packageId = `returnable-pkg-${product.id}`;
+        const rest = prev.filter((item) => item.product_id !== product.id);
+        const mappedRest = rest.map((item) =>
+          item.product_id === packageId
+            ? { ...item, quantity: updatedItem.quantity }
+            : item
+        );
+        return [updatedItem, ...mappedRest];
       }
 
       const returnableConfig = parseReturnableConfig(product.description);
@@ -1722,40 +1736,72 @@ export const usePosSale = (tenantId: string | null) => {
 
   const cycleReturnableStatus = useCallback(
     (productId: string) => {
-      setCartState((prev) =>
-        prev.map((item) => {
-          if (item.product_id !== productId || !item.returnable_config?.enabled) {
-            return item;
-          }
+      setCartState((prev) => {
+        const targetIndex = prev.findIndex((item) => item.product_id === productId);
+        if (targetIndex === -1) return prev;
+        const targetItem = prev[targetIndex];
+        if (!targetItem.returnable_config?.enabled) return prev;
 
-          const currentStatus = item.returnable_status ?? "exchange";
-          let nextStatus: ReturnableCartStatus = "exchange";
+        const currentStatus = targetItem.returnable_status ?? "exchange";
+        let nextStatus: ReturnableCartStatus = "exchange";
 
-          if (currentStatus === "exchange") {
-            nextStatus = "charge";
-          } else if (currentStatus === "charge") {
-            if (!selectedCustomerId) {
-              setFeedback({
-                type: "error",
-                message:
-                  "Para anotar el envase en cuenta corriente, selecciona primero al cliente en la venta.",
-              });
-              nextStatus = "exchange";
-            } else {
-              nextStatus = "owe";
-            }
-          } else {
-            nextStatus = "exchange";
-          }
+        if (currentStatus === "exchange") {
+          nextStatus = "charge";
+        } else if (currentStatus === "charge") {
+          nextStatus = "owe";
+        } else {
+          nextStatus = "exchange";
+        }
 
-          return {
-            ...item,
-            returnable_status: nextStatus,
+        const packageId = `returnable-pkg-${productId}`;
+        // Filtrar cualquier ítem de cobro de envase previo para este producto padre
+        const withoutOldPkg = prev.filter((item) => item.product_id !== packageId);
+
+        const updatedTarget: PosCartItem = {
+          ...targetItem,
+          returnable_status: nextStatus,
+        };
+
+        if (nextStatus === "charge") {
+          const pkgItem: PosCartItem = {
+            product_id: packageId,
+            name: `Envase: ${targetItem.returnable_config.packageName}`,
+            category: "Envases",
+            sale_mode: "unit",
+            quantity: targetItem.quantity,
+            unit_price: targetItem.returnable_config.packagePrice,
+            base_unit_price: targetItem.returnable_config.packagePrice,
+            stock_available: Number.MAX_SAFE_INTEGER,
+            price_list_id: null,
+            price_list_name: null,
+            price_list_is_active: null,
+            is_scale_item: false,
+            scale_weight: null,
+            scale_total_price: null,
+            scale_barcode: null,
+            is_manual_item: true,
+            is_returnable_package_item: true,
+            parent_product_id: productId,
           };
-        })
-      );
+
+          const result: PosCartItem[] = [];
+          for (const item of withoutOldPkg) {
+            if (item.product_id === productId) {
+              result.push(updatedTarget);
+              result.push(pkgItem);
+            } else {
+              result.push(item);
+            }
+          }
+          return result;
+        }
+
+        return withoutOldPkg.map((item) =>
+          item.product_id === productId ? updatedTarget : item
+        );
+      });
     },
-    [selectedCustomerId]
+    []
   );
 
   const createProductFromPosAndAddToCart = useCallback(
@@ -2221,14 +2267,22 @@ export const usePosSale = (tenantId: string | null) => {
         return prev;
       }
 
-      return prev.map((item) =>
-        item.product_id === productId
-          ? {
-              ...item,
-              quantity: normalizedQty,
-            }
-          : item
-      );
+      const packageId = `returnable-pkg-${productId}`;
+      return prev.map((item) => {
+        if (item.product_id === productId) {
+          return {
+            ...item,
+            quantity: normalizedQty,
+          };
+        }
+        if (item.product_id === packageId || item.parent_product_id === productId) {
+          return {
+            ...item,
+            quantity: normalizedQty,
+          };
+        }
+        return item;
+      });
     });
   };
 
@@ -2320,7 +2374,23 @@ export const usePosSale = (tenantId: string | null) => {
 
   const removeFromCart = (productId: string) => {
     setCartState((prev) => {
-      const next = prev.filter((item) => item.product_id !== productId);
+      const target = prev.find((item) => item.product_id === productId);
+      const packageId = `returnable-pkg-${productId}`;
+
+      let next = prev.filter(
+        (item) => item.product_id !== productId && item.product_id !== packageId && item.parent_product_id !== productId
+      );
+
+      // Si el ítem eliminado era un cobro de envase vinculado a un producto padre,
+      // revertir el estado del producto padre a "exchange" (Trajo envase)
+      if (target?.is_returnable_package_item && target.parent_product_id) {
+        next = next.map((item) =>
+          item.product_id === target.parent_product_id
+            ? { ...item, returnable_status: "exchange" as const }
+            : item
+        );
+      }
+
       if (next.length === 0) {
         setCartManualDiscount(null);
         setRoundingEnabled(posSettings?.rounding_enabled ?? true);
@@ -3135,7 +3205,9 @@ export const usePosSale = (tenantId: string | null) => {
           !item.product_id.startsWith("manual-") &&
           !item.product_id.startsWith("temp-") &&
           !item.is_debt_payment_item &&
-          !item.product_id.startsWith("debt-")
+          !item.product_id.startsWith("debt-") &&
+          !item.is_returnable_package_item &&
+          !item.product_id.startsWith("returnable-pkg-")
         ) {
           if (item.is_promo_item && item.promo_items?.length) {
             // Descontar stock correspondiente de cada artículo interno del pack o combo
@@ -3206,7 +3278,9 @@ export const usePosSale = (tenantId: string | null) => {
             item.product_id.startsWith("manual-") ||
             item.product_id.startsWith("temp-") ||
             item.is_debt_payment_item ||
-            item.product_id.startsWith("debt-")
+            item.product_id.startsWith("debt-") ||
+            item.is_returnable_package_item ||
+            item.product_id.startsWith("returnable-pkg-")
           ) {
             return itemPromise;
           }
@@ -3291,23 +3365,27 @@ export const usePosSale = (tenantId: string | null) => {
           (i) => i.returnable_config?.enabled && i.returnable_status === "owe"
         );
 
-        if (oweReturnableItems.length > 0 && selectedCustomer) {
+        const targetCustomer =
+          (values.customerId ? customers.find((c) => c.id === values.customerId) : null) ||
+          selectedCustomer;
+
+        if (oweReturnableItems.length > 0 && targetCustomer) {
           try {
-            const currentDebts = parseCustomerPackageDebts(selectedCustomer.observations);
+            const currentDebts = parseCustomerPackageDebts(targetCustomer.observations);
             for (const item of oweReturnableItems) {
               const pkgName = item.returnable_config!.packageName;
               currentDebts[pkgName] = (currentDebts[pkgName] ?? 0) + item.quantity;
             }
             const updatedObservations = serializeCustomerPackageDebts(
-              selectedCustomer.observations,
+              targetCustomer.observations,
               currentDebts
             );
-            await customersService.update(tenantId, selectedCustomer.id, {
+            await customersService.update(tenantId, targetCustomer.id, {
               observations: updatedObservations,
             });
             setCustomers((prevCustomers) =>
               prevCustomers.map((c) =>
-                c.id === selectedCustomer.id
+                c.id === targetCustomer.id
                   ? { ...c, observations: updatedObservations }
                   : c
               )
@@ -3664,6 +3742,16 @@ export const usePosSale = (tenantId: string | null) => {
       );
 
       // 5. Creación del comprobante / ticket
+      const oweItems = cart.filter(
+        (i) => i.returnable_config?.enabled && i.returnable_status === "owe"
+      );
+      const oweNotes =
+        oweItems.length > 0
+          ? `Envases adeudados: ${oweItems
+              .map((i) => `${i.quantity}x ${i.returnable_config?.packageName || "Envase"}`)
+              .join(", ")}`
+          : null;
+
       const receiptPayload = {
         sale_id: sale.id,
         sale_number: sale.sale_number,
@@ -3690,6 +3778,7 @@ export const usePosSale = (tenantId: string | null) => {
           summary.roundingAdjustment !== 0
             ? `Redondeo comercial: ${summary.roundingAdjustment > 0 ? "+" : ""}$${summary.roundingAdjustment.toFixed(2)}`
             : null,
+          oweNotes,
           values.notes?.trim() || null,
         ]
           .filter(Boolean)
@@ -4071,6 +4160,8 @@ export const usePosSale = (tenantId: string | null) => {
     removeFromCart,
     clearCart,
     cycleReturnableStatus,
+    hasOwedReturnables,
+    owedReturnablesCount,
     createOriginBank,
     mercadoPagoIntent,
     startMercadoPagoPayment,

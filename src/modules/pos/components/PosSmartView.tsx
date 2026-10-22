@@ -672,6 +672,11 @@ export const PosSmartView = ({
                           Cobro Cta. Cte.
                         </span>
                       ) : null}
+                      {"is_returnable_package_item" in item && item.is_returnable_package_item ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/60">
+                          📦 Cobro de Envase
+                        </span>
+                      ) : null}
                       {"is_promo_item" in item && item.is_promo_item ? (
                         <span className="inline-flex items-center gap-1 rounded-md bg-purple-100 dark:bg-purple-950/60 px-1.5 py-0.5 text-[10px] font-bold text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800/60">
                           <Sparkles size={10} />
@@ -758,7 +763,7 @@ export const PosSmartView = ({
                               ? "bg-purple-100 text-purple-900 border-purple-300 dark:bg-purple-950/70 dark:text-purple-200 dark:border-purple-700 hover:bg-purple-200 dark:hover:bg-purple-900"
                               : "bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950/70 dark:text-emerald-200 dark:border-emerald-700 hover:bg-emerald-200 dark:hover:bg-emerald-900"
                           )}
-                          title="Hacé clic para cambiar: Canje mano a mano / Cobrar envase / Anotar en cuenta corriente"
+                          title="Hacé clic para cambiar estado: Trajo envase / Cobrar envase / Anotar envase"
                         >
                           {item.returnable_status === "charge" ? (
                             <>
@@ -769,13 +774,13 @@ export const PosSmartView = ({
                             </>
                           ) : item.returnable_status === "owe" ? (
                             <>
-                              <span>📝 Debe envase</span>
+                              <span>📝 Anotar envase</span>
                               <span className="font-normal text-[10px]">(Cta. Cte.)</span>
                             </>
                           ) : (
                             <>
-                              <span>🔄 Canje</span>
-                              <span className="font-normal text-[10px]">(Trajo envase)</span>
+                              <span>✓ Trajo envase</span>
+                              <span className="font-normal text-[10px]">(Canje)</span>
                             </>
                           )}
                         </button>
@@ -788,6 +793,10 @@ export const PosSmartView = ({
                     {item.is_debt_payment_item ? (
                       <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60">
                         Pago único
+                      </span>
+                    ) : "is_returnable_package_item" in item && item.is_returnable_package_item ? (
+                      <span className="text-[11px] font-bold text-amber-700 dark:text-amber-300 px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60">
+                        {item.quantity} {item.quantity === 1 ? "envase" : "envases"}
                       </span>
                     ) : (
                       <div className="flex items-center h-8 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-2xs overflow-hidden">
@@ -914,7 +923,7 @@ export const PosSmartView = ({
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      {!item.is_debt_payment_item && onOpenItemPromoModal ? (
+                      {!item.is_debt_payment_item && !("is_returnable_package_item" in item && item.is_returnable_package_item) && onOpenItemPromoModal ? (
                         <button
                           type="button"
                           onClick={() => onOpenItemPromoModal(item as PosCartItemComputed)}
@@ -941,20 +950,22 @@ export const PosSmartView = ({
                         </button>
                       ) : null}
 
-                      <button
-                        type="button"
-                        onClick={() => onEdit(item)}
-                        disabled={disabled || !canWrite}
-                        className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 text-xs font-semibold transition disabled:opacity-40"
-                      >
-                        Editar
-                      </button>
+                      {!Boolean("is_returnable_package_item" in item && item.is_returnable_package_item) && (
+                        <button
+                          type="button"
+                          onClick={() => onEdit(item)}
+                          disabled={disabled || !canWrite}
+                          className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 text-xs font-semibold transition disabled:opacity-40"
+                        >
+                          Editar
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => onRemove(item.product_id)}
                         disabled={disabled || !canWrite}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition disabled:opacity-40"
-                        title="Eliminar producto"
+                        title={"is_returnable_package_item" in item && item.is_returnable_package_item ? "Quitar cobro de envase" : "Eliminar producto"}
                       >
                         <Trash2 size={15} />
                       </button>

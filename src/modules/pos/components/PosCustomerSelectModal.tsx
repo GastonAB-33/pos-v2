@@ -15,6 +15,8 @@ interface PosCustomerSelectModalProps {
   onOpenCreateCustomer: (initialName?: string) => void;
   onEditCustomer?: (customer: Customer, defaultTab?: "personal" | "fiscal" | "account") => void;
   employeeDiscountPercent?: number;
+  title?: string;
+  subtitle?: string;
 }
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -35,6 +37,8 @@ export const PosCustomerSelectModal = ({
   onOpenCreateCustomer,
   onEditCustomer,
   employeeDiscountPercent = 10,
+  title,
+  subtitle,
 }: PosCustomerSelectModalProps) => {
   const [activeTab, setActiveTab] = useState<"customers" | "employees">(
     selectedEmployeeId ? "employees" : "customers"
@@ -177,10 +181,10 @@ export const PosCustomerSelectModal = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Seleccionar Cliente o Empleado
+                {title || "Seleccionar Cliente o Empleado"}
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Para cuenta corriente o asignación de venta directa
+                {subtitle || "Para cuenta corriente o asignación de venta directa"}
               </p>
             </div>
           </div>

@@ -234,6 +234,8 @@ export const PosPage = () => {
     decreaseQuantity,
     removeFromCart,
     cycleReturnableStatus,
+    hasOwedReturnables,
+    owedReturnablesCount,
     createOriginBank,
     mercadoPagoIntent,
     startMercadoPagoPayment,
@@ -2017,6 +2019,7 @@ export const PosPage = () => {
                   onSetQuantity={setCartItemQuantity}
                   onEdit={(item) => setEditingCartItemId(item.product_id)}
                   onRemove={removeFromCart}
+                  onCycleReturnableStatus={cycleReturnableStatus}
                   onClearCart={() => {
                     clearCart();
                     setSearchResetToken((prev) => prev + 1);
@@ -2128,6 +2131,8 @@ export const PosPage = () => {
               canWrite={canWritePos}
               canManageCustomers={canWriteCustomers}
               currentAccountSnapshot={currentAccountSnapshot}
+              hasOwedReturnables={hasOwedReturnables}
+              owedReturnablesCount={owedReturnablesCount}
               disabled={isSubmitting || isCashGateBlocking}
               arcaEnabled={arcaEnabledForPos}
               arcaMode={arcaSettings.mode}

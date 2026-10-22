@@ -38,6 +38,7 @@ import type {
   PosPaymentSplitItem,
 } from "@/modules/pos/schemas/pos-checkout.schema";
 import { PosCustomerSelectModal } from "./PosCustomerSelectModal";
+import { cn } from "@/utils/cn";
 
 interface PosCheckoutPanelProps {
   panelId?: string;
@@ -71,6 +72,8 @@ interface PosCheckoutPanelProps {
     available: number | null;
   } | null;
   hasDebtPaymentInCart?: boolean;
+  hasOwedReturnables?: boolean;
+  owedReturnablesCount?: number;
   disabled?: boolean;
   onCustomerChange: (customerId: string) => void;
   onSelectEmployee?: (employee: Employee | null) => void;
@@ -132,6 +135,7 @@ interface PosPaymentOption {
 
 export const PosCheckoutPanel = ({
   formId,
+  layout = "modal",
   customers,
   employees = [],
   paymentMethods,
@@ -152,6 +156,8 @@ export const PosCheckoutPanel = ({
   canWrite,
   currentAccountSnapshot,
   hasDebtPaymentInCart: _hasDebtPaymentInCart = false,
+  hasOwedReturnables = false,
+  owedReturnablesCount = 0,
   disabled,
   onCustomerChange,
   onSelectEmployee,
@@ -197,6 +203,14 @@ export const PosCheckoutPanel = ({
 
   // Modal para selección ágil de cliente
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const hasPromptedCustomerForReturnablesRef = useRef(false);
+
+  useEffect(() => {
+    if (layout === "modal" && hasOwedReturnables && !selectedCustomerId && !hasPromptedCustomerForReturnablesRef.current) {
+      hasPromptedCustomerForReturnablesRef.current = true;
+      setIsCustomerModalOpen(true);
+    }
+  }, [layout, hasOwedReturnables, selectedCustomerId]);
 
   // Cuentas bancarias configuradas y habilitadas para POS
   const posBankAccounts = useMemo(() => {
@@ -727,6 +741,15 @@ export const PosCheckoutPanel = ({
         return;
       }
 
+      // Validar si hay envases adeudados que requieren asignación obligatoria de cliente
+      if (hasOwedReturnables && !selectedCustomer) {
+        setSubmitError(
+          `Hay ${owedReturnablesCount > 1 ? `${owedReturnablesCount} envases` : "un envase"} para anotar. Debes seleccionar al cliente para registrar la deuda de envases antes de finalizar la venta.`
+        );
+        setIsCustomerModalOpen(true);
+        return;
+      }
+
       // Validar si cuenta corriente está usada y requiere cliente o empleado
       if (isCurrentAccountUsed && !selectedCustomer && !selectedEmployee) {
         setSubmitError("Debes seleccionar un cliente o empleado para cobrar con cuenta corriente.");
@@ -1242,6 +1265,41 @@ export const PosCheckoutPanel = ({
         </div>
       </div>
 
+      {/* AVISO DESTACADO DE ENVASES ADEUDADOS / PARA ANOTAR */}
+      {hasOwedReturnables && (
+        <div
+          className={cn(
+            "flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border text-xs font-medium shadow-2xs",
+            selectedCustomer
+              ? "bg-purple-50 dark:bg-purple-950/40 border-purple-300 dark:border-purple-700/80 text-purple-950 dark:text-purple-200"
+              : "bg-amber-50 dark:bg-amber-950/50 border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-200"
+          )}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-base shrink-0">{selectedCustomer ? "📦" : "⚠️"}</span>
+            <div className="min-w-0">
+              <span className="font-bold">
+                {selectedCustomer ? "Envases adeudados:" : "Atención (Envases adeudados):"}
+              </span>{" "}
+              <span>
+                {selectedCustomer
+                  ? `Se registrarán ${owedReturnablesCount > 1 ? `${owedReturnablesCount} envases` : "1 envase"} adeudados en la cuenta corriente de ${selectedCustomer.full_name}.`
+                  : `Hay ${owedReturnablesCount > 1 ? `${owedReturnablesCount} envases` : "1 envase"} para anotar. Debes seleccionar al cliente antes de finalizar.`}
+              </span>
+            </div>
+          </div>
+          {!selectedCustomer ? (
+            <button
+              type="button"
+              onClick={() => setIsCustomerModalOpen(true)}
+              className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shrink-0 cursor-pointer shadow-xs transition"
+            >
+              ¿Quién es el cliente?
+            </button>
+          ) : null}
+        </div>
+      )}
+
       {/* PANEL UNIFICADO DE CLIENTE Y FACTURA AFIP (COMPACTO Y MISMO TAMAÑO ASIGNADO O NO) */}
       <div className="flex items-center justify-between gap-2.5 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 min-h-[42px]">
         <div className="flex items-center gap-1.5 text-xs min-w-0 flex-1">
@@ -1663,6 +1721,12 @@ export const PosCheckoutPanel = ({
       {/* Modal Ágil de Búsqueda y Selección de Cliente / Empleado */}
       <PosCustomerSelectModal
         isOpen={isCustomerModalOpen}
+        title={hasOwedReturnables && !selectedCustomer ? "¿Quién es el cliente?" : undefined}
+        subtitle={
+          hasOwedReturnables && !selectedCustomer
+            ? "Hay envases para anotar que se registrarán en la cuenta corriente del cliente."
+            : undefined
+        }
         customers={customers}
         employees={employees}
         selectedCustomerId={selectedCustomerId}
