@@ -28,13 +28,18 @@ export const salesService = {
     if (
       resolvedProductId.startsWith("manual-") ||
       resolvedProductId.startsWith("temp-") ||
-      resolvedProductId.startsWith("debt-")
+      resolvedProductId.startsWith("debt-") ||
+      resolvedProductId.startsWith("returnable-pkg-")
     ) {
       const specialCode = resolvedProductId.startsWith("debt-")
         ? "SISTEMA_COBRO_CTA_CTE"
+        : resolvedProductId.startsWith("returnable-pkg-")
+        ? "SISTEMA_COBRO_ENVASE"
         : "SISTEMA_VENTA_MANUAL";
       const specialName = resolvedProductId.startsWith("debt-")
         ? "Cobro Cuenta Corriente"
+        : resolvedProductId.startsWith("returnable-pkg-")
+        ? "Cobro de Envase Retornable"
         : "Venta Manual / Producto Temporal";
 
       const specialProduct = await productsService.ensureSpecialProduct(

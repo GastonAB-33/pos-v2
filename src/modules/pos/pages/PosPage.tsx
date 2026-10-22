@@ -2181,6 +2181,9 @@ export const PosPage = () => {
         selectedCustomer={selectedCustomer}
         existingDebtItem={existingDebtItem}
         disabled={isSubmitting || isCashGateBlocking || !canWritePos}
+        tenantId={tenantId}
+        userId={resolvedOperatorUserId}
+        openCashSessionId={openCashSessionId}
         onClose={() => {
           setIsDebtPaymentModalOpen(false);
           window.setTimeout(() => {
@@ -2197,6 +2200,9 @@ export const PosPage = () => {
           triggerCartSuccessHighlight();
         }}
         onRemoveExisting={removeDebtPaymentFromCart}
+        onCustomerUpdated={(updated) => {
+          upsertCustomer(updated);
+        }}
       />
 
       <PosQuickProductModal

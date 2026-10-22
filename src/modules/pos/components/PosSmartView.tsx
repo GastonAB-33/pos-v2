@@ -1298,10 +1298,10 @@ export const PosSmartView = ({
                       ? "border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-600/80 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/60"
                       : "border-indigo-200 bg-indigo-50/80 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-700/70 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-900/60"
                   )}
-                  title={hasDebtPaymentInCart ? "Modificar cobro de cuenta corriente" : "Agregar cobro de deuda de cuenta corriente al carrito"}
+                  title={hasDebtPaymentInCart ? "Modificar cobro de cuenta corriente" : "Cobrar deuda de cuenta corriente o registrar devolución de envases"}
                 >
                   <Coins size={14} className={hasDebtPaymentInCart ? "text-amber-600 dark:text-amber-400" : "text-indigo-600 dark:text-indigo-400"} />
-                  <span>{hasDebtPaymentInCart ? "Editar deuda" : "Cobrar deuda"}</span>
+                  <span>{hasDebtPaymentInCart ? "Editar deuda" : "Cobrar deuda / Envases"}</span>
                 </button>
               ) : null}
             </div>
