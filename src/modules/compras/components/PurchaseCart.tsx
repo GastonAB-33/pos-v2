@@ -1,7 +1,29 @@
-import { useEffect, useState } from "react";
-import { ArrowRight, Gift, Package, PackagePlus, Percent, Plus, ShoppingBag, Tag, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Barcode,
+  CheckCircle2,
+  DollarSign,
+  Gift,
+  Loader2,
+  Lock,
+  Package,
+  PackagePlus,
+  Percent,
+  Receipt,
+  Search,
+  ShoppingBag,
+  Tag,
+  Trash2,
+  X,
+} from "lucide-react";
 import { handleNumericInputFocus } from "@/utils/input-helpers";
 import { DualRateAmountInput, type RateAmountMode } from "@/components/ui/DualRateAmountInput";
+import { matchesProductSearch } from "@/utils/search";
+import type { Product } from "@/types/entities";
+import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
+import { cn } from "@/utils/cn";
 
 export interface PurchaseCartItemView {
   product_id: string;
@@ -26,6 +48,8 @@ export interface PurchaseSummary {
   vatTotal: number;
   iibbPercent?: number;
   iibbTotal?: number;
+  extraTaxAmount?: number;
+  extraTaxTotal?: number;
   total: number;
   totalUnits: number;
   totalDiscountAmount?: number;
@@ -35,6 +59,7 @@ interface PurchaseCartProps {
   items: PurchaseCartItemView[];
   summary: PurchaseSummary;
   canWrite: boolean;
+  canAdjustProfitMargin?: boolean;
   disabled?: boolean;
   formId?: string;
   vatPercent?: number;
@@ -43,6 +68,8 @@ interface PurchaseCartProps {
   onIibbPercentChange?: (iibb: number) => void;
   iibbAmount?: number;
   onIibbAmountChange?: (amount: number) => void;
+  extraTaxAmount?: number;
+  onExtraTaxAmountChange?: (amount: number) => void;
   onSetQuantity: (productId: string, quantity: number) => void;
   onSetUnitCost: (productId: string, unitCost: number) => void;
   onSetDiscountPercent?: (productId: string, discountPercent: number) => void;
@@ -52,8 +79,11 @@ interface PurchaseCartProps {
   onSetBonifiedQuantity: (productId: string, bonifiedQty: number) => void;
   onSetUpdateSalePrice?: (productId: string, update: boolean) => void;
   onRemove: (productId: string) => void;
-  onOpenAddProductModal?: () => void;
-  onOpenCreateProductModal?: () => void;
+  onOpenCreateProductModal?: (initialCode?: string) => void;
+  products?: Product[];
+  barcodesByProductId?: Map<string, string[]>;
+  onAddProduct?: (product: Product, quantity?: number) => void;
+  onBarcodeScan?: (barcode: string) => Promise<{ ok: boolean; product?: Product; error?: string }>;
 }
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -75,6 +105,7 @@ export const PurchaseCart = ({
   items,
   summary,
   canWrite,
+  canAdjustProfitMargin = true,
   disabled,
   formId = "purchase-checkout-form",
   vatPercent = 0,
@@ -83,6 +114,8 @@ export const PurchaseCart = ({
   onIibbPercentChange,
   iibbAmount = 0,
   onIibbAmountChange,
+  extraTaxAmount = 0,
+  onExtraTaxAmountChange,
   onSetQuantity,
   onSetUnitCost,
   onSetDiscountPercent,
@@ -92,9 +125,213 @@ export const PurchaseCart = ({
   onSetBonifiedQuantity,
   onSetUpdateSalePrice,
   onRemove,
-  onOpenAddProductModal,
   onOpenCreateProductModal,
+  products = [],
+  barcodesByProductId,
+  onAddProduct,
+  onBarcodeScan,
 }: PurchaseCartProps) => {
+  // Buscador y escáner inline
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [isScanning, setIsScanning] = useState(false);
+  const [notFoundCode, setNotFoundCode] = useState<string | null>(null);
+  const [scanFeedback, setScanFeedback] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+
+  // Auto-dismiss scan feedback after 3s
+  useEffect(() => {
+    if (!scanFeedback) return;
+    const t = setTimeout(() => setScanFeedback(null), 3000);
+    return () => clearTimeout(t);
+  }, [scanFeedback]);
+
+  // Click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node) &&
+        searchInputRef.current &&
+        !searchInputRef.current.contains(e.target as Node)
+      ) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Global F2 shortcut to focus the product search input
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "F2") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Filtrado de productos en vivo
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim();
+    if (!q || !products.length) return [];
+    return products
+      .filter((p) =>
+        matchesProductSearch(
+          {
+            name: p.name,
+            code: p.code,
+            barcodes: barcodesByProductId?.get(p.id) ?? [],
+            category: p.category,
+            subcategory: p.subcategory,
+          },
+          q,
+          "all"
+        )
+      )
+      .slice(0, 8);
+  }, [searchQuery, products, barcodesByProductId]);
+
+  const handleSelectProduct = (product: Product) => {
+    if (disabled || !canWrite) return;
+    onAddProduct?.(product, 1);
+    setSearchQuery("");
+    setIsDropdownOpen(false);
+    setNotFoundCode(null);
+    setScanFeedback({
+      type: "success",
+      message: `${product.name} agregado`,
+    });
+    window.setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 50);
+  };
+
+  const handleTriggerCreateNew = () => {
+    const codeToUse = notFoundCode || searchQuery.trim() || undefined;
+    onOpenCreateProductModal?.(codeToUse);
+    setNotFoundCode(null);
+    setSearchQuery("");
+    setIsDropdownOpen(false);
+  };
+
+  const handleDirectBarcodeScan = async (scannedBarcode: string) => {
+    const raw = scannedBarcode.trim();
+    if (!raw || disabled || !canWrite) return;
+
+    setIsScanning(true);
+    setNotFoundCode(null);
+
+    try {
+      if (onBarcodeScan) {
+        const scanResult = await onBarcodeScan(raw);
+        if (scanResult.ok && scanResult.product) {
+          setSearchQuery("");
+          setIsDropdownOpen(false);
+          setNotFoundCode(null);
+          setScanFeedback({
+            type: "success",
+            message: `✓ ${scanResult.product.name} agregado a la compra`,
+          });
+          return;
+        }
+      }
+
+      // No se encontró ningún producto con ese código de barras
+      setNotFoundCode(raw);
+      setSearchQuery(raw);
+      setIsDropdownOpen(true);
+      setScanFeedback({
+        type: "error",
+        message: `Código "${raw}" no encontrado en el inventario`,
+      });
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  // Escaneo global de código de barras (estilo POS, no requiere foco previo en el buscador)
+  useBarcodeScanner({
+    enabled: Boolean(canWrite && !disabled),
+    onScan: (barcode) => {
+      void handleDirectBarcodeScan(barcode);
+    },
+  });
+
+  const handleSearchSubmit = async () => {
+    const query = searchQuery.trim();
+    if (!query || isScanning || disabled || !canWrite) return;
+
+    setIsScanning(true);
+    setNotFoundCode(null);
+
+    try {
+      // 1. Probar primero si coincide con código de barras o código directo
+      if (onBarcodeScan) {
+        const scanResult = await onBarcodeScan(query);
+        if (scanResult.ok && scanResult.product) {
+          setSearchQuery("");
+          setIsDropdownOpen(false);
+          setNotFoundCode(null);
+          setScanFeedback({
+            type: "success",
+            message: `${scanResult.product.name} agregado a la compra`,
+          });
+          window.setTimeout(() => {
+            searchInputRef.current?.focus();
+          }, 50);
+          return;
+        }
+      }
+
+      // 2. Si no fue código exacto pero hay coincidencia en el dropdown
+      if (searchResults.length > 0) {
+        const target = searchResults[selectedIndex] ?? searchResults[0];
+        handleSelectProduct(target);
+        return;
+      }
+
+      // 3. No se encontró ningún producto
+      setNotFoundCode(query);
+      setScanFeedback({
+        type: "error",
+        message: `Código "${query}" no encontrado en el inventario`,
+      });
+      setIsDropdownOpen(true);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!isDropdownOpen && searchResults.length > 0) {
+        setIsDropdownOpen(true);
+      }
+      setSelectedIndex((prev) => (prev < searchResults.length - 1 ? prev + 1 : 0));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : searchResults.length - 1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      void handleSearchSubmit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setIsDropdownOpen(false);
+      setSearchQuery("");
+    }
+  };
+
   const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
   const [costDrafts, setCostDrafts] = useState<Record<string, string>>({});
   const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
@@ -102,6 +339,7 @@ export const PurchaseCart = ({
   const [salePriceDrafts, setSalePriceDrafts] = useState<Record<string, string>>({});
   const [bonifiedDrafts, setBonifiedDrafts] = useState<Record<string, string>>({});
   const [vatDraft, setVatDraft] = useState<string | null>(null);
+  const [extraTaxDraft, setExtraTaxDraft] = useState<string | null>(null);
   const [iibbMode, setIibbMode] = useState<RateAmountMode>(
     iibbAmount > 0 ? "amount" : "percent"
   );
@@ -109,6 +347,10 @@ export const PurchaseCart = ({
   useEffect(() => {
     setVatDraft(null);
   }, [vatPercent]);
+
+  useEffect(() => {
+    setExtraTaxDraft(null);
+  }, [extraTaxAmount]);
 
   const getUnitLabel = (item: PurchaseCartItemView) =>
     item.sale_mode === "weight" ? "g" : "u.";
@@ -222,10 +464,10 @@ export const PurchaseCart = ({
   };
 
   return (
-    <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3.5 sm:p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 w-full max-w-full overflow-hidden">
-      {/* Header minimalista de la lista */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5 dark:border-slate-800">
-        <div className="flex items-center gap-2">
+    <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3.5 sm:p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 w-full max-w-full">
+      {/* Header con Buscador / Escáner directo y botón Nuevo producto */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+        <div className="flex items-center gap-2 shrink-0">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300">
             <Package className="h-4 w-4" />
           </div>
@@ -251,28 +493,187 @@ export const PurchaseCart = ({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          {onOpenAddProductModal && (
-            <button
-              type="button"
-              onClick={onOpenAddProductModal}
-              disabled={disabled || !canWrite}
-              className="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Agregar producto
-            </button>
-          )}
+        {/* Buscador y Escáner Inline + Botón Nuevo Producto */}
+        <div className="flex flex-1 items-center justify-start lg:justify-end gap-2.5 max-w-xl w-full">
+          <div className="relative flex-1 max-w-md w-full">
+            <div className="relative flex items-center h-10 w-full">
+              <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center text-slate-400 dark:text-slate-400 z-10">
+                {isScanning ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-brand-600 dark:text-brand-400" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+              </span>
+              <input
+                ref={searchInputRef}
+                type="text"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-lpignore="true"
+                data-scanner-capture="true"
+                value={searchQuery}
+                disabled={disabled || !canWrite}
+                placeholder="Buscar o escanear código (F2 / Enter)..."
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsDropdownOpen(true);
+                  setSelectedIndex(0);
+                  if (notFoundCode) setNotFoundCode(null);
+                }}
+                onFocus={() => {
+                  if (searchQuery.trim().length > 0) {
+                    setIsDropdownOpen(true);
+                  }
+                }}
+                onKeyDown={handleInputKeyDown}
+                className="w-full h-10 pl-10 pr-9 text-xs sm:text-sm font-medium rounded-xl border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950/80 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 dark:focus:border-brand-400 shadow-xs transition-colors"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setIsDropdownOpen(false);
+                    setNotFoundCode(null);
+                    searchInputRef.current?.focus();
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-1 rounded-md z-10"
+                  title="Limpiar búsqueda"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
 
+            {/* FEEDBACK DE ESCANEO / NOTIFICACIÓN RÁPIDA */}
+            {scanFeedback && (
+              <div
+                className={cn(
+                  "absolute left-0 top-full mt-1.5 z-40 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold shadow-lg border animate-in fade-in slide-in-from-top-1",
+                  scanFeedback.type === "success"
+                    ? "bg-emerald-50 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700"
+                    : "bg-amber-50 dark:bg-amber-950 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-700"
+                )}
+              >
+                {scanFeedback.type === "success" ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                )}
+                <span>{scanFeedback.message}</span>
+              </div>
+            )}
+
+            {/* DROPDOWN FLOTANTE DE RESULTADOS DE BÚSQUEDA */}
+            {isDropdownOpen && searchQuery.trim().length > 0 && (
+              <div
+                ref={dropdownRef}
+                className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-80 overflow-y-auto rounded-xl border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-2xl divide-y divide-slate-100 dark:divide-slate-800"
+              >
+                {searchResults.length > 0 ? (
+                  <>
+                    <div className="px-3.5 py-1.5 bg-slate-100 dark:bg-slate-800/90 border-b border-slate-200 dark:border-slate-700 text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                      <span>Resultados ({searchResults.length})</span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">
+                        Usa ↑↓ y Enter para agregar
+                      </span>
+                    </div>
+                    {searchResults.map((prod, index) => {
+                      const isHighlighted = index === selectedIndex;
+                      const primaryBarcode = barcodesByProductId?.get(prod.id)?.[0] ?? "";
+                      return (
+                        <button
+                          key={prod.id}
+                          type="button"
+                          onClick={() => handleSelectProduct(prod)}
+                          onMouseEnter={() => setSelectedIndex(index)}
+                          className={cn(
+                            "w-full text-left px-3.5 py-2.5 text-xs flex items-center justify-between gap-3 transition-colors cursor-pointer border-l-4",
+                            isHighlighted
+                              ? "bg-blue-50/90 dark:bg-slate-800 text-slate-900 dark:text-white border-blue-600 dark:border-blue-400"
+                              : "bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-800 dark:text-slate-200 border-transparent"
+                          )}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div
+                              className={cn(
+                                "font-bold truncate text-sm",
+                                isHighlighted
+                                  ? "text-blue-900 dark:text-white"
+                                  : "text-slate-900 dark:text-slate-100"
+                              )}
+                            >
+                              {prod.name}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                              {primaryBarcode && (
+                                <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold">
+                                  <Barcode className="h-3 w-3" /> {primaryBarcode}
+                                </span>
+                              )}
+                              {prod.code && <span className="text-slate-600 dark:text-slate-300">Cód: {prod.code}</span>}
+                              <span className="text-slate-600 dark:text-slate-400">
+                                Stock: <strong className="text-slate-800 dark:text-slate-200">{prod.stock_current.toLocaleString("es-AR")} {prod.sale_mode === "weight" ? "g" : "u."}</strong>
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="font-bold text-xs text-emerald-700 dark:text-emerald-400">
+                              Costo: {currency.format(prod.cost_price ?? 0)}
+                            </div>
+                            <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 mt-0.5">
+                              Venta: {currency.format(prod.price)}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </>
+                ) : (
+                  <div className="p-4 text-center space-y-2.5 bg-white dark:bg-slate-900">
+                    <p className="text-xs text-slate-700 dark:text-slate-300">
+                      No se encontró ningún producto para <strong className="text-slate-900 dark:text-slate-100">"{searchQuery}"</strong>
+                    </p>
+                    {onOpenCreateProductModal && (
+                      <button
+                        type="button"
+                        onClick={handleTriggerCreateNew}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg bg-brand-600 hover:bg-brand-700 text-white shadow-xs cursor-pointer"
+                      >
+                        <PackagePlus className="h-4 w-4" />
+                        Crear nuevo con este código
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* BOTÓN NUEVO PRODUCTO (LEE AUTOMÁTICAMENTE EL CÓDIGO NO ENCONTRADO) */}
           {onOpenCreateProductModal && (
             <button
               type="button"
-              onClick={onOpenCreateProductModal}
+              onClick={handleTriggerCreateNew}
               disabled={disabled || !canWrite}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              title={
+                notFoundCode
+                  ? `Crear nuevo producto con el código escaneado "${notFoundCode}"`
+                  : "Dar de alta un nuevo producto"
+              }
+              className={cn(
+                "h-10 inline-flex items-center gap-1.5 rounded-xl border-2 px-3.5 text-xs font-semibold shadow-2xs transition-all cursor-pointer shrink-0",
+                notFoundCode
+                  ? "border-amber-400 bg-amber-50 text-amber-800 dark:border-amber-500 dark:bg-amber-950/60 dark:text-amber-200 ring-2 ring-amber-400/50 animate-pulse font-bold"
+                  : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/80"
+              )}
             >
-              <PackagePlus className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
-              Nuevo producto
+              <PackagePlus className={cn("h-4 w-4", notFoundCode ? "text-amber-600 dark:text-amber-400" : "text-slate-500 dark:text-slate-400")} />
+              <span className="whitespace-nowrap">
+                {notFoundCode ? `Crear "${notFoundCode}"` : "Nuevo producto"}
+              </span>
             </button>
           )}
         </div>
@@ -288,31 +689,31 @@ export const PurchaseCart = ({
             No hay productos cargados en esta compra
           </p>
           <p className="text-[11px] text-slate-400 dark:text-slate-400">
-            Agrega productos del inventario o da de alta uno nuevo
+            Escanea con el lector o busca en el campo superior para comenzar
           </p>
 
           <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2">
-            {onOpenAddProductModal && (
-              <button
-                type="button"
-                onClick={onOpenAddProductModal}
-                disabled={disabled || !canWrite}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Agregar producto
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                searchInputRef.current?.focus();
+              }}
+              disabled={disabled || !canWrite}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+            >
+              <Search className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+              Buscar / Escanear producto
+            </button>
 
             {onOpenCreateProductModal && (
               <button
                 type="button"
-                onClick={onOpenCreateProductModal}
+                onClick={handleTriggerCreateNew}
                 disabled={disabled || !canWrite}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 cursor-pointer"
               >
                 <PackagePlus className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
-                Crear nuevo producto
+                {notFoundCode ? `Crear "${notFoundCode}"` : "Crear nuevo producto"}
               </button>
             )}
           </div>
@@ -562,9 +963,12 @@ export const PurchaseCart = ({
 
                   {/* 5. % Ganancia */}
                   <div className="min-w-0">
-                    <label className="mb-0.5 flex items-center gap-0.5 text-[10px] font-semibold uppercase tracking-wider text-purple-700 dark:text-purple-400 truncate" title="Margen de ganancia (%)">
-                      <Percent className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400 shrink-0" />
-                      Ganancia (%)
+                    <label className="mb-0.5 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-purple-700 dark:text-purple-400 truncate" title="Margen de ganancia (%)">
+                      <span className="flex items-center gap-0.5 truncate">
+                        <Percent className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                        Ganancia (%)
+                      </span>
+                      {!canAdjustProfitMargin && <Lock className="h-2.5 w-2.5 text-slate-400 dark:text-slate-500 shrink-0 ml-1" />}
                     </label>
                     <input
                       type="number"
@@ -573,6 +977,7 @@ export const PurchaseCart = ({
                       placeholder="0"
                       value={profitDrafts[item.product_id] ?? String(item.profit_percent ?? 0)}
                       onChange={(event) => {
+                        if (!canAdjustProfitMargin) return;
                         const nextValue = event.target.value;
                         setProfitDrafts((current) => ({
                           ...current,
@@ -595,9 +1000,13 @@ export const PurchaseCart = ({
                         })
                       }
                       onBlur={() => commitProfit(item)}
-                      className="w-full min-w-0 rounded-md border border-purple-300 bg-purple-50/30 px-2 py-1.5 text-xs font-bold text-purple-900 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 dark:border-purple-700/60 dark:bg-purple-950/40 dark:text-purple-200 dark:focus:border-purple-400"
-                      disabled={disabled || !canWrite}
-                      title="Margen de ganancia aplicado sobre el costo real"
+                      className={`w-full min-w-0 rounded-md border px-2 py-1.5 text-xs font-bold ${
+                        !canAdjustProfitMargin
+                          ? "border-slate-300 bg-slate-100 text-slate-400 cursor-not-allowed dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-500"
+                          : "border-purple-300 bg-purple-50/30 text-purple-900 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 dark:border-purple-700/60 dark:bg-purple-950/40 dark:text-purple-200 dark:focus:border-purple-400"
+                      }`}
+                      disabled={disabled || !canWrite || !canAdjustProfitMargin}
+                      title={!canAdjustProfitMargin ? "Ajuste de margen deshabilitado por configuración o permisos" : "Margen de ganancia aplicado sobre el costo real"}
                       autoComplete="off"
                       autoCorrect="off"
                       autoCapitalize="off"
@@ -627,8 +1036,9 @@ export const PurchaseCart = ({
 
                   {/* 7. Precio final unitario: En móvil abarca las 2 columnas para no desbordar y brindar máxima claridad */}
                   <div className="col-span-2 sm:col-span-2 lg:col-span-1 min-w-0">
-                    <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-400 truncate" title={`Precio final unitario (${item.sale_mode === "weight" ? "$/kg" : "$/u"})`}>
-                      Precio final unit. ({item.sale_mode === "weight" ? "$/kg" : "$/u"})
+                    <label className="mb-0.5 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-400 truncate" title={`Precio final unitario (${item.sale_mode === "weight" ? "$/kg" : "$/u"})`}>
+                      <span className="truncate">Precio final unit. ({item.sale_mode === "weight" ? "$/kg" : "$/u"})</span>
+                      {!canAdjustProfitMargin && <Lock className="h-2.5 w-2.5 text-slate-400 dark:text-slate-500 shrink-0 ml-1" />}
                     </label>
                     <input
                       type="number"
@@ -636,6 +1046,7 @@ export const PurchaseCart = ({
                       min="0"
                       value={salePriceDrafts[item.product_id] ?? String(item.new_sale_price || 0)}
                       onChange={(event) => {
+                        if (!canAdjustProfitMargin) return;
                         const nextValue = event.target.value;
                         setSalePriceDrafts((current) => ({
                           ...current,
@@ -658,9 +1069,13 @@ export const PurchaseCart = ({
                         })
                       }
                       onBlur={() => commitSalePrice(item)}
-                      className="w-full min-w-0 rounded-md border border-blue-300 bg-blue-50/40 px-2 py-1.5 text-xs font-bold text-blue-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-blue-700/60 dark:bg-blue-950/40 dark:text-blue-200 dark:focus:border-blue-400"
-                      disabled={disabled || !canWrite}
-                      title="Precio de venta final al público (aplica ganancia e IVA sobre el costo real)"
+                      className={`w-full min-w-0 rounded-md border px-2 py-1.5 text-xs font-bold ${
+                        !canAdjustProfitMargin
+                          ? "border-slate-300 bg-slate-100 text-slate-400 cursor-not-allowed dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-500"
+                          : "border-blue-300 bg-blue-50/40 text-blue-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-blue-700/60 dark:bg-blue-950/40 dark:text-blue-200 dark:focus:border-blue-400"
+                      }`}
+                      disabled={disabled || !canWrite || !canAdjustProfitMargin}
+                      title={!canAdjustProfitMargin ? "Ajuste de precio/margen deshabilitado por configuración o permisos" : "Precio de venta final al público (aplica ganancia e IVA sobre el costo real)"}
                       autoComplete="off"
                       autoCorrect="off"
                       autoCapitalize="off"
@@ -761,114 +1176,223 @@ export const PurchaseCart = ({
         </div>
       )}
 
-      {/* Resumen Total y Botón de Confirmación Responsivo para Móvil (al final de la compra) */}
-      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/90 p-3.5 sm:p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/80 w-full max-w-full overflow-hidden">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between w-full max-w-full">
-          {/* Grid de Totales e Impuestos: fila 1 (IVA y Neto), fila 2 (IIBB y Total) */}
-          <div className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_auto] items-center gap-x-2.5 sm:gap-x-4 gap-y-1.5 text-xs w-full max-w-full">
-            {/* Fila 1, Columna 1: % IVA */}
-            <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-0.5 dark:border-slate-700 dark:bg-slate-900/90">
-              <label
-                htmlFor="purchase-vat-input"
-                className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200"
-              >
-                % IVA:
-              </label>
-              <div className="flex items-center">
-                <input
-                  id="purchase-vat-input"
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  data-lpignore="true"
-                  value={vatDraft ?? (vatPercent === 0 ? "0" : vatPercent.toString())}
-                  onFocus={handleNumericInputFocus}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    setVatDraft(raw);
-                    const val = raw.trim().replace(",", ".");
-                    if (val === "") {
-                      onVatPercentChange?.(0);
-                    } else {
-                      const parsed = Number(val);
-                      if (!isNaN(parsed) && parsed >= 0) {
-                        onVatPercentChange?.(Math.min(100, parsed));
-                      }
-                    }
-                  }}
-                  onBlur={() => setVatDraft(null)}
-                  disabled={disabled || !canWrite}
-                  placeholder="0"
-                  className="w-12 sm:w-14 rounded border border-slate-300 bg-white px-1 py-0.5 text-center text-xs font-bold text-slate-900 transition focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
-                />
+      {/* Resumen Total y Botón de Confirmación Responsivo (al final de la compra) */}
+      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/90 p-3.5 sm:p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/80 w-full max-w-full">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between w-full max-w-full">
+          {/* LADO IZQUIERDO: Configuración de Impuestos y Percepciones */}
+          <div className="flex flex-col gap-2 flex-1 max-w-md w-full">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Impuestos y percepciones
+            </span>
+
+            <div className="flex flex-col gap-2">
+              {/* 1. IVA */}
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-900/90 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="flex items-center justify-center rounded bg-blue-50 dark:bg-blue-950/60 p-1 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50"
+                    title="Porcentaje de IVA"
+                  >
+                    <Percent className="h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={2.5} />
+                  </span>
+                  <label
+                    htmlFor="purchase-vat-input"
+                    className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 cursor-pointer"
+                  >
+                    IVA:
+                  </label>
+                  <div className="flex items-center">
+                    <input
+                      id="purchase-vat-input"
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-lpignore="true"
+                      value={vatDraft ?? (vatPercent === 0 ? "0" : vatPercent.toString())}
+                      onFocus={handleNumericInputFocus}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setVatDraft(raw);
+                        const val = raw.trim().replace(",", ".");
+                        if (val === "") {
+                          onVatPercentChange?.(0);
+                        } else {
+                          const parsed = Number(val);
+                          if (!isNaN(parsed) && parsed >= 0) {
+                            onVatPercentChange?.(Math.min(100, parsed));
+                          }
+                        }
+                      }}
+                      onBlur={() => setVatDraft(null)}
+                      disabled={disabled || !canWrite}
+                      placeholder="0"
+                      className="w-16 rounded border border-slate-300 bg-white px-2 py-0.5 text-center text-xs sm:text-sm font-bold text-slate-900 transition focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
+                    />
+                  </div>
+                </div>
+                <span className="font-bold text-[11px] sm:text-xs text-blue-700 dark:text-blue-400 whitespace-nowrap">
+                  ({currency.format(summary.vatTotal)})
+                </span>
               </div>
-              <span className="font-bold text-[10px] sm:text-[11px] text-blue-700 dark:text-blue-400 whitespace-nowrap">
-                ({currency.format(summary.vatTotal)})
-              </span>
-            </div>
 
-            {/* Fila 1, Columna 2: Subtotal neto */}
-            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap justify-self-end">
-              <span className="text-slate-500 dark:text-slate-400">Neto:</span>
-              <strong className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                {currency.format(summary.subtotal)}
-              </strong>
-            </div>
+              {/* 2. IIBB con selector dual (% o $) */}
+              <DualRateAmountInput
+                id="purchase-iibb-input"
+                label="IIBB"
+                mode={iibbMode}
+                onModeChange={setIibbMode}
+                percentValue={iibbPercent}
+                amountValue={iibbAmount > 0 ? iibbAmount : summary.iibbTotal ?? 0}
+                baseTotal={summary.subtotal}
+                onPercentChange={(val) => {
+                  onIibbPercentChange?.(val);
+                  onIibbAmountChange?.(0);
+                }}
+                onAmountChange={(val) => {
+                  onIibbAmountChange?.(val);
+                  const derivedPercent = summary.subtotal > 0 ? (val / summary.subtotal) * 100 : 0;
+                  onIibbPercentChange?.(Math.min(100, Math.round(derivedPercent * 100) / 100));
+                }}
+                disabled={disabled || !canWrite}
+                accentColor="amber"
+              />
 
-            {/* Fila 2, Columna 1: IIBB con selector dual (% o $) */}
-            <DualRateAmountInput
-              id="purchase-iibb-input"
-              label="IIBB"
-              mode={iibbMode}
-              onModeChange={setIibbMode}
-              percentValue={iibbPercent}
-              amountValue={iibbAmount > 0 ? iibbAmount : summary.iibbTotal ?? 0}
-              baseTotal={summary.subtotal}
-              onPercentChange={(val) => {
-                onIibbPercentChange?.(val);
-                onIibbAmountChange?.(0);
-              }}
-              onAmountChange={(val) => {
-                onIibbAmountChange?.(val);
-                const derivedPercent = summary.subtotal > 0 ? (val / summary.subtotal) * 100 : 0;
-                onIibbPercentChange?.(Math.min(100, Math.round(derivedPercent * 100) / 100));
-              }}
-              disabled={disabled || !canWrite}
-              accentColor="amber"
-            />
-
-            {/* Fila 2, Columna 2: Total a pagar */}
-            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap justify-self-end">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Total:</span>
-              <strong className="text-base sm:text-lg font-black text-brand-700 dark:text-brand-400">
-                {currency.format(summary.total)}
-              </strong>
-            </div>
-
-            {summary.totalDiscountAmount != null && summary.totalDiscountAmount > 0 && (
-              <div className="col-span-2 rounded-md border border-amber-300 bg-amber-100/80 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                Ahorro: +{currency.format(summary.totalDiscountAmount)}
+              {/* 3. Impuesto Agregado (por monto fijo) */}
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-900/90 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="flex items-center justify-center rounded bg-purple-50 dark:bg-purple-950/60 p-1 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-900/50"
+                    title="Impuesto por monto fijo"
+                  >
+                    <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={2.5} />
+                  </span>
+                  <label
+                    htmlFor="purchase-extra-tax-input"
+                    className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 cursor-pointer"
+                    title="Impuesto agregado o percepción adicional por monto fijo"
+                  >
+                    Imp. Agregado:
+                  </label>
+                  <div className="flex items-center">
+                    <input
+                      id="purchase-extra-tax-input"
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      min="0"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-lpignore="true"
+                      value={extraTaxDraft ?? (extraTaxAmount === 0 ? "0" : extraTaxAmount.toString())}
+                      onFocus={handleNumericInputFocus}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setExtraTaxDraft(raw);
+                        const val = raw.trim().replace(",", ".");
+                        if (val === "") {
+                          onExtraTaxAmountChange?.(0);
+                        } else {
+                          const parsed = Number(val);
+                          if (!isNaN(parsed) && parsed >= 0) {
+                            onExtraTaxAmountChange?.(Math.round(parsed * 100) / 100);
+                          }
+                        }
+                      }}
+                      onBlur={() => setExtraTaxDraft(null)}
+                      disabled={disabled || !canWrite}
+                      placeholder="0.00"
+                      className="w-20 sm:w-24 rounded border border-slate-300 bg-white px-2 py-0.5 text-center text-xs sm:text-sm font-bold text-slate-900 transition focus:border-purple-500 focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
+                    />
+                  </div>
+                </div>
+                <span className="font-bold text-[11px] sm:text-xs text-purple-700 dark:text-purple-400 whitespace-nowrap">
+                  ({currency.format(summary.extraTaxTotal ?? 0)})
+                </span>
               </div>
-            )}
+            </div>
           </div>
 
-          {/* Botón de confirmación / pago */}
-          <button
-            type="submit"
-            form={formId}
-            disabled={disabled || !canWrite || items.length === 0}
-            title={items.length === 0 ? "Agregá productos al carrito para proceder al pago" : "Proceder al registro del pago"}
-            className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-brand-500 dark:hover:bg-brand-600"
-          >
-            <span>Proceder al pago</span>
-            <ArrowRight className="h-4 w-4" />
-          </button>
+          {/* LADO DERECHO: Detalle de Pago Completo + Botón Proceder al Pago */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 shrink-0 justify-end w-full lg:w-auto">
+            {/* Panel de desglose de liquidación / pago */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/90 p-3 sm:p-3.5 shadow-sm min-w-[260px] sm:min-w-[280px] space-y-1.5 text-xs">
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1">
+                  <Receipt className="h-3 w-3 text-slate-400 dark:text-slate-500" />
+                  Detalle de pago
+                </span>
+                {summary.totalDiscountAmount != null && summary.totalDiscountAmount > 0 && (
+                  <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 lowercase first-letter:uppercase">
+                    Ahorro: +{currency.format(summary.totalDiscountAmount)}
+                  </span>
+                )}
+              </div>
+
+              {/* 1. Neto */}
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Neto:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  {currency.format(summary.subtotal)}
+                </span>
+              </div>
+
+              {/* 2. IVA */}
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 dark:text-slate-400 font-medium">
+                  IVA {vatPercent > 0 ? `(${vatPercent}%)` : ""}:
+                </span>
+                <span className="font-semibold text-blue-700 dark:text-blue-400">
+                  +{currency.format(summary.vatTotal)}
+                </span>
+              </div>
+
+              {/* 3. IIBB */}
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 dark:text-slate-400 font-medium">
+                  IIBB {iibbMode === "percent" && iibbPercent > 0 ? `(${iibbPercent}%)` : ""}:
+                </span>
+                <span className="font-semibold text-amber-700 dark:text-amber-400">
+                  +{currency.format(summary.iibbTotal ?? 0)}
+                </span>
+              </div>
+
+              {/* 4. Impuesto Agregado */}
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Imp. Agregado:</span>
+                <span className="font-semibold text-purple-700 dark:text-purple-400">
+                  +{currency.format(summary.extraTaxTotal ?? 0)}
+                </span>
+              </div>
+
+              {/* Línea divisoria y Total */}
+              <div className="border-t border-slate-200 dark:border-slate-700 pt-1.5 mt-1 flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Total a pagar:</span>
+                <span className="text-base sm:text-lg font-black text-brand-700 dark:text-brand-400">
+                  {currency.format(summary.total)}
+                </span>
+              </div>
+            </div>
+
+            {/* Botón de confirmación / pago */}
+            <button
+              type="submit"
+              form={formId}
+              disabled={disabled || !canWrite || items.length === 0}
+              title={items.length === 0 ? "Agregá productos al carrito para proceder al pago" : "Proceder al registro del pago"}
+              className="inline-flex h-10 px-4 py-2 items-center justify-center gap-2 rounded-lg bg-brand-600 font-bold text-xs text-white shadow-sm transition hover:bg-brand-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-brand-500 dark:hover:bg-brand-600 cursor-pointer shrink-0 w-full sm:w-auto"
+            >
+              <span>Proceder al pago</span>
+              <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
+            </button>
+          </div>
         </div>
       </div>
     </section>

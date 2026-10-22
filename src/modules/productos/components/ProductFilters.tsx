@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Camera, Download, Ellipsis, FilterX, Plus, RefreshCw, Search, SlidersHorizontal, Upload, X } from "lucide-react";
+import { Camera, Download, Ellipsis, FilterX, Package, Plus, RefreshCw, Search, SlidersHorizontal, Upload, X } from "lucide-react";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { IconButton } from "@/components/ui/IconButton";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
@@ -26,6 +26,7 @@ interface ProductFiltersProps {
   onDeleteSelected: () => void;
   onSelectAllFiltered: () => void;
   onClearSelection: () => void;
+  onOpenReturnablePackages?: () => void;
 }
 
 export const ProductFilters = ({
@@ -47,6 +48,7 @@ export const ProductFilters = ({
   onDeleteSelected,
   onSelectAllFiltered,
   onClearSelection,
+  onOpenReturnablePackages,
 }: ProductFiltersProps) => {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -85,6 +87,18 @@ export const ProductFilters = ({
             </span>
           </button>
 
+          {onOpenReturnablePackages && (
+            <button
+              type="button"
+              onClick={onOpenReturnablePackages}
+              className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
+              title="Ver y configurar tipos de envases retornables"
+            >
+              <Package size={14} className="text-amber-600 dark:text-amber-400" />
+              <span className="hidden sm:inline">Envases</span>
+            </button>
+          )}
+
           <div className="relative z-30">
             <IconButton
               icon={Ellipsis}
@@ -103,6 +117,20 @@ export const ProductFilters = ({
                   style={{ zIndex: 50 }}
                   onClick={(e) => e.stopPropagation()}
                 >
+                  {onOpenReturnablePackages && (
+                    <button
+                      type="button"
+                      className="ui-popover-action"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActionsOpen(false);
+                        onOpenReturnablePackages();
+                      }}
+                    >
+                      <Package aria-hidden="true" className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                      Envases Retornables
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="ui-popover-action"

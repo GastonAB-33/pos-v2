@@ -23,6 +23,7 @@ import {
   ArrowRight,
   UserCheck,
   UserPlus,
+  Package,
 } from "lucide-react";
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -79,6 +80,7 @@ export const CuentasCorrientesPage = () => {
   const {
     customers,
     filteredCustomers,
+    customerPackagesMap,
     selectedCustomer,
     setSelectedCustomerId,
     search,
@@ -87,6 +89,9 @@ export const CuentasCorrientesPage = () => {
     setFilterMode,
     totalDebt,
     customersWithDebtCount,
+    customersWithPackagesCount,
+    totalPackagesOwedCount,
+    customersWithBothCount,
     customersUpToDateCount,
     isLoading,
     feedback,
@@ -188,13 +193,13 @@ export const CuentasCorrientesPage = () => {
       description="Control de saldos, deudas y cobranzas de clientes"
     >
       <div className="cuentas-corrientes-clientes-workspace space-y-4">
-        {/* 3 Paneles KPI Superiores: solo visibles en el listado general de clientes */}
+        {/* 4 Paneles KPI Superiores: Deuda $, Clientes deudores, Envases prestados y Clientes al día */}
         {!selectedCustomer && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <article className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 shadow-sm dark:border-rose-900/60 dark:bg-rose-950/20">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-rose-800 dark:text-rose-300">
-                  Deuda Total de Clientes
+                  Deuda Total ($)
                 </span>
                 <Users className="h-5 w-5 text-rose-600 dark:text-rose-400" />
               </div>
@@ -206,18 +211,33 @@ export const CuentasCorrientesPage = () => {
               </p>
             </article>
 
-            <article className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/20">
+            <article className="rounded-xl border border-rose-200 bg-rose-50/40 p-4 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/10">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                  Clientes con Saldo Pendiente
+                <span className="text-xs font-semibold uppercase tracking-wider text-rose-800 dark:text-rose-300">
+                  Con Deuda $
                 </span>
-                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                <AlertCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
               </div>
-              <p className="mt-2 text-2xl font-bold tracking-tight text-amber-900 dark:text-amber-100">
+              <p className="mt-2 text-2xl font-bold tracking-tight text-rose-900 dark:text-rose-100">
                 {customersWithDebtCount}
               </p>
-              <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+              <p className="mt-1 text-xs text-rose-700 dark:text-rose-400">
                 De {customers.length} clientes activos
+              </p>
+            </article>
+
+            <article className="rounded-xl border border-amber-300 bg-amber-50/80 p-4 shadow-sm dark:border-amber-700/60 dark:bg-amber-950/30">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-amber-900 dark:text-amber-200">
+                  Envases en la Calle
+                </span>
+                <Package className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <p className="mt-2 text-2xl font-bold tracking-tight text-amber-950 dark:text-amber-100">
+                {totalPackagesOwedCount} {totalPackagesOwedCount === 1 ? "unidad" : "unidades"}
+              </p>
+              <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
+                {customersWithPackagesCount} {customersWithPackagesCount === 1 ? "cliente debe envases" : "clientes deben envases"}
               </p>
             </article>
 
@@ -232,7 +252,7 @@ export const CuentasCorrientesPage = () => {
                 {customersUpToDateCount}
               </p>
               <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
-                Sin saldo deudor pendiente
+                Sin deuda $ ni envases
               </p>
             </article>
           </div>
@@ -267,7 +287,7 @@ export const CuentasCorrientesPage = () => {
               </div>
 
               <div className="flex items-center gap-2">
-                <div className="flex gap-1">
+                <div className="flex flex-wrap gap-1">
                   <button
                     type="button"
                     onClick={() => setFilterMode("all")}
@@ -288,8 +308,33 @@ export const CuentasCorrientesPage = () => {
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
                     }`}
                   >
-                    Con deuda ({customersWithDebtCount})
+                    Con deuda $ ({customersWithDebtCount})
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterMode("packages")}
+                    className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      filterMode === "packages"
+                        ? "bg-amber-600 text-white shadow-2xs"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                    }`}
+                  >
+                    <Package size={13} />
+                    <span>Con envases ({customersWithPackagesCount})</span>
+                  </button>
+                  {customersWithBothCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setFilterMode("both")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        filterMode === "both"
+                          ? "bg-purple-600 text-white shadow-2xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                      }`}
+                    >
+                      Deuda + Envases ({customersWithBothCount})
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setFilterMode("zero")}
@@ -358,7 +403,7 @@ export const CuentasCorrientesPage = () => {
                     <tr>
                       <th className="py-3 px-4">Cliente</th>
                       <th className="py-3 px-4">Contacto</th>
-                      <th className="py-3 px-4">Estado</th>
+                      <th className="py-3 px-4">Estado y Envases</th>
                       <th className="py-3 px-4 text-right">Saldo Actual</th>
                       <th className="py-3 px-4 text-center">Acción</th>
                     </tr>
@@ -367,6 +412,9 @@ export const CuentasCorrientesPage = () => {
                     {filteredCustomers.map((cust) => {
                       const balance = cust.current_balance ?? 0;
                       const hasDebt = balance > 0;
+                      const pkgInfo = customerPackagesMap.get(cust.id);
+                      const packageCount = pkgInfo?.count ?? 0;
+                      const packageDebts = pkgInfo?.debts ?? {};
 
                       return (
                         <tr
@@ -391,17 +439,31 @@ export const CuentasCorrientesPage = () => {
                           </td>
 
                           <td className="py-3 px-4 whitespace-nowrap">
-                            <span
-                              className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                                hasDebt
-                                  ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
-                                  : balance < 0
-                                  ? "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
-                                  : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-                              }`}
-                            >
-                              {hasDebt ? "Con deuda" : balance < 0 ? "A favor" : "Al día"}
-                            </span>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span
+                                className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                                  hasDebt
+                                    ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
+                                    : balance < 0
+                                    ? "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
+                                    : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                }`}
+                              >
+                                {hasDebt ? "Con deuda" : balance < 0 ? "A favor" : "Al día"}
+                              </span>
+
+                              {packageCount > 0 && (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-800/60"
+                                  title={`Adeuda envases: ${Object.entries(packageDebts)
+                                    .map(([k, v]) => `${v}x ${k}`)
+                                    .join(", ")}`}
+                                >
+                                  <Package className="h-3 w-3" />
+                                  <span>{packageCount} {packageCount === 1 ? "envase" : "envases"}</span>
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           <td className="py-3 px-4 text-right whitespace-nowrap">

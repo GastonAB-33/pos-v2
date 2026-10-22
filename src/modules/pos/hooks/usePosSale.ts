@@ -2,11 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { auditService } from "@/services/audit.service";
 import { bankAccountsService } from "@/services/bank-accounts.service";
 import { currentAccountsService } from "@/services/current-accounts.service";
+import { employeeCurrentAccountsService } from "@/services/employee-current-accounts.service";
+import { employeesService } from "@/services/employees.service";
 import { cashService } from "@/services/cash.service";
 import { customersService } from "@/services/customers.service";
 import { useOffline } from "@/features/offline/hooks/useOffline";
 import { offlineService } from "@/services/offline.service";
 import { arcaInvoicesService } from "@/services/arca/arca-invoices.service";
+import { arcaService } from "@/services/arca.service";
 import { parseScaleBarcode, type ParsedScaleBarcode } from "@/services/barcode/scale-barcode.service";
 import { invoicesService } from "@/services/invoices.service";
 import { installmentPlansService } from "@/services/installment-plans.service";
@@ -31,7 +34,8 @@ import { salesService } from "@/services/sales.service";
 import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
 import { settingsService } from "@/services/settings.service";
 import { stockService } from "@/services/stock.service";
-import type { ArcaSettings, BankAccount, BarcodeScaleSettings, Customer, InstallmentPlan, Invoice, InvoiceDocumentType, MercadoPagoSettings, OriginBank, PaymentMethod, PaymentMethodType, PosSettings, PriceList, Product, ProductBarcode, Receipt, Sale } from "@/types/entities";
+import type { ArcaSettings, BankAccount, BarcodeScaleSettings, Customer, Employee, InstallmentPlan, Invoice, InvoiceDocumentType,
+  PaymentMethodInvoiceRules, MercadoPagoSettings, OriginBank, PaymentMethod, PaymentMethodType, PosSettings, PriceList, Product, ProductBarcode, Receipt, Sale } from "@/types/entities";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
 import {
   parseReturnableConfig,
@@ -70,6 +74,8 @@ export interface PosCartItem {
   debt_customer_name?: string | null;
   returnable_config?: ReturnableConfig | null;
   returnable_status?: ReturnableCartStatus;
+  is_returnable_package_item?: boolean;
+  parent_product_id?: string | null;
   code?: string | null;
   barcode?: string | null;
   manual_discount?: {
@@ -108,7 +114,7 @@ export interface PosCartItemComputed extends PosCartItem {
 
 import { calculatePosRounding } from "@/utils/pos-rounding";
 
-interface PosCheckoutSummary {
+export interface PosCheckoutSummary {
   subtotal: number;
   surchargeTotal: number;
   discountTotal: number;
@@ -282,8 +288,15 @@ const calculateSummaryByMethod = (
   const rawTotal = roundAmount(subtotal + paymentAdjustment);
 
   const isCash = normalizePaymentMethodCode(paymentMethod.code) === "cash";
+  const isCreditCard =
+    normalizePaymentMethodCode(paymentMethod.code) === "card_credit" ||
+    paymentMethod.type === "card_credit";
+
+  // En tarjeta de crédito no se aplica redondeo ya que sería un sobreprecio adicional sobre el interés
+  const shouldApplyRounding = isRoundingActive && !isCreditCard;
+
   const rounding = calculatePosRounding(rawTotal, {
-    enabled: isRoundingActive,
+    enabled: shouldApplyRounding,
     rule: posSettings?.rounding_rule || "integer",
     mode: posSettings?.rounding_mode,
     target: posSettings?.rounding_target,
@@ -334,6 +347,7 @@ export const usePosSale = (tenantId: string | null) => {
   }, [productBarcodes]);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [originBanks, setOriginBanks] = useState<OriginBank[]>([]);
@@ -454,9 +468,15 @@ export const usePosSale = (tenantId: string | null) => {
   );
   const [arcaSettings, setArcaSettings] = useState<ArcaSettings>(defaultArcaSettings);
   const [requireOpenSessionForSale, setRequireOpenSessionForSale] = useState(false);
+  const [paymentMethodInvoiceRules, setPaymentMethodInvoiceRules] = useState<PaymentMethodInvoiceRules | null>(null);
   const [defaultInvoiceDocumentType, setDefaultInvoiceDocumentType] =
     useState<InvoiceDocumentType>("B");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const selectedEmployee = useMemo(
+    () => employees.find((e) => e.id === selectedEmployeeId) ?? null,
+    [employees, selectedEmployeeId]
+  );
   const [cartState, setCartState] = useState<PosCartItem[]>([]);
   const [cartManualDiscount, setCartManualDiscount] = useState<CartManualDiscount | null>(null);
   const [discountsEnabled, setDiscountsEnabled] = useState(true);
@@ -724,6 +744,7 @@ export const usePosSale = (tenantId: string | null) => {
           allActiveInstallmentPlansResult,
           allActivePromotionsResult,
           tenantSettingsResult,
+          allEmployeesResult,
         ] = await Promise.allSettled([
           shouldFetchCatalog
             ? productsService.getAllByTenant(tenantId)
@@ -741,6 +762,7 @@ export const usePosSale = (tenantId: string | null) => {
           installmentPlansService.getActiveByTenant(tenantId),
           promotionsService.getActiveByTenantWithDetails(tenantId),
           settingsService.getByTenant(tenantId),
+          employeesService.getAllByTenant(tenantId),
         ]);
 
         const allProducts =
@@ -779,6 +801,8 @@ export const usePosSale = (tenantId: string | null) => {
             : [];
         const tenantSettings =
           tenantSettingsResult.status === "fulfilled" ? tenantSettingsResult.value : null;
+        const allEmployees =
+          allEmployeesResult.status === "fulfilled" ? allEmployeesResult.value : [];
 
         const hasPartialErrors =
           (shouldFetchCatalog && allProductsResult.status === "rejected") ||
@@ -804,9 +828,27 @@ export const usePosSale = (tenantId: string | null) => {
           ...defaultMercadoPagoSettings,
           ...(tenantSettings?.sistema?.mercado_pago ?? {}),
         };
+        const cleanArcaCuit = (
+          tenantSettings?.facturacion?.arca?.cuit_emisor ||
+          tenantSettings?.facturacion?.issuer_cuit ||
+          ""
+        ).replace(/\D/g, "");
+        const localCrt =
+          typeof window !== "undefined" && cleanArcaCuit
+            ? localStorage.getItem(`arca_saved_crt_${cleanArcaCuit}`)
+            : null;
+        const localKey =
+          typeof window !== "undefined" && cleanArcaCuit
+            ? localStorage.getItem(`arca_saved_key_${cleanArcaCuit}`)
+            : null;
+
         const resolvedArcaSettings = {
           ...defaultArcaSettings,
           ...(tenantSettings?.facturacion?.arca ?? {}),
+          certificate_crt:
+            tenantSettings?.facturacion?.arca?.certificate_crt || localCrt,
+          certificate_key:
+            tenantSettings?.facturacion?.arca?.certificate_key || localKey,
         };
 
         const activeProducts = allProducts.filter((product) => product.is_active !== false);
@@ -840,6 +882,7 @@ export const usePosSale = (tenantId: string | null) => {
         }
 
       setCustomers(activeCustomers);
+      setEmployees(allEmployees.filter((emp) => emp.is_active));
       setPaymentMethods(
         [...allActivePaymentMethods].sort((a, b) => {
           const priorityDiff = paymentMethodPriority(a) - paymentMethodPriority(b);
@@ -867,6 +910,7 @@ export const usePosSale = (tenantId: string | null) => {
       setArcaSettings(resolvedArcaSettings);
       setRequireOpenSessionForSale(tenantSettings?.caja?.require_open_session_for_sale ?? false);
       setDefaultInvoiceDocumentType(tenantSettings?.facturacion?.default_document_type ?? "B");
+      setPaymentMethodInvoiceRules(tenantSettings?.facturacion?.payment_method_rules ?? null);
       setSelectedCustomerId((current) =>
         current && activeCustomers.some((customer) => customer.id === current)
           ? current
@@ -1099,10 +1143,8 @@ export const usePosSale = (tenantId: string | null) => {
         };
       }
 
-      const returnableSurcharge =
-        item.returnable_status === "charge" && item.returnable_config
-          ? roundAmount(item.returnable_config.packagePrice * item.quantity)
-          : 0;
+      // Los cobros de envase se agregan como ítems independientes en el carrito
+      const returnableSurcharge = 0;
 
       const grossLine = roundAmount(item.quantity * item.unit_price);
 
@@ -1201,7 +1243,21 @@ export const usePosSale = (tenantId: string | null) => {
       };
     });
 
-    const eligibleItems = itemsWithProductPromotions.filter((item) => !item.is_debt_payment_item);
+    const isEmployeeDiscount = cartManualDiscount?.reason === "Descuento Empleado";
+    const excludedCategories = (posSettings.employee_discount_excluded_categories || []).map((c) =>
+      c.trim().toLowerCase()
+    );
+
+    const isItemEligible = (item: PosCartItemComputed) => {
+      if (item.is_debt_payment_item) return false;
+      if (isEmployeeDiscount && item.category) {
+        const cat = item.category.trim().toLowerCase();
+        if (excludedCategories.includes(cat)) return false;
+      }
+      return true;
+    };
+
+    const eligibleItems = itemsWithProductPromotions.filter(isItemEligible);
     const subtotalAfterProductPromotions = roundAmount(
       eligibleItems.reduce((acc, item) => acc + item.line_total, 0)
     );
@@ -1235,7 +1291,7 @@ export const usePosSale = (tenantId: string | null) => {
 
     let accumulated = 0;
     const eligibleIndices = allocated
-      .map((item, idx) => (!item.is_debt_payment_item ? idx : -1))
+      .map((item, idx) => (isItemEligible(item) ? idx : -1))
       .filter((idx) => idx !== -1);
 
     for (let i = 0; i < eligibleIndices.length; i += 1) {
@@ -1260,7 +1316,7 @@ export const usePosSale = (tenantId: string | null) => {
     }
 
     return allocated;
-  }, [cartManualDiscount, cartState, promotions, promotionsResolution]);
+  }, [cartManualDiscount, cartState, promotions, promotionsResolution, posSettings.employee_discount_excluded_categories]);
 
   const debtPaymentTotal = useMemo(
     () =>
@@ -1272,16 +1328,23 @@ export const usePosSale = (tenantId: string | null) => {
     [cartState]
   );
 
+  const hasOwedReturnables = useMemo(
+    () => cart.some((i) => i.returnable_config?.enabled && i.returnable_status === "owe"),
+    [cart]
+  );
+
+  const owedReturnablesCount = useMemo(
+    () =>
+      cart
+        .filter((i) => i.returnable_config?.enabled && i.returnable_status === "owe")
+        .reduce((sum, i) => sum + i.quantity, 0),
+    [cart]
+  );
+
   const subtotalBeforePromotions = useMemo(
     () =>
       roundAmount(
-        cartState.reduce((acc, item) => {
-          const returnableSurcharge =
-            item.returnable_status === "charge" && item.returnable_config
-              ? roundAmount(item.returnable_config.packagePrice * item.quantity)
-              : 0;
-          return acc + item.unit_price * item.quantity + returnableSurcharge;
-        }, 0)
+        cartState.reduce((acc, item) => acc + item.unit_price * item.quantity, 0)
       ),
     [cartState]
   );
@@ -1298,9 +1361,21 @@ export const usePosSale = (tenantId: string | null) => {
 
   const manualCartDiscountTotal = useMemo(() => {
     if (!cartManualDiscount || cartManualDiscount.value <= 0) return 0;
+    const isEmployeeDiscount = cartManualDiscount.reason === "Descuento Empleado";
+    const excludedCategories = (posSettings.employee_discount_excluded_categories || []).map((c) =>
+      c.trim().toLowerCase()
+    );
+
     const eligibleSubtotal = roundAmount(
       cart
-        .filter((item) => !item.is_debt_payment_item)
+        .filter((item) => {
+          if (item.is_debt_payment_item) return false;
+          if (isEmployeeDiscount && item.category) {
+            const cat = item.category.trim().toLowerCase();
+            if (excludedCategories.includes(cat)) return false;
+          }
+          return true;
+        })
         .reduce((acc, item) => acc + item.line_subtotal - item.product_promotion_discount_total, 0)
     );
     if (eligibleSubtotal <= 0) return 0;
@@ -1308,7 +1383,7 @@ export const usePosSale = (tenantId: string | null) => {
       return roundAmount(eligibleSubtotal * (cartManualDiscount.value / 100));
     }
     return roundAmount(Math.min(eligibleSubtotal, cartManualDiscount.value));
-  }, [cart, cartManualDiscount]);
+  }, [cart, cartManualDiscount, posSettings.employee_discount_excluded_categories]);
 
   const totalPromotionDiscount = useMemo(
     () => roundAmount(promotionDiscountTotal + cartPromotionDiscountTotal),
@@ -1507,7 +1582,14 @@ export const usePosSale = (tenantId: string | null) => {
         };
 
         // El producto recién escaneado se mueve arriba de todo para visibilidad inmediata
-        return [updatedItem, ...prev.filter((item) => item.product_id !== product.id)];
+        const packageId = `returnable-pkg-${product.id}`;
+        const rest = prev.filter((item) => item.product_id !== product.id);
+        const mappedRest = rest.map((item) =>
+          item.product_id === packageId
+            ? { ...item, quantity: updatedItem.quantity }
+            : item
+        );
+        return [updatedItem, ...mappedRest];
       }
 
       const returnableConfig = parseReturnableConfig(product.description);
@@ -1654,40 +1736,72 @@ export const usePosSale = (tenantId: string | null) => {
 
   const cycleReturnableStatus = useCallback(
     (productId: string) => {
-      setCartState((prev) =>
-        prev.map((item) => {
-          if (item.product_id !== productId || !item.returnable_config?.enabled) {
-            return item;
-          }
+      setCartState((prev) => {
+        const targetIndex = prev.findIndex((item) => item.product_id === productId);
+        if (targetIndex === -1) return prev;
+        const targetItem = prev[targetIndex];
+        if (!targetItem.returnable_config?.enabled) return prev;
 
-          const currentStatus = item.returnable_status ?? "exchange";
-          let nextStatus: ReturnableCartStatus = "exchange";
+        const currentStatus = targetItem.returnable_status ?? "exchange";
+        let nextStatus: ReturnableCartStatus = "exchange";
 
-          if (currentStatus === "exchange") {
-            nextStatus = "charge";
-          } else if (currentStatus === "charge") {
-            if (!selectedCustomerId) {
-              setFeedback({
-                type: "error",
-                message:
-                  "Para anotar el envase en cuenta corriente, selecciona primero al cliente en la venta.",
-              });
-              nextStatus = "exchange";
-            } else {
-              nextStatus = "owe";
-            }
-          } else {
-            nextStatus = "exchange";
-          }
+        if (currentStatus === "exchange") {
+          nextStatus = "charge";
+        } else if (currentStatus === "charge") {
+          nextStatus = "owe";
+        } else {
+          nextStatus = "exchange";
+        }
 
-          return {
-            ...item,
-            returnable_status: nextStatus,
+        const packageId = `returnable-pkg-${productId}`;
+        // Filtrar cualquier ítem de cobro de envase previo para este producto padre
+        const withoutOldPkg = prev.filter((item) => item.product_id !== packageId);
+
+        const updatedTarget: PosCartItem = {
+          ...targetItem,
+          returnable_status: nextStatus,
+        };
+
+        if (nextStatus === "charge") {
+          const pkgItem: PosCartItem = {
+            product_id: packageId,
+            name: `Envase: ${targetItem.returnable_config.packageName}`,
+            category: "Envases",
+            sale_mode: "unit",
+            quantity: targetItem.quantity,
+            unit_price: targetItem.returnable_config.packagePrice,
+            base_unit_price: targetItem.returnable_config.packagePrice,
+            stock_available: Number.MAX_SAFE_INTEGER,
+            price_list_id: null,
+            price_list_name: null,
+            price_list_is_active: null,
+            is_scale_item: false,
+            scale_weight: null,
+            scale_total_price: null,
+            scale_barcode: null,
+            is_manual_item: true,
+            is_returnable_package_item: true,
+            parent_product_id: productId,
           };
-        })
-      );
+
+          const result: PosCartItem[] = [];
+          for (const item of withoutOldPkg) {
+            if (item.product_id === productId) {
+              result.push(updatedTarget);
+              result.push(pkgItem);
+            } else {
+              result.push(item);
+            }
+          }
+          return result;
+        }
+
+        return withoutOldPkg.map((item) =>
+          item.product_id === productId ? updatedTarget : item
+        );
+      });
     },
-    [selectedCustomerId]
+    []
   );
 
   const createProductFromPosAndAddToCart = useCallback(
@@ -2153,14 +2267,22 @@ export const usePosSale = (tenantId: string | null) => {
         return prev;
       }
 
-      return prev.map((item) =>
-        item.product_id === productId
-          ? {
-              ...item,
-              quantity: normalizedQty,
-            }
-          : item
-      );
+      const packageId = `returnable-pkg-${productId}`;
+      return prev.map((item) => {
+        if (item.product_id === productId) {
+          return {
+            ...item,
+            quantity: normalizedQty,
+          };
+        }
+        if (item.product_id === packageId || item.parent_product_id === productId) {
+          return {
+            ...item,
+            quantity: normalizedQty,
+          };
+        }
+        return item;
+      });
     });
   };
 
@@ -2252,7 +2374,23 @@ export const usePosSale = (tenantId: string | null) => {
 
   const removeFromCart = (productId: string) => {
     setCartState((prev) => {
-      const next = prev.filter((item) => item.product_id !== productId);
+      const target = prev.find((item) => item.product_id === productId);
+      const packageId = `returnable-pkg-${productId}`;
+
+      let next = prev.filter(
+        (item) => item.product_id !== productId && item.product_id !== packageId && item.parent_product_id !== productId
+      );
+
+      // Si el ítem eliminado era un cobro de envase vinculado a un producto padre,
+      // revertir el estado del producto padre a "exchange" (Trajo envase)
+      if (target?.is_returnable_package_item && target.parent_product_id) {
+        next = next.map((item) =>
+          item.product_id === target.parent_product_id
+            ? { ...item, returnable_status: "exchange" as const }
+            : item
+        );
+      }
+
       if (next.length === 0) {
         setCartManualDiscount(null);
         setRoundingEnabled(posSettings?.rounding_enabled ?? true);
@@ -2356,10 +2494,40 @@ export const usePosSale = (tenantId: string | null) => {
   const setSelectedCustomer = useCallback((customerId: string) => {
     const normalized = customerId.trim();
     setSelectedCustomerId(normalized);
+    if (normalized) {
+      setSelectedEmployeeId(null);
+      setCartManualDiscount((current) => (current?.reason === "Descuento Empleado" ? null : current));
+    }
     setSaleTabs((prevTabs) =>
       prevTabs.map((tab) => (tab.id === activeTabId ? { ...tab, selectedCustomerId: normalized } : tab))
     );
   }, [activeTabId]);
+
+  const selectEmployee = useCallback(
+    (employee: Employee | null) => {
+      if (!employee) {
+        setSelectedEmployeeId(null);
+        setCartManualDiscount((current) => (current?.reason === "Descuento Empleado" ? null : current));
+        return;
+      }
+
+      setSelectedCustomerId("");
+      setSelectedEmployeeId(employee.id);
+      setSaleTabs((prevTabs) =>
+        prevTabs.map((tab) => (tab.id === activeTabId ? { ...tab, selectedCustomerId: "" } : tab))
+      );
+
+      const discountPercent = employee.discount_percent ?? (posSettings.employee_discount_percent ?? 10);
+      if (discountPercent > 0) {
+        setCartManualDiscount({
+          type: "percent",
+          value: discountPercent,
+          reason: "Descuento Empleado",
+        });
+      }
+    },
+    [activeTabId, posSettings.employee_discount_percent]
+  );
 
   const upsertCustomer = useCallback((customer: Customer) => {
     setCustomers((prev) => {
@@ -2699,8 +2867,8 @@ export const usePosSale = (tenantId: string | null) => {
     const isMercadoPagoManual =
       isMercadoPagoMethod && !mercadoPagoSettings.enabled;
 
-    if (hasCurrentAccount && !values.customerId) {
-      setFeedback({ type: "error", message: "Cliente obligatorio para cuenta corriente" });
+    if (hasCurrentAccount && !values.customerId && !values.employeeId) {
+      setFeedback({ type: "error", message: "Cliente o empleado obligatorio para cuenta corriente" });
       return null;
     }
 
@@ -2740,8 +2908,8 @@ export const usePosSale = (tenantId: string | null) => {
       }
     }
 
-    if (!posSettings.allow_sale_without_customer && !values.customerId?.trim()) {
-      setFeedback({ type: "error", message: "La configuracion requiere cliente para vender" });
+    if (!posSettings.allow_sale_without_customer && !values.customerId?.trim() && !values.employeeId?.trim()) {
+      setFeedback({ type: "error", message: "La configuracion requiere cliente o empleado para vender" });
       return null;
     }
 
@@ -2819,6 +2987,36 @@ export const usePosSale = (tenantId: string | null) => {
             message: "El importe supera el limite de cuenta corriente del cliente",
           });
           return null;
+        }
+      }
+    }
+
+    const normalizedEmployeeId = values.employeeId?.trim() ?? "";
+    if (currentAccountDebtAmount > 0 && normalizedEmployeeId) {
+      const selectedEmployeeForSale = employees.find((e) => e.id === normalizedEmployeeId);
+      if (selectedEmployeeForSale) {
+        if (!selectedEmployeeForSale.current_account_enabled) {
+          setFeedback({
+            type: "error",
+            message: `La cuenta corriente está deshabilitada para el empleado ${selectedEmployeeForSale.full_name}`,
+          });
+          return null;
+        }
+
+        if (
+          selectedEmployeeForSale.current_account_limit != null &&
+          selectedEmployeeForSale.current_account_limit > 0
+        ) {
+          const projectedBalance = roundAmount(
+            (selectedEmployeeForSale.current_balance ?? 0) + currentAccountDebtAmount
+          );
+          if (projectedBalance > selectedEmployeeForSale.current_account_limit) {
+            setFeedback({
+              type: "error",
+              message: `El importe supera el límite de cuenta corriente del empleado (${selectedEmployeeForSale.full_name})`,
+            });
+            return null;
+          }
         }
       }
     }
@@ -2963,6 +3161,7 @@ export const usePosSale = (tenantId: string | null) => {
 
         clearCart();
         setSelectedCustomerId("");
+        setSelectedEmployeeId(null);
         refreshPending();
         return null;
       } catch {
@@ -2977,6 +3176,11 @@ export const usePosSale = (tenantId: string | null) => {
     setGeneratedReceipt(null);
     setGeneratedInvoice(null);
 
+    const employeeForSale = values.employeeId ? employees.find((e) => e.id === values.employeeId) : null;
+    const notesWithEmployee = employeeForSale
+      ? `[Empleado: ${employeeForSale.full_name}] ${values.notes?.trim() || ""}`.trim()
+      : values.notes?.trim() || null;
+
     const sale = await salesService.create(tenantId, {
         sale_number: saleNumber,
         customer_id: values.customerId?.trim() || null,
@@ -2987,7 +3191,7 @@ export const usePosSale = (tenantId: string | null) => {
         tax_total: 0,
         total: summary.total,
         currency_code: "ARS",
-        notes: values.notes?.trim() || null,
+        notes: notesWithEmployee,
         current_account_id: null,
         arca_document_id: null,
         mercado_pago_preference_id:
@@ -3001,7 +3205,9 @@ export const usePosSale = (tenantId: string | null) => {
           !item.product_id.startsWith("manual-") &&
           !item.product_id.startsWith("temp-") &&
           !item.is_debt_payment_item &&
-          !item.product_id.startsWith("debt-")
+          !item.product_id.startsWith("debt-") &&
+          !item.is_returnable_package_item &&
+          !item.product_id.startsWith("returnable-pkg-")
         ) {
           if (item.is_promo_item && item.promo_items?.length) {
             // Descontar stock correspondiente de cada artículo interno del pack o combo
@@ -3072,7 +3278,9 @@ export const usePosSale = (tenantId: string | null) => {
             item.product_id.startsWith("manual-") ||
             item.product_id.startsWith("temp-") ||
             item.is_debt_payment_item ||
-            item.product_id.startsWith("debt-")
+            item.product_id.startsWith("debt-") ||
+            item.is_returnable_package_item ||
+            item.product_id.startsWith("returnable-pkg-")
           ) {
             return itemPromise;
           }
@@ -3157,23 +3365,27 @@ export const usePosSale = (tenantId: string | null) => {
           (i) => i.returnable_config?.enabled && i.returnable_status === "owe"
         );
 
-        if (oweReturnableItems.length > 0 && selectedCustomer) {
+        const targetCustomer =
+          (values.customerId ? customers.find((c) => c.id === values.customerId) : null) ||
+          selectedCustomer;
+
+        if (oweReturnableItems.length > 0 && targetCustomer) {
           try {
-            const currentDebts = parseCustomerPackageDebts(selectedCustomer.observations);
+            const currentDebts = parseCustomerPackageDebts(targetCustomer.observations);
             for (const item of oweReturnableItems) {
               const pkgName = item.returnable_config!.packageName;
               currentDebts[pkgName] = (currentDebts[pkgName] ?? 0) + item.quantity;
             }
             const updatedObservations = serializeCustomerPackageDebts(
-              selectedCustomer.observations,
+              targetCustomer.observations,
               currentDebts
             );
-            await customersService.update(tenantId, selectedCustomer.id, {
+            await customersService.update(tenantId, targetCustomer.id, {
               observations: updatedObservations,
             });
             setCustomers((prevCustomers) =>
               prevCustomers.map((c) =>
-                c.id === selectedCustomer.id
+                c.id === targetCustomer.id
                   ? { ...c, observations: updatedObservations }
                   : c
               )
@@ -3231,7 +3443,17 @@ export const usePosSale = (tenantId: string | null) => {
               });
 
               const currentAccountPromise =
-                pIsCurrentAccount && values.customerId
+                pIsCurrentAccount && values.employeeId
+                  ? employeeCurrentAccountsService.createMovement(tenantId, {
+                      employee_id: values.employeeId,
+                      sale_id: sale.id,
+                      type: "debt",
+                      amount: p.amount,
+                      category: "product_purchase",
+                      notes: `Venta POS #${sale.sale_number} (Parcial cta. cte. empleado)`,
+                      created_by: resolvedCreatedBy,
+                    })
+                  : pIsCurrentAccount && values.customerId
                   ? currentAccountsService.createMovement(tenantId, {
                       customer_id: values.customerId,
                       sale_id: sale.id,
@@ -3452,16 +3674,27 @@ export const usePosSale = (tenantId: string | null) => {
             });
           }
 
-          const singleCurrentAccountPromise = isCurrentAccountMethod
-            ? currentAccountsService.createMovement(tenantId, {
-                customer_id: values.customerId!,
-                sale_id: sale.id,
-                type: "debt",
-                amount: summary.total,
-                notes: `Venta ${sale.sale_number}`,
-                created_by: resolvedCreatedBy,
-              })
-            : Promise.resolve();
+          const singleCurrentAccountPromise =
+            isCurrentAccountMethod && values.employeeId
+              ? employeeCurrentAccountsService.createMovement(tenantId, {
+                  employee_id: values.employeeId,
+                  sale_id: sale.id,
+                  type: "debt",
+                  amount: summary.total,
+                  category: "product_purchase",
+                  notes: `Venta POS #${sale.sale_number} (Cta. Cte. Empleado)`,
+                  created_by: resolvedCreatedBy,
+                })
+              : isCurrentAccountMethod && values.customerId
+              ? currentAccountsService.createMovement(tenantId, {
+                  customer_id: values.customerId!,
+                  sale_id: sale.id,
+                  type: "debt",
+                  amount: summary.total,
+                  notes: `Venta ${sale.sale_number}`,
+                  created_by: resolvedCreatedBy,
+                })
+              : Promise.resolve();
 
           const singleCashMovementPromise =
             requiresCashMovementRegistration && openSession
@@ -3509,6 +3742,16 @@ export const usePosSale = (tenantId: string | null) => {
       );
 
       // 5. Creación del comprobante / ticket
+      const oweItems = cart.filter(
+        (i) => i.returnable_config?.enabled && i.returnable_status === "owe"
+      );
+      const oweNotes =
+        oweItems.length > 0
+          ? `Envases adeudados: ${oweItems
+              .map((i) => `${i.quantity}x ${i.returnable_config?.packageName || "Envase"}`)
+              .join(", ")}`
+          : null;
+
       const receiptPayload = {
         sale_id: sale.id,
         sale_number: sale.sale_number,
@@ -3535,6 +3778,7 @@ export const usePosSale = (tenantId: string | null) => {
           summary.roundingAdjustment !== 0
             ? `Redondeo comercial: ${summary.roundingAdjustment > 0 ? "+" : ""}$${summary.roundingAdjustment.toFixed(2)}`
             : null,
+          oweNotes,
           values.notes?.trim() || null,
         ]
           .filter(Boolean)
@@ -3566,8 +3810,8 @@ export const usePosSale = (tenantId: string | null) => {
       const postSaleMessages: string[] = [];
 
       if (values.issueInvoice) {
-        if (!sale.customer_id) {
-          postSaleMessages.push("Sin cliente: no se emitio factura fiscal.");
+        if (!sale.customer_id && defaultInvoiceDocumentType === "A") {
+          postSaleMessages.push("Para Factura A se requiere cliente con CUIT registrado.");
         } else {
           try {
             generatedInvoiceFromSale = await invoicesService.createFromSale(tenantId, {
@@ -3591,110 +3835,119 @@ export const usePosSale = (tenantId: string | null) => {
             });
 
             if (arcaEnabledForPos && arcaOperationalStatus.available) {
-              const customerValidation = arcaInvoicesService.validateCustomerTaxData(
-                generatedInvoiceFromSale.customer_snapshot
+              const pendingInvoice = await invoicesService.updateArcaStatus(
+                tenantId,
+                generatedInvoiceFromSale.id,
+                {
+                  arca_status: "pending",
+                  arca_reference: generatedInvoiceFromSale.arca_reference,
+                  arca_message: `Enviando a ARCA (${arcaOperationalStatus.mode})...`,
+                }
               );
-              if (!customerValidation.valid) {
-                postSaleMessages.push(
-                  `Factura interna generada. No se envio a ARCA: ${customerValidation.errors.join(
-                    ". "
-                  )}`
-                );
-                await auditService.createSafe(tenantId, {
-                  user_id: resolvedCreatedBy,
-                  module: "facturacion",
-                  action: "arca_validation_error",
-                  entity_type: "invoice",
-                  entity_id: generatedInvoiceFromSale.id,
-                  description: `Validacion ARCA fallida desde POS: ${generatedInvoiceFromSale.document_number}`,
-                  metadata: {
-                    errors: customerValidation.errors,
-                    mode: arcaOperationalStatus.mode,
-                  },
-                });
-              } else {
-                const pendingInvoice = await invoicesService.updateArcaStatus(
+
+              await auditService.createSafe(tenantId, {
+                user_id: resolvedCreatedBy,
+                module: "facturacion",
+                action: "arca_send",
+                entity_type: "invoice",
+                entity_id: pendingInvoice.id,
+                description: `Envío ARCA desde POS: ${pendingInvoice.document_number}`,
+                metadata: {
+                  previous_arca_status: generatedInvoiceFromSale.arca_status,
+                  next_arca_status: "pending",
+                  mode: arcaOperationalStatus.mode,
+                },
+              });
+
+              const currentSeq =
+                parseInt(pendingInvoice.document_number.split("-").pop() || "1", 10) || 1;
+
+              const arcaResult = await arcaService.authorizeInvoice(
+                arcaSettings,
+                {
                   tenantId,
-                  generatedInvoiceFromSale.id,
-                  {
-                    arca_status: "pending",
-                    arca_reference: generatedInvoiceFromSale.arca_reference,
-                    arca_message: `Factura enviada a ARCA (${arcaOperationalStatus.mode}) desde POS. Procesando...`,
-                  }
-                );
+                  documentType: generatedInvoiceFromSale.document_type,
+                  puntoVenta: arcaSettings.punto_venta,
+                  cuitEmisor: arcaSettings.cuit_emisor || "",
+                  receiverDocType: generatedInvoiceFromSale.customer_snapshot?.document_type ?? "dni",
+                  receiverDocNumber: generatedInvoiceFromSale.customer_snapshot?.document_number ?? "0",
+                  subtotal: generatedInvoiceFromSale.subtotal,
+                  taxTotal: generatedInvoiceFromSale.tax_total,
+                  total: generatedInvoiceFromSale.total,
+                  items: generatedInvoiceFromSale.items_snapshot.map((item) => ({
+                    name: item.product_name,
+                    quantity: item.quantity,
+                    unitPrice: item.unit_price,
+                    subtotal: item.subtotal,
+                  })),
+                },
+                currentSeq
+              );
 
-                await auditService.createSafe(tenantId, {
-                  user_id: resolvedCreatedBy,
-                  module: "facturacion",
-                  action: "arca_send",
-                  entity_type: "invoice",
-                  entity_id: pendingInvoice.id,
-                  description: `Envio ARCA desde POS: ${pendingInvoice.document_number}`,
-                  metadata: {
-                    previous_arca_status: generatedInvoiceFromSale.arca_status,
-                    next_arca_status: "pending",
-                    mode: arcaOperationalStatus.mode,
-                  },
-                });
-
-                const sendResult = await arcaInvoicesService.sendInvoice(pendingInvoice, {
-                  settings: arcaSettings,
-                });
-                const statusResult = await arcaInvoicesService.checkInvoiceStatus(
-                  sendResult.reference ?? `ARCA-MOCK-${Date.now()}`,
-                  {
-                    forcedStatus:
-                      sendResult.status === "accepted" || sendResult.status === "rejected"
-                        ? sendResult.status
-                        : undefined,
-                    settings: arcaSettings,
-                    tenantId,
-                  }
-                );
-
-                const finalArcaStatus: Invoice["arca_status"] =
-                  statusResult.status === "accepted" || statusResult.status === "rejected"
-                    ? statusResult.status
-                    : sendResult.status === "accepted" || sendResult.status === "rejected"
-                      ? sendResult.status
-                      : "pending";
-
+              if (arcaResult.success) {
                 generatedInvoiceFromSale = await invoicesService.updateArcaStatus(
                   tenantId,
                   pendingInvoice.id,
                   {
-                    arca_status: finalArcaStatus,
-                    arca_reference: sendResult.reference,
-                    arca_message:
-                      finalArcaStatus === "accepted"
-                        ? "Factura aprobada por ARCA"
-                        : finalArcaStatus === "rejected"
-                          ? "Factura rechazada por ARCA"
-                          : "Factura enviada a ARCA. Estado pendiente",
+                    arca_status: "accepted",
+                    arca_reference: arcaResult.cae ?? null,
+                    arca_message: "Comprobante autorizado por ARCA",
+                    cae: arcaResult.cae ?? null,
+                    cae_due_date: arcaResult.caeDueDate ?? null,
+                    qr_data_url: arcaResult.qrUrl ?? null,
+                    document_number:
+                      arcaResult.formattedDocumentNumber ?? pendingInvoice.document_number,
                   }
                 );
 
                 await auditService.createSafe(tenantId, {
                   user_id: resolvedCreatedBy,
                   module: "facturacion",
-                  action: "arca_status_change",
+                  action: "arca_authorized",
                   entity_type: "invoice",
                   entity_id: generatedInvoiceFromSale.id,
-                  description: `Estado ARCA actualizado desde POS: ${generatedInvoiceFromSale.arca_status}`,
+                  description: `Factura autorizada por ARCA: ${generatedInvoiceFromSale.document_number} (CAE: ${arcaResult.cae})`,
                   metadata: {
-                    arca_reference: generatedInvoiceFromSale.arca_reference,
-                    arca_response: sendResult.rawResponse,
-                    arca_status_check: statusResult.rawResponse,
+                    cae: arcaResult.cae,
+                    cae_due_date: arcaResult.caeDueDate,
+                    voucher_number: arcaResult.voucherNumber,
+                    qr_url: arcaResult.qrUrl,
                     mode: arcaOperationalStatus.mode,
                   },
                 });
 
                 postSaleMessages.push(
-                  generatedInvoiceFromSale.arca_status === "accepted"
-                    ? "Factura aprobada por ARCA."
-                    : generatedInvoiceFromSale.arca_status === "rejected"
-                      ? "Factura rechazada por ARCA."
-                      : "Factura enviada a ARCA. Pendiente."
+                  `Factura ${generatedInvoiceFromSale.document_number} autorizada por ARCA (CAE: ${arcaResult.cae}).`
+                );
+              } else {
+                const isFallback = arcaSettings.allow_internal_fallback;
+                generatedInvoiceFromSale = await invoicesService.updateArcaStatus(
+                  tenantId,
+                  pendingInvoice.id,
+                  {
+                    arca_status: isFallback ? "not_sent" : "rejected",
+                    arca_message: arcaResult.errorMessage ?? "No se pudo autorizar con ARCA",
+                  }
+                );
+
+                await auditService.createSafe(tenantId, {
+                  user_id: resolvedCreatedBy,
+                  module: "facturacion",
+                  action: isFallback ? "arca_fallback_contingency" : "arca_rejected",
+                  entity_type: "invoice",
+                  entity_id: generatedInvoiceFromSale.id,
+                  description: `ARCA no autorizado (${isFallback ? "Contingencia" : "Rechazado"}): ${arcaResult.errorMessage}`,
+                  metadata: {
+                    error: arcaResult.errorMessage,
+                    mode: arcaOperationalStatus.mode,
+                    fallback: isFallback,
+                  },
+                });
+
+                postSaleMessages.push(
+                  isFallback
+                    ? `Factura generada en contingencia interna (ARCA: ${arcaResult.errorMessage || "ARCA no disponible"}).`
+                    : `ARCA rechazó el comprobante: ${arcaResult.errorMessage || "Error al autorizar"}.`
                 );
               }
             } else if (arcaEnabledForPos && !arcaOperationalStatus.available) {
@@ -3709,7 +3962,7 @@ export const usePosSale = (tenantId: string | null) => {
                 action: "arca_send_blocked",
                 entity_type: "invoice",
                 entity_id: generatedInvoiceFromSale.id,
-                description: `Envio ARCA bloqueado desde POS: ${generatedInvoiceFromSale.document_number}`,
+                description: `Envío ARCA bloqueado desde POS: ${generatedInvoiceFromSale.document_number}`,
                 metadata: {
                   mode: arcaOperationalStatus.mode,
                   reason: arcaOperationalStatus.reason,
@@ -3760,6 +4013,7 @@ export const usePosSale = (tenantId: string | null) => {
 
       setMercadoPagoIntent(null);
       setCartManualDiscount(null);
+      setSelectedEmployeeId(null);
       setRoundingEnabled(posSettings?.rounding_enabled ?? true);
       closeSaleTab(activeTabId);
       if (updatedStockByProductId.size) {
@@ -3781,6 +4035,18 @@ export const usePosSale = (tenantId: string | null) => {
               : {
                   ...customer,
                   current_balance: roundAmount(customer.current_balance + summary.total),
+                }
+          )
+        );
+      }
+      if (isCurrentAccountMethod && normalizedEmployeeId) {
+        setEmployees((previous) =>
+          previous.map((emp) =>
+            emp.id !== normalizedEmployeeId
+              ? emp
+              : {
+                  ...emp,
+                  current_balance: roundAmount((emp.current_balance ?? 0) + summary.total),
                 }
           )
         );
@@ -3839,6 +4105,8 @@ export const usePosSale = (tenantId: string | null) => {
     requireOpenSessionForSale,
     arcaEnabledForPos,
     isArcaConnected,
+    defaultInvoiceDocumentType,
+    paymentMethodInvoiceRules,
     saleTabs,
     activeTabId,
     switchSaleTab,
@@ -3846,6 +4114,11 @@ export const usePosSale = (tenantId: string | null) => {
     closeSaleTab,
     selectedCustomerId,
     selectedCustomer,
+    employees,
+    selectedEmployeeId,
+    selectedEmployee,
+    selectEmployee,
+    setSelectedEmployeeId,
     appliedPriceList,
     promotions,
     cart,
@@ -3887,6 +4160,8 @@ export const usePosSale = (tenantId: string | null) => {
     removeFromCart,
     clearCart,
     cycleReturnableStatus,
+    hasOwedReturnables,
+    owedReturnablesCount,
     createOriginBank,
     mercadoPagoIntent,
     startMercadoPagoPayment,

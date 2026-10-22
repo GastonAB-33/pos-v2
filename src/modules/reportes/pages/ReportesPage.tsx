@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
-import { Download, RefreshCw } from "lucide-react";
+import { Download, RefreshCw, FileSpreadsheet } from "lucide-react";
+import { Link } from "react-router-dom";
+import { routePaths } from "@/config/routes";
 import { ErrorState, LoadingState } from "@/components/ui/UiStates";
 import { useToast } from "@/components/ui/useToast";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -424,6 +426,13 @@ export const ReportesPage = () => {
               <Download aria-hidden="true" className="h-4 w-4" />
               Exportar CSV
             </button>
+            <Link
+              to={`${routePaths.facturacion}?tab=libro-iva`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-900/60"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              <span>Libro IVA Digital (ARCA)</span>
+            </Link>
           </div>
         </div>
 

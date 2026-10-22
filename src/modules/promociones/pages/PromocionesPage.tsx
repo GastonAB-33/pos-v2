@@ -128,7 +128,7 @@ export const PromocionesPage = () => {
       vat_percent: Number(values.porcentajeIva.toFixed(2)),
       profit_percent: Number(values.porcentajeGanancia.toFixed(2)),
       is_active: values.estadoActivo,
-      is_favorite: values.favorito,
+      is_favorite: values.favorito ?? false,
       brand: null,
       supplier: null,
       description: null,

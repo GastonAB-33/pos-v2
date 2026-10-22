@@ -19,6 +19,7 @@ import { useUiStore } from "@/store/ui.store";
 import type { Product, UserRecord } from "@/types/entities";
 import { storageKeys } from "@/utils/local-storage";
 import { cn } from "@/utils/cn";
+import { isStockTrackingEnabled } from "@/utils/stock-tracking";
 
 type TopbarPanel = "support" | "tasks" | "chat" | "notifications" | "user" | "more" | "changelog" | null;
 type TaskStatus = "pendiente" | "completada";
@@ -352,7 +353,7 @@ export const Topbar = () => {
         const products = await productsService.getAllByTenant(tenantId);
         if (!active) return;
         const lowStock = products
-          .filter((product) => product.is_active)
+          .filter((product) => product.is_active && isStockTrackingEnabled(product.description))
           .filter((product) => {
             if (typeof product.stock_min === "number") {
               return product.stock_current <= product.stock_min;

@@ -3,6 +3,7 @@ import { BadgePercent, Barcode, Calculator, Percent, ShoppingCart, Trash2 } from
 import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
 import { cn } from "@/utils/cn";
 import type { CartManualDiscount, PosCartItemComputed } from "@/modules/pos/hooks/usePosSale";
+import type { ReturnableCartStatus, ReturnableConfig } from "@/utils/returnable-packages";
 
 interface PosCartItemView {
   product_id: string;
@@ -20,6 +21,9 @@ interface PosCartItemView {
   scale_total_price: number | null;
   scale_barcode: string | null;
   is_debt_payment_item?: boolean;
+  is_returnable_package_item?: boolean;
+  returnable_config?: ReturnableConfig | null;
+  returnable_status?: ReturnableCartStatus;
   manual_discount?: { type: "percent" | "amount"; value: number; reason: string } | null;
   manual_promotion?: { id: string; name: string; code: string; discount_amount: number } | null;
 }
@@ -55,6 +59,7 @@ interface PosCartProps {
   onSetQuantity: (productId: string, quantity: number) => void;
   onEdit: (item: PosCartItemView) => void;
   onRemove: (productId: string) => void;
+  onCycleReturnableStatus?: (productId: string) => void;
   onClearCart?: () => void;
   onOpenQuickProduct?: () => void;
   onCheckout: () => void;
@@ -108,6 +113,7 @@ export const PosCart = ({
   onSetQuantity,
   onEdit,
   onRemove,
+  onCycleReturnableStatus,
   onClearCart,
   onCheckout,
 }: PosCartProps) => {
@@ -398,6 +404,11 @@ export const PosCart = ({
                           Cobro Cta. Cte.
                         </span>
                       ) : null}
+                      {item.is_returnable_package_item ? (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-200 border border-amber-300 dark:border-amber-800">
+                          📦 Cobro de Envase
+                        </span>
+                      ) : null}
                       {item.sale_mode === "weight" ? (
                         <span className="rounded bg-amber-100 px-1 py-0.2 text-[9px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-200">
                           Balanza
@@ -417,6 +428,30 @@ export const PosCart = ({
                         <span className="rounded bg-purple-100 px-1 py-0.2 text-[9px] font-bold text-purple-800 dark:bg-purple-950 dark:text-purple-200 border border-purple-300 dark:border-purple-700">
                           {item.manual_promotion.name}
                         </span>
+                      ) : null}
+                      {item.returnable_config?.enabled && onCycleReturnableStatus ? (
+                        <button
+                          type="button"
+                          onClick={() => onCycleReturnableStatus(item.product_id)}
+                          disabled={disabled || !canWrite}
+                          className={cn(
+                            "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border transition shadow-2xs cursor-pointer select-none",
+                            item.returnable_status === "charge"
+                              ? "bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/70 dark:text-amber-200 dark:border-amber-700 hover:bg-amber-200 dark:hover:bg-amber-900"
+                              : item.returnable_status === "owe"
+                              ? "bg-purple-100 text-purple-900 border-purple-300 dark:bg-purple-950/70 dark:text-purple-200 dark:border-purple-700 hover:bg-purple-200 dark:hover:bg-purple-900"
+                              : "bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950/70 dark:text-emerald-200 dark:border-emerald-700 hover:bg-emerald-200 dark:hover:bg-emerald-900"
+                          )}
+                          title="Hacé clic para cambiar estado: Trajo envase / Cobrar envase / Anotar envase"
+                        >
+                          {item.returnable_status === "charge" ? (
+                            <span>💰 Cobrar envase (+{currency.format(item.returnable_config.packagePrice * item.quantity)})</span>
+                          ) : item.returnable_status === "owe" ? (
+                            <span>📝 Anotar envase (Cta. Cte.)</span>
+                          ) : (
+                            <span>✓ Trajo envase</span>
+                          )}
+                        </button>
                       ) : null}
                     </div>
                   </div>
@@ -438,6 +473,10 @@ export const PosCart = ({
                   {item.is_debt_payment_item ? (
                     <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                       Pago único
+                    </span>
+                  ) : item.is_returnable_package_item ? (
+                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60">
+                      {item.quantity} {item.quantity === 1 ? "envase" : "envases"}
                     </span>
                   ) : (
                     <div className="flex items-center gap-1">
@@ -523,7 +562,7 @@ export const PosCart = ({
                   )}
 
                   <div className="flex items-center gap-1">
-                    {!item.is_debt_payment_item && onOpenItemPromoModal ? (
+                    {!item.is_debt_payment_item && !item.is_returnable_package_item && onOpenItemPromoModal ? (
                       <button
                         type="button"
                         onClick={() => onOpenItemPromoModal(item as PosCartItemComputed)}
@@ -544,23 +583,25 @@ export const PosCart = ({
                         <span>Promo</span>
                       </button>
                     ) : null}
-                    <button
-                      type="button"
-                      onClick={() => onEdit(item)}
-                      disabled={disabled || !canWrite}
-                      aria-label={`Editar ${item.name}`}
-                      className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-                      title="Editar precio o detalle"
-                    >
-                      Editar
-                    </button>
+                    {!item.is_returnable_package_item && (
+                      <button
+                        type="button"
+                        onClick={() => onEdit(item)}
+                        disabled={disabled || !canWrite}
+                        aria-label={`Editar ${item.name}`}
+                        className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                        title="Editar precio o detalle"
+                      >
+                        Editar
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => onRemove(item.product_id)}
                       disabled={disabled || !canWrite}
                       aria-label={`Eliminar ${item.name}`}
                       className="flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/50"
-                      title="Eliminar producto"
+                      title={item.is_returnable_package_item ? "Quitar cobro de envase" : "Eliminar producto"}
                     >
                       <Trash2 size={13} />
                     </button>

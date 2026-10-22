@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import {
   Lock,
+  LockOpen,
   User,
   CheckCircle2,
   AlertCircle,
@@ -62,6 +63,10 @@ export const CashSessionCloseDetailModal = ({
   const billCounts = snapshot?.billCounts ?? (session.closing_bill_counts as Record<number, number> | undefined);
   const coinsAmount = snapshot?.coinsAmount ?? session.closing_coins_amount ?? 0;
 
+  const openingBillCounts =
+    snapshot?.openingBillCounts ?? (session.opening_bill_counts as Record<number, number> | undefined);
+  const openingCoinsAmount = snapshot?.openingCoinsAmount ?? session.opening_coins_amount ?? 0;
+
   const openedByUser = usersById[session.opened_by_user_id] ?? session.opened_by_user_id;
   const closedByUser = session.closed_by_user_id
     ? usersById[session.closed_by_user_id] ?? session.closed_by_user_id
@@ -72,6 +77,10 @@ export const CashSessionCloseDetailModal = ({
   const hasBillBreakdown =
     billCounts &&
     Object.values(billCounts).some((count) => Number(count) > 0);
+
+  const hasOpeningBillBreakdown =
+    openingBillCounts &&
+    Object.values(openingBillCounts).some((count) => Number(count) > 0);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
@@ -271,6 +280,76 @@ export const CashSessionCloseDetailModal = ({
               </div>
             )}
           </div>
+
+          {/* Desglose de Billetes en Apertura (si fue registrada por conteo físico) */}
+          {hasOpeningBillBreakdown && (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
+              <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <LockOpen className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                    Desglose de Billetes en Apertura
+                  </h4>
+                </div>
+                <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                  Fondo Inicial: <strong className="text-slate-800 dark:text-slate-200">{currency.format(session.opening_amount)}</strong>
+                </span>
+              </div>
+
+              <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                <div className="grid grid-cols-12 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 bg-slate-50/50 dark:bg-slate-900/40">
+                  <div className="col-span-5">Denominación</div>
+                  <div className="col-span-3 text-center">Cantidad</div>
+                  <div className="col-span-4 text-right">Subtotal</div>
+                </div>
+
+                {BILL_DENOMINATIONS.map((denom) => {
+                  const count = openingBillCounts?.[denom] || 0;
+                  if (count === 0) return null;
+                  const subtotal = denom * count;
+                  return (
+                    <div
+                      key={denom}
+                      className="grid grid-cols-12 px-4 py-2 text-xs items-center hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
+                    >
+                      <div className="col-span-5 font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                        <Banknote className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        <span>{currency.format(denom)}</span>
+                      </div>
+                      <div className="col-span-3 text-center font-bold text-slate-900 dark:text-slate-100">
+                        {count.toLocaleString("es-AR")}
+                      </div>
+                      <div className="col-span-4 text-right font-bold text-emerald-700 dark:text-emerald-400">
+                        {currency.format(subtotal)}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {openingCoinsAmount > 0 && (
+                  <div className="grid grid-cols-12 px-4 py-2.5 text-xs items-center bg-slate-50/40 dark:bg-slate-800/30">
+                    <div className="col-span-5 font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                      <Coins className="h-4 w-4 text-amber-500" />
+                      <span>Monedas y valores menores</span>
+                    </div>
+                    <div className="col-span-3 text-center text-slate-400">-</div>
+                    <div className="col-span-4 text-right font-bold text-emerald-700 dark:text-emerald-400">
+                      {currency.format(openingCoinsAmount)}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-12 px-4 py-3 text-xs items-center bg-emerald-50/40 dark:bg-emerald-950/20 font-bold">
+                  <div className="col-span-8 text-slate-900 dark:text-slate-100">
+                    Total Declarado en Apertura
+                  </div>
+                  <div className="col-span-4 text-right text-sm text-emerald-700 dark:text-emerald-300 font-black">
+                    {currency.format(session.opening_amount)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Información Operativa y Auditoría del Turno */}
           <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 space-y-3">

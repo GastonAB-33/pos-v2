@@ -23,35 +23,42 @@ import type {
 import type {
   BankAccount,
   Customer,
+  Employee,
   InstallmentPlan,
   MercadoPagoSettings,
   OriginBank,
   PaymentMethod,
+  PaymentMethodInvoiceRules,
 } from "@/types/entities";
 import { formatCustomerDocument } from "@/modules/configuracion/hooks/useEntityRequirements";
 import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
+import type { PosCheckoutSummary } from "@/modules/pos/hooks/usePosSale";
 import type {
   PosCheckoutValues,
   PosPaymentSplitItem,
 } from "@/modules/pos/schemas/pos-checkout.schema";
 import { PosCustomerSelectModal } from "./PosCustomerSelectModal";
+import { cn } from "@/utils/cn";
 
 interface PosCheckoutPanelProps {
   panelId?: string;
   formId?: string;
   layout?: "panel" | "modal";
   customers: Customer[];
+  employees?: Employee[];
   paymentMethods: PaymentMethod[];
   bankAccounts: BankAccount[];
   originBanks: OriginBank[];
   installmentPlans: InstallmentPlan[];
   selectedCustomerId: string;
+  selectedEmployeeId?: string | null;
   selectedPaymentMethodId: string;
   defaultPaymentMethodId?: string;
   isOnline: boolean;
   checkoutTotal: number;
   rawCheckoutTotal?: number;
   roundingAdjustment?: number;
+  getCheckoutSummary?: (paymentMethodId: string | null | undefined) => PosCheckoutSummary;
   mercadoPagoIntent: MercadoPagoPaymentIntent | null;
   mercadoPagoSettings: MercadoPagoSettings;
   mercadoPagoStatus: MercadoPagoOperationalStatus;
@@ -65,8 +72,12 @@ interface PosCheckoutPanelProps {
     available: number | null;
   } | null;
   hasDebtPaymentInCart?: boolean;
+  hasOwedReturnables?: boolean;
+  owedReturnablesCount?: number;
   disabled?: boolean;
   onCustomerChange: (customerId: string) => void;
+  onSelectEmployee?: (employee: Employee | null) => void;
+  employeeDiscountPercent?: number;
   onPaymentMethodChange: (paymentMethodId: string) => void;
   onCreateOriginBank: (name: string) => Promise<OriginBank | null>;
   onOpenCustomerModal: (customer: Customer | null, defaultTab?: "personal" | "fiscal" | "account") => void;
@@ -77,6 +88,10 @@ interface PosCheckoutPanelProps {
   onCancelMercadoPago: () => void;
   onClose?: () => void;
   onSubmit: (values: PosCheckoutValues) => Promise<void>;
+  arcaEnabled?: boolean;
+  arcaMode?: string;
+  defaultDocumentType?: string;
+  paymentMethodInvoiceRules?: PaymentMethodInvoiceRules | null;
 }
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -120,16 +135,20 @@ interface PosPaymentOption {
 
 export const PosCheckoutPanel = ({
   formId,
+  layout = "modal",
   customers,
+  employees = [],
   paymentMethods,
   bankAccounts,
   selectedCustomerId,
+  selectedEmployeeId,
   selectedPaymentMethodId,
   defaultPaymentMethodId,
   isOnline,
   checkoutTotal,
   rawCheckoutTotal,
   roundingAdjustment = 0,
+  getCheckoutSummary,
   mercadoPagoIntent: _mercadoPagoIntent,
   mercadoPagoSettings: _mercadoPagoSettings,
   mercadoPagoStatus: _mercadoPagoStatus,
@@ -137,8 +156,12 @@ export const PosCheckoutPanel = ({
   canWrite,
   currentAccountSnapshot,
   hasDebtPaymentInCart: _hasDebtPaymentInCart = false,
+  hasOwedReturnables = false,
+  owedReturnablesCount = 0,
   disabled,
   onCustomerChange,
+  onSelectEmployee,
+  employeeDiscountPercent = 10,
   onPaymentMethodChange,
   onOpenCustomerModal,
   onStartMercadoPago: _onStartMercadoPago,
@@ -148,8 +171,31 @@ export const PosCheckoutPanel = ({
   onCancelMercadoPago: _onCancelMercadoPago,
   onClose,
   onSubmit,
+  arcaEnabled,
+  arcaMode,
+  defaultDocumentType,
+  paymentMethodInvoiceRules,
 }: PosCheckoutPanelProps) => {
   const [issueInvoice, setIssueInvoice] = useState(false);
+
+  // Evalúa si una opción de pago exige emisión fiscal obligatoria
+  const isOptionInvoiceMandatory = useCallback((option: PosPaymentOption): boolean => {
+    if (!paymentMethodInvoiceRules?.mandatory_methods?.length) return false;
+    const list = paymentMethodInvoiceRules.mandatory_methods;
+    if (option.bankAccountId && list.includes(`bank_account:${option.bankAccountId}`)) return true;
+    if (option.code && list.includes(option.code)) return true;
+    return false;
+  }, [paymentMethodInvoiceRules]);
+
+  // Evalúa si una opción de pago tiene la facturación deshabilitada completamente
+  const isOptionInvoiceDisabled = useCallback((option: PosPaymentOption): boolean => {
+    if (!paymentMethodInvoiceRules?.disabled_methods?.length) return false;
+    const list = paymentMethodInvoiceRules.disabled_methods;
+    if (option.bankAccountId && list.includes(`bank_account:${option.bankAccountId}`)) return true;
+    if (option.code && list.includes(option.code)) return true;
+    return false;
+  }, [paymentMethodInvoiceRules]);
+
   const [notes] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const isSubmittingLocalRef = useRef(false);
@@ -157,6 +203,14 @@ export const PosCheckoutPanel = ({
 
   // Modal para selección ágil de cliente
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const hasPromptedCustomerForReturnablesRef = useRef(false);
+
+  useEffect(() => {
+    if (layout === "modal" && hasOwedReturnables && !selectedCustomerId && !hasPromptedCustomerForReturnablesRef.current) {
+      hasPromptedCustomerForReturnablesRef.current = true;
+      setIsCustomerModalOpen(true);
+    }
+  }, [layout, hasOwedReturnables, selectedCustomerId]);
 
   // Cuentas bancarias configuradas y habilitadas para POS
   const posBankAccounts = useMemo(() => {
@@ -264,18 +318,22 @@ export const PosCheckoutPanel = ({
       (m) => normalizePaymentMethodCode(m.code) === "current_account"
     );
     if (ccMethod) {
+      const isEmp = Boolean(selectedEmployeeId);
+      const emp = isEmp ? employees.find((e) => e.id === selectedEmployeeId) : null;
       options.push({
         id: `method-${ccMethod.id}`,
         paymentMethodId: ccMethod.id,
         code: "current_account",
-        name: ccMethod.name || "Cuenta Corriente",
-        subtitle: "A crédito / saldo fiado al cliente",
+        name: emp ? "Cuenta Corriente Empleado" : ccMethod.name || "Cuenta Corriente",
+        subtitle: emp
+          ? `A crédito de empleado (${emp.full_name})`
+          : "A crédito / saldo fiado al cliente",
         isCurrentAccount: true,
       });
     }
 
     return options;
-  }, [paymentMethods, posBankAccounts]);
+  }, [paymentMethods, posBankAccounts, selectedEmployeeId, employees]);
 
   // Montos asignados a cada opción de pago { [optionId]: number }
   const [allocatedAmounts, setAllocatedAmounts] = useState<Record<string, number>>({});
@@ -285,6 +343,58 @@ export const PosCheckoutPanel = ({
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [isReadyToSubmit, setIsReadyToSubmit] = useState(false);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Política fiscal activa calculada a partir de los métodos con importe asignado o del método seleccionado
+  const activeInvoiceRule = useMemo<{
+    status: "mandatory" | "disabled" | "normal";
+    reason?: string;
+  }>(() => {
+    if (!paymentMethodInvoiceRules) return { status: "normal" };
+
+    const allocatedOptions = paymentOptions.filter(
+      (opt) => (allocatedAmounts[opt.id] || 0) > 0
+    );
+
+    const targetOptions =
+      allocatedOptions.length > 0
+        ? allocatedOptions
+        : paymentOptions[highlightedIndex]
+        ? [paymentOptions[highlightedIndex]]
+        : [];
+
+    if (targetOptions.length === 0) return { status: "normal" };
+
+    // 1. Si alguna de las opciones activas es OBLIGATORIA
+    const mandatoryMatch = targetOptions.find((opt) => isOptionInvoiceMandatory(opt));
+    if (mandatoryMatch) {
+      return {
+        status: "mandatory",
+        reason: `Facturación obligatoria para ${mandatoryMatch.name}`,
+      };
+    }
+
+    // 2. Si TODAS las opciones activas están DESHABILITADAS
+    const allDisabled =
+      targetOptions.length > 0 &&
+      targetOptions.every((opt) => isOptionInvoiceDisabled(opt));
+    if (allDisabled) {
+      return {
+        status: "disabled",
+        reason: `Facturación deshabilitada para ${targetOptions.map((o) => o.name).join(", ")}`,
+      };
+    }
+
+    return { status: "normal" };
+  }, [paymentMethodInvoiceRules, paymentOptions, allocatedAmounts, highlightedIndex, isOptionInvoiceMandatory, isOptionInvoiceDisabled]);
+
+  // Activa o desactiva automáticamente el switch de facturación fiscal según la regla del medio de pago
+  useEffect(() => {
+    if (activeInvoiceRule.status === "mandatory") {
+      setIssueInvoice(true);
+    } else if (activeInvoiceRule.status === "disabled") {
+      setIssueInvoice(false);
+    }
+  }, [activeInvoiceRule.status]);
 
   // Inicializar con el medio de pago predeterminado o efectivo
   const isInitializedRef = useRef(false);
@@ -307,11 +417,14 @@ export const PosCheckoutPanel = ({
 
       setHighlightedIndex(chosenIndex);
       setIsReadyToSubmit(false);
+      const initialTotal = getCheckoutSummary
+        ? getCheckoutSummary(initialOption.paymentMethodId).total
+        : checkoutTotal;
       setAllocatedAmounts({
-        [initialOption.id]: checkoutTotal,
+        [initialOption.id]: initialTotal,
       });
       setAmountInputs({
-        [initialOption.id]: checkoutTotal.toFixed(2),
+        [initialOption.id]: initialTotal.toFixed(2),
       });
 
       onPaymentMethodChange(initialOption.paymentMethodId);
@@ -319,6 +432,7 @@ export const PosCheckoutPanel = ({
   }, [
     checkoutTotal,
     defaultPaymentMethodId,
+    getCheckoutSummary,
     onPaymentMethodChange,
     paymentOptions,
     selectedPaymentMethodId,
@@ -342,6 +456,12 @@ export const PosCheckoutPanel = ({
   const selectedCustomer = useMemo(
     () => customers.find((c) => c.id === selectedCustomerId) ?? null,
     [customers, selectedCustomerId]
+  );
+
+  // Empleado seleccionado actual
+  const selectedEmployee = useMemo(
+    () => employees.find((e) => e.id === selectedEmployeeId) ?? null,
+    [employees, selectedEmployeeId]
   );
 
   const isCurrentAccountUsed = useMemo(() => {
@@ -410,7 +530,7 @@ export const PosCheckoutPanel = ({
       const targetOption = paymentOptions.find((o) => o.id === optionId);
       if (!targetOption) return;
 
-      if (targetOption.isCurrentAccount && !selectedCustomer) {
+      if (targetOption.isCurrentAccount && !selectedCustomer && !selectedEmployee) {
         setIsCustomerModalOpen(true);
         return;
       }
@@ -472,9 +592,16 @@ export const PosCheckoutPanel = ({
     [allocatedAmounts, amountInputs, checkoutTotal, paymentOptions, selectedCustomer]
   );
 
-  // Desplazar el resto pendiente dinámicamente al método objetivo
+  // Desplazar el resto pendiente dinámicamente al método objetivo (calculando recargos/intereses del método)
   const shiftRemainderToOption = useCallback(
-    (targetOption: PosPaymentOption) => {
+    (targetOption: PosPaymentOption, explicitTotal?: number) => {
+      const effectiveTotal =
+        typeof explicitTotal === "number"
+          ? explicitTotal
+          : getCheckoutSummary
+          ? getCheckoutSummary(targetOption.paymentMethodId).total
+          : checkoutTotal;
+
       if (lockedMethodIds[targetOption.id]) {
         // Si el método ya está establecido, limpiamos los flotantes no bloqueados
         setAllocatedAmounts((prev) => {
@@ -505,7 +632,7 @@ export const PosCheckoutPanel = ({
         }
         return acc;
       }, 0);
-      const remainder = Number(Math.max(0, checkoutTotal - lockedSum).toFixed(2));
+      const remainder = Number(Math.max(0, effectiveTotal - lockedSum).toFixed(2));
 
       setAllocatedAmounts((prev) => {
         const next: Record<string, number> = {};
@@ -533,8 +660,60 @@ export const PosCheckoutPanel = ({
         return next;
       });
     },
-    [allocatedAmounts, checkoutTotal, lockedMethodIds]
+    [allocatedAmounts, checkoutTotal, getCheckoutSummary, lockedMethodIds]
   );
+
+  // Sincronizar el monto asignado dinámico cuando cambia checkoutTotal (por recargos, intereses o descuentos de medios de pago)
+  const prevCheckoutTotalRef = useRef(checkoutTotal);
+  useEffect(() => {
+    if (prevCheckoutTotalRef.current === checkoutTotal) return;
+    prevCheckoutTotalRef.current = checkoutTotal;
+
+    const activeOption = paymentOptions[highlightedIndex];
+    if (!activeOption || lockedMethodIds[activeOption.id]) return;
+
+    setAllocatedAmounts((prev) => {
+      const lockedSum = Object.entries(prev).reduce((acc, [id, val]) => {
+        if (lockedMethodIds[id] && id !== activeOption.id) {
+          return acc + (val || 0);
+        }
+        return acc;
+      }, 0);
+      const remainder = Number(Math.max(0, checkoutTotal - lockedSum).toFixed(2));
+
+      const next: Record<string, number> = {};
+      for (const [id, val] of Object.entries(prev)) {
+        if (lockedMethodIds[id] && id !== activeOption.id) {
+          next[id] = val;
+        }
+      }
+      if (remainder > 0) {
+        next[activeOption.id] = remainder;
+      }
+      return next;
+    });
+
+    setAmountInputs((prev) => {
+      const lockedSum = Object.entries(allocatedAmounts).reduce((acc, [id, val]) => {
+        if (lockedMethodIds[id] && id !== activeOption.id) {
+          return acc + (val || 0);
+        }
+        return acc;
+      }, 0);
+      const remainder = Number(Math.max(0, checkoutTotal - lockedSum).toFixed(2));
+
+      const next: Record<string, string> = {};
+      for (const [id, val] of Object.entries(prev)) {
+        if (lockedMethodIds[id] && id !== activeOption.id) {
+          next[id] = val;
+        }
+      }
+      if (remainder > 0) {
+        next[activeOption.id] = remainder.toFixed(2);
+      }
+      return next;
+    });
+  }, [checkoutTotal, highlightedIndex, lockedMethodIds, paymentOptions, allocatedAmounts]);
 
   // Manejo de envío final de la venta
   const handleFinalSubmit = useCallback(async () => {
@@ -562,9 +741,18 @@ export const PosCheckoutPanel = ({
         return;
       }
 
-      // Validar si cuenta corriente está usada y requiere cliente
-      if (isCurrentAccountUsed && !selectedCustomer) {
-        setSubmitError("Debes seleccionar un cliente para cobrar con cuenta corriente.");
+      // Validar si hay envases adeudados que requieren asignación obligatoria de cliente
+      if (hasOwedReturnables && !selectedCustomer) {
+        setSubmitError(
+          `Hay ${owedReturnablesCount > 1 ? `${owedReturnablesCount} envases` : "un envase"} para anotar. Debes seleccionar al cliente para registrar la deuda de envases antes de finalizar la venta.`
+        );
+        setIsCustomerModalOpen(true);
+        return;
+      }
+
+      // Validar si cuenta corriente está usada y requiere cliente o empleado
+      if (isCurrentAccountUsed && !selectedCustomer && !selectedEmployee) {
+        setSubmitError("Debes seleccionar un cliente o empleado para cobrar con cuenta corriente.");
         setIsCustomerModalOpen(true);
         return;
       }
@@ -574,6 +762,27 @@ export const PosCheckoutPanel = ({
           `La cuenta corriente no está habilitada para ${selectedCustomer.full_name}. Habilitala desde "Habilitar Cta. Cte." para poder confirmar la venta.`
         );
         return;
+      }
+
+      if (isCurrentAccountUsed && selectedEmployee && !selectedEmployee.current_account_enabled) {
+        setSubmitError(
+          `La cuenta corriente no está habilitada para el empleado ${selectedEmployee.full_name}.`
+        );
+        return;
+      }
+
+      if (isCurrentAccountUsed && selectedEmployee && selectedEmployee.current_account_limit != null && selectedEmployee.current_account_limit > 0) {
+        const ccOption = paymentOptions.find((opt) => opt.isCurrentAccount);
+        const debtPart = ccOption ? (allocatedAmounts[ccOption.id] || 0) : totalAssigned;
+        const projected = (selectedEmployee.current_balance ?? 0) + debtPart;
+        if (projected > selectedEmployee.current_account_limit) {
+          const proceed = window.confirm(
+            `Atención: El importe supera el límite de cuenta corriente del empleado (${currency.format(
+              selectedEmployee.current_account_limit
+            )}). Saldo proyectado: ${currency.format(projected)}. ¿Deseás confirmar igualmente?`
+          );
+          if (!proceed) return;
+        }
       }
 
       // Obtener los métodos con monto asignado
@@ -623,6 +832,7 @@ export const PosCheckoutPanel = ({
 
       const payload: PosCheckoutValues = {
         customerId: selectedCustomerId || undefined,
+        employeeId: selectedEmployeeId || undefined,
         paymentMethodId: primaryOption.paymentMethodId,
         issueInvoice,
         notes: notes.trim(),
@@ -687,7 +897,11 @@ export const PosCheckoutPanel = ({
       onPaymentMethodChange(targetOption.paymentMethodId);
       setIsReadyToSubmit(false);
 
-      shiftRemainderToOption(targetOption);
+      const targetTotal = getCheckoutSummary
+        ? getCheckoutSummary(targetOption.paymentMethodId).total
+        : checkoutTotal;
+
+      shiftRemainderToOption(targetOption, targetTotal);
 
       window.setTimeout(() => {
         const el = inputRefs.current[targetOption.id];
@@ -697,7 +911,7 @@ export const PosCheckoutPanel = ({
         }
       }, 20);
     },
-    [onPaymentMethodChange, paymentOptions, shiftRemainderToOption]
+    [checkoutTotal, getCheckoutSummary, onPaymentMethodChange, paymentOptions, shiftRemainderToOption]
   );
 
   // Listener global de teclado para navegación ágil y flujo de Enter en 3 pasos
@@ -746,7 +960,10 @@ export const PosCheckoutPanel = ({
         setHighlightedIndex(nextIndex);
         if (nextOption) {
           onPaymentMethodChange(nextOption.paymentMethodId);
-          shiftRemainderToOption(nextOption);
+          const nextTotal = getCheckoutSummary
+            ? getCheckoutSummary(nextOption.paymentMethodId).total
+            : checkoutTotal;
+          shiftRemainderToOption(nextOption, nextTotal);
         }
         return;
       }
@@ -764,7 +981,10 @@ export const PosCheckoutPanel = ({
         setHighlightedIndex(nextIndex);
         if (nextOption) {
           onPaymentMethodChange(nextOption.paymentMethodId);
-          shiftRemainderToOption(nextOption);
+          const nextTotal = getCheckoutSummary
+            ? getCheckoutSummary(nextOption.paymentMethodId).total
+            : checkoutTotal;
+          shiftRemainderToOption(nextOption, nextTotal);
         }
         return;
       }
@@ -774,8 +994,8 @@ export const PosCheckoutPanel = ({
         const activeOption = paymentOptions[highlightedIndex];
         if (!activeOption) return;
 
-        // Si es cuenta corriente y falta cliente, abrir selector de cliente
-        if (activeOption.isCurrentAccount && !selectedCustomer) {
+        // Si es cuenta corriente y falta cliente o empleado, abrir selector
+        if (activeOption.isCurrentAccount && !selectedCustomer && !selectedEmployee) {
           setIsCustomerModalOpen(true);
           return;
         }
@@ -799,7 +1019,10 @@ export const PosCheckoutPanel = ({
 
         // Si no está bloqueado, asegurarse de asignar el restante disponible
         if (!lockedMethodIds[activeOption.id]) {
-          shiftRemainderToOption(activeOption);
+          const optTotal = getCheckoutSummary
+            ? getCheckoutSummary(activeOption.paymentMethodId).total
+            : checkoutTotal;
+          shiftRemainderToOption(activeOption, optTotal);
         }
 
         setIsReadyToSubmit(false);
@@ -935,6 +1158,7 @@ export const PosCheckoutPanel = ({
     clearOptionAmount,
     confirmOptionAmount,
     defaultPaymentMethodId,
+    getCheckoutSummary,
     handleFinalSubmit,
     highlightedIndex,
     isCustomerModalOpen,
@@ -1041,12 +1265,85 @@ export const PosCheckoutPanel = ({
         </div>
       </div>
 
+      {/* AVISO DESTACADO DE ENVASES ADEUDADOS / PARA ANOTAR */}
+      {hasOwedReturnables && (
+        <div
+          className={cn(
+            "flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl border text-xs font-medium shadow-2xs",
+            selectedCustomer
+              ? "bg-purple-50 dark:bg-purple-950/40 border-purple-300 dark:border-purple-700/80 text-purple-950 dark:text-purple-200"
+              : "bg-amber-50 dark:bg-amber-950/50 border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-200"
+          )}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-base shrink-0">{selectedCustomer ? "📦" : "⚠️"}</span>
+            <div className="min-w-0">
+              <span className="font-bold">
+                {selectedCustomer ? "Envases adeudados:" : "Atención (Envases adeudados):"}
+              </span>{" "}
+              <span>
+                {selectedCustomer
+                  ? `Se registrarán ${owedReturnablesCount > 1 ? `${owedReturnablesCount} envases` : "1 envase"} adeudados en la cuenta corriente de ${selectedCustomer.full_name}.`
+                  : `Hay ${owedReturnablesCount > 1 ? `${owedReturnablesCount} envases` : "1 envase"} para anotar. Debes seleccionar al cliente antes de finalizar.`}
+              </span>
+            </div>
+          </div>
+          {!selectedCustomer ? (
+            <button
+              type="button"
+              onClick={() => setIsCustomerModalOpen(true)}
+              className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shrink-0 cursor-pointer shadow-xs transition"
+            >
+              ¿Quién es el cliente?
+            </button>
+          ) : null}
+        </div>
+      )}
+
       {/* PANEL UNIFICADO DE CLIENTE Y FACTURA AFIP (COMPACTO Y MISMO TAMAÑO ASIGNADO O NO) */}
       <div className="flex items-center justify-between gap-2.5 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 min-h-[42px]">
         <div className="flex items-center gap-1.5 text-xs min-w-0 flex-1">
-          <span className="font-bold text-slate-700 dark:text-slate-200 shrink-0">Cliente:</span>
-          {selectedCustomer ? (
+          {selectedEmployee ? (
             <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <span className="font-bold text-slate-700 dark:text-slate-200 shrink-0">Empleado:</span>
+              <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-600 rounded-lg px-2 py-0.5 shadow-2xs min-w-0">
+                <span className="font-bold text-indigo-900 dark:text-indigo-100 truncate max-w-[130px] sm:max-w-[170px]" title={selectedEmployee.full_name}>
+                  {selectedEmployee.full_name}
+                </span>
+                <span className="rounded bg-indigo-100 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-700 px-1 py-0.2 text-[10px] font-bold text-indigo-800 dark:text-indigo-200 shrink-0">
+                  {selectedEmployee.discount_percent ?? employeeDiscountPercent}% OFF
+                </span>
+                {selectedEmployee.code && (
+                  <span className="rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1 py-0.2 text-[10px] font-mono text-slate-700 dark:text-slate-200 shrink-0 hidden md:inline-block">
+                    {selectedEmployee.code}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsCustomerModalOpen(true)}
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition cursor-pointer shadow-2xs"
+                  title="Cambiar empleado o cliente"
+                  aria-label="Cambiar cliente o empleado"
+                >
+                  <Users size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSelectEmployee?.(null)}
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-rose-200 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/80 transition cursor-pointer shadow-2xs"
+                  title="Quitar empleado seleccionado"
+                  aria-label="Quitar empleado"
+                >
+                  <X size={13} strokeWidth={2.5} />
+                </button>
+              </div>
+            </div>
+          ) : selectedCustomer ? (
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <span className="font-bold text-slate-700 dark:text-slate-200 shrink-0">Cliente:</span>
               <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-2 py-0.5 shadow-2xs min-w-0">
                 <span className="font-bold text-slate-900 dark:text-slate-100 truncate max-w-[130px] sm:max-w-[170px]" title={selectedCustomer.full_name}>
                   {selectedCustomer.full_name}
@@ -1091,13 +1388,14 @@ export const PosCheckoutPanel = ({
             </div>
           ) : (
             <div className="flex items-center gap-2 min-w-0">
-              <span className="text-slate-500 dark:text-slate-400 font-medium truncate">
+              <span className="font-bold text-slate-700 dark:text-slate-200 shrink-0">Cliente / Empleado:</span>
+              <span className="text-slate-600 dark:text-slate-300 font-medium truncate">
                 Consumidor Final (Venta mostrador)
               </span>
               <button
                 type="button"
                 onClick={() => setIsCustomerModalOpen(true)}
-                className="inline-flex items-center gap-1 rounded-md border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50 dark:bg-indigo-950/50 px-2 py-0.5 text-xs font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition cursor-pointer shrink-0"
+                className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/80 px-2.5 py-1 text-xs font-bold text-indigo-700 dark:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition cursor-pointer shrink-0 shadow-2xs"
               >
                 Asignar
               </button>
@@ -1105,19 +1403,58 @@ export const PosCheckoutPanel = ({
           )}
         </div>
 
-        {/* Factura AFIP switch */}
+        {/* Factura ARCA switch */}
         <div className="flex items-center gap-2 shrink-0 pl-2.5 border-l border-slate-200 dark:border-slate-700">
-          <div className="flex items-center gap-1 text-xs">
+          <div className="flex items-center gap-1.5 text-xs">
             <FileText size={13} className="text-blue-600 dark:text-blue-400" />
-            <span className="font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">Factura AFIP:</span>
+            <span className="font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+              Factura {arcaEnabled ? "ARCA" : "Fiscal"}:
+            </span>
+            {issueInvoice && (
+              <span
+                className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                  arcaMode === "mock"
+                    ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                    : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                }`}
+              >
+                {defaultDocumentType || "B"} {arcaEnabled ? `(${arcaMode === "mock" ? "MOCK" : "OFICIAL"})` : ""}
+              </span>
+            )}
+            {activeInvoiceRule.status === "mandatory" && (
+              <span
+                className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-300 dark:border-blue-800 shadow-2xs"
+                title={activeInvoiceRule.reason}
+              >
+                Obligatoria
+              </span>
+            )}
+            {activeInvoiceRule.status === "disabled" && (
+              <span
+                className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800 shadow-2xs"
+                title={activeInvoiceRule.reason}
+              >
+                Deshabilitada
+              </span>
+            )}
           </div>
-          <label className="pos-switch relative inline-flex shrink-0 cursor-pointer items-center">
+          <label
+            className={`pos-switch relative inline-flex shrink-0 items-center ${
+              activeInvoiceRule.status === "disabled"
+                ? "opacity-40 cursor-not-allowed"
+                : "cursor-pointer"
+            }`}
+            title={activeInvoiceRule.reason || "Emitir comprobante fiscal con CAE y código QR oficial"}
+          >
             <input
               type="checkbox"
               checked={issueInvoice}
-              onChange={(e) => setIssueInvoice(e.target.checked)}
+              onChange={(e) => {
+                if (activeInvoiceRule.status === "disabled") return;
+                setIssueInvoice(e.target.checked);
+              }}
               className="peer sr-only"
-              disabled={disabled || !canWrite || !isOnline}
+              disabled={disabled || !canWrite || !isOnline || activeInvoiceRule.status === "disabled"}
             />
             <span className="pos-switch-track">
               <span className="pos-switch-thumb" />
@@ -1151,7 +1488,7 @@ export const PosCheckoutPanel = ({
                   ? "border-amber-400 dark:border-amber-400 bg-amber-500/15 dark:bg-amber-500/20 ring-2 ring-amber-400 dark:ring-amber-400/90 shadow-sm"
                   : hasAmount
                   ? "border-slate-300 dark:border-slate-600 bg-slate-100/70 dark:bg-slate-800/80 hover:border-slate-400 dark:hover:border-slate-500"
-                  : "border-slate-300 dark:border-slate-600/90 bg-white dark:bg-slate-800/60 hover:border-slate-400 dark:hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/90"
+                  : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/70"
               }`}
             >
               {/* Lado izquierdo: Icono y Nombre */}
@@ -1180,6 +1517,36 @@ export const PosCheckoutPanel = ({
                   >
                     {option.name}
                   </span>
+                  {isOptionInvoiceMandatory(option) && (
+                    <span className="rounded bg-blue-50 dark:bg-blue-950/70 px-1.5 py-0.2 text-[9px] font-bold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 shrink-0">
+                      Factura obligatoria
+                    </span>
+                  )}
+                  {isOptionInvoiceDisabled(option) && (
+                    <span className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.2 text-[9px] font-medium text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 shrink-0">
+                      Sin factura
+                    </span>
+                  )}
+                  {(() => {
+                    const methodEntity = paymentMethods.find((m) => m.id === option.paymentMethodId);
+                    const surchargePercent = methodEntity?.surcharge_percent ?? 0;
+                    const discountPercent = methodEntity?.discount_percent ?? 0;
+                    if (surchargePercent > 0) {
+                      return (
+                        <span className="rounded bg-amber-100 dark:bg-amber-950/80 px-1.5 py-0.2 text-[10px] font-bold text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800 shrink-0">
+                          +{surchargePercent}%
+                        </span>
+                      );
+                    }
+                    if (discountPercent > 0) {
+                      return (
+                        <span className="rounded bg-emerald-100 dark:bg-emerald-950/80 px-1.5 py-0.2 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shrink-0">
+                          -{discountPercent}%
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
                   {isEstablished && (
                     <div className="flex items-center gap-1 shrink-0">
                       <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-600 text-white">
@@ -1226,6 +1593,10 @@ export const PosCheckoutPanel = ({
                       setHighlightedIndex(idx);
                       onPaymentMethodChange(option.paymentMethodId);
                       setIsReadyToSubmit(false);
+                      const optTotal = getCheckoutSummary
+                        ? getCheckoutSummary(option.paymentMethodId).total
+                        : checkoutTotal;
+                      shiftRemainderToOption(option, optTotal);
                     }}
                     onClick={(e) => {
                       (e.target as HTMLInputElement).select();
@@ -1305,8 +1676,20 @@ export const PosCheckoutPanel = ({
 
         <button
           type="button"
-          onClick={() => void handleFinalSubmit()}
-          disabled={disabled || isSubmittingLocal || !canWrite || !isFullyAssigned}
+          onClick={() => {
+            if (isFullyAssigned) {
+              void handleFinalSubmit();
+            } else {
+              const activeOption = paymentOptions[highlightedIndex];
+              if (activeOption) {
+                const optTotal = getCheckoutSummary
+                  ? getCheckoutSummary(activeOption.paymentMethodId).total
+                  : checkoutTotal;
+                shiftRemainderToOption(activeOption, optTotal);
+              }
+            }
+          }}
+          disabled={disabled || isSubmittingLocal || !canWrite || (!isFullyAssigned && totalPending <= 0)}
           className={`inline-flex items-center justify-center gap-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-6 shadow-md shadow-emerald-600/20 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer ${
             !disabled && !isSubmittingLocal && isReadyToSubmit && isFullyAssigned
               ? "ring-2 ring-emerald-400 ring-offset-2 dark:ring-offset-slate-900 animate-pulse"
@@ -1335,14 +1718,28 @@ export const PosCheckoutPanel = ({
         </button>
       </div>
 
-      {/* Modal Ágil de Búsqueda y Selección de Cliente */}
+      {/* Modal Ágil de Búsqueda y Selección de Cliente / Empleado */}
       <PosCustomerSelectModal
         isOpen={isCustomerModalOpen}
+        title={hasOwedReturnables && !selectedCustomer ? "¿Quién es el cliente?" : undefined}
+        subtitle={
+          hasOwedReturnables && !selectedCustomer
+            ? "Hay envases para anotar que se registrarán en la cuenta corriente del cliente."
+            : undefined
+        }
         customers={customers}
+        employees={employees}
         selectedCustomerId={selectedCustomerId}
+        selectedEmployeeId={selectedEmployeeId}
         onClose={() => setIsCustomerModalOpen(false)}
         onSelect={(cust) => {
+          onSelectEmployee?.(null);
           onCustomerChange(cust.id);
+          setIsCustomerModalOpen(false);
+        }}
+        onSelectEmployee={(emp) => {
+          onCustomerChange("");
+          onSelectEmployee?.(emp);
           setIsCustomerModalOpen(false);
         }}
         onOpenCreateCustomer={() => {
@@ -1353,6 +1750,7 @@ export const PosCheckoutPanel = ({
           setIsCustomerModalOpen(false);
           onOpenCustomerModal(cust, defaultTab ?? "account");
         }}
+        employeeDiscountPercent={employeeDiscountPercent}
       />
     </section>
   );

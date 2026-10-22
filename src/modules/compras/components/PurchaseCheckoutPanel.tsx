@@ -9,6 +9,7 @@ import {
   ChevronRight,
   FileText,
   Maximize2,
+  Pencil,
   Plus,
   Search,
   StickyNote,
@@ -37,7 +38,9 @@ interface PurchaseCheckoutPanelProps {
   onVatPercentChange: (vat: number) => void;
   iibbPercent: number;
   iibbAmount: number;
+  extraTaxAmount?: number;
   onCreateSupplier: (initialName?: string) => void;
+  onEditSupplier?: (supplier: Supplier) => void;
   onSubmit: (values: PurchaseHeaderValues) => Promise<boolean | void> | boolean | void;
 }
 
@@ -54,7 +57,9 @@ export const PurchaseCheckoutPanel = ({
   onVatPercentChange,
   iibbPercent,
   iibbAmount,
+  extraTaxAmount = 0,
   onCreateSupplier,
+  onEditSupplier,
   onSubmit,
 }: PurchaseCheckoutPanelProps) => {
   const {
@@ -74,6 +79,7 @@ export const PurchaseCheckoutPanel = ({
       vatPercent: vatPercent ?? 0,
       iibbPercent: iibbPercent ?? 0,
       iibbAmount: iibbAmount ?? 0,
+      extraTaxAmount: extraTaxAmount ?? 0,
       notes: "",
       invoicePhotoUrl: "",
     },
@@ -157,7 +163,8 @@ export const PurchaseCheckoutPanel = ({
       if (
         selectedDocumentType === "FACTURA_C" ||
         selectedDocumentType === "REMITO" ||
-        selectedDocumentType === "PRESUPUESTO"
+        selectedDocumentType === "PRESUPUESTO" ||
+        selectedDocumentType === "NOTA_CREDITO_C"
       ) {
         setValue("vatPercent", 0);
         onVatPercentChange(0);
@@ -248,6 +255,7 @@ export const PurchaseCheckoutPanel = ({
         vatPercent: 0,
         iibbPercent: 0,
         iibbAmount: 0,
+        extraTaxAmount: 0,
         notes: "",
         invoicePhotoUrl: "",
       });
@@ -267,6 +275,7 @@ export const PurchaseCheckoutPanel = ({
       vatPercent,
       iibbPercent,
       iibbAmount,
+      extraTaxAmount,
     });
   };
 
@@ -288,6 +297,7 @@ export const PurchaseCheckoutPanel = ({
         <input type="hidden" {...register("vatPercent", { valueAsNumber: true })} />
         <input type="hidden" {...register("iibbPercent", { valueAsNumber: true })} />
         <input type="hidden" {...register("iibbAmount", { valueAsNumber: true })} />
+        <input type="hidden" {...register("extraTaxAmount", { valueAsNumber: true })} />
 
         {/* Grid principal de datos */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -324,17 +334,35 @@ export const PurchaseCheckoutPanel = ({
                       <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
                         CUIT: {currentSelectedSupplier.tax_id}
                       </p>
-                    ) : null}
+                    ) : (
+                      <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+                        ⚠️ Sin CUIT cargado
+                      </p>
+                    )}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleClearSupplier}
-                  disabled={disabled || !canWrite}
-                  className="shrink-0 rounded px-2 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
-                >
-                  Cambiar
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {onEditSupplier ? (
+                    <button
+                      type="button"
+                      onClick={() => onEditSupplier(currentSelectedSupplier)}
+                      disabled={disabled || !canWrite}
+                      className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-white px-2 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-slate-800 shadow-2xs transition"
+                      title="Editar proveedor para asignarle CUIT u otros datos fiscales"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      <span>Editar</span>
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={handleClearSupplier}
+                    disabled={disabled || !canWrite}
+                    className="shrink-0 rounded px-2 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-900/60 transition"
+                  >
+                    Cambiar
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="relative">
@@ -439,7 +467,10 @@ export const PurchaseCheckoutPanel = ({
             >
               <option value="FACTURA_A">Factura A</option>
               <option value="FACTURA_B">Factura B</option>
-              <option value="FACTURA_C">Factura C</option>
+              <option value="FACTURA_C">Factura C (Monotributo)</option>
+              <option value="NOTA_CREDITO_A">Nota de Crédito A</option>
+              <option value="NOTA_CREDITO_B">Nota de Crédito B</option>
+              <option value="NOTA_CREDITO_C">Nota de Crédito C</option>
               <option value="REMITO">Remito</option>
               <option value="TICKET">Ticket</option>
               <option value="PRESUPUESTO">Presupuesto</option>

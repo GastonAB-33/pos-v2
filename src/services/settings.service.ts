@@ -69,6 +69,8 @@ const createDefaultPosSettings = (): PosSettings => ({
   rounding_rule: "none",
   rounding_mode: "nearest",
   rounding_target: "cash_only",
+  employee_discount_percent: 10,
+  employee_discount_excluded_categories: [],
 });
 
 const createDefaultStockSettings = (): StockSettings => ({
@@ -77,6 +79,8 @@ const createDefaultStockSettings = (): StockSettings => ({
   global_low_stock_threshold: 5,
   allow_manual_adjustments: true,
   allow_negative_stock: false,
+  allow_purchases_profit_margin_adjustment: true,
+  returnable_packages: [],
 });
 
 const createDefaultCashSettings = (): CashSettings => ({
@@ -97,6 +101,11 @@ const createDefaultArcaSettings = (): ArcaSettings => ({
   fiscal_environment: "homologacion",
   force_unavailable: false,
   allow_internal_fallback: true,
+  certificate_crt: null,
+  certificate_key: null,
+  certificate_expiration: null,
+  last_connection_status: "untested",
+  last_connection_message: null,
 });
 
 const createDefaultFacturacionSettings = (): FacturacionSettings => ({
@@ -114,6 +123,10 @@ const createDefaultFacturacionSettings = (): FacturacionSettings => ({
   issuer_fiscal_condition: "",
   arca: createDefaultArcaSettings(),
   entity_requirements: createDefaultEntityRequirements(),
+  payment_method_rules: {
+    mandatory_methods: [],
+    disabled_methods: [],
+  },
 });
 
 const createDefaultBarcodeScaleSettings = (): BarcodeScaleSettings => ({
@@ -194,10 +207,15 @@ const normalizeTenantSettings = (input: TenantSettings): TenantSettings => ({
     rounding_rule: input.pos?.rounding_rule ?? "none",
     rounding_mode: input.pos?.rounding_mode ?? "nearest",
     rounding_target: input.pos?.rounding_target ?? "cash_only",
+    employee_discount_percent: input.pos?.employee_discount_percent ?? 10,
+    employee_discount_excluded_categories: input.pos?.employee_discount_excluded_categories ?? [],
   },
   stock: {
     ...createDefaultStockSettings(),
     ...(input.stock ?? {}),
+    returnable_packages: Array.isArray(input.stock?.returnable_packages)
+      ? input.stock.returnable_packages
+      : (input.stock?.returnable_packages ?? []),
   },
   caja: {
     ...createDefaultCashSettings(),
@@ -220,12 +238,13 @@ const normalizeTenantSettings = (input: TenantSettings): TenantSettings => ({
         input.facturacion?.arca?.mode ??
         createDefaultFacturacionSettings().arca.mode,
       cuit_emisor:
-        input.facturacion?.arca?.cuit_emisor ??
-        input.facturacion?.issuer_cuit ??
+        (input.facturacion?.arca?.cuit_emisor || "").trim() ||
+        (input.facturacion?.issuer_cuit || "").trim() ||
         createDefaultFacturacionSettings().arca.cuit_emisor,
       punto_venta:
-        input.facturacion?.arca?.punto_venta ??
-        createDefaultFacturacionSettings().arca.punto_venta,
+        input.facturacion?.arca?.punto_venta && input.facturacion.arca.punto_venta > 0
+          ? input.facturacion.arca.punto_venta
+          : createDefaultFacturacionSettings().arca.punto_venta,
       certificado_alias:
         input.facturacion?.arca?.certificado_alias ??
         createDefaultFacturacionSettings().arca.certificado_alias,
@@ -240,6 +259,29 @@ const normalizeTenantSettings = (input: TenantSettings): TenantSettings => ({
       allow_internal_fallback:
         input.facturacion?.arca?.allow_internal_fallback ??
         createDefaultFacturacionSettings().arca.allow_internal_fallback,
+      certificate_crt:
+        input.facturacion?.arca?.certificate_crt ??
+        createDefaultFacturacionSettings().arca.certificate_crt,
+      certificate_key:
+        input.facturacion?.arca?.certificate_key ??
+        createDefaultFacturacionSettings().arca.certificate_key,
+      certificate_expiration:
+        input.facturacion?.arca?.certificate_expiration ??
+        createDefaultFacturacionSettings().arca.certificate_expiration,
+      last_connection_status:
+        input.facturacion?.arca?.last_connection_status ??
+        createDefaultFacturacionSettings().arca.last_connection_status,
+      last_connection_message:
+        input.facturacion?.arca?.last_connection_message ??
+        createDefaultFacturacionSettings().arca.last_connection_message,
+    },
+    payment_method_rules: {
+      mandatory_methods: Array.isArray(input.facturacion?.payment_method_rules?.mandatory_methods)
+        ? input.facturacion.payment_method_rules.mandatory_methods
+        : [],
+      disabled_methods: Array.isArray(input.facturacion?.payment_method_rules?.disabled_methods)
+        ? input.facturacion.payment_method_rules.disabled_methods
+        : [],
     },
     entity_requirements: {
       customer: {
@@ -285,6 +327,9 @@ const mergeSettingsPayload = (
   stock: {
     ...current.stock,
     ...(patch.stock ?? {}),
+    returnable_packages: patch.stock?.returnable_packages !== undefined
+      ? patch.stock.returnable_packages
+      : current.stock.returnable_packages,
   },
   caja: {
     ...current.caja,
@@ -301,6 +346,16 @@ const mergeSettingsPayload = (
       ...createDefaultArcaSettings(),
       ...current.facturacion.arca,
       ...(patch.facturacion?.arca ?? {}),
+      cuit_emisor:
+        (patch.facturacion?.arca?.cuit_emisor || "").trim() ||
+        (patch.facturacion?.issuer_cuit || "").trim() ||
+        (current.facturacion.arca.cuit_emisor || "").trim() ||
+        (current.facturacion.issuer_cuit || "").trim() ||
+        "",
+      punto_venta:
+        (patch.facturacion?.arca?.punto_venta && patch.facturacion.arca.punto_venta > 0)
+          ? patch.facturacion.arca.punto_venta
+          : (current.facturacion.arca.punto_venta || 1),
     },
     entity_requirements: {
       customer: {

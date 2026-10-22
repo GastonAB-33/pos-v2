@@ -10,28 +10,35 @@ export const usePosNavigation = () => {
   const { isInstalled } = usePwa();
   const posWindowMode = useUiStore((state) => state.posWindowMode);
 
+  const getPosUrl = useCallback(() => {
+    const posUrl = new URL(routePaths.pos, window.location.origin);
+    posUrl.searchParams.set("from", "panel-web");
+    posUrl.searchParams.set("returnTo", `${location.pathname}${location.search}`);
+    return `${posUrl.pathname}${posUrl.search}`;
+  }, [location.pathname, location.search]);
+
   const openPos = useCallback(
     (targetMode?: PosWindowMode) => {
       const mode = targetMode ?? posWindowMode;
-      const posUrl = new URL(routePaths.pos, window.location.origin);
-      posUrl.searchParams.set("from", "panel-web");
-      posUrl.searchParams.set("returnTo", `${location.pathname}${location.search}`);
+      const targetPath = getPosUrl();
 
       if (mode === "new_window" && !isInstalled) {
-        const opened = window.open(posUrl.toString(), "_blank", "noopener,noreferrer");
+        const fullUrl = new URL(targetPath, window.location.origin).toString();
+        const opened = window.open(fullUrl, "_blank", "noopener,noreferrer");
         if (!opened) {
-          navigate(`${posUrl.pathname}${posUrl.search}`);
+          navigate(targetPath);
         }
         return;
       }
 
-      navigate(`${posUrl.pathname}${posUrl.search}`);
+      navigate(targetPath);
     },
-    [isInstalled, location.pathname, location.search, navigate, posWindowMode]
+    [getPosUrl, isInstalled, navigate, posWindowMode]
   );
 
   return {
     openPos,
+    getPosUrl,
     posWindowMode,
   };
 };

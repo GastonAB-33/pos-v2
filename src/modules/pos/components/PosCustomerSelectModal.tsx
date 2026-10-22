@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Edit2, Plus, Search, UserCheck, X } from "lucide-react";
-import type { Customer } from "@/types/entities";
+import { Check, Edit2, Plus, Search, Tag, UserCheck, Users, X } from "lucide-react";
+import type { Customer, Employee } from "@/types/entities";
 import { formatCustomerDocument } from "@/modules/configuracion/hooks/useEntityRequirements";
 
 interface PosCustomerSelectModalProps {
   isOpen: boolean;
   customers: Customer[];
+  employees?: Employee[];
   selectedCustomerId?: string | null;
+  selectedEmployeeId?: string | null;
   onClose: () => void;
   onSelect: (customer: Customer) => void;
+  onSelectEmployee?: (employee: Employee) => void;
   onOpenCreateCustomer: (initialName?: string) => void;
   onEditCustomer?: (customer: Customer, defaultTab?: "personal" | "fiscal" | "account") => void;
+  employeeDiscountPercent?: number;
+  title?: string;
+  subtitle?: string;
 }
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -22,12 +28,21 @@ const currency = new Intl.NumberFormat("es-AR", {
 export const PosCustomerSelectModal = ({
   isOpen,
   customers,
+  employees = [],
   selectedCustomerId,
+  selectedEmployeeId,
   onClose,
   onSelect,
+  onSelectEmployee,
   onOpenCreateCustomer,
   onEditCustomer,
+  employeeDiscountPercent = 10,
+  title,
+  subtitle,
 }: PosCustomerSelectModalProps) => {
+  const [activeTab, setActiveTab] = useState<"customers" | "employees">(
+    selectedEmployeeId ? "employees" : "customers"
+  );
   const [query, setQuery] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -50,26 +65,47 @@ export const PosCustomerSelectModal = ({
       .slice(0, 30);
   }, [customers, query]);
 
+  // Filtrar empleados activos según el query
+  const filteredEmployees = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const active = employees.filter((e) => e.is_active);
+    if (!q) return active.slice(0, 30);
+
+    return active
+      .filter((e) => {
+        const nameMatch = e.full_name.toLowerCase().includes(q);
+        const docMatch = e.document_number?.toLowerCase().includes(q);
+        const codeMatch = e.code?.toLowerCase().includes(q);
+        const posMatch = e.position?.toLowerCase().includes(q);
+        return nameMatch || docMatch || codeMatch || posMatch;
+      })
+      .slice(0, 30);
+  }, [employees, query]);
+
+  const activeListLength =
+    activeTab === "customers" ? filteredCustomers.length : filteredEmployees.length;
+
   // Reset y autofocus inmediato al abrir
   useEffect(() => {
     if (isOpen) {
       setQuery("");
       setHighlightedIndex(0);
+      setActiveTab(selectedEmployeeId ? "employees" : "customers");
       window.setTimeout(() => {
         searchInputRef.current?.focus();
         searchInputRef.current?.select();
       }, 50);
     }
-  }, [isOpen]);
+  }, [isOpen, selectedEmployeeId]);
 
   // Asegurar que el índice resaltado siempre esté dentro del rango
   useEffect(() => {
     setHighlightedIndex((prev) => {
-      if (filteredCustomers.length === 0) return 0;
-      if (prev >= filteredCustomers.length) return filteredCustomers.length - 1;
+      if (activeListLength === 0) return 0;
+      if (prev >= activeListLength) return activeListLength - 1;
       return prev;
     });
-  }, [filteredCustomers.length]);
+  }, [activeListLength]);
 
   // Scroll automático para mantener el ítem resaltado a la vista
   useEffect(() => {
@@ -86,7 +122,7 @@ export const PosCustomerSelectModal = ({
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setHighlightedIndex((prev) =>
-        filteredCustomers.length > 0 ? (prev + 1) % filteredCustomers.length : 0
+        activeListLength > 0 ? (prev + 1) % activeListLength : 0
       );
       return;
     }
@@ -94,8 +130,8 @@ export const PosCustomerSelectModal = ({
     if (e.key === "ArrowUp") {
       e.preventDefault();
       setHighlightedIndex((prev) =>
-        filteredCustomers.length > 0
-          ? (prev - 1 + filteredCustomers.length) % filteredCustomers.length
+        activeListLength > 0
+          ? (prev - 1 + activeListLength) % activeListLength
           : 0
       );
       return;
@@ -103,13 +139,19 @@ export const PosCustomerSelectModal = ({
 
     if (e.key === "Enter") {
       e.preventDefault();
-      if (filteredCustomers.length > 0 && filteredCustomers[highlightedIndex]) {
-        onSelect(filteredCustomers[highlightedIndex]);
-        onClose();
-      } else if (query.trim()) {
-        // Si no hay resultados y apretó enter, ofrece crear cliente con lo que escribió
-        onOpenCreateCustomer(query.trim());
-        onClose();
+      if (activeTab === "customers") {
+        if (filteredCustomers.length > 0 && filteredCustomers[highlightedIndex]) {
+          onSelect(filteredCustomers[highlightedIndex]);
+          onClose();
+        } else if (query.trim()) {
+          onOpenCreateCustomer(query.trim());
+          onClose();
+        }
+      } else {
+        if (filteredEmployees.length > 0 && filteredEmployees[highlightedIndex]) {
+          onSelectEmployee?.(filteredEmployees[highlightedIndex]);
+          onClose();
+        }
       }
       return;
     }
@@ -127,22 +169,22 @@ export const PosCustomerSelectModal = ({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150"
       onKeyDown={handleKeyDown}
     >
       <div className="flex flex-col w-full max-w-xl max-h-[85vh] rounded-2xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-5 py-3.5 bg-slate-50 dark:bg-slate-850">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300">
-              <UserCheck size={16} />
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-5 py-3.5 bg-slate-50 dark:bg-slate-900">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300">
+              <UserCheck size={18} />
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Seleccionar Cliente para Cuenta Corriente
+                {title || "Seleccionar Cliente o Empleado"}
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Buscá por nombre, DNI, CUIT o teléfono
+                {subtitle || "Para cuenta corriente o asignación de venta directa"}
               </p>
             </div>
           </div>
@@ -150,19 +192,65 @@ export const PosCustomerSelectModal = ({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition"
             title="Cerrar (Esc)"
           >
             <X size={18} />
           </button>
         </div>
 
+        {/* Selector de Pestañas Segmentadas con Alto Contraste */}
+        <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-900/90">
+          <div className="flex rounded-xl bg-slate-200/80 p-1 dark:bg-slate-800 dark:border dark:border-slate-700/80">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("customers");
+                setHighlightedIndex(0);
+              }}
+              className={`flex-1 flex items-center justify-center gap-2 rounded-lg py-1.5 px-3 text-xs font-bold transition cursor-pointer ${
+                activeTab === "customers"
+                  ? "bg-white text-indigo-700 shadow-sm dark:bg-slate-700 dark:text-white"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+              }`}
+            >
+              <Users size={14} />
+              <span>Clientes ({customers.filter((c) => c.is_active).length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("employees");
+                setHighlightedIndex(0);
+              }}
+              className={`flex-1 flex items-center justify-center gap-2 rounded-lg py-1.5 px-3 text-xs font-bold transition cursor-pointer ${
+                activeTab === "employees"
+                  ? "bg-white text-indigo-700 shadow-sm dark:bg-slate-700 dark:text-white"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+              }`}
+            >
+              <UserCheck size={14} />
+              <span>Empleados Cta. Cte. ({employees.filter((e) => e.is_active).length})</span>
+              <span
+                className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                  activeTab === "employees"
+                    ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 dark:border dark:border-indigo-800"
+                    : "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300"
+                }`}
+              >
+                {employeeDiscountPercent}% OFF
+              </span>
+            </button>
+          </div>
+        </div>
+
         {/* Search Bar con cursor listo para escribir */}
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+        <div className="p-3.5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
           <div className="relative">
             <Search
               size={16}
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none"
             />
             <input
               ref={searchInputRef}
@@ -172,13 +260,17 @@ export const PosCustomerSelectModal = ({
                 setQuery(e.target.value);
                 setHighlightedIndex(0);
               }}
-              placeholder="Escribí para buscar... (ej: Pérez, 38123...)"
+              placeholder={
+                activeTab === "customers"
+                  ? "Escribí para buscar cliente... (ej: Pérez, 38123...)"
+                  : "Escribí para buscar empleado... (ej: Juan, Cajero, EMP-001)"
+              }
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="off"
               spellCheck={false}
               data-lpignore="true"
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 py-2.5 pl-10 pr-4 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent font-medium"
+              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 py-2 pl-10 pr-4 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent font-medium"
             />
           </div>
         </div>
@@ -186,11 +278,99 @@ export const PosCustomerSelectModal = ({
         {/* Results List */}
         <div
           ref={listContainerRef}
-          className="flex-1 overflow-y-auto p-2 space-y-1 divide-y divide-slate-100 dark:divide-slate-800/60"
+          className="flex-1 overflow-y-auto p-2 space-y-1.5"
         >
-          {filteredCustomers.length === 0 ? (
+          {activeTab === "employees" ? (
+            filteredEmployees.length === 0 ? (
+              <div className="p-8 text-center">
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  No se encontraron empleados para &quot;{query}&quot;
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Verificá el nombre, legajo o que el empleado esté registrado en Agenda &gt; Empleados.
+                </p>
+              </div>
+            ) : (
+              filteredEmployees.map((emp, idx) => {
+                const isHighlighted = idx === highlightedIndex;
+                const isSelected = emp.id === selectedEmployeeId;
+                const isCcEnabled = emp.current_account_enabled;
+                const discount = emp.discount_percent ?? employeeDiscountPercent;
+
+                return (
+                  <div
+                    key={emp.id}
+                    data-customer-item="true"
+                    onClick={() => {
+                      onSelectEmployee?.(emp);
+                      onClose();
+                    }}
+                    onMouseEnter={() => setHighlightedIndex(idx)}
+                    className={`group relative flex items-center justify-between rounded-xl px-3.5 py-2.5 text-left transition cursor-pointer border ${
+                      isHighlighted
+                        ? "bg-indigo-50/90 dark:bg-indigo-950/70 border-indigo-400 dark:border-indigo-500 ring-2 ring-indigo-500/30"
+                        : "bg-white dark:bg-slate-900/90 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                    } ${isSelected ? "border-l-4 border-l-indigo-600 dark:border-l-indigo-400" : ""}`}
+                  >
+                    <div className="min-w-0 pr-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                          {emp.full_name}
+                        </span>
+                        <span className="rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 text-[10px] font-mono text-slate-700 dark:text-slate-200">
+                          {emp.code}
+                        </span>
+                        <span className="rounded-md bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1">
+                          <Tag size={10} /> {discount}% OFF
+                        </span>
+                        {isSelected && (
+                          <span className="rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 text-[10px] font-bold px-2 py-0.2 flex items-center gap-1">
+                            <Check size={10} strokeWidth={3} /> Seleccionado
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                        <span>
+                          Puesto: <strong className="text-slate-700 dark:text-slate-200">{emp.position}</strong>
+                        </span>
+                        {emp.document_number && <span>DNI: {emp.document_number}</span>}
+                        {emp.phone && <span>Tel: {emp.phone}</span>}
+                      </div>
+                    </div>
+
+                    {/* Estado de Cuenta Corriente */}
+                    <div className="text-right shrink-0">
+                      {isCcEnabled ? (
+                        <div>
+                          <span className="inline-block rounded-md bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-700 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                            Cta. Cte. Habilitada
+                          </span>
+                          {emp.current_account_limit != null && (
+                            <p className="text-[10px] text-slate-400 dark:text-slate-400 mt-0.5 font-mono">
+                              Límite: {currency.format(emp.current_account_limit)}
+                            </p>
+                          )}
+                          <p className="text-[11px] font-bold text-slate-800 dark:text-slate-200 font-mono mt-0.5">
+                            Saldo adeudado: {currency.format(emp.current_balance || 0)}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="inline-block rounded-md bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-700 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                            Cta. Cte. Inactiva
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )
+          ) : (
+            filteredCustomers.length === 0 ? (
             <div className="p-8 text-center">
-              <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                 No se encontraron clientes para &quot;{query}&quot;
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 mb-4">
@@ -223,11 +403,11 @@ export const PosCustomerSelectModal = ({
                     onClose();
                   }}
                   onMouseEnter={() => setHighlightedIndex(idx)}
-                  className={`group relative flex items-center justify-between rounded-xl px-3.5 py-3 text-left transition cursor-pointer ${
+                  className={`group relative flex items-center justify-between rounded-xl px-3.5 py-2.5 text-left transition cursor-pointer border ${
                     isHighlighted
-                      ? "bg-indigo-50 dark:bg-indigo-950/60 ring-1.5 ring-indigo-500/80 dark:ring-indigo-400/80"
-                      : "hover:bg-slate-50 dark:hover:bg-slate-800/70"
-                  } ${isSelected ? "border-l-4 border-indigo-600 dark:border-indigo-400" : ""}`}
+                      ? "bg-indigo-50/90 dark:bg-indigo-950/70 border-indigo-400 dark:border-indigo-500 ring-2 ring-indigo-500/30"
+                      : "bg-white dark:bg-slate-900/90 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                  } ${isSelected ? "border-l-4 border-l-indigo-600 dark:border-l-indigo-400" : ""}`}
                 >
                   <div className="min-w-0 pr-3">
                     <div className="flex items-center gap-2">
@@ -235,12 +415,12 @@ export const PosCustomerSelectModal = ({
                         {customer.full_name}
                       </span>
                       {customer.document_number && (
-                        <span className="rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 text-[10px] font-mono text-slate-600 dark:text-slate-300">
+                        <span className="rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-1.5 py-0.5 text-[10px] font-mono text-slate-700 dark:text-slate-200">
                           {formatCustomerDocument(customer.document_type, customer.document_number)}
                         </span>
                       )}
                       {isSelected && (
-                        <span className="rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold px-2 py-0.2 flex items-center gap-1">
+                        <span className="rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 text-[10px] font-bold px-2 py-0.2 flex items-center gap-1">
                           <Check size={10} strokeWidth={3} /> Actual
                         </span>
                       )}
@@ -258,21 +438,21 @@ export const PosCustomerSelectModal = ({
                   <div className="text-right shrink-0">
                     {isCcEnabled ? (
                       <div>
-                        <span className="inline-block rounded-md bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/70 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                        <span className="inline-block rounded-md bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-700 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
                           Cta. Cte. Habilitada
                         </span>
                         {customer.current_account_limit != null && (
-                          <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                          <p className="text-[10px] text-slate-400 dark:text-slate-400 mt-0.5 font-mono">
                             Límite: {currency.format(customer.current_account_limit)}
                           </p>
                         )}
-                        <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300 font-mono mt-0.5">
+                        <p className="text-[11px] font-bold text-slate-800 dark:text-slate-200 font-mono mt-0.5">
                           Saldo actual: {currency.format(customer.current_balance || 0)}
                         </p>
                       </div>
                     ) : (
                       <div className="flex flex-col items-end gap-1">
-                        <span className="inline-block rounded-md bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/70 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                        <span className="inline-block rounded-md bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-700 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
                           Cta. Cte. Inactiva
                         </span>
                         {onEditCustomer ? (
@@ -296,23 +476,25 @@ export const PosCustomerSelectModal = ({
                 </div>
               );
             })
-          )}
+          ))}
         </div>
 
         {/* Footer con botón rápido de alta */}
-        <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800 px-4 py-3 bg-slate-50 dark:bg-slate-850 text-xs">
-          <button
-            type="button"
-            onClick={() => {
-              onOpenCreateCustomer(query.trim());
-              onClose();
-            }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
-          >
-            <Plus size={14} className="text-indigo-600 dark:text-indigo-400" />
-            Crear nuevo cliente
-          </button>
-        </div>
+        {activeTab === "customers" ? (
+          <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800 px-4 py-3 bg-slate-50 dark:bg-slate-900 text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                onOpenCreateCustomer(query.trim());
+                onClose();
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer"
+            >
+              <Plus size={14} className="text-indigo-600 dark:text-indigo-400" />
+              Crear nuevo cliente
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

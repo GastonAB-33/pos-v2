@@ -1,28 +1,51 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { LoadingState } from "@/components/ui/UiStates";
+import { useToast } from "@/components/ui/useToast";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
 import {
+  Activity,
   AlertTriangle,
   AppWindow,
+  Ban,
   Building2,
   Calculator,
   CheckCircle2,
   Coins,
+  CreditCard,
+  Download,
   ExternalLink,
+  FileCheck2,
   FileText,
+  Key,
+  Landmark,
+  Lock,
   Package,
   Palette,
+  Plus,
+  QrCode,
   RefreshCw,
+  Save,
   Scale,
   Settings,
+  ShieldAlert,
+  ShieldCheck,
   ShoppingCart,
   Sparkles,
   Store,
+  Tag,
   Type,
+  Trash2,
   Users,
   Wallet,
+  X,
 } from "lucide-react";
+import { ArcaCertificateWizardModal } from "@/modules/configuracion/components/ArcaCertificateWizardModal";
+import { ArcaAccountantGuideModal } from "@/modules/configuracion/components/ArcaAccountantGuideModal";
+import { downloadFile } from "@/modules/configuracion/utils/arca-certificate-helper";
+import { arcaService } from "@/services/arca.service";
+import { productsService } from "@/services/products.service";
+import { parseReturnableConfig, COMMON_RETURNABLE_PACKAGES } from "@/utils/returnable-packages";
 import { broadcastEntityRequirementsChanged } from "@/modules/configuracion/hooks/useEntityRequirements";
 import { parseScaleBarcode } from "@/services/barcode/scale-barcode.service";
 import { useAuthStore } from "@/features/auth/store/auth.store";
@@ -46,6 +69,12 @@ import type {
   TenantSettings,
   TenantSettingsSectionKey,
 } from "@/types/entities";
+
+const currency = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  maximumFractionDigits: 2,
+});
 
 const toNumber = (value: string, fallback: number): number => {
   const parsed = Number(value);
@@ -79,6 +108,7 @@ interface ConfiguracionScopePreset {
     codigos_balanza: boolean;
     apariencia: boolean;
     sistema: boolean;
+    empleados: boolean;
   };
 }
 
@@ -98,11 +128,12 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       codigos_balanza: true,
       apariencia: true,
       sistema: true,
+      empleados: true,
     },
   },
   agenda: {
-    title: "Configuración de Agenda",
-    description: "Configuraciones relacionadas con agenda y datos base del negocio",
+    title: "Configuración de Agenda y Personal",
+    description: "Configuraciones del negocio, beneficios y cuenta corriente de empleados",
     permissionModule: "configuracion_agenda",
     allowSaveAll: false,
     visibleSections: {
@@ -115,6 +146,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       codigos_balanza: false,
       apariencia: false,
       sistema: false,
+      empleados: true,
     },
   },
   catalogo: {
@@ -132,6 +164,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       codigos_balanza: true,
       apariencia: false,
       sistema: false,
+      empleados: false,
     },
   },
   analisis: {
@@ -149,6 +182,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       codigos_balanza: false,
       apariencia: false,
       sistema: false,
+      empleados: false,
     },
   },
   sistema: {
@@ -166,6 +200,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       codigos_balanza: false,
       apariencia: true,
       sistema: true,
+      empleados: false,
     },
   },
   contable: {
@@ -183,6 +218,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       codigos_balanza: false,
       apariencia: false,
       sistema: false,
+      empleados: false,
     },
   },
 };
@@ -196,7 +232,8 @@ type ConfigTabKey =
   | "facturacion"
   | "contableCatalogos"
   | "codigos_balanza"
-  | "sistema";
+  | "sistema"
+  | "empleados";
 
 interface ConfigTabDefinition {
   id: ConfigTabKey;
@@ -209,6 +246,7 @@ interface ConfigTabDefinition {
 const configTabs: ConfigTabDefinition[] = [
   { id: "negocio", label: "Negocio", icon: Store, description: "Datos comerciales y de contacto" },
   { id: "pos", label: "Punto de Venta", icon: ShoppingCart, description: "Comportamiento de caja y scanner" },
+  { id: "empleados", label: "Empleados y Cta. Cte.", icon: Users, badge: "Personal", description: "Descuento en compras y categorías excluidas" },
   { id: "apariencia", label: "Apariencia y Letra", icon: Palette, badge: "Accesibilidad", description: "Tema y tamaño de letra/interfaz" },
   { id: "caja", label: "Caja y Tesorería", icon: Wallet, description: "Sesiones y movimientos iniciales" },
   { id: "stock", label: "Stock e Inventario", icon: Package, description: "Alertas y umbrales de stock" },
@@ -267,6 +305,7 @@ interface ConfiguracionPageProps {
 export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => {
   const scopePreset = configuracionScopePresets[scope];
   const { tenantId } = useTenant();
+  const toast = useToast();
   const user = useAuthStore((state) => state.user);
   const { canRead, canWrite } = usePermissions();
   const canReadConfiguracion = canRead(scopePreset.permissionModule);
@@ -351,6 +390,229 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     return parseScaleBarcode(scaleTesterBarcode, draft.codigos_balanza);
   }, [scaleTesterBarcode, draft?.codigos_balanza]);
 
+    const [newPackageName, setNewPackageName] = useState("");
+  const [newPackagePrice, setNewPackagePrice] = useState<number | "">("");
+
+  const handleAddReturnablePackage = () => {
+    const trimmed = newPackageName.trim();
+    if (!trimmed || !draft) return;
+
+    const currentList = draft.stock.returnable_packages || [];
+    if (currentList.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) {
+      toast.error(`El envase "${trimmed}" ya está en la lista.`);
+      return;
+    }
+
+    const price = typeof newPackagePrice === "number" ? Math.max(0, newPackagePrice) : 0;
+    const updated = [...currentList, { name: trimmed, suggestedPrice: price }];
+    updateSection("stock", { returnable_packages: updated });
+    setNewPackageName("");
+    setNewPackagePrice("");
+    toast.success(`Envase "${trimmed}" agregado a la lista`);
+  };
+
+  const handleRemoveReturnablePackage = (packageName: string) => {
+    if (!draft) return;
+    const currentList = draft.stock.returnable_packages || [];
+    const updated = currentList.filter((p) => p.name !== packageName);
+    updateSection("stock", { returnable_packages: updated });
+    toast.success(`Envase "${packageName}" eliminado`);
+  };
+
+  const handleDetectPackagesFromProducts = async () => {
+    if (!tenantId || !draft) return;
+    try {
+      const products = await productsService.getAllByTenant(tenantId);
+      const currentList = [...(draft.stock.returnable_packages || [])];
+      const existingNames = new Set(currentList.map((p) => p.name.toLowerCase()));
+      let addedCount = 0;
+
+      for (const p of products) {
+        const config = parseReturnableConfig(p.description);
+        if (config && config.enabled && config.packageName.trim()) {
+          const lower = config.packageName.trim().toLowerCase();
+          if (!existingNames.has(lower)) {
+            existingNames.add(lower);
+            currentList.push({
+              name: config.packageName.trim(),
+              suggestedPrice: config.packagePrice,
+            });
+            addedCount++;
+          }
+        }
+      }
+
+      if (addedCount > 0) {
+        updateSection("stock", { returnable_packages: currentList });
+        toast.success(`Se detectaron y agregaron ${addedCount} envases desde tus productos`);
+      } else {
+        toast.info("No se encontraron envases nuevos en los productos actuales");
+      }
+    } catch {
+      toast.error("Error al detectar envases desde productos");
+    }
+  };
+
+  const handleLoadCommonPackages = () => {
+    if (!draft) return;
+    const currentList = [...(draft.stock.returnable_packages || [])];
+    const existingNames = new Set(currentList.map((p) => p.name.toLowerCase()));
+    let addedCount = 0;
+
+    for (const pkg of COMMON_RETURNABLE_PACKAGES) {
+      if (!existingNames.has(pkg.name.toLowerCase())) {
+        existingNames.add(pkg.name.toLowerCase());
+        currentList.push(pkg);
+        addedCount++;
+      }
+    }
+
+    if (addedCount > 0) {
+      updateSection("stock", { returnable_packages: currentList });
+      toast.success(`Se agregaron ${addedCount} tipos de envases habituales`);
+    } else {
+      toast.info("Los envases habituales ya se encuentran en la lista");
+    }
+  };
+
+  const [isArcaWizardOpen, setIsArcaWizardOpen] = useState(false);
+  const [isArcaGuideOpen, setIsArcaGuideOpen] = useState(false);
+  const [isTestingArcaConnection, setIsTestingArcaConnection] = useState(false);
+  const [arcaTestFeedback, setArcaTestFeedback] = useState<{
+    status: "success" | "error";
+    message: string;
+  } | null>(null);
+
+  const handleTestArcaConnection = async () => {
+    if (!draft?.facturacion?.arca) return;
+    const { cuit_emisor, punto_venta } = draft.facturacion.arca;
+    const cleanCuit = (cuit_emisor || draft.facturacion.issuer_cuit || "").replace(/\D/g, "");
+
+    if (!cleanCuit || cleanCuit.length < 11) {
+      setArcaTestFeedback({
+        status: "error",
+        message: "Ingresá un CUIT emisor válido de 11 dígitos para probar la conexión.",
+      });
+      return;
+    }
+
+    if (!punto_venta || punto_venta < 1) {
+      setArcaTestFeedback({
+        status: "error",
+        message: "Ingresá un Punto de Venta fiscal válido (mayor o igual a 1).",
+      });
+      return;
+    }
+
+    setIsTestingArcaConnection(true);
+    setArcaTestFeedback(null);
+
+    const result = await arcaService.testConnection(draft.facturacion.arca, cleanCuit, punto_venta);
+    setIsTestingArcaConnection(false);
+    setArcaTestFeedback({
+      status: result.success ? "success" : "error",
+      message: result.message,
+    });
+
+    if (result.success) {
+      const updatedFacturacion: FacturacionSettings = {
+        ...draft.facturacion,
+        issuer_cuit: cleanCuit,
+        arca: {
+          ...draft.facturacion.arca,
+          enabled: true,
+          cuit_emisor: cleanCuit,
+          punto_venta,
+        },
+      };
+      await handleSaveSection("facturacion", updatedFacturacion);
+    }
+  };
+
+  // Permiso para modificar beneficios de empleados (solo administradores del sistema)
+  const isAdminUser = useMemo(() => {
+    if (!user) return false;
+    const role = (user.role || "").toLowerCase();
+    const profileName = (user.permissionProfileName || "").toLowerCase();
+    return (
+      role === "admin" ||
+      role === "owner" ||
+      role === "superadmin" ||
+      role === "platform_admin" ||
+      profileName.includes("admin") ||
+      profileName.includes("dueño") ||
+      profileName.includes("propietario")
+    );
+  }, [user]);
+
+  const canModifyEmployeeBenefits = canWriteConfiguracion && isAdminUser;
+
+  // Categorías de productos del comercio para exclusión rápida
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [newExcludedCategoryInput, setNewExcludedCategoryInput] = useState("");
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let isMounted = true;
+    productsService
+      .getAllByTenant(tenantId)
+      .then((prods) => {
+        if (!isMounted) return;
+        const set = new Set<string>();
+        (prods || []).forEach((p) => {
+          if (p.category && p.category.trim()) {
+            set.add(p.category.trim());
+          }
+        });
+        setAvailableCategories(Array.from(set).sort((a, b) => a.localeCompare(b)));
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [tenantId]);
+
+  const handleToggleExcludedCategory = (categoryName: string) => {
+    if (!canModifyEmployeeBenefits || !draft?.pos) return;
+    const trimmed = categoryName.trim();
+    if (!trimmed) return;
+
+    const currentList = draft.pos.employee_discount_excluded_categories ?? [];
+    const exists = currentList.some((c) => c.toLowerCase() === trimmed.toLowerCase());
+    const nextList = exists
+      ? currentList.filter((c) => c.toLowerCase() !== trimmed.toLowerCase())
+      : [...currentList, trimmed];
+
+    updateSection("pos", {
+      employee_discount_excluded_categories: nextList,
+    });
+  };
+
+  const handleAddCustomExcludedCategory = () => {
+    if (!canModifyEmployeeBenefits || !draft?.pos) return;
+    const trimmed = newExcludedCategoryInput.trim();
+    if (!trimmed) return;
+
+    const currentList = draft.pos.employee_discount_excluded_categories ?? [];
+    if (!currentList.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
+      updateSection("pos", {
+        employee_discount_excluded_categories: [...currentList, trimmed],
+      });
+    }
+    setNewExcludedCategoryInput("");
+  };
+
+  const allDisplayedCategories = useMemo(() => {
+    const set = new Set<string>();
+    (draft?.pos?.employee_discount_excluded_categories ?? []).forEach((c) => {
+      if (c && c.trim()) set.add(c.trim());
+    });
+    availableCategories.forEach((c) => {
+      if (c && c.trim()) set.add(c.trim());
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [draft?.pos?.employee_discount_excluded_categories, availableCategories]);
 
   const visibleTabs = useMemo(
     () => configTabs.filter((tab) => scopePreset.visibleSections[tab.id]),
@@ -393,6 +655,22 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     });
   };
 
+  const updateArca = useCallback((patch: Partial<FacturacionSettings["arca"]>) => {
+    setDraft((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        facturacion: {
+          ...current.facturacion,
+          arca: {
+            ...current.facturacion.arca,
+            ...patch,
+          },
+        },
+      };
+    });
+  }, []);
+
   const updateEntityRequirements = (
     entity: "customer" | "supplier",
     field: string,
@@ -421,6 +699,102 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
       };
     });
   };
+
+  const togglePaymentMethodInvoiceRule = (
+    key: string,
+    ruleType: "mandatory" | "disabled"
+  ) => {
+    setDraft((current) => {
+      if (!current) return current;
+
+      const currentRules = current.facturacion.payment_method_rules || {
+        mandatory_methods: [],
+        disabled_methods: [],
+      };
+
+      const currentMandatory = new Set(currentRules.mandatory_methods || []);
+      const currentDisabled = new Set(currentRules.disabled_methods || []);
+
+      if (ruleType === "mandatory") {
+        if (currentMandatory.has(key)) {
+          currentMandatory.delete(key);
+        } else {
+          currentMandatory.add(key);
+          currentDisabled.delete(key); // Mutuamente excluyente
+        }
+      } else {
+        if (currentDisabled.has(key)) {
+          currentDisabled.delete(key);
+        } else {
+          currentDisabled.add(key);
+          currentMandatory.delete(key); // Mutuamente excluyente
+        }
+      }
+
+      return {
+        ...current,
+        facturacion: {
+          ...current.facturacion,
+          payment_method_rules: {
+            mandatory_methods: Array.from(currentMandatory),
+            disabled_methods: Array.from(currentDisabled),
+          },
+        },
+      };
+    });
+  };
+
+  const standardPaymentMethodOptions = useMemo(
+    () => [
+      {
+        key: "cash",
+        label: "Efectivo",
+        subtitle: "Cobro inmediato en caja física",
+        icon: Coins,
+      },
+      {
+        key: "card_debit",
+        label: "Tarjeta de Débito",
+        subtitle: "Cobro posnet / terminal de débito",
+        icon: CreditCard,
+      },
+      {
+        key: "card_credit",
+        label: "Tarjeta de Crédito",
+        subtitle: "Cobro financiado / tarjeta de crédito",
+        icon: CreditCard,
+      },
+      {
+        key: "transfer",
+        label: "Transferencias (Generales / Sin banco)",
+        subtitle: "Acreditaciones bancarias genéricas",
+        icon: Landmark,
+      },
+      {
+        key: "mercado_pago",
+        label: "Mercado Pago",
+        subtitle: "Cobro vía QR o link de pago",
+        icon: QrCode,
+      },
+      {
+        key: "cheque",
+        label: "Cheque",
+        subtitle: "Cheques físicos o eCheq",
+        icon: FileText,
+      },
+      {
+        key: "current_account",
+        label: "Cuenta Corriente",
+        subtitle: "Ventas a crédito de clientes o empleados",
+        icon: Wallet,
+      },
+    ],
+    []
+  );
+
+  const activeBankAccounts = useMemo(() => {
+    return (bankAccounts || []).filter((b) => b.is_active);
+  }, [bankAccounts]);
 
   const updateMercadoPagoSettings = (
     patch: Partial<TenantSettings["sistema"]["mercado_pago"]>
@@ -453,11 +827,14 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     }
   };
 
-  const handleSaveSection = async (section: TenantSettingsSectionKey) => {
+  const handleSaveSection = async (
+    section: TenantSettingsSectionKey,
+    customSectionData?: TenantSettings[TenantSettingsSectionKey]
+  ) => {
     if (!draft) return;
 
     const appearanceBeforeSave = draft.apariencia;
-    await saveSection(section);
+    await saveSection(section, customSectionData);
 
     if (section === "apariencia") {
       applyAppearance(appearanceBeforeSave);
@@ -760,6 +1137,203 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
           </div>
         </section>
 
+        {/* SECCIÓN: BENEFICIOS Y CUENTA CORRIENTE DE EMPLEADOS */}
+        <section
+          className="ui-card space-y-5"
+          hidden={!scopePreset.visibleSections.empleados || (visibleTabs.length > 1 && activeTab !== "empleados")}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400">
+                <Users size={20} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    Descuento y Beneficios para Empleados
+                  </h2>
+                  <span className="rounded-full bg-indigo-100 dark:bg-indigo-950 px-2 py-0.5 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                    Cta. Cte. Personal
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Porcentaje fijo de bonificación para retiros a cuenta corriente y exclusión de categorías
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="ui-btn-ghost"
+                onClick={() => { void resetSection("pos"); }}
+                disabled={!canModifyEmployeeBenefits || savingSection.pos}
+              >
+                Restablecer
+              </button>
+              <button
+                type="button"
+                className="ui-btn-primary bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white"
+                onClick={() => { void handleSaveSection("pos"); }}
+                disabled={!canModifyEmployeeBenefits || savingSection.pos}
+              >
+                {savingSection.pos ? "Guardando..." : "Guardar Beneficios"}
+              </button>
+            </div>
+          </div>
+
+          {/* Banner si el usuario actual NO es administrador */}
+          {!isAdminUser && (
+            <div className="flex items-center gap-2.5 rounded-xl border border-amber-300 dark:border-amber-800/80 bg-amber-50 dark:bg-amber-950/40 p-3.5 text-xs text-amber-900 dark:text-amber-200">
+              <ShieldAlert size={18} className="shrink-0 text-amber-600 dark:text-amber-400" />
+              <div>
+                <p className="font-bold">Acceso en modo solo lectura</p>
+                <p className="text-amber-800 dark:text-amber-300">
+                  Solo los usuarios con rol de <strong>Administrador</strong> pueden modificar el porcentaje de descuento fijo y las categorías excluidas de empleados.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Tarjeta 1: Porcentaje Fijo de Descuento */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Tag size={16} className="text-indigo-600 dark:text-indigo-400" />
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Porcentaje Fijo de Descuento para Empleados (%)
+                  </label>
+                  {!canModifyEmployeeBenefits && (
+                    <span className="flex items-center gap-1 rounded bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-400">
+                      <Lock size={10} /> Solo Admins
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl">
+                  Se aplica automáticamente cuando un empleado compra o retira productos a su cuenta corriente (ej. 10%). Si un empleado tiene un porcentaje particular cargado en su ficha, prevalecerá su porcentaje individual.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="relative w-36">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.5}
+                    value={draft.pos.employee_discount_percent ?? 10}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      updateSection("pos", {
+                        employee_discount_percent: isNaN(val) ? 0 : Math.max(0, Math.min(100, val)),
+                      });
+                    }}
+                    disabled={!canModifyEmployeeBenefits}
+                    className="ui-input pr-8 text-right font-bold font-mono text-base border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  />
+                  <span className="absolute right-3.5 top-2.5 text-sm font-bold text-slate-400 dark:text-slate-500 pointer-events-none">
+                    %
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Tarjeta 2: Categorías Excluidas del Descuento (Minimalista) */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4 space-y-3">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <Ban size={15} className="text-rose-600 dark:text-rose-400" />
+                <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Categorías Excluidas del Descuento
+                </h3>
+                {(draft.pos.employee_discount_excluded_categories ?? []).length > 0 && (
+                  <span className="rounded-full bg-rose-100 dark:bg-rose-950 px-2 py-0.5 text-[10px] font-bold text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                    {(draft.pos.employee_discount_excluded_categories ?? []).length} excluidas
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Hacé clic sobre cualquier categoría para excluirla del descuento o volver a incluirla.
+              </p>
+            </div>
+
+            {/* Chips unificados de categorías + Input inline */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              {allDisplayedCategories.map((cat) => {
+                const isExcluded = (draft.pos.employee_discount_excluded_categories ?? []).some(
+                  (c) => c.toLowerCase() === cat.toLowerCase()
+                );
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => handleToggleExcludedCategory(cat)}
+                    disabled={!canModifyEmployeeBenefits}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition cursor-pointer border select-none ${
+                      isExcluded
+                        ? "border-rose-400 dark:border-rose-700 bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200 shadow-2xs"
+                        : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-600 hover:text-slate-900 dark:hover:text-white"
+                    } ${!canModifyEmployeeBenefits ? "opacity-60 cursor-not-allowed" : ""}`}
+                    title={
+                      isExcluded
+                        ? `Clic para reactivar descuento en ${cat}`
+                        : `Clic para excluir ${cat} del descuento`
+                    }
+                  >
+                    {isExcluded ? (
+                      <>
+                        <X size={12} className="text-rose-600 dark:text-rose-400" />
+                        <span>{cat}</span>
+                        <span className="text-[10px] font-bold opacity-80">(Sin desc.)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus size={12} className="text-slate-400" />
+                        <span>{cat}</span>
+                      </>
+                    )}
+                  </button>
+                );
+              })}
+
+              {/* Input inline para escribir otra categoría */}
+              {canModifyEmployeeBenefits && (
+                <div className="inline-flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={newExcludedCategoryInput}
+                    onChange={(e) => setNewExcludedCategoryInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddCustomExcludedCategory();
+                      }
+                    }}
+                    placeholder="+ Otra categoría..."
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-lpignore="true"
+                    className="h-7 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:border-indigo-500 focus:border-solid focus:outline-none w-36 sm:w-44"
+                  />
+                  {newExcludedCategoryInput.trim() && (
+                    <button
+                      type="button"
+                      onClick={handleAddCustomExcludedCategory}
+                      className="h-7 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold cursor-pointer"
+                    >
+                      Excluir
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
         {/* SECCIÓN: PUNTO DE VENTA (POS) */}
         <section
           className="ui-card space-y-4"
@@ -1043,6 +1617,144 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   El cobro en POS se realizará por el valor numérico exacto con dos decimales de centavos (ej: $1.234,75).
                 </div>
               )}
+            </div>
+
+            {/* DESCUENTO PARA EMPLEADOS EN CUENTA CORRIENTE */}
+            <div className="md:col-span-2 space-y-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-indigo-100 dark:bg-indigo-950/70 p-2.5 text-indigo-700 dark:text-indigo-400">
+                    <Users size={18} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                        Descuento en compras a cuenta corriente de empleados
+                      </span>
+                      {!canModifyEmployeeBenefits && (
+                        <span className="flex items-center gap-1 rounded bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-400">
+                          <Lock size={10} /> Solo Admins
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Porcentaje de bonificación que se aplica automáticamente cuando un empleado compra o retira productos a su cuenta corriente.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <div className="relative w-32">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      value={draft.pos.employee_discount_percent ?? 10}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        updateSection("pos", {
+                          employee_discount_percent: isNaN(val) ? 0 : Math.max(0, Math.min(100, val)),
+                        });
+                      }}
+                      className="ui-input pr-8 text-right font-bold font-mono"
+                      disabled={!canModifyEmployeeBenefits}
+                    />
+                    <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-500 dark:text-slate-400 pointer-events-none">
+                      %
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Categorías Excluidas del Descuento (Minimalista) */}
+              <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                    <Ban size={14} className="text-rose-600 dark:text-rose-400" />
+                    <span>Categorías excluidas del descuento de empleados:</span>
+                  </div>
+                  {(draft.pos.employee_discount_excluded_categories ?? []).length > 0 && (
+                    <span className="rounded-full bg-rose-100 dark:bg-rose-950 px-2 py-0.5 text-[10px] font-bold text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                      {(draft.pos.employee_discount_excluded_categories ?? []).length} excluidas
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  {allDisplayedCategories.map((cat) => {
+                    const isExcluded = (draft.pos.employee_discount_excluded_categories ?? []).some(
+                      (c) => c.toLowerCase() === cat.toLowerCase()
+                    );
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => handleToggleExcludedCategory(cat)}
+                        disabled={!canModifyEmployeeBenefits}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition cursor-pointer border select-none ${
+                          isExcluded
+                            ? "border-rose-400 dark:border-rose-700 bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200 shadow-2xs"
+                            : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-600 hover:text-slate-900 dark:hover:text-white"
+                        } ${!canModifyEmployeeBenefits ? "opacity-60 cursor-not-allowed" : ""}`}
+                        title={
+                          isExcluded
+                            ? `Clic para reactivar descuento en ${cat}`
+                            : `Clic para excluir ${cat} del descuento`
+                        }
+                      >
+                        {isExcluded ? (
+                          <>
+                            <X size={12} className="text-rose-600 dark:text-rose-400" />
+                            <span>{cat}</span>
+                            <span className="text-[10px] font-bold opacity-80">(Sin desc.)</span>
+                          </>
+                        ) : (
+                          <>
+                            <Plus size={12} className="text-slate-400" />
+                            <span>{cat}</span>
+                          </>
+                        )}
+                      </button>
+                    );
+                  })}
+
+                  {canModifyEmployeeBenefits && (
+                    <div className="inline-flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={newExcludedCategoryInput}
+                        onChange={(e) => setNewExcludedCategoryInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddCustomExcludedCategory();
+                          }
+                        }}
+                        placeholder="+ Otra categoría..."
+                        autoComplete="off"
+                        className="h-7 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:border-indigo-500 focus:border-solid focus:outline-none w-36 sm:w-44"
+                      />
+                      {newExcludedCategoryInput.trim() && (
+                        <button
+                          type="button"
+                          onClick={handleAddCustomExcludedCategory}
+                          className="h-7 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold cursor-pointer"
+                        >
+                          Excluir
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 p-2.5 text-xs text-indigo-800 dark:text-indigo-300">
+                <CheckCircle2 size={15} className="shrink-0 text-indigo-600 dark:text-indigo-400" />
+                <span>
+                  Cada comercio puede definir su porcentaje (ej. 10%). Si un empleado tiene un porcentaje particular cargado en su ficha, prevalecerá su porcentaje individual.
+                </span>
+              </div>
             </div>
           </div>
         </section>
@@ -1450,7 +2162,170 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.stock.allow_negative_stock} onChange={(event) => updateSection("stock", { allow_negative_stock: event.target.checked })} disabled={!canWriteConfiguracion} />
                   <span>Permitir stock bajo cero</span>
                 </label>
+
+                <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 sm:col-span-2 lg:col-span-4">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 mt-0.5 rounded text-blue-600"
+                    checked={draft.stock.allow_purchases_profit_margin_adjustment ?? true}
+                    onChange={(event) =>
+                      updateSection("stock", {
+                        allow_purchases_profit_margin_adjustment: event.target.checked,
+                      })
+                    }
+                    disabled={!canWriteConfiguracion}
+                  />
+                  <div>
+                    <span className="font-semibold block text-slate-900 dark:text-slate-100">
+                      Permitir ajustar % de ganancias desde el módulo de compras a proveedores
+                    </span>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400 font-normal mt-0.5">
+                      Habilita la edición libre de márgenes de ganancia (%) y precio de venta final al cargar facturas de compra. Si se desactiva, se bloquea la modificación y se mantiene el margen del catálogo.
+                    </span>
+                  </div>
+                </label>
               </div>
+            </div>
+
+            {/* SECCIÓN: TIPOS DE ENVASES RETORNABLES */}
+            <div className="md:col-span-2 space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                    <Package className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                      Tipos de Envases Retornables
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Define los envases que utiliza tu comercio (ej. Envase de Coca, Garrafa, Sifón). Solo estos envases aparecerán para prestar en Cuentas Corrientes y asociar a productos.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleDetectPackagesFromProducts()}
+                    title="Buscar envases configurados en tus productos actuales"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    <span>Detectar desde productos</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLoadCommonPackages}
+                    title="Cargar sugerencias habituales (Garrafas, Bidones, Cajones)"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    <span>+ Sugerencias habituales</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* FORMULARIO AGREGAR ENVASE */}
+              <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-800/40">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Nombre del tipo de envase
+                  </label>
+                  <input
+                    type="text"
+                    value={newPackageName}
+                    onChange={(e) => setNewPackageName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddReturnablePackage();
+                      }
+                    }}
+                    placeholder="Ej. ENVASE DE COCA, Bidón 20L, Garrafa 10kg..."
+                    className="ui-input w-full text-xs"
+                    disabled={!canWriteConfiguracion}
+                  />
+                </div>
+
+                <div className="w-44">
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Precio reposición ($)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={newPackagePrice}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setNewPackagePrice(v === "" ? "" : Number(v));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddReturnablePackage();
+                      }
+                    }}
+                    placeholder="0.00"
+                    className="ui-input w-full text-xs"
+                    disabled={!canWriteConfiguracion}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAddReturnablePackage}
+                  disabled={!canWriteConfiguracion || !newPackageName.trim()}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3.5 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-amber-700 transition disabled:opacity-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Agregar Envase</span>
+                </button>
+              </div>
+
+              {/* LISTA DE ENVASES REGISTRADOS */}
+              {draft.stock.returnable_packages && draft.stock.returnable_packages.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+                  {draft.stock.returnable_packages.map((pkg) => (
+                    <div
+                      key={pkg.name}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-2xs dark:border-slate-700 dark:bg-slate-900"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                          {pkg.name}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {pkg.suggestedPrice
+                            ? `Precio reposición: ${currency.format(pkg.suggestedPrice)}`
+                            : "Sin precio de reposición"}
+                        </div>
+                      </div>
+
+                      {canWriteConfiguracion && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveReturnablePackage(pkg.name)}
+                          title={`Eliminar ${pkg.name}`}
+                          className="shrink-0 rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-slate-400 dark:border-slate-800">
+                  <Package className="h-8 w-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
+                  <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                    No has registrado tipos de envases retornables aún.
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Agrega los envases que maneja tu comercio con el formulario de arriba o haz clic en "Detectar desde productos".
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -1475,151 +2350,764 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Tipo de Comprobante por Defecto</label>
-              <select className="ui-input" value={draft.facturacion.default_document_type} onChange={(event) => updateSection("facturacion", { default_document_type: event.target.value as FacturacionSettings["default_document_type"] })} disabled={!canWriteConfiguracion}>
-                <option value="A">Factura A</option>
-                <option value="B">Factura B</option>
-                <option value="C">Factura C</option>
-                <option value="PRESUPUESTO">Presupuesto Interno</option>
-              </select>
+          <div className="space-y-4">
+            {/* BLOQUE 1: DATOS FISCALES DEL COMERCIO */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4.5 dark:border-slate-800 dark:bg-slate-900 shadow-xs space-y-3">
+            <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
+              <Building2 className="text-blue-600 dark:text-blue-400 h-4 w-4" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                1. Datos Fiscales del Comercio Emisor
+              </h3>
             </div>
 
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Razón Social Emisor ARCA</label>
-              <input className="ui-input" value={draft.facturacion.issuer_tax_name} onChange={(event) => updateSection("facturacion", { issuer_tax_name: event.target.value })} placeholder="Razón social fiscal" disabled={!canWriteConfiguracion} />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">CUIT Emisor Fiscal</label>
-              <input className="ui-input" value={draft.facturacion.issuer_cuit} onChange={(event) => updateSection("facturacion", { issuer_cuit: event.target.value })} placeholder="CUIT de emisión" disabled={!canWriteConfiguracion} />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Condición Fiscal Emisor</label>
-              <input className="ui-input" value={draft.facturacion.issuer_fiscal_condition} onChange={(event) => updateSection("facturacion", { issuer_fiscal_condition: event.target.value })} placeholder="Responsable Inscripto / Monotributo" disabled={!canWriteConfiguracion} />
-            </div>
-
-            {/* PANEL ARCA */}
-            <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3 mb-3 dark:border-slate-700">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Parámetros de Integración ARCA</h3>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={[
-                      "ui-badge",
-                      draft.facturacion.arca.mode === "mock"
-                        ? "ui-badge--info"
-                        : draft.facturacion.arca.mode === "sandbox"
-                          ? "ui-badge--warn"
-                          : "ui-badge--success",
-                    ].join(" ")}
-                  >
-                    Modo {draft.facturacion.arca.mode.toUpperCase()}
-                  </span>
-                </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  CUIT del Comercio *
+                </label>
+                <input
+                  className="ui-input font-mono font-bold"
+                  value={draft.facturacion.issuer_cuit}
+                  onChange={(event) => {
+                    const clean = event.target.value.replace(/\D/g, "");
+                    setDraft((current) => {
+                      if (!current) return current;
+                      return {
+                        ...current,
+                        facturacion: {
+                          ...current.facturacion,
+                          issuer_cuit: clean,
+                          arca: {
+                            ...current.facturacion.arca,
+                            cuit_emisor: clean,
+                          },
+                        },
+                      };
+                    });
+                  }}
+                  maxLength={11}
+                  placeholder="20123456789"
+                  disabled={!canWriteConfiguracion}
+                />
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                  11 dígitos sin guiones
+                </span>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="flex items-center gap-2.5 text-sm font-medium text-slate-800 dark:text-slate-200">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded text-blue-600"
-                    checked={draft.facturacion.arca.enabled}
-                    onChange={(event) =>
-                      updateSection("facturacion", {
-                        arca: {
-                          ...draft.facturacion.arca,
-                          enabled: event.target.checked,
-                        },
-                      })
-                    }
-                    disabled={!canWriteConfiguracion}
-                  />
-                  Habilitar Facturación Electrónica ARCA
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  Razón Social / Titular *
                 </label>
-
-                <select
+                <input
                   className="ui-input"
-                  value={draft.facturacion.arca.mode}
+                  value={draft.facturacion.issuer_tax_name}
                   onChange={(event) =>
                     updateSection("facturacion", {
-                      arca: {
-                        ...draft.facturacion.arca,
-                        mode: event.target.value as FacturacionSettings["arca"]["mode"],
-                      },
+                      issuer_tax_name: event.target.value,
+                    })
+                  }
+                  placeholder="Nombre legal del negocio"
+                  disabled={!canWriteConfiguracion}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  Condición Fiscal ante el IVA *
+                </label>
+                <select
+                  className="ui-input"
+                  value={draft.facturacion.issuer_fiscal_condition || "Monotributo"}
+                  onChange={(event) => {
+                    const cond = event.target.value;
+                    const suggestedDocType =
+                      cond === "Monotributo" ? "C" : cond === "Responsable Inscripto" ? "B" : "B";
+                    updateSection("facturacion", {
+                      issuer_fiscal_condition: cond,
+                      default_document_type: suggestedDocType as FacturacionSettings["default_document_type"],
+                    });
+                  }}
+                  disabled={!canWriteConfiguracion}
+                >
+                  <option value="Monotributo">Monotributo (Emite Factura C)</option>
+                  <option value="Responsable Inscripto">Responsable Inscripto (Facturas A y B)</option>
+                  <option value="IVA Exento">IVA Exento</option>
+                  <option value="Consumidor Final">Consumidor Final</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  Comprobante por Defecto
+                </label>
+                <select
+                  className="ui-input font-semibold"
+                  value={draft.facturacion.default_document_type}
+                  onChange={(event) =>
+                    updateSection("facturacion", {
+                      default_document_type: event.target.value as FacturacionSettings["default_document_type"],
                     })
                   }
                   disabled={!canWriteConfiguracion}
                 >
-                  <option value="mock">Modo Mock (Pruebas Locales)</option>
-                  <option value="sandbox">Modo Sandbox (Homologación AFIP)</option>
-                  <option value="real">Modo Real (Producción AFIP)</option>
+                  <option value="B">Factura B (Consumidor Final / Monotributo)</option>
+                  <option value="C">Factura C (Régimen Simplificado)</option>
+                  <option value="A">Factura A (Con discriminación de IVA)</option>
+                  <option value="PRESUPUESTO">Presupuesto Interno (Sin valor fiscal)</option>
                 </select>
+              </div>
+            </div>
+          </div>
 
+          {/* BLOQUE 2: PARÁMETROS ARCA Y FIRMA DIGITAL */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4.5 dark:border-slate-800 dark:bg-slate-800/40 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3 dark:border-slate-700">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="text-blue-600 dark:text-blue-400 h-5 w-5" />
                 <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Punto de Venta Fiscal</label>
-                  <input
-                    className="ui-input"
-                    type="number"
-                    min="1"
-                    value={draft.facturacion.arca.punto_venta}
-                    onChange={(event) =>
-                      updateSection("facturacion", {
-                        arca: {
-                          ...draft.facturacion.arca,
-                          punto_venta: Math.max(
-                            1,
-                            Math.floor(toNumber(event.target.value, draft.facturacion.arca.punto_venta))
-                          ),
-                        },
-                      })
-                    }
-                    placeholder="1"
-                    disabled={!canWriteConfiguracion}
-                  />
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    2. Conexión Fiscal con ARCA (ex AFIP)
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Emisión electrónica de facturas con CAE y código QR oficial
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span
+                  className={[
+                    "ui-badge",
+                    draft.facturacion.arca.mode === "mock"
+                      ? "ui-badge--info"
+                      : draft.facturacion.arca.mode === "sandbox"
+                        ? "ui-badge--warn"
+                        : "ui-badge--success",
+                  ].join(" ")}
+                >
+                  {draft.facturacion.arca.mode === "mock"
+                    ? "Modo MOCK (Simulación)"
+                    : draft.facturacion.arca.mode === "sandbox"
+                      ? "Modo SANDBOX (Homologación)"
+                      : "Modo REAL (Producción)"}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {/* SWITCH DE HABILITACIÓN ARCA */}
+              <div className="sm:col-span-2 flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xs">
+                <div className="space-y-0.5 pr-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                      Facturación con ARCA
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        draft.facturacion.arca.enabled
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                          : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-300 dark:border-slate-700"
+                      }`}
+                    >
+                      {draft.facturacion.arca.enabled ? "Activo" : "Inactivo"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Emitir comprobantes fiscales electrónicos con CAE y código QR
+                  </p>
                 </div>
 
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Alias Certificado Digital</label>
+                <label className="pos-switch relative inline-flex shrink-0 cursor-pointer items-center" title="Habilitar o deshabilitar facturación electrónica con ARCA">
                   <input
-                    className="ui-input"
-                    value={draft.facturacion.arca.certificado_alias}
-                    onChange={(event) =>
-                      updateSection("facturacion", {
-                        arca: {
-                          ...draft.facturacion.arca,
-                          certificado_alias: event.target.value.trim(),
-                        },
-                      })
-                    }
-                    placeholder="Alias certificado AFIP"
+                    type="checkbox"
+                    checked={draft.facturacion.arca.enabled}
+                    onChange={(event) => updateArca({ enabled: event.target.checked })}
+                    className="peer sr-only"
                     disabled={!canWriteConfiguracion}
                   />
+                  <span className="pos-switch-track">
+                    <span className="pos-switch-thumb" />
+                  </span>
+                </label>
+              </div>
+
+              {/* ENTORNO DE FACTURACIÓN */}
+              <div className="sm:col-span-2 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xs flex flex-col justify-between">
+                <div>
+                  <label className="mb-0.5 block text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                    Entorno de Facturación
+                  </label>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
+                    Servidores fiscales a los que se enviarán las facturas
+                  </p>
+                </div>
+                <select
+                  className="ui-input font-medium"
+                  value={draft.facturacion.arca.mode}
+                  onChange={(event) =>
+                    updateArca({ mode: event.target.value as FacturacionSettings["arca"]["mode"] })
+                  }
+                  disabled={!canWriteConfiguracion}
+                >
+                  <option value="mock">Modo Simulación Local (Sin internet / Mock de prueba)</option>
+                  <option value="sandbox">Modo Sandbox (Homologación / Pruebas con servidores de ARCA)</option>
+                  <option value="real">Modo Real (Producción Oficial / Facturas Reales de ARCA)</option>
+                </select>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  Punto de Venta de ARCA *
+                </label>
+                <input
+                  className="ui-input font-mono font-bold"
+                  type="number"
+                  min="1"
+                  value={draft.facturacion.arca.punto_venta}
+                  onChange={(event) =>
+                    updateArca({
+                      punto_venta: Math.max(
+                        1,
+                        Math.floor(toNumber(event.target.value, draft.facturacion.arca.punto_venta))
+                      ),
+                    })
+                  }
+                  placeholder="Ej: 1, 2, 3..."
+                  disabled={!canWriteConfiguracion}
+                />
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">
+                  Número de punto de venta dado de alta en ARCA bajo "Factura Electrónica - Web Services".
+                </span>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  Nombre / Alias del Certificado
+                </label>
+                <input
+                  className="ui-input font-mono"
+                  value={draft.facturacion.arca.certificado_alias}
+                  onChange={(event) =>
+                    updateArca({ certificado_alias: event.target.value.trim() })
+                  }
+                  placeholder="Ej: pos-v2"
+                  disabled={!canWriteConfiguracion}
+                />
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">
+                  Identificador del alias registrado en "Administración de Certificados Digitales".
+                </span>
+              </div>
+
+              {/* TARJETA DE ESTADO DE LA FIRMA DIGITAL */}
+              <div className="sm:col-span-2 lg:col-span-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    {draft.facturacion.arca.certificate_crt && draft.facturacion.arca.certificate_key ? (
+                      <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                        <ShieldCheck className="h-5 w-5" />
+                      </div>
+                    ) : (
+                      <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                        <ShieldAlert className="h-5 w-5" />
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                          Firma Digital y Credenciales ARCA
+                        </h4>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            draft.facturacion.arca.certificate_crt && draft.facturacion.arca.certificate_key
+                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                              : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                          }`}
+                        >
+                          {draft.facturacion.arca.certificate_crt && draft.facturacion.arca.certificate_key
+                            ? "Vinculado y Activo"
+                            : "Pendiente de Carga"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        {draft.facturacion.arca.certificate_crt && draft.facturacion.arca.certificate_key
+                          ? "Tu negocio ya tiene cargadas sus credenciales para firmar facturas directamente con ARCA."
+                          : "Para emitir comprobantes oficiales en ARCA debés vincular tu certificado digital (.crt) y clave privada."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {draft.facturacion.arca.certificate_key && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          downloadFile(
+                            `clave_privada_${draft.facturacion.arca.cuit_emisor || "arca"}.key`,
+                            draft.facturacion.arca.certificate_key || ""
+                          )
+                        }
+                        className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1.5 transition cursor-pointer"
+                        title="Descargar copia de seguridad de la clave privada"
+                      >
+                        <Download size={13} />
+                        Respaldo .key
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setIsArcaGuideOpen(true)}
+                      className="px-3.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <FileText size={13} className="text-blue-500" />
+                      Instructivo PDF Contador
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsArcaWizardOpen(true)}
+                      disabled={!canWriteConfiguracion}
+                      className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Key size={13} />
+                      {draft.facturacion.arca.certificate_crt
+                        ? "Renovar / Reemplazar Certificado"
+                        : "Conectar con ARCA (Paso a Paso)"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* BOTÓN PROBAR CONEXIÓN CON ARCA */}
+              <div className="sm:col-span-2 lg:col-span-4 pt-3 border-t border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleTestArcaConnection}
+                    disabled={isTestingArcaConnection}
+                    className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-sky-600 dark:hover:bg-sky-500 text-white text-xs font-bold shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isTestingArcaConnection ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" />
+                        Consultando ARCA...
+                      </>
+                    ) : (
+                      <>
+                        <Activity size={14} />
+                        Probar Conexión con ARCA
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { void handleSaveSection("facturacion"); }}
+                    disabled={!canWriteConfiguracion || savingSection.facturacion}
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Save size={14} />
+                    {savingSection.facturacion ? "Guardando..." : "Guardar Facturación"}
+                  </button>
+
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Verifica la respuesta de los servidores de ARCA para este punto de venta.
+                  </span>
+                </div>
+
+                {arcaTestFeedback && (
+                  <div
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${
+                      arcaTestFeedback.status === "success"
+                        ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                        : "bg-rose-50 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                    }`}
+                  >
+                    {arcaTestFeedback.status === "success" ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+                    <span>{arcaTestFeedback.message}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+            {/* CORRELATIVIDAD DE SECUENCIAS */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4.5 dark:border-slate-800 dark:bg-slate-900 shadow-xs space-y-3">
+              <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
+                <Calculator className="text-blue-600 dark:text-blue-400 h-4 w-4" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                  3. Correlatividad y Próximos Números de Secuencia
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Próximo número correlativo a emitir por tipo de comprobante. Al facturar en modo oficial, ARCA asigna el número oficial correlativo automáticamente.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 pt-1">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">Factura A</label>
+                  <input className="ui-input font-mono font-bold" type="number" min="1" value={draft.facturacion.document_sequences.A} onChange={(event) => updateDocumentSequence("A", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.A))))} disabled={!canWriteConfiguracion} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">Factura B</label>
+                  <input className="ui-input font-mono font-bold" type="number" min="1" value={draft.facturacion.document_sequences.B} onChange={(event) => updateDocumentSequence("B", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.B))))} disabled={!canWriteConfiguracion} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">Factura C</label>
+                  <input className="ui-input font-mono font-bold" type="number" min="1" value={draft.facturacion.document_sequences.C} onChange={(event) => updateDocumentSequence("C", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.C))))} disabled={!canWriteConfiguracion} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">Presupuesto</label>
+                  <input className="ui-input font-mono font-bold" type="number" min="1" value={draft.facturacion.document_sequences.PRESUPUESTO} onChange={(event) => updateDocumentSequence("PRESUPUESTO", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.PRESUPUESTO))))} disabled={!canWriteConfiguracion} />
                 </div>
               </div>
             </div>
 
-            {/* CORRELATIVIDAD DE SECUENCIAS */}
-            <div className="md:col-span-2 space-y-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Próximos Números de Secuencia</span>
-              <div className="grid gap-3 md:grid-cols-4">
-                <div>
-                  <label className="mb-1 block text-xs text-slate-600 dark:text-slate-400">Factura A</label>
-                  <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.A} onChange={(event) => updateDocumentSequence("A", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.A))))} disabled={!canWriteConfiguracion} />
+            {/* BLOQUE 4: REGLAS FISCALES POR MEDIO DE PAGO Y BANCOS */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4.5 dark:border-slate-800 dark:bg-slate-900 shadow-xs space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <FileCheck2 className="text-blue-600 dark:text-blue-400 h-5 w-5" />
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                      4. Automatización y Reglas Fiscales por Medio de Pago y Bancos
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Configurá qué cobros activan automáticamente la emisión de factura fiscal y cuáles la deshabilitan por completo en el POS.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs text-slate-600 dark:text-slate-400">Factura B</label>
-                  <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.B} onChange={(event) => updateDocumentSequence("B", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.B))))} disabled={!canWriteConfiguracion} />
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    {(draft.facturacion.payment_method_rules?.mandatory_methods || []).length} obligatorios
+                  </span>
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                    {(draft.facturacion.payment_method_rules?.disabled_methods || []).length} deshabilitados
+                  </span>
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs text-slate-600 dark:text-slate-400">Factura C</label>
-                  <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.C} onChange={(event) => updateDocumentSequence("C", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.C))))} disabled={!canWriteConfiguracion} />
+              </div>
+
+              <div className="grid gap-5 lg:grid-cols-2">
+                {/* COLUMNA 1: FACTURACIÓN OBLIGATORIA */}
+                <div className="rounded-xl border border-emerald-200/90 bg-emerald-50/20 p-4 dark:border-emerald-800/60 dark:bg-emerald-950/20 space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-emerald-100 dark:border-emerald-900/40 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="text-emerald-600 dark:text-emerald-400 h-4 w-4" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-200">
+                        Facturación Obligatoria
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                      Auto-activa switch en POS
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Al seleccionar o asignar monto a estos medios o cuentas bancarias, el switch fiscal de facturación se activará automáticamente.
+                  </p>
+
+                  {/* Medios de Pago Estándar */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block px-0.5">
+                      Medios de Pago Estándar
+                    </span>
+                    <div className="space-y-1.5">
+                      {standardPaymentMethodOptions.map((item) => {
+                        const Icon = item.icon;
+                        const isMandatory = (draft.facturacion.payment_method_rules?.mandatory_methods || []).includes(item.key);
+                        const isDisabled = (draft.facturacion.payment_method_rules?.disabled_methods || []).includes(item.key);
+
+                        return (
+                          <div
+                            key={item.key}
+                            onClick={() => togglePaymentMethodInvoiceRule(item.key, "mandatory")}
+                            className={cn(
+                              "flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer select-none",
+                              isMandatory
+                                ? "border-emerald-500 bg-emerald-50 dark:border-emerald-500/80 dark:bg-emerald-950/40 shadow-xs ring-1 ring-emerald-500/30"
+                                : isDisabled
+                                  ? "border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 opacity-60 hover:opacity-100"
+                                  : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-emerald-300 dark:hover:border-emerald-700/60"
+                            )}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                              <div
+                                className={cn(
+                                  "p-1.5 rounded-md shrink-0",
+                                  isMandatory
+                                    ? "bg-emerald-600 text-white"
+                                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                                )}
+                              >
+                                <Icon className="h-3.5 w-3.5" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
+                                    {item.label}
+                                  </span>
+                                  {isDisabled && (
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                                      En deshabilitados
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                  {item.subtitle}
+                                </p>
+                              </div>
+                            </div>
+
+                            <input
+                              type="checkbox"
+                              checked={isMandatory}
+                              onChange={() => togglePaymentMethodInvoiceRule(item.key, "mandatory")}
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 dark:border-slate-600 dark:bg-slate-800 cursor-pointer shrink-0"
+                              disabled={!canWriteConfiguracion}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Cuentas Bancarias Receptoras Dinámicas */}
+                  <div className="space-y-1.5 pt-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block px-0.5">
+                      Bancos Receptores Registrados (Dinámicos)
+                    </span>
+                    {activeBankAccounts.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 p-3 text-center">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          No hay cuentas bancarias activas registradas en el catálogo contable.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {activeBankAccounts.map((account) => {
+                          const accountKey = `bank_account:${account.id}`;
+                          const isMandatory = (draft.facturacion.payment_method_rules?.mandatory_methods || []).includes(accountKey);
+                          const isDisabled = (draft.facturacion.payment_method_rules?.disabled_methods || []).includes(accountKey);
+                          const holderText = account.holder_name ? ` • Titular: ${account.holder_name}` : "";
+                          const detailText = account.alias ? `Alias: ${account.alias}` : account.cbu ? `CBU: ...${account.cbu.slice(-6)}` : account.account_type.replace("_", " ");
+
+                          return (
+                            <div
+                              key={accountKey}
+                              onClick={() => togglePaymentMethodInvoiceRule(accountKey, "mandatory")}
+                              className={cn(
+                                "flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer select-none",
+                                isMandatory
+                                  ? "border-emerald-500 bg-emerald-50 dark:border-emerald-500/80 dark:bg-emerald-950/40 shadow-xs ring-1 ring-emerald-500/30"
+                                  : isDisabled
+                                    ? "border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 opacity-60 hover:opacity-100"
+                                    : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-emerald-300 dark:hover:border-emerald-700/60"
+                              )}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                <div
+                                  className={cn(
+                                    "p-1.5 rounded-md shrink-0",
+                                    isMandatory
+                                      ? "bg-emerald-600 text-white"
+                                      : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                                  )}
+                                >
+                                  <Landmark className="h-3.5 w-3.5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
+                                      Transferencia: {account.bank_name}
+                                    </span>
+                                    {isDisabled && (
+                                      <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                                        En deshabilitados
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                    {detailText}{holderText}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <input
+                                type="checkbox"
+                                checked={isMandatory}
+                                onChange={() => togglePaymentMethodInvoiceRule(accountKey, "mandatory")}
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 dark:border-slate-600 dark:bg-slate-800 cursor-pointer shrink-0"
+                                disabled={!canWriteConfiguracion}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs text-slate-600 dark:text-slate-400">Presupuesto</label>
-                  <input className="ui-input" type="number" min="1" value={draft.facturacion.document_sequences.PRESUPUESTO} onChange={(event) => updateDocumentSequence("PRESUPUESTO", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.PRESUPUESTO))))} disabled={!canWriteConfiguracion} />
+
+                {/* COLUMNA 2: FACTURACIÓN DESHABILITADA */}
+                <div className="rounded-xl border border-rose-200/90 bg-rose-50/20 p-4 dark:border-rose-800/60 dark:bg-rose-950/20 space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-rose-100 dark:border-rose-900/40 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Ban className="text-rose-600 dark:text-rose-400 h-4 w-4" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-rose-900 dark:text-rose-200">
+                        Facturación Deshabilitada
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-semibold text-rose-700 dark:text-rose-300">
+                      Apaga y bloquea switch en POS
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    Al cobrar con estos medios o cuentas bancarias, el switch de Facturación se apagará y bloqueará para impedir comprobantes no deseados.
+                  </p>
+
+                  {/* Medios de Pago Estándar */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block px-0.5">
+                      Medios de Pago Estándar
+                    </span>
+                    <div className="space-y-1.5">
+                      {standardPaymentMethodOptions.map((item) => {
+                        const Icon = item.icon;
+                        const isMandatory = (draft.facturacion.payment_method_rules?.mandatory_methods || []).includes(item.key);
+                        const isDisabled = (draft.facturacion.payment_method_rules?.disabled_methods || []).includes(item.key);
+
+                        return (
+                          <div
+                            key={item.key}
+                            onClick={() => togglePaymentMethodInvoiceRule(item.key, "disabled")}
+                            className={cn(
+                              "flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer select-none",
+                              isDisabled
+                                ? "border-rose-500 bg-rose-50 dark:border-rose-500/80 dark:bg-rose-950/40 shadow-xs ring-1 ring-rose-500/30"
+                                : isMandatory
+                                  ? "border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 opacity-60 hover:opacity-100"
+                                  : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-rose-300 dark:hover:border-rose-700/60"
+                            )}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                              <div
+                                className={cn(
+                                  "p-1.5 rounded-md shrink-0",
+                                  isDisabled
+                                    ? "bg-rose-600 text-white"
+                                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                                )}
+                              >
+                                <Icon className="h-3.5 w-3.5" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
+                                    {item.label}
+                                  </span>
+                                  {isMandatory && (
+                                    <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                      En obligatorios
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                  {item.subtitle}
+                                </p>
+                              </div>
+                            </div>
+
+                            <input
+                              type="checkbox"
+                              checked={isDisabled}
+                              onChange={() => togglePaymentMethodInvoiceRule(item.key, "disabled")}
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-4 w-4 rounded text-rose-600 focus:ring-rose-500 dark:border-slate-600 dark:bg-slate-800 cursor-pointer shrink-0"
+                              disabled={!canWriteConfiguracion}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Cuentas Bancarias Receptoras Dinámicas */}
+                  <div className="space-y-1.5 pt-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block px-0.5">
+                      Bancos Receptores Registrados (Dinámicos)
+                    </span>
+                    {activeBankAccounts.length === 0 ? (
+                      <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 p-3 text-center">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          No hay cuentas bancarias activas registradas en el catálogo contable.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {activeBankAccounts.map((account) => {
+                          const accountKey = `bank_account:${account.id}`;
+                          const isMandatory = (draft.facturacion.payment_method_rules?.mandatory_methods || []).includes(accountKey);
+                          const isDisabled = (draft.facturacion.payment_method_rules?.disabled_methods || []).includes(accountKey);
+                          const holderText = account.holder_name ? ` • Titular: ${account.holder_name}` : "";
+                          const detailText = account.alias ? `Alias: ${account.alias}` : account.cbu ? `CBU: ...${account.cbu.slice(-6)}` : account.account_type.replace("_", " ");
+
+                          return (
+                            <div
+                              key={accountKey}
+                              onClick={() => togglePaymentMethodInvoiceRule(accountKey, "disabled")}
+                              className={cn(
+                                "flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer select-none",
+                                isDisabled
+                                  ? "border-rose-500 bg-rose-50 dark:border-rose-500/80 dark:bg-rose-950/40 shadow-xs ring-1 ring-rose-500/30"
+                                  : isMandatory
+                                    ? "border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 opacity-60 hover:opacity-100"
+                                    : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-rose-300 dark:hover:border-rose-700/60"
+                              )}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                <div
+                                  className={cn(
+                                    "p-1.5 rounded-md shrink-0",
+                                    isDisabled
+                                      ? "bg-rose-600 text-white"
+                                      : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                                  )}
+                                >
+                                  <Landmark className="h-3.5 w-3.5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
+                                      Transferencia: {account.bank_name}
+                                    </span>
+                                    {isMandatory && (
+                                      <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                        En obligatorios
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                    {detailText}{holderText}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <input
+                                type="checkbox"
+                                checked={isDisabled}
+                                onChange={() => togglePaymentMethodInvoiceRule(accountKey, "disabled")}
+                                onClick={(e) => e.stopPropagation()}
+                                className="h-4 w-4 rounded text-rose-600 focus:ring-rose-500 dark:border-slate-600 dark:bg-slate-800 cursor-pointer shrink-0"
+                                disabled={!canWriteConfiguracion}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1630,7 +3118,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                 <Users className="text-blue-600 dark:text-blue-400" size={18} />
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                    Requisitos de Registro de Clientes y Proveedores
+                    5. Requisitos de Registro de Clientes y Proveedores
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     Configurá qué campos son obligatorios al crear o editar clientes y proveedores (desde POS, Clientes, Cuentas Corrientes y Proveedores).
@@ -2214,6 +3702,42 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
           </div>
         </section>
       </div>
+
+      {/* MODAL ASISTENTE DE CERTIFICADOS ARCA */}
+      <ArcaCertificateWizardModal
+        isOpen={isArcaWizardOpen}
+        onClose={() => setIsArcaWizardOpen(false)}
+        cuit={draft?.facturacion?.arca?.cuit_emisor || draft?.facturacion?.issuer_cuit || ""}
+        businessName={draft?.facturacion?.issuer_tax_name || draft?.negocio?.legal_name || ""}
+        alias={draft?.facturacion?.arca?.certificado_alias || "pos-v2"}
+        currentCrt={draft?.facturacion?.arca?.certificate_crt}
+        currentKey={draft?.facturacion?.arca?.certificate_key}
+        onSaveCredentials={async ({ certificate_crt, certificate_key, certificado_alias }) => {
+          if (!draft?.facturacion) return;
+          const updatedFacturacion: FacturacionSettings = {
+            ...draft.facturacion,
+            arca: {
+              ...draft.facturacion.arca,
+              enabled: true,
+              mode: draft.facturacion.arca.mode === "mock" ? "real" : draft.facturacion.arca.mode,
+              certificate_crt,
+              certificate_key,
+              certificado_alias: certificado_alias || draft.facturacion.arca.certificado_alias || "pos-v2",
+            },
+          };
+          updateSection("facturacion", updatedFacturacion);
+          await handleSaveSection("facturacion", updatedFacturacion);
+        }}
+      />
+
+      {/* MODAL GUÍA PARA EL CONTADOR / INSTRUCTIVO PDF */}
+      <ArcaAccountantGuideModal
+        isOpen={isArcaGuideOpen}
+        onClose={() => setIsArcaGuideOpen(false)}
+        cuit={draft?.facturacion?.arca?.cuit_emisor || draft?.facturacion?.issuer_cuit || ""}
+        businessName={draft?.facturacion?.issuer_tax_name || draft?.negocio?.legal_name || ""}
+        alias={draft?.facturacion?.arca?.certificado_alias || "pos-v2"}
+      />
     </PagePlaceholder>
   );
 };

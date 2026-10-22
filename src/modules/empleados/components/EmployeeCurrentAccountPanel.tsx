@@ -18,7 +18,8 @@ interface EmployeeCurrentAccountPanelProps {
   userId: string | null;
   employee: Employee;
   canWrite: boolean;
-  onClose: () => void;
+  onClose?: () => void;
+  hideBackButton?: boolean;
   onBalanceUpdated: () => void;
   onOpenSalaryDisbursement?: (employee: Employee) => void;
 }
@@ -62,6 +63,7 @@ export const EmployeeCurrentAccountPanel = ({
   employee,
   canWrite,
   onClose,
+  hideBackButton = false,
   onBalanceUpdated,
   onOpenSalaryDisbursement,
 }: EmployeeCurrentAccountPanelProps) => {
@@ -124,16 +126,18 @@ export const EmployeeCurrentAccountPanel = ({
 
   return (
     <section className="current-account-detail ui-card space-y-4">
-      {/* Barra de navegación superior con botón Volver */}
-      <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
-        <button
-          type="button"
-          onClick={onClose}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-        >
-          <ArrowLeft size={14} />
-          <span>Volver al listado de cuentas corrientes</span>
-        </button>
+      {/* Barra de navegación / utilidades superior */}
+      <div className={`flex items-center ${hideBackButton ? "justify-end" : "justify-between"} border-b border-slate-100 pb-3 dark:border-slate-800`}>
+        {!hideBackButton && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+          >
+            <ArrowLeft size={14} />
+            <span>Volver al listado de cuentas corrientes</span>
+          </button>
+        )}
 
         <div className="flex items-center gap-2">
           <button
@@ -218,10 +222,10 @@ export const EmployeeCurrentAccountPanel = ({
             type="button"
             onClick={() => setProductModalOpen(true)}
             disabled={isSubmitting}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition dark:bg-indigo-600 dark:hover:bg-indigo-500"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition dark:bg-indigo-600 dark:hover:bg-indigo-500 cursor-pointer"
           >
             <ShoppingBag size={14} />
-            <span>Retiro de productos</span>
+            <span>+ Cargar / Retiro de productos</span>
           </button>
 
           {/* Botón Adeudar manual / Anticipo */}

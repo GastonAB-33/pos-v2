@@ -19,6 +19,9 @@ export const employeeFormSchema = z.object({
   currentAccountLimit: z.string().refine((val) => !val || (!isNaN(Number(val)) && Number(val) >= 0), {
     message: "El límite de cuenta corriente debe ser un número válido",
   }).optional().or(z.literal("")),
+  discountPercent: z.string().refine((val) => !val || (!isNaN(Number(val)) && Number(val) >= 0 && Number(val) <= 100), {
+    message: "El porcentaje de descuento debe estar entre 0 y 100",
+  }).optional().or(z.literal("")),
   observations: z.string().max(500, "Máximo 500 caracteres").optional().or(z.literal("")),
 });
 

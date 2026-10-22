@@ -5,6 +5,7 @@ import { productsService } from "@/services/products.service";
 import { settingsService } from "@/services/settings.service";
 import { stockService } from "@/services/stock.service";
 import type { Product, StockMovement, StockSettings } from "@/types/entities";
+import { isStockTrackingEnabled } from "@/utils/stock-tracking";
 import type { StockBatchAdjustmentValues } from "@/modules/stock/types/stock-adjustment.types";
 
 type FeedbackType = "success" | "error";
@@ -408,6 +409,7 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
     let unassigned = 0;
 
     for (const product of activeProducts) {
+      if (!isStockTrackingEnabled(product.description)) continue;
       const min = product.stock_min;
       const max = product.stock_max != null && product.stock_max > 0 ? product.stock_max : null;
 

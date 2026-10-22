@@ -1,5 +1,5 @@
 import { Boxes, CircleDollarSign, PackageSearch, ShoppingCart, Users, Wallet } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { routePaths } from "@/config/routes";
 import { usePosNavigation } from "@/hooks/usePosNavigation";
@@ -14,8 +14,7 @@ const quickActions = [
 ] as const;
 
 export const MainMenuPage = () => {
-  const navigate = useNavigate();
-  const { openPos } = usePosNavigation();
+  const { openPos, getPosUrl } = usePosNavigation();
 
   return (
     <PagePlaceholder title="Inicio operativo" description="Accesos principales y novedades del comercio">
@@ -31,16 +30,20 @@ export const MainMenuPage = () => {
           <div className="operational-quick-grid">
             {quickActions.map((action) => {
               const Icon = action.icon;
+              const isPos = action.to === routePaths.pos;
+              const targetUrl = isPos ? getPosUrl() : action.to;
+
               return (
-                <button
+                <Link
                   key={action.to}
-                  type="button"
+                  to={targetUrl}
                   className="operational-quick-action"
-                  onClick={() => {
-                    if (action.to === routePaths.pos) {
-                      openPos();
-                    } else {
-                      navigate(action.to);
+                  onClick={(e) => {
+                    if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+                      if (isPos) {
+                        e.preventDefault();
+                        openPos();
+                      }
                     }
                   }}
                 >
@@ -49,7 +52,7 @@ export const MainMenuPage = () => {
                     <span className="block text-sm font-semibold text-slate-900">{action.label}</span>
                     <span className="block truncate text-xs text-slate-500">{action.detail}</span>
                   </span>
-                </button>
+                </Link>
               );
             })}
           </div>

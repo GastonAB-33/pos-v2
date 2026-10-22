@@ -6,6 +6,10 @@ export const purchaseHeaderSchema = z.object({
     "FACTURA_A",
     "FACTURA_B",
     "FACTURA_C",
+    "NOTA_CREDITO_A",
+    "NOTA_CREDITO_B",
+    "NOTA_CREDITO_C",
+    "NOTA_CREDITO",
     "REMITO",
     "TICKET",
     "PRESUPUESTO",
@@ -16,6 +20,7 @@ export const purchaseHeaderSchema = z.object({
   vatPercent: z.number().min(0).max(100).default(0),
   iibbPercent: z.number().min(0).max(100).default(0),
   iibbAmount: z.number().min(0).default(0),
+  extraTaxAmount: z.number().min(0).default(0),
   notes: z.string().max(240, "Máximo 240 caracteres").optional().or(z.literal("")),
   invoicePhotoUrl: z.string().optional().or(z.literal("")),
 });
@@ -70,4 +75,3 @@ export const purchaseCheckoutSchema = purchaseHeaderSchema.extend({
 });
 
 export type PurchaseCheckoutValues = z.infer<typeof purchaseCheckoutSchema>;
-

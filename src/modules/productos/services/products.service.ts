@@ -4,6 +4,7 @@ import { usersService } from "@/services/users.service";
 import type { Product as ProductEntity } from "@/types/entities";
 import type { Product, ProductAuditEntry, ProductViewModel } from "@/modules/productos/types/product.types";
 import { DEFAULT_IVA_PERCENT, roundMoney, roundPercent } from "@/modules/productos/utils/product-pricing";
+import { isStockTrackingEnabled } from "@/utils/stock-tracking";
 
 const normalizeText = (value: string | null | undefined): string => value?.trim() ?? "";
 
@@ -154,6 +155,7 @@ export const mapEntityToProductViewModel = (
     stock: product.stock_current,
     favorito: product.is_favorite,
     activo: product.is_active,
+    trackStock: isStockTrackingEnabled(product.description),
   };
 };
 

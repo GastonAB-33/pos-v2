@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
 import { ArrowLeft, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { settingsService } from "@/services/settings.service";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -138,11 +139,29 @@ export const ComprasPage = () => {
   const { canRead, canWrite } = usePermissions();
   const canReadPurchases = canRead("compras");
   const canWritePurchases = canWrite("compras");
+  const canAdjustProfitMarginPerm = canWrite("compras_margen");
+  const [allowProfitMarginBySetting, setAllowProfitMarginBySetting] = useState(true);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let active = true;
+    void settingsService.getByTenant(tenantId).then((settings) => {
+      if (active && settings?.stock?.allow_purchases_profit_margin_adjustment !== undefined) {
+        setAllowProfitMarginBySetting(settings.stock.allow_purchases_profit_margin_adjustment);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [tenantId]);
+
+  const canAdjustProfitMargin = allowProfitMarginBySetting && canAdjustProfitMarginPerm;
 
   const [viewMode, setViewMode] = useState<"history" | "create">("history");
   const [isSelectProductModalOpen, setIsSelectProductModalOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [newSupplierInitialName, setNewSupplierInitialName] = useState<string>("");
   const [newProductPrefill, setNewProductPrefill] = useState<{
     initialBarcode?: string | null;
@@ -175,6 +194,7 @@ export const ComprasPage = () => {
     search,
     setSearch,
     isLoading,
+    isBackgroundRefreshing,
     isSubmitting,
     feedback,
     clearFeedback,
@@ -196,12 +216,15 @@ export const ComprasPage = () => {
     findPotentialDuplicateProducts,
     createProductAndAddToCart,
     createSupplier,
+    updateSupplier,
     purchaseVatPercent,
     setPurchaseVatPercent,
     purchaseIibbPercent,
     setPurchaseIibbPercent,
     purchaseIibbAmount,
     setPurchaseIibbAmount,
+    purchaseExtraTaxAmount,
+    setPurchaseExtraTaxAmount,
   } = usePurchasesModule(tenantId, user?.id ?? null);
   const toast = useToast();
   const [backgroundSavingProduct, setBackgroundSavingProduct] = useState<string | null>(null);
@@ -239,19 +262,33 @@ export const ComprasPage = () => {
     }
   };
 
-  const handleCreateSupplier = async (values: SupplierFormValues) => {
+  const handleEditSupplier = (supplier: Supplier) => {
+    setEditingSupplier(supplier);
+    setIsSupplierModalOpen(true);
+  };
+
+  const handleSupplierFormSubmit = async (values: SupplierFormValues) => {
     if (!canWritePurchases) return;
-    const created = await createSupplier(values);
-    if (created) {
-      setPreferredSupplierId(created.id);
-      setIsSupplierModalOpen(false);
-      setNewSupplierInitialName("");
+    if (editingSupplier) {
+      const updated = await updateSupplier(editingSupplier.id, values);
+      if (updated) {
+        setPreferredSupplierId(updated.id);
+        setIsSupplierModalOpen(false);
+        setEditingSupplier(null);
+      }
+    } else {
+      const created = await createSupplier(values);
+      if (created) {
+        setPreferredSupplierId(created.id);
+        setIsSupplierModalOpen(false);
+        setNewSupplierInitialName("");
+      }
     }
   };
 
-  const handleOpenCreateProduct = (query?: string, returnToSelect: boolean = true) => {
+  const handleOpenCreateProduct = (query?: string, returnToSelect: boolean = false) => {
     const trimmed = query?.trim() ?? "";
-    const isBarcodeLike = trimmed.length >= 6 && /^\d+$/.test(trimmed);
+    const isBarcodeLike = /^\d+$/.test(trimmed) || (trimmed.length >= 3 && /^[A-Z0-9_-]+$/i.test(trimmed));
     setNewProductPrefill({
       initialBarcode: isBarcodeLike ? trimmed : null,
       initialName: !isBarcodeLike && trimmed ? trimmed : null,
@@ -378,7 +415,15 @@ export const ComprasPage = () => {
           <div className="space-y-4 w-full max-w-full overflow-x-hidden">
             <section className="workspace-toolbar workspace-toolbar--inline">
               <div className="workspace-meta">
-                <span className="font-semibold text-slate-800 dark:text-slate-200">{purchases.length} compras registradas</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{purchases.length} compras registradas</span>
+                  {isBackgroundRefreshing ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                      Sincronizando en segundo plano...
+                    </span>
+                  ) : null}
+                </div>
                 <span className="text-slate-500 dark:text-slate-400">El historial se ordena desde la compra más reciente</span>
               </div>
               <div className="workspace-toolbar__actions">
@@ -399,9 +444,9 @@ export const ComprasPage = () => {
                   label="Recargar compras"
                   onClick={() => {
                     clearFeedback();
-                    void reload();
+                    void reload(true);
                   }}
-                  loading={isLoading}
+                  loading={isLoading || isBackgroundRefreshing}
                   disabled={isSubmitting}
                 />
               </div>
@@ -412,7 +457,7 @@ export const ComprasPage = () => {
                 <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Historial de compras</h2>
                 <span className="ui-badge ui-badge--info">{purchases.length}</span>
               </div>
-              {isLoading ? (
+              {isLoading && purchases.length === 0 ? (
                 <div className="rounded-lg border border-slate-200 dark:border-slate-800 p-8 text-center text-sm text-slate-600 dark:text-slate-400">
                   Cargando historial...
                 </div>
@@ -478,10 +523,13 @@ export const ComprasPage = () => {
               onVatPercentChange={setPurchaseVatPercent}
               iibbPercent={purchaseIibbPercent}
               iibbAmount={purchaseIibbAmount}
+              extraTaxAmount={purchaseExtraTaxAmount}
               onCreateSupplier={(initialName) => {
+                setEditingSupplier(null);
                 setNewSupplierInitialName(initialName?.trim() || "");
                 setIsSupplierModalOpen(true);
               }}
+              onEditSupplier={handleEditSupplier}
               onSubmit={handleProceedToPayment}
             />
 
@@ -489,8 +537,9 @@ export const ComprasPage = () => {
             <PurchaseCart
               items={cart}
               summary={summary}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isProductModalOpen || isSupplierModalOpen || isPaymentModalOpen}
               canWrite={canWritePurchases}
+              canAdjustProfitMargin={canAdjustProfitMargin}
               formId="purchase-checkout-form"
               vatPercent={purchaseVatPercent}
               onVatPercentChange={setPurchaseVatPercent}
@@ -498,6 +547,8 @@ export const ComprasPage = () => {
               onIibbPercentChange={setPurchaseIibbPercent}
               iibbAmount={purchaseIibbAmount}
               onIibbAmountChange={setPurchaseIibbAmount}
+              extraTaxAmount={purchaseExtraTaxAmount}
+              onExtraTaxAmountChange={setPurchaseExtraTaxAmount}
               onSetQuantity={setItemQuantity}
               onSetUnitCost={setItemUnitCost}
               onSetDiscountPercent={setItemDiscountPercent}
@@ -507,11 +558,14 @@ export const ComprasPage = () => {
               onSetBonifiedQuantity={setItemBonifiedQuantity}
               onSetUpdateSalePrice={setItemUpdateSalePrice}
               onRemove={removeItem}
-              onOpenAddProductModal={() => {
-                setSearch("");
-                setIsSelectProductModalOpen(true);
+              products={allProducts}
+              barcodesByProductId={barcodesByProductId}
+              onAddProduct={(product, quantity) => {
+                if (!canWritePurchases) return;
+                addProductToCart(product, quantity);
               }}
-              onOpenCreateProductModal={() => handleOpenCreateProduct("")}
+              onBarcodeScan={addProductByBarcode}
+              onOpenCreateProductModal={(initialCode) => handleOpenCreateProduct(initialCode, false)}
             />
           </div>
         )}
@@ -566,30 +620,37 @@ export const ComprasPage = () => {
           <div className="max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-panel dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-4 flex items-start justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
               <div>
-                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Nuevo proveedor</h2>
+                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                  {editingSupplier ? "Editar proveedor" : "Nuevo proveedor"}
+                </h2>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  Se guardará en Proveedores y quedará seleccionado en esta compra.
+                  {editingSupplier
+                    ? "Actualizá el CUIT u otros datos fiscales del proveedor para esta compra."
+                    : "Se guardará en Proveedores y quedará seleccionado en esta compra."}
                 </p>
               </div>
               <IconButton
                 icon={X}
-                label="Cerrar alta de proveedor"
+                label="Cerrar formulario de proveedor"
                 onClick={() => {
                   setIsSupplierModalOpen(false);
+                  setEditingSupplier(null);
                   setNewSupplierInitialName("");
                 }}
                 disabled={isSubmitting}
               />
             </div>
             <SupplierForm
-              mode="create"
+              mode={editingSupplier ? "edit" : "create"}
+              supplier={editingSupplier ?? undefined}
               initialName={newSupplierInitialName}
               disabled={isSubmitting}
               onCancel={() => {
                 setIsSupplierModalOpen(false);
+                setEditingSupplier(null);
                 setNewSupplierInitialName("");
               }}
-              onSubmit={handleCreateSupplier}
+              onSubmit={handleSupplierFormSubmit}
             />
           </div>
         </section>

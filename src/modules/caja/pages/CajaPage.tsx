@@ -21,7 +21,7 @@ import { useAuthStore } from "@/features/auth/store/auth.store";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { CashCloseForm } from "@/modules/caja/components/CashCloseForm";
 import { CashDailyTrackingTable } from "@/modules/caja/components/CashDailyTrackingTable";
-import { CashMovementForm } from "@/modules/caja/components/CashMovementForm";
+import { ManualCashMovementModal } from "@/modules/caja/components/ManualCashMovementModal";
 import { CashMovementsTable } from "@/modules/caja/components/CashMovementsTable";
 import { CashOpenForm } from "@/modules/caja/components/CashOpenForm";
 import { CashSessionCloseDetailModal } from "@/modules/caja/components/CashSessionCloseDetailModal";
@@ -70,6 +70,14 @@ export const CajaPage = () => {
   const [isManualMovementModalOpen, setIsManualMovementModalOpen] = useState(false);
   const [manualMovementTab, setManualMovementTab] = useState<"income" | "expense">("income");
   const [isCloseCashModalOpen, setIsCloseCashModalOpen] = useState(false);
+  const [closingSessionSnapshot, setClosingSessionSnapshot] = useState<CashSession | null>(null);
+  const [closingSummarySnapshot, setClosingSummarySnapshot] = useState<{
+    expectedBalance: number;
+    expectedCashBalance: number;
+    expectedFullBalance: number;
+  } | null>(null);
+  const [closingIncomeSnapshot, setClosingIncomeSnapshot] = useState<typeof currentSessionIncomeSummary | null>(null);
+  const [isCashClosed, setIsCashClosed] = useState(false);
   const [isDailyDetailModalOpen, setIsDailyDetailModalOpen] = useState(false);
   const [openSummaryModal, setOpenSummaryModal] = useState<"incomes" | "expenses" | "total" | null>(
     null
@@ -106,14 +114,14 @@ export const CajaPage = () => {
     getCurrentAccountDailySummary,
     getDailyMovements,
     isLoading,
+    isBackgroundRefreshing,
     isSubmitting,
     feedback,
     clearFeedback,
     reload,
     openCash,
     closeCash,
-    registerIncome,
-    registerExpense,
+    updateSessionNotes,
   } = useCashModule(tenantId, user?.id ?? null);
 
   const handleOpenCloseDetailForDate = (date: string | null) => {
@@ -301,7 +309,7 @@ export const CajaPage = () => {
     clearFeedback();
     setIsRefreshing(true);
     try {
-      await reload();
+      await reload(true);
       setLastUpdatedAt(new Date().toISOString());
       setIsRefreshConfirmed(true);
     } finally {
@@ -452,7 +460,17 @@ export const CajaPage = () => {
               <button
                 type="button"
                 disabled={isSubmitting}
-                onClick={() => setIsCloseCashModalOpen(true)}
+                onClick={() => {
+                  setClosingSessionSnapshot(currentSession);
+                  setClosingSummarySnapshot({
+                    expectedBalance: currentSessionSummary.expectedBalance,
+                    expectedCashBalance: currentSessionSummary.expectedCashBalance,
+                    expectedFullBalance: currentSessionSummary.expectedFullBalance,
+                  });
+                  setClosingIncomeSnapshot(currentSessionIncomeSummary);
+                  setIsCashClosed(false);
+                  setIsCloseCashModalOpen(true);
+                }}
                 className="h-10 inline-flex items-center gap-2 px-3.5 text-sm font-bold text-rose-700 dark:text-rose-300 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/70 rounded-xl transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
               >
                 <Lock className="h-4 w-4" />
@@ -487,22 +505,22 @@ export const CajaPage = () => {
               onClick={() => {
                 void handleRefresh();
               }}
-              disabled={isLoading || isSubmitting || isRefreshing}
+              disabled={isLoading || isSubmitting || isRefreshing || isBackgroundRefreshing}
               title="Recargar caja diaria"
               className="h-10 w-10 inline-flex items-center justify-center text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700/80 border border-slate-300 dark:border-slate-700 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
             >
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              <RefreshCw className={`h-4 w-4 ${isRefreshing || isBackgroundRefreshing ? "animate-spin" : ""}`} />
             </button>
           </div>
         </div>
 
         {/* Feedback / Notifications */}
-        {(isRefreshing || lastUpdatedAt || isRefreshConfirmed) && (
+        {(isRefreshing || isBackgroundRefreshing || lastUpdatedAt || isRefreshConfirmed) && (
           <div className="flex items-center gap-1.5 text-xs px-1">
-            {isRefreshing ? (
+            {isRefreshing || isBackgroundRefreshing ? (
               <>
                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700 dark:border-slate-600 dark:border-t-slate-200" />
-                <span className="text-slate-500 dark:text-slate-400">Actualizando datos de caja...</span>
+                <span className="text-slate-500 dark:text-slate-400">Actualizando datos de caja en segundo plano...</span>
               </>
             ) : (
               <span className={`inline-flex items-center gap-1 ${isRefreshConfirmed ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-slate-400 dark:text-slate-500"}`}>
@@ -801,7 +819,7 @@ export const CajaPage = () => {
             </div>
           )
         ) : (
-          isLoading ? (
+          isLoading && dailyTracking.length === 0 ? (
             <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
               <RefreshCw className="h-6 w-6 text-slate-400 animate-spin mx-auto mb-2" />
               <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Cargando historial de cajas diarias...</p>
@@ -820,89 +838,16 @@ export const CajaPage = () => {
         )}
       </div>
 
-      {/* MODAL: Movimiento Manual (sin scroll, visible en una sola pantalla) */}
-      {isManualMovementModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-3 sm:p-4">
-          <div className="w-full max-w-lg flex flex-col bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            <header className="shrink-0 px-4 py-2.5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/70 dark:bg-slate-800/60">
-              <div className="flex items-center gap-2">
-                <ArrowLeftRight className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-                <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-100">Movimiento Manual de Caja</h3>
-              </div>
-              <ModalCloseButton onClick={() => setIsManualMovementModalOpen(false)} />
-            </header>
 
-            {/* Selector de Pestañas Ingreso / Egreso */}
-            <div className="shrink-0 px-4 pt-2.5 pb-1">
-              <div className="grid grid-cols-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                <button
-                  type="button"
-                  onClick={() => setManualMovementTab("income")}
-                  className={`h-7 text-xs font-semibold rounded-md transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
-                    manualMovementTab === "income"
-                      ? "bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-xs"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                  }`}
-                >
-                  <span>+ Ingreso</span>
-                  <kbd className="hidden sm:inline-block text-[10px] px-1 py-0.2 rounded font-mono font-medium opacity-60 border border-current">
-                    F2
-                  </kbd>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setManualMovementTab("expense")}
-                  className={`h-7 text-xs font-semibold rounded-md transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
-                    manualMovementTab === "expense"
-                      ? "bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-400 shadow-xs"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                  }`}
-                >
-                  <span>- Retiro / Egreso</span>
-                  <kbd className="hidden sm:inline-block text-[10px] px-1 py-0.2 rounded font-mono font-medium opacity-60 border border-current">
-                    F2
-                  </kbd>
-                </button>
-              </div>
-            </div>
-
-            {/* Contenido sin scroll */}
-            <div className="px-4 pb-4 pt-2">
-              {manualMovementTab === "income" ? (
-                <CashMovementForm
-                  mode="income"
-                  paymentMethods={paymentMethods}
-                  bankAccounts={bankAccounts}
-                  canWrite={canWriteCaja}
-                  disabled={isSubmitting}
-                  onSubmit={async (values) => {
-                    await registerIncome(values);
-                    setIsManualMovementModalOpen(false);
-                  }}
-                  onSuccess={() => setIsManualMovementModalOpen(false)}
-                  onCancel={() => setIsManualMovementModalOpen(false)}
-                  onToggleMode={(next) => setManualMovementTab(next)}
-                />
-              ) : (
-                <CashMovementForm
-                  mode="expense"
-                  paymentMethods={paymentMethods}
-                  bankAccounts={bankAccounts}
-                  canWrite={canWriteCaja}
-                  disabled={isSubmitting}
-                  onSubmit={async (values) => {
-                    await registerExpense(values);
-                    setIsManualMovementModalOpen(false);
-                  }}
-                  onSuccess={() => setIsManualMovementModalOpen(false)}
-                  onCancel={() => setIsManualMovementModalOpen(false)}
-                  onToggleMode={(next) => setManualMovementTab(next)}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* MODAL: Movimiento Manual */}
+      <ManualCashMovementModal
+        isOpen={isManualMovementModalOpen}
+        onClose={() => setIsManualMovementModalOpen(false)}
+        defaultMode={manualMovementTab}
+        paymentMethods={paymentMethods}
+        bankAccounts={bankAccounts}
+        canWrite={canWriteCaja}
+      />
 
       {/* MODAL: Apertura de Caja */}
       {isOpenCashModalOpen && (
@@ -943,36 +888,44 @@ export const CajaPage = () => {
                 <Lock className="h-4 w-4 text-slate-500 dark:text-slate-400" />
                 <h3 className="text-xs font-bold text-slate-800 dark:text-slate-100">Cierre de Caja y Arqueo de Turno</h3>
               </div>
-              <ModalCloseButton onClick={() => setIsCloseCashModalOpen(false)} />
+              <ModalCloseButton
+                onClick={() => {
+                  setIsCloseCashModalOpen(false);
+                  setClosingSessionSnapshot(null);
+                  setClosingSummarySnapshot(null);
+                  setClosingIncomeSnapshot(null);
+                  setIsCashClosed(false);
+                }}
+              />
             </header>
 
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              {currentSession ? (
+              {(currentSession || closingSessionSnapshot) ? (
                 <>
-                  {!cashSettings.blind_cash_closing && (
+                  {!cashSettings.blind_cash_closing && !isCashClosed && (
                     <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-lg border border-slate-200/70 dark:border-slate-700">
                       <div>
                         <span className="text-slate-500 dark:text-slate-400 text-[11px]">Cobros por venta:</span>
                         <p className="font-semibold text-slate-900 dark:text-slate-100">
-                          {formatMoney(currentSessionIncomeSummary.salePaymentsTotal)}
+                          {formatMoney((closingIncomeSnapshot ?? currentSessionIncomeSummary).salePaymentsTotal)}
                         </p>
                       </div>
                       <div>
                         <span className="text-slate-500 dark:text-slate-400 text-[11px]">Ingresos manuales:</span>
                         <p className="font-semibold text-slate-900 dark:text-slate-100">
-                          {formatMoney(currentSessionIncomeSummary.manualIncomesTotal)}
+                          {formatMoney((closingIncomeSnapshot ?? currentSessionIncomeSummary).manualIncomesTotal)}
                         </p>
                       </div>
                       <div>
                         <span className="text-slate-500 dark:text-slate-400 text-[11px]">Ajustes positivos:</span>
                         <p className="font-semibold text-slate-900 dark:text-slate-100">
-                          {formatMoney(currentSessionIncomeSummary.positiveAdjustmentsTotal)}
+                          {formatMoney((closingIncomeSnapshot ?? currentSessionIncomeSummary).positiveAdjustmentsTotal)}
                         </p>
                       </div>
                       <div>
                         <span className="text-slate-500 dark:text-slate-400 text-[11px]">Total ingresos del turno:</span>
                         <p className="font-bold text-emerald-700 dark:text-emerald-400">
-                          {formatMoney(currentSessionIncomeSummary.totalIncomes)}
+                          {formatMoney((closingIncomeSnapshot ?? currentSessionIncomeSummary).totalIncomes)}
                         </p>
                       </div>
                     </div>
@@ -981,19 +934,28 @@ export const CajaPage = () => {
                   <CashCloseForm
                     canWrite={canWriteCaja}
                     disabled={isSubmitting}
-                    expectedBalance={currentSessionSummary.expectedBalance}
-                    expectedCashBalance={currentSessionSummary.expectedCashBalance}
-                    expectedFullBalance={currentSessionSummary.expectedFullBalance}
+                    expectedBalance={closingSummarySnapshot?.expectedBalance ?? currentSessionSummary.expectedBalance}
+                    expectedCashBalance={closingSummarySnapshot?.expectedCashBalance ?? currentSessionSummary.expectedCashBalance}
+                    expectedFullBalance={closingSummarySnapshot?.expectedFullBalance ?? currentSessionSummary.expectedFullBalance}
                     reconciliationMode={cashSettings.cash_reconciliation_mode ?? "cash_only"}
                     blindMode={cashSettings.blind_cash_closing ?? false}
+                    initialNotes={closingSessionSnapshot?.notes ?? currentSession?.notes}
+                    onUpdateNotes={updateSessionNotes}
                     onSubmit={async (values) => {
                       const res = await closeCash(values);
                       if (res) {
+                        setIsCashClosed(true);
                         setActiveViewTab("history");
                       }
                       return res;
                     }}
-                    onCancel={() => setIsCloseCashModalOpen(false)}
+                    onCancel={() => {
+                      setIsCloseCashModalOpen(false);
+                      setClosingSessionSnapshot(null);
+                      setClosingSummarySnapshot(null);
+                      setClosingIncomeSnapshot(null);
+                      setIsCashClosed(false);
+                    }}
                   />
                 </>
               ) : (
@@ -1285,7 +1247,7 @@ export const CajaPage = () => {
             </header>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {isLoading ? (
+              {isLoading && detailMovements.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-500 dark:text-slate-400">
                   Cargando movimientos...
                 </div>

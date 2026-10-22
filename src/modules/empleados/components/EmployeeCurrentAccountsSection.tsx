@@ -6,9 +6,12 @@ import {
   CreditCard,
   ArrowRight,
   ShoppingBag,
+  X,
 } from "lucide-react";
 import type { Employee } from "@/types/entities";
 import { EmployeeCurrentAccountPanel } from "@/modules/empleados/components/EmployeeCurrentAccountPanel";
+import { EmployeeProductConsumptionModal } from "@/modules/empleados/components/EmployeeProductConsumptionModal";
+import { employeeCurrentAccountsService } from "@/services/employee-current-accounts.service";
 
 interface EmployeeCurrentAccountsSectionProps {
   tenantId: string;
@@ -39,6 +42,8 @@ export const EmployeeCurrentAccountsSection = ({
 }: EmployeeCurrentAccountsSectionProps) => {
   const [search, setSearch] = useState("");
   const [filterMode, setFilterMode] = useState<"all" | "debt" | "upToDate">("all");
+  const [productModalEmployee, setProductModalEmployee] = useState<Employee | null>(null);
+  const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
 
   // Si hay un empleado seleccionado, mostramos directamente su panel detallado
   if (selectedEmployee) {
@@ -54,6 +59,30 @@ export const EmployeeCurrentAccountsSection = ({
       />
     );
   }
+
+  const handleProductSubmit = async (values: {
+    amount: number;
+    notes: string;
+    category: "product_purchase";
+  }) => {
+    if (!productModalEmployee) return false;
+    try {
+      await employeeCurrentAccountsService.createMovement(tenantId, {
+        employee_id: productModalEmployee.id,
+        type: "debt",
+        amount: values.amount,
+        category: values.category,
+        notes: values.notes,
+        created_by: userId,
+      });
+      onBalanceUpdated();
+      setProductModalEmployee(null);
+      return true;
+    } catch (err) {
+      console.error("Error al registrar compra de productos:", err);
+      return false;
+    }
+  };
 
   // Cálculos de KPIs
   const totalDebt = useMemo(() => {
@@ -155,40 +184,60 @@ export const EmployeeCurrentAccountsSection = ({
           />
         </div>
 
-        <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
-          <button
-            type="button"
-            onClick={() => setFilterMode("all")}
-            className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${
-              filterMode === "all"
-                ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100"
-                : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
-            }`}
-          >
-            Todos ({employees.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterMode("debt")}
-            className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${
-              filterMode === "debt"
-                ? "bg-white text-rose-700 shadow-sm dark:bg-slate-700 dark:text-rose-300"
-                : "text-slate-500 hover:text-rose-700 dark:hover:text-rose-300"
-            }`}
-          >
-            Con Deuda ({employeesWithDebtCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterMode("upToDate")}
-            className={`rounded-lg px-3 py-1 text-xs font-semibold transition ${
-              filterMode === "upToDate"
-                ? "bg-white text-emerald-700 shadow-sm dark:bg-slate-700 dark:text-emerald-300"
-                : "text-slate-500 hover:text-emerald-700 dark:hover:text-emerald-300"
-            }`}
-          >
-            Al Día ({employeesUpToDateCount})
-          </button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+            <button
+              type="button"
+              onClick={() => setFilterMode("all")}
+              className={`rounded-lg px-3 py-1 text-xs font-semibold transition cursor-pointer ${
+                filterMode === "all"
+                  ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100"
+                  : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
+              }`}
+            >
+              Todos ({employees.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode("debt")}
+              className={`rounded-lg px-3 py-1 text-xs font-semibold transition cursor-pointer ${
+                filterMode === "debt"
+                  ? "bg-white text-rose-700 shadow-sm dark:bg-slate-700 dark:text-rose-300"
+                  : "text-slate-500 hover:text-rose-700 dark:hover:text-rose-300"
+              }`}
+            >
+              Con Deuda ({employeesWithDebtCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode("upToDate")}
+              className={`rounded-lg px-3 py-1 text-xs font-semibold transition cursor-pointer ${
+                filterMode === "upToDate"
+                  ? "bg-white text-emerald-700 shadow-sm dark:bg-slate-700 dark:text-emerald-300"
+                  : "text-slate-500 hover:text-emerald-700 dark:hover:text-emerald-300"
+              }`}
+            >
+              Al Día ({employeesUpToDateCount})
+            </button>
+          </div>
+
+          {canWrite && employees.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (filteredEmployees.length === 1) {
+                  setProductModalEmployee(filteredEmployees[0]);
+                } else {
+                  setEmployeePickerOpen(true);
+                }
+              }}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 cursor-pointer shrink-0"
+              title="Cargar productos a cuenta corriente de empleado"
+            >
+              <ShoppingBag size={14} />
+              <span>+ Cargar Productos</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -275,15 +324,28 @@ export const EmployeeCurrentAccountsSection = ({
                       </td>
 
                       <td className="py-3 px-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => onSelectEmployee(emp)}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 transition dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-300"
-                        >
-                          <CreditCard size={13} />
-                          <span>Ver Cuenta</span>
-                          <ArrowRight size={13} />
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          {canWrite && (
+                            <button
+                              type="button"
+                              onClick={() => setProductModalEmployee(emp)}
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition dark:bg-indigo-600 dark:hover:bg-indigo-500 cursor-pointer"
+                              title={`Cargar productos a cuenta corriente de ${emp.full_name}`}
+                            >
+                              <ShoppingBag size={13} />
+                              <span>Cargar Productos</span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => onSelectEmployee(emp)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
+                          >
+                            <CreditCard size={13} />
+                            <span>Ver Cuenta</span>
+                            <ArrowRight size={13} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -293,6 +355,75 @@ export const EmployeeCurrentAccountsSection = ({
           </table>
         </div>
       </div>
+
+      {/* Selector modal si hay múltiples empleados y se pulsa el botón del header */}
+      {employeePickerOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div className="flex flex-col w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-2xl overflow-hidden p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
+                  <ShoppingBag size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Cargar Productos a Empleado
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Seleccioná el empleado a imputar el consumo
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEmployeePickerOpen(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="max-h-72 overflow-y-auto space-y-2">
+              {employees.map((emp) => (
+                <button
+                  key={emp.id}
+                  type="button"
+                  onClick={() => {
+                    setProductModalEmployee(emp);
+                    setEmployeePickerOpen(false);
+                  }}
+                  className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 hover:border-indigo-300 dark:hover:border-indigo-600 transition text-left cursor-pointer"
+                >
+                  <div>
+                    <p className="font-bold text-sm text-slate-900 dark:text-white">{emp.full_name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                      {emp.code} • {emp.position}
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                    Cargar <ArrowRight size={13} />
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Consumo / Retiro de Productos */}
+      {productModalEmployee && (
+        <EmployeeProductConsumptionModal
+          open={Boolean(productModalEmployee)}
+          tenantId={tenantId}
+          employee={productModalEmployee}
+          onClose={() => setProductModalEmployee(null)}
+          onSubmit={handleProductSubmit}
+        />
+      )}
     </div>
   );
 };

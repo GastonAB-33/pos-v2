@@ -1,25 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditService } from "@/services/audit.service";
-import { bankAccountsService } from "@/services/bank-accounts.service";
 import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
 import { cashService } from "@/services/cash.service";
 import { generalCashService } from "@/services/general-cash.service";
-import { currentAccountsService } from "@/services/current-accounts.service";
-import { customersService } from "@/services/customers.service";
-import { paymentMethodsService, normalizePaymentMethodCode } from "@/services/payment-methods.service";
-import { salesService } from "@/services/sales.service";
-import { settingsService } from "@/services/settings.service";
-import { usersService } from "@/services/users.service";
+import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
+import { useCashStore } from "@/modules/caja/store/cash.store";
 import type {
-  BankAccount,
   CashMovement,
   CashSession,
-  CashSettings,
-  CurrentAccountMovement,
-  Customer,
-  PaymentMethod,
-  Sale,
-  SalePayment,
 } from "@/types/entities";
 import type {
   CashMovementValues,
@@ -53,6 +41,8 @@ export interface CashDailyTrackingRow {
 export interface CashCloseSnapshot {
   billCounts?: Record<number, number>;
   coinsAmount?: number;
+  openingBillCounts?: Record<number, number>;
+  openingCoinsAmount?: number;
   expectedAmount?: number;
   expectedCashAmount?: number;
   expectedFullAmount?: number;
@@ -113,6 +103,7 @@ export interface CashCloseResult {
   salePaymentsTotal: number;
   cashSalesTotal: number;
   totalIncomes: number;
+  userNotes?: string;
 }
 
 export interface CashBreakdownItem {
@@ -198,130 +189,48 @@ const expenseReferenceLabels: Record<string, string> = {
   supplier_payment: "Pago a proveedores",
 };
 
-const defaultCashSettings: CashSettings = {
-  require_open_session_for_sale: false,
-  default_opening_amount: 0,
-  allow_manual_movements: true,
-  require_notes_on_manual_movements: false,
-  blind_cash_closing: false,
-  cash_reconciliation_mode: "cash_only",
-};
-
 export const useCashModule = (tenantId: string | null, userId: string | null) => {
-  const [sessions, setSessions] = useState<CashSession[]>([]);
-  const [movements, setMovements] = useState<CashMovement[]>([]);
-  const [currentAccountMovements, setCurrentAccountMovements] = useState<CurrentAccountMovement[]>(
-    []
-  );
-  const [customersById, setCustomersById] = useState<Record<string, Customer>>({});
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
-  const [paymentMethodsByCode, setPaymentMethodsByCode] = useState<Record<string, string>>({});
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
-  const [salePayments, setSalePayments] = useState<SalePayment[]>([]);
-  const [salesById, setSalesById] = useState<Record<string, Sale>>({});
-  const [usersById, setUsersById] = useState<Record<string, string>>({});
-  const [cashSettings, setCashSettings] = useState<CashSettings>(defaultCashSettings);
+  const {
+    sessions,
+    movements,
+    currentAccountMovements,
+    customersById,
+    paymentMethods,
+    paymentMethodsByCode,
+    bankAccounts,
+    salePayments,
+    salesById,
+    usersById,
+    cashSettings,
+    isLoading,
+    isBackgroundRefreshing,
+  } = useCashStore();
+
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [movementTypeFilter, setMovementTypeFilter] = useState<CashMovementFilter>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<CashFeedback | null>(null);
 
   const clearFeedback = () => setFeedback(null);
 
-  const loadCashData = useCallback(async () => {
-    if (!tenantId) {
-      setSessions([]);
-      setMovements([]);
-      setCurrentAccountMovements([]);
-      setCustomersById({});
-      setPaymentMethods([]);
-      setPaymentMethodsByCode({});
-      setBankAccounts([]);
-      setSalePayments([]);
-      setSalesById({});
-      setUsersById({});
-      setCashSettings(defaultCashSettings);
-      setSelectedSessionId("");
-      return;
-    }
+  const loadCashData = useCallback(
+    async (force = false) => {
+      if (!tenantId) {
+        useCashStore.getState().clearCache();
+        setSelectedSessionId("");
+        return;
+      }
 
-    setIsLoading(true);
-    try {
-      const [
-        allSessions,
-        allMovements,
-        tenantSettings,
-        allUsers,
-        allPaymentMethods,
-        allCurrentAccountMovements,
-        allCustomers,
-        allSales,
-        allBankAccounts,
-        allSalePayments,
-      ] = await Promise.all([
-        cashService.getAllByTenant(tenantId),
-        cashService.getAllMovementsByTenant(tenantId),
-        settingsService.getByTenant(tenantId),
-        usersService.getAllByTenant(tenantId),
-        paymentMethodsService.getAllByTenant(tenantId),
-        currentAccountsService.getAllByTenant(tenantId),
-        customersService.getAllByTenant(tenantId),
-        salesService.getAllByTenant(tenantId),
-        bankAccountsService.getActiveByTenant(tenantId).catch(() => []),
-        salesService.getAllPaymentsByTenant(tenantId).catch(() => []),
-      ]);
-
-      setSessions(allSessions.sort((a, b) => b.opened_at.localeCompare(a.opened_at)));
-      setMovements(allMovements.sort((a, b) => b.created_at.localeCompare(a.created_at)));
-      setBankAccounts(allBankAccounts);
-      setSalePayments(allSalePayments);
-      setCurrentAccountMovements(
-        allCurrentAccountMovements.sort((a, b) => b.created_at.localeCompare(a.created_at))
-      );
-      setCustomersById(
-        allCustomers.reduce<Record<string, Customer>>((acc, customer) => {
-          acc[customer.id] = customer;
-          return acc;
-        }, {})
-      );
-      setPaymentMethodsByCode(
-        allPaymentMethods.reduce<Record<string, string>>((acc, method) => {
-          const key = normalizeKey(method.code);
-          if (!key) return acc;
-          acc[key] = method.name;
-          return acc;
-        }, {})
-      );
-      setPaymentMethods(allPaymentMethods);
-      setSalesById(
-        allSales.reduce<Record<string, Sale>>((acc, sale) => {
-          acc[sale.id] = sale;
-          return acc;
-        }, {})
-      );
-      setUsersById(
-        allUsers.reduce<Record<string, string>>((acc, user) => {
-          const fullName = user.full_name?.trim() ?? "";
-          if (fullName) {
-            acc[user.id] = fullName;
-            return acc;
-          }
-
-          const fallback = user.email?.trim() || user.username?.trim() || user.id;
-          acc[user.id] = fallback;
-          return acc;
-        }, {})
-      );
-      setCashSettings(tenantSettings.caja ?? defaultCashSettings);
-    } catch {
-      setFeedback({ type: "error", message: "No se pudo cargar informacion de caja" });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [tenantId]);
+      try {
+        await useCashStore.getState().loadCashData(tenantId, force);
+      } catch {
+        setFeedback({ type: "error", message: "No se pudo cargar informacion de caja" });
+      }
+    },
+    [tenantId]
+  );
 
   useEffect(() => {
     void loadCashData();
@@ -1106,6 +1015,15 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         return;
       }
 
+      const openSnapshot: CashCloseSnapshot = {
+        openingBillCounts: values.billCounts,
+        openingCoinsAmount: values.coinsAmount,
+        userNotes: values.notes?.trim() || "",
+      };
+      const serializedNotes = values.billCounts
+        ? serializeCloseSnapshot(openSnapshot, values.notes?.trim() || null)
+        : values.notes?.trim() || null;
+
       const createdSession = await cashService.create(tenantId, {
         branch_id: null,
         opened_by_user_id: userId,
@@ -1117,7 +1035,9 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         closing_amount: null,
         expected_closing_amount: null,
         closing_difference: null,
-        notes: values.notes?.trim() || null,
+        notes: serializedNotes,
+        opening_bill_counts: (values.billCounts as Record<string, number>) ?? null,
+        opening_coins_amount: values.coinsAmount ?? null,
       });
       await auditService.createSafe(tenantId, {
         user_id: userId,
@@ -1129,6 +1049,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         metadata: {
           opening_amount: values.openingAmount,
           notes: values.notes?.trim() || null,
+          bill_counts: values.billCounts,
+          coins_amount: values.coinsAmount,
         },
       });
 
@@ -1147,7 +1069,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         }
       }
       setFeedback({ type: "success", message: "Caja diaria abierta" });
-      await loadCashData();
+      await loadCashData(true);
       setSelectedSessionId(createdSession.id);
     } catch {
       setFeedback({ type: "error", message: "No se pudo abrir la caja diaria" });
@@ -1168,9 +1090,16 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       const expectedAmount = currentSessionSummary.expectedBalance;
       const difference = roundAmount(values.realAmount - expectedAmount);
 
+      const existingSnapshot = parseCloseSnapshot(currentSession.notes).snapshot;
+
       const snapshot: CashCloseSnapshot = {
         billCounts: values.billCounts,
         coinsAmount: values.coinsAmount,
+        openingBillCounts:
+          existingSnapshot?.openingBillCounts ??
+          (currentSession.opening_bill_counts as Record<number, number> | undefined),
+        openingCoinsAmount:
+          existingSnapshot?.openingCoinsAmount ?? currentSession.opening_coins_amount ?? undefined,
         expectedAmount,
         expectedCashAmount: currentSessionSummary.expectedCashBalance,
         expectedFullAmount: currentSessionSummary.expectedFullBalance,
@@ -1227,7 +1156,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         }
       }
       setFeedback({ type: "success", message: "Caja diaria cerrada" });
-      await loadCashData();
+      await loadCashData(true);
       return {
         session: closedSession,
         expectedAmount: currentSessionSummary.expectedBalance,
@@ -1236,12 +1165,46 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         salePaymentsTotal: currentSessionIncomeSummary.salePaymentsTotal,
         cashSalesTotal: currentSessionIncomeSummary.cashSalesTotal,
         totalIncomes: currentSessionIncomeSummary.totalIncomes,
+        userNotes: values.notes?.trim() || "",
       };
     } catch {
       setFeedback({ type: "error", message: "No se pudo cerrar la caja diaria" });
       return null;
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const updateSessionNotes = async (
+    sessionId: string,
+    notes: string
+  ): Promise<boolean> => {
+    if (!tenantId) return false;
+    try {
+      const existingSession =
+        sessions.find((s) => s.id === sessionId) ||
+        (await cashService.getById(tenantId, sessionId));
+      const parsed = parseCloseSnapshot(existingSession?.notes);
+      let serializedNotes: string;
+      if (parsed.snapshot) {
+        const updatedSnapshot: CashCloseSnapshot = {
+          ...parsed.snapshot,
+          userNotes: notes.trim(),
+        };
+        serializedNotes = serializeCloseSnapshot(updatedSnapshot, notes.trim());
+      } else {
+        serializedNotes = notes.trim();
+      }
+
+      await cashService.update(tenantId, sessionId, {
+        notes: serializedNotes,
+      });
+
+      await loadCashData(true);
+      return true;
+    } catch (err) {
+      console.error("Error al actualizar observaciones de caja:", err);
+      return false;
     }
   };
 
@@ -1357,7 +1320,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       });
 
       setFeedback({ type: "success", message: "Ingreso registrado" });
-      await loadCashData();
+      await loadCashData(true);
       return true;
     } catch {
       setFeedback({ type: "error", message: "No se pudo registrar el ingreso" });
@@ -1468,7 +1431,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
           ? `Egreso registrado y debitado de ${selectedBank?.bank_name}`
           : "Egreso en efectivo registrado correctamente",
       });
-      await loadCashData();
+      await loadCashData(true);
       return true;
     } catch {
       setFeedback({ type: "error", message: "No se pudo registrar el egreso" });
@@ -1513,12 +1476,14 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     dateTo,
     setDateTo,
     isLoading,
+    isBackgroundRefreshing,
     isSubmitting,
     feedback,
     clearFeedback,
-    reload: loadCashData,
+    reload: (force = true) => loadCashData(force),
     openCash,
     closeCash,
+    updateSessionNotes,
     registerIncome,
     registerExpense,
   };

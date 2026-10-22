@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowDownLeft,
   BadgePercent,
   Calculator,
+  ChevronDown,
   Coins,
   FileText,
   Moon,
@@ -18,8 +20,13 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useUiStore } from "@/store/ui.store";
+import { useAuthStore } from "@/features/auth/store/auth.store";
+import { authService } from "@/services/auth.service";
+import { routePaths } from "@/config/routes";
 import { QuickPriceGlobalModal } from "@/modules/productos/components/QuickPriceGlobalModal";
+import { ManualCashMovementModal } from "@/modules/caja/components/ManualCashMovementModal";
 import type { Product } from "@/types/entities";
 import type {
   PosCartItem,
@@ -95,6 +102,7 @@ export interface PosSmartViewProps {
   onOpenReceipts: () => void;
   onOpenQuickProduct: () => void;
   onOpenQuickPrice?: () => void;
+  onOpenManualCashExpense?: () => void;
   searchResetToken?: number;
 }
 
@@ -141,9 +149,39 @@ export const PosSmartView = ({
   onOpenReceipts,
   onOpenQuickProduct,
   onOpenQuickPrice,
+  onOpenManualCashExpense,
 }: PosSmartViewProps) => {
   const theme = useUiStore((state) => state.theme);
-  const cycleTheme = useUiStore((state) => state.cycleTheme);
+  const setTheme = useUiStore((state) => state.setTheme);
+  const user = useAuthStore((state) => state.user);
+  const clearSession = useAuthStore((state) => state.clearSession);
+  const navigate = useNavigate();
+
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
+  const [isManualCashModalOpen, setIsManualCashModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isUserMenuOpen) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [isUserMenuOpen]);
+
+  const userRoleLabel = useMemo(() => {
+    if (user?.role === "admin") return "Administrador";
+    if (user?.role === "cashier") return "Cajero";
+    if (user?.role === "operator") return "Operador";
+    return user?.permissionProfileName || user?.role || "Operador";
+  }, [user]);
+
+  const displayUserFullName = user?.fullName || userName || "Usuario";
+  const displayUserEmail = user?.email || (user?.username ? `@${user.username}` : "sin-sesion@local");
+  const shortUserName = user?.fullName?.split(" ")[0] || userName;
 
   const [isQuickPriceModalOpen, setIsQuickPriceModalOpen] = useState(false);
 
@@ -347,12 +385,27 @@ export const PosSmartView = ({
           isHighlighted && "ring-2 ring-emerald-500/60 border-emerald-500/80"
         )}
       >
-        {/* Encabezado: Carrito (N ítems) */}
-        <div className="flex items-center gap-2.5 mb-4">
-          <ShoppingCart className="text-blue-600 dark:text-sky-400" size={20} />
-          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-            Carrito ({items.length} {items.length === 1 ? "ítem" : "ítems"})
-          </h2>
+        {/* Encabezado: Carrito (N ítems) y botón Vaciar a la derecha */}
+        <div className="flex items-center justify-between gap-2.5 mb-4">
+          <div className="flex items-center gap-2.5">
+            <ShoppingCart className="text-blue-600 dark:text-sky-400" size={20} />
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              Carrito ({items.length} {items.length === 1 ? "ítem" : "ítems"})
+            </h2>
+          </div>
+
+          {items.length > 0 ? (
+            <button
+              type="button"
+              onClick={onClearCart}
+              disabled={disabled || !canWrite}
+              className="h-8 px-2.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 dark:hover:border-rose-800/80 transition disabled:opacity-50 whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+              title="Vaciar todos los productos del carrito"
+            >
+              <Trash2 size={13} className="text-slate-400 group-hover:text-rose-500" />
+              <span>Vaciar</span>
+            </button>
+          ) : null}
         </div>
 
         {/* Buscador general con filtro desplegable de categoría */}
@@ -619,6 +672,11 @@ export const PosSmartView = ({
                           Cobro Cta. Cte.
                         </span>
                       ) : null}
+                      {"is_returnable_package_item" in item && item.is_returnable_package_item ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/60">
+                          📦 Cobro de Envase
+                        </span>
+                      ) : null}
                       {"is_promo_item" in item && item.is_promo_item ? (
                         <span className="inline-flex items-center gap-1 rounded-md bg-purple-100 dark:bg-purple-950/60 px-1.5 py-0.5 text-[10px] font-bold text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800/60">
                           <Sparkles size={10} />
@@ -705,7 +763,7 @@ export const PosSmartView = ({
                               ? "bg-purple-100 text-purple-900 border-purple-300 dark:bg-purple-950/70 dark:text-purple-200 dark:border-purple-700 hover:bg-purple-200 dark:hover:bg-purple-900"
                               : "bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950/70 dark:text-emerald-200 dark:border-emerald-700 hover:bg-emerald-200 dark:hover:bg-emerald-900"
                           )}
-                          title="Hacé clic para cambiar: Canje mano a mano / Cobrar envase / Anotar en cuenta corriente"
+                          title="Hacé clic para cambiar estado: Trajo envase / Cobrar envase / Anotar envase"
                         >
                           {item.returnable_status === "charge" ? (
                             <>
@@ -716,13 +774,13 @@ export const PosSmartView = ({
                             </>
                           ) : item.returnable_status === "owe" ? (
                             <>
-                              <span>📝 Debe envase</span>
+                              <span>📝 Anotar envase</span>
                               <span className="font-normal text-[10px]">(Cta. Cte.)</span>
                             </>
                           ) : (
                             <>
-                              <span>🔄 Canje</span>
-                              <span className="font-normal text-[10px]">(Trajo envase)</span>
+                              <span>✓ Trajo envase</span>
+                              <span className="font-normal text-[10px]">(Canje)</span>
                             </>
                           )}
                         </button>
@@ -735,6 +793,10 @@ export const PosSmartView = ({
                     {item.is_debt_payment_item ? (
                       <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60">
                         Pago único
+                      </span>
+                    ) : "is_returnable_package_item" in item && item.is_returnable_package_item ? (
+                      <span className="text-[11px] font-bold text-amber-700 dark:text-amber-300 px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60">
+                        {item.quantity} {item.quantity === 1 ? "envase" : "envases"}
                       </span>
                     ) : (
                       <div className="flex items-center h-8 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-900 shadow-2xs overflow-hidden">
@@ -861,7 +923,7 @@ export const PosSmartView = ({
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      {!item.is_debt_payment_item && onOpenItemPromoModal ? (
+                      {!item.is_debt_payment_item && !("is_returnable_package_item" in item && item.is_returnable_package_item) && onOpenItemPromoModal ? (
                         <button
                           type="button"
                           onClick={() => onOpenItemPromoModal(item as PosCartItemComputed)}
@@ -888,20 +950,22 @@ export const PosSmartView = ({
                         </button>
                       ) : null}
 
-                      <button
-                        type="button"
-                        onClick={() => onEdit(item)}
-                        disabled={disabled || !canWrite}
-                        className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 text-xs font-semibold transition disabled:opacity-40"
-                      >
-                        Editar
-                      </button>
+                      {!Boolean("is_returnable_package_item" in item && item.is_returnable_package_item) && (
+                        <button
+                          type="button"
+                          onClick={() => onEdit(item)}
+                          disabled={disabled || !canWrite}
+                          className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 text-xs font-semibold transition disabled:opacity-40"
+                        >
+                          Editar
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => onRemove(item.product_id)}
                         disabled={disabled || !canWrite}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition disabled:opacity-40"
-                        title="Eliminar producto"
+                        title={"is_returnable_package_item" in item && item.is_returnable_package_item ? "Quitar cobro de envase" : "Eliminar producto"}
                       >
                         <Trash2 size={15} />
                       </button>
@@ -920,18 +984,140 @@ export const PosSmartView = ({
       <aside className="lg:col-span-4 flex flex-col gap-3.5">
         {/* Panel Superior Derecho: Botones y funciones */}
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-3.5 sm:p-4 space-y-3 shadow-sm">
-          {/* Fila 1: Operador, Consulta rápida y Tema */}
+          {/* Fila 1: Operador con Menú Desplegable, Consulta rápida y Egreso Manual Caja */}
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800/90 bg-slate-50 dark:bg-slate-900/80 px-2.5 py-1.5 h-8 shrink-0">
-              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-fuchsia-600 text-[10px] font-bold text-white shadow-sm shrink-0">
-                {operatorInitials}
-              </span>
-              <div className="leading-tight flex items-baseline gap-1.5 min-w-0">
-                <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate max-w-[105px]">
-                  {userName}
-                </p>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 shrink-0">Operador</span>
-              </div>
+            {/* Desplegable de usuario */}
+            <div className="relative shrink-0" ref={userMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsUserMenuOpen((prev) => !prev)}
+                className={cn(
+                  "h-8 flex items-center gap-1.5 rounded-xl border px-2 text-xs font-semibold transition shadow-2xs whitespace-nowrap cursor-pointer select-none",
+                  isUserMenuOpen
+                    ? "border-blue-400 bg-blue-50/80 text-blue-900 dark:border-blue-700 dark:bg-slate-800 dark:text-blue-200"
+                    : "border-slate-300 dark:border-slate-700/80 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800/40 dark:hover:bg-slate-700/60 text-slate-700 dark:text-slate-200"
+                )}
+                title={`Usuario: ${displayUserFullName} (${userRoleLabel}). Clic para ver perfil y opciones.`}
+                aria-expanded={isUserMenuOpen}
+                aria-haspopup="true"
+              >
+                <span className="flex h-5 w-5 items-center justify-center rounded-md bg-fuchsia-600 text-[10px] font-bold text-white shadow-xs shrink-0">
+                  {operatorInitials}
+                </span>
+                <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate max-w-[70px] sm:max-w-[85px]">
+                  {shortUserName}
+                </span>
+                <ChevronDown
+                  size={12}
+                  className={cn(
+                    "text-slate-400 dark:text-slate-500 transition-transform duration-150 shrink-0",
+                    isUserMenuOpen && "rotate-180 text-blue-600 dark:text-blue-400"
+                  )}
+                />
+              </button>
+
+              {/* Popover con información del usuario y selector de tema */}
+              {isUserMenuOpen && (
+                <div
+                  className="absolute left-0 top-[calc(100%+6px)] z-50 w-72 sm:w-80 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 shadow-2xl space-y-3"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Información del usuario registrado */}
+                  <div className="flex items-center gap-3 pb-2.5 border-b border-slate-200/80 dark:border-slate-800">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-600 to-purple-700 text-white font-bold text-sm shadow-xs shrink-0">
+                      {operatorInitials}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate" title={displayUserFullName}>
+                        {displayUserFullName}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate" title={displayUserEmail}>
+                        {displayUserEmail}
+                      </p>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-fuchsia-50 dark:bg-fuchsia-950/60 text-fuchsia-700 dark:text-fuchsia-300 border border-fuchsia-200/80 dark:border-fuchsia-800/60 mt-1">
+                        {userRoleLabel}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Selector de tema */}
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Tema del sistema
+                    </p>
+                    <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 p-1 border border-slate-200/60 dark:border-slate-700/60">
+                      <button
+                        type="button"
+                        onClick={() => setTheme("light")}
+                        className={cn(
+                          "flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition cursor-pointer",
+                          theme === "light"
+                            ? "bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-white"
+                            : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                        )}
+                        title="Tema Claro"
+                      >
+                        <Sun size={13} className="text-amber-500" />
+                        <span>Claro</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTheme("midnight")}
+                        className={cn(
+                          "flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition cursor-pointer",
+                          theme === "midnight"
+                            ? "bg-slate-900 text-white shadow-xs dark:bg-slate-700 dark:text-white"
+                            : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                        )}
+                        title="Tema Azul Medianoche"
+                      >
+                        <MoonStar size={13} className="text-indigo-400" />
+                        <span>Azul</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTheme("dark")}
+                        className={cn(
+                          "flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition cursor-pointer",
+                          theme === "dark"
+                            ? "bg-slate-900 text-white shadow-xs dark:bg-slate-700 dark:text-white"
+                            : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                        )}
+                        title="Tema Oscuro"
+                      >
+                        <Moon size={13} className="text-amber-300" />
+                        <span>Oscuro</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Acciones de navegación y sesión */}
+                  <div className="border-t border-slate-200/80 dark:border-slate-800 pt-2 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        navigate(routePaths.dashboard);
+                      }}
+                      className="ui-btn-ghost flex-1 justify-center text-xs text-slate-600 dark:text-slate-300 py-1.5 cursor-pointer"
+                    >
+                      Ir al panel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        void authService.signOut();
+                        clearSession();
+                        navigate(routePaths.login, { replace: true });
+                      }}
+                      className="ui-btn-ghost flex-1 justify-center text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/40 py-1.5 cursor-pointer"
+                    >
+                      Cerrar sesión
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <button
@@ -944,22 +1130,22 @@ export const PosSmartView = ({
               <span className="truncate">Consulta rápida</span>
             </button>
 
+            {/* Botón Rojo: Egreso / Pago Manual de Caja */}
             <button
               type="button"
-              onClick={cycleTheme}
-              className="h-8 flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 px-2.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/60 transition shadow-2xs whitespace-nowrap shrink-0 cursor-pointer"
-              title={`Tema actual: ${theme === "midnight" ? "Azul Medianoche" : theme === "dark" ? "Oscuro" : "Claro"}. Clic para cambiar.`}
+              onClick={() => {
+                if (onOpenManualCashExpense) {
+                  onOpenManualCashExpense();
+                } else {
+                  setIsManualCashModalOpen(true);
+                }
+              }}
+              disabled={disabled || !canWrite}
+              className="h-8 flex items-center gap-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white px-2.5 text-xs font-bold transition shadow-xs whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50 active:scale-95 border border-rose-700/60 dark:border-rose-500/60"
+              title="Registrar egreso o pago manual en la caja diaria"
             >
-              {theme === "midnight" ? (
-                <MoonStar size={14} className="text-indigo-400" />
-              ) : theme === "dark" ? (
-                <Moon size={14} className="text-amber-300" />
-              ) : (
-                <Sun size={14} className="text-amber-500" />
-              )}
-              <span className="text-xs font-semibold">
-                {theme === "midnight" ? "Azul" : theme === "dark" ? "Oscuro" : "Claro"}
-              </span>
+              <ArrowDownLeft size={14} className="text-white shrink-0 stroke-[2.5]" />
+              <span>Egreso</span>
             </button>
           </div>
 
@@ -1112,23 +1298,10 @@ export const PosSmartView = ({
                       ? "border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-600/80 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/60"
                       : "border-indigo-200 bg-indigo-50/80 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-700/70 dark:bg-indigo-950/50 dark:text-indigo-300 dark:hover:bg-indigo-900/60"
                   )}
-                  title={hasDebtPaymentInCart ? "Modificar cobro de cuenta corriente" : "Agregar cobro de deuda de cuenta corriente al carrito"}
+                  title={hasDebtPaymentInCart ? "Modificar cobro de cuenta corriente" : "Cobrar deuda de cuenta corriente o registrar devolución de envases"}
                 >
                   <Coins size={14} className={hasDebtPaymentInCart ? "text-amber-600 dark:text-amber-400" : "text-indigo-600 dark:text-indigo-400"} />
-                  <span>{hasDebtPaymentInCart ? "Editar deuda" : "Cobrar deuda"}</span>
-                </button>
-              ) : null}
-
-              {items.length > 0 ? (
-                <button
-                  type="button"
-                  onClick={onClearCart}
-                  disabled={disabled || !canWrite}
-                  className="h-8 px-2.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 dark:hover:border-rose-800/80 transition disabled:opacity-50 whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 shadow-2xs"
-                  title="Vaciar todos los productos del carrito"
-                >
-                  <Trash2 size={13} className="text-slate-400 group-hover:text-rose-500" />
-                  <span>Vaciar</span>
+                  <span>{hasDebtPaymentInCart ? "Editar deuda" : "Cobrar deuda / Envases"}</span>
                 </button>
               ) : null}
             </div>
@@ -1227,6 +1400,15 @@ export const PosSmartView = ({
             setIsQuickPriceModalOpen(false);
             onRefreshCatalog();
           }}
+        />
+      ) : null}
+
+      {/* MODAL: Egreso Manual de Caja Diaria */}
+      {isManualCashModalOpen ? (
+        <ManualCashMovementModal
+          isOpen={isManualCashModalOpen}
+          onClose={() => setIsManualCashModalOpen(false)}
+          defaultMode="expense"
         />
       ) : null}
     </div>
