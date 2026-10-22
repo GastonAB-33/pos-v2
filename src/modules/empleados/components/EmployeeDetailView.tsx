@@ -17,6 +17,7 @@ import {
   Mail,
   Briefcase,
   IdCard,
+  X,
 } from "lucide-react";
 import type {
   Employee,
@@ -90,7 +91,7 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
-type DetailSubTab = "horarios" | "cuenta-corriente" | "sueldos" | "legajo";
+export type DetailSubTab = "horarios" | "cuenta-corriente" | "sueldos" | "legajo";
 
 const statusLabels: Record<EmployeeAttendance["status"], { label: string; color: string }> = {
   present: {
@@ -126,7 +127,7 @@ export const EmployeeDetailView = ({
   tenantId,
   userId,
   canWrite,
-  initialSubTab = "legajo",
+  initialSubTab = "horarios",
   onBackToList,
   onSelectEmployee,
   onEditEmployee,
@@ -152,6 +153,7 @@ export const EmployeeDetailView = ({
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString("es-AR"));
 
   // Modales
+  const [isLegajoModalOpen, setIsLegajoModalOpen] = useState(false);
   const [manualAttendanceOpen, setManualAttendanceOpen] = useState(false);
   const [editingAttendance, setEditingAttendance] = useState<EmployeeAttendance | null>(null);
   const [salaryPaymentModalOpen, setSalaryPaymentModalOpen] = useState(false);
@@ -351,16 +353,15 @@ export const EmployeeDetailView = ({
               </button>
             )}
 
-            {canWrite && (
-              <button
-                type="button"
-                onClick={() => onEditEmployee(employee)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-xs transition cursor-pointer"
-              >
-                <Edit2 size={13} />
-                <span>Editar Legajo</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setIsLegajoModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border border-blue-200 dark:border-blue-800/80 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 shadow-xs transition cursor-pointer"
+              title="Consultar datos personales y legajo contractual del empleado"
+            >
+              <User size={14} />
+              <span>Ver Legajo</span>
+            </button>
           </div>
         </div>
 
@@ -451,19 +452,6 @@ export const EmployeeDetailView = ({
 
       {/* 3. SUB-PESTAÑAS DE SEGUIMIENTO DEL EMPLEADO */}
       <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2 overflow-x-auto">
-        <button
-          type="button"
-          onClick={() => setActiveSubTab("legajo")}
-          className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
-            activeSubTab === "legajo"
-              ? "bg-slate-900 text-white shadow dark:bg-slate-100 dark:text-slate-900"
-              : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-          }`}
-        >
-          <User size={14} />
-          <span>Ficha de Legajo</span>
-        </button>
-
         <button
           type="button"
           onClick={() => setActiveSubTab("horarios")}
@@ -867,104 +855,152 @@ export const EmployeeDetailView = ({
         </div>
       )}
 
-      {/* SUB-PESTAÑA 4: FICHA DE LEGAJO */}
-      {activeSubTab === "legajo" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Card 1: Datos Personales */}
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 space-y-3 shadow-xs">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center gap-1.5">
-              <User size={14} className="text-blue-500" /> Datos Personales
-            </h3>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/60">
-                <span className="text-slate-500 dark:text-slate-400">Nombre Completo:</span>
-                <span className="font-bold text-slate-900 dark:text-slate-100">{employee.full_name}</span>
+      {/* MODAL EMERGENTE: FICHA DE LEGAJO */}
+      {isLegajoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden animate-in zoom-in-95">
+            {/* Header del Modal */}
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-5 py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 dark:bg-blue-950/70 text-blue-600 dark:text-blue-300">
+                  <User size={18} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                      Ficha de Legajo
+                    </h3>
+                    <span className="font-mono text-[10px] font-bold bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                      {employee.code}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {employee.full_name} • {employee.position || "Empleado"}
+                  </p>
+                </div>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/60">
-                <span className="text-slate-500 dark:text-slate-400">Tipo y Número de Doc.:</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
-                  {employee.document_type} {employee.document_number}
-                </span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/60">
-                <span className="text-slate-500 dark:text-slate-400">Teléfono:</span>
-                <span className="text-slate-900 dark:text-slate-100 font-medium">
-                  {employee.phone || "No especificado"}
-                </span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/60">
-                <span className="text-slate-500 dark:text-slate-400">Correo Electrónico:</span>
-                <span className="text-slate-900 dark:text-slate-100 font-medium">
-                  {employee.email || "No especificado"}
-                </span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="text-slate-500 dark:text-slate-400">Dirección:</span>
-                <span className="text-slate-900 dark:text-slate-100 font-medium">
-                  {employee.address || "No especificada"}
-                </span>
-              </div>
-            </div>
-          </div>
 
-          {/* Card 2: Condiciones Laborales y Salariales */}
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 space-y-3 shadow-xs">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-2 flex items-center gap-1.5">
-              <Briefcase size={14} className="text-indigo-500" /> Condiciones Laborales & Salario
-            </h3>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/60">
-                <span className="text-slate-500 dark:text-slate-400">Puesto / Cargo:</span>
-                <span className="font-bold text-slate-900 dark:text-slate-100">
-                  {employee.position || "Empleado"}
-                </span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/60">
-                <span className="text-slate-500 dark:text-slate-400">Código de Legajo:</span>
-                <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                  {employee.code}
-                </span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/60">
-                <span className="text-slate-500 dark:text-slate-400">Fecha de Ingreso:</span>
-                <span className="font-mono text-slate-900 dark:text-slate-100">
-                  {employee.hire_date || "No registrada"}
-                </span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/60">
-                <span className="text-slate-500 dark:text-slate-400">Sueldo Base:</span>
-                <span className="font-mono font-black text-slate-900 dark:text-slate-100">
-                  {currency.format(employee.base_salary || 0)}
-                </span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-50 dark:border-slate-800/60">
-                <span className="text-slate-500 dark:text-slate-400">Descuento en Mercadería:</span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                  {employee.discount_percent ?? 10}%
-                </span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="text-slate-500 dark:text-slate-400">Límite Cta. Cte.:</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
-                  {employee.current_account_limit
-                    ? currency.format(employee.current_account_limit)
-                    : "Sin límite"}
-                </span>
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsLegajoModalOpen(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
             </div>
 
-            {canWrite && (
-              <div className="pt-2">
+            {/* Contenido: Cards de Datos Personales y Condiciones Laborales */}
+            <div className="p-5 max-h-[80vh] overflow-y-auto space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Card 1: Datos Personales */}
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-4 space-y-2.5">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5 border-b border-slate-200 dark:border-slate-700/80 pb-2">
+                    <User size={13} className="text-blue-500" /> Datos Personales
+                  </h4>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between py-0.5 border-b border-slate-100 dark:border-slate-800/50">
+                      <span className="text-slate-500 dark:text-slate-400">Nombre Completo:</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100">{employee.full_name}</span>
+                    </div>
+                    <div className="flex justify-between py-0.5 border-b border-slate-100 dark:border-slate-800/50">
+                      <span className="text-slate-500 dark:text-slate-400">Tipo y Documento:</span>
+                      <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                        {employee.document_type} {employee.document_number}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-0.5 border-b border-slate-100 dark:border-slate-800/50">
+                      <span className="text-slate-500 dark:text-slate-400">Teléfono:</span>
+                      <span className="text-slate-900 dark:text-slate-100 font-medium">
+                        {employee.phone || "No especificado"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-0.5 border-b border-slate-100 dark:border-slate-800/50">
+                      <span className="text-slate-500 dark:text-slate-400">Correo Electrónico:</span>
+                      <span className="text-slate-900 dark:text-slate-100 font-medium">
+                        {employee.email || "No especificado"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-0.5">
+                      <span className="text-slate-500 dark:text-slate-400">Dirección:</span>
+                      <span className="text-slate-900 dark:text-slate-100 font-medium">
+                        {employee.address || "No especificada"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 2: Condiciones Laborales y Salario */}
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-4 space-y-2.5">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5 border-b border-slate-200 dark:border-slate-700/80 pb-2">
+                    <Briefcase size={13} className="text-indigo-500" /> Condiciones & Salario
+                  </h4>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between py-0.5 border-b border-slate-100 dark:border-slate-800/50">
+                      <span className="text-slate-500 dark:text-slate-400">Puesto / Cargo:</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100">
+                        {employee.position || "Empleado"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-0.5 border-b border-slate-100 dark:border-slate-800/50">
+                      <span className="text-slate-500 dark:text-slate-400">Código de Legajo:</span>
+                      <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                        {employee.code}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-0.5 border-b border-slate-100 dark:border-slate-800/50">
+                      <span className="text-slate-500 dark:text-slate-400">Fecha de Ingreso:</span>
+                      <span className="font-mono text-slate-900 dark:text-slate-100">
+                        {employee.hire_date || "No registrada"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-0.5 border-b border-slate-100 dark:border-slate-800/50">
+                      <span className="text-slate-500 dark:text-slate-400">Sueldo Base:</span>
+                      <span className="font-mono font-black text-slate-900 dark:text-slate-100">
+                        {currency.format(employee.base_salary || 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-0.5 border-b border-slate-100 dark:border-slate-800/50">
+                      <span className="text-slate-500 dark:text-slate-400">Desc. Mercadería:</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                        {employee.discount_percent ?? 10}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-0.5">
+                      <span className="text-slate-500 dark:text-slate-400">Límite Cta. Cte.:</span>
+                      <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                        {employee.current_account_limit
+                          ? currency.format(employee.current_account_limit)
+                          : "Sin límite"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer con botón Modificar */}
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 px-5 py-3.5 bg-slate-50/50 dark:bg-slate-900/50">
+              <button
+                type="button"
+                onClick={() => setIsLegajoModalOpen(false)}
+                className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition cursor-pointer"
+              >
+                Cerrar
+              </button>
+              {canWrite && (
                 <button
                   type="button"
-                  onClick={() => onEditEmployee(employee)}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer"
+                  onClick={() => {
+                    setIsLegajoModalOpen(false);
+                    onEditEmployee(employee);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 px-4 py-2 text-xs font-bold text-white shadow-xs transition cursor-pointer"
                 >
                   <Edit2 size={13} />
                   <span>Modificar Datos del Legajo</span>
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -86,6 +86,7 @@ const sidebarGroups: SidebarGroup[] = [
       { label: "Bancos", to: routePaths.bancos, module: "bancos" },
       { label: "Comprobantes", to: routePaths.comprobantes, module: "comprobantes" },
       { label: "Facturacion", to: routePaths.facturacion, module: "facturacion" },
+      { label: "Libro IVA Digital", to: `${routePaths.facturacion}?tab=libro-iva`, module: "facturacion" },
       { label: "Configuracion", to: routePaths.configuracionContable, module: "configuracion_contable" },
     ],
   },

@@ -266,38 +266,51 @@ const ArcaInvoiceSingleSheet: React.FC<{
 
   return (
     <div
-      className={`arca-invoice-page w-full max-w-[850px] mx-auto bg-white text-black p-4 sm:p-6 font-sans text-xs select-text shadow-sm border border-slate-300 print:border-none print:shadow-none print:p-0 print:max-w-none print:w-full print:m-0 print:bg-white print:text-black mb-8 last:mb-0 print:mb-0 ${className}`}
-      style={{ color: "#000000", backgroundColor: "#ffffff" }}
+      className={`arca-invoice-page w-full max-w-[850px] mx-auto p-4 sm:p-6 font-sans text-xs select-text shadow-xl border border-black print:border-none print:shadow-none print:p-0 print:max-w-none print:w-full print:m-0 mb-8 last:mb-0 print:mb-0 ${className}`}
+      style={{
+        backgroundColor: "#ffffff",
+        color: "#000000",
+        colorScheme: "light",
+      }}
     >
       {/* 1. Título de copia (ORIGINAL / DUPLICADO / TRIPLICADO) */}
-      <div className="border border-black py-1 text-center font-bold text-sm tracking-wider uppercase mb-[-1px]">
+      <div
+        className="border border-black py-1 text-center font-bold text-sm tracking-wider uppercase mb-[-1px]"
+        style={{ backgroundColor: "#ffffff", color: "#000000" }}
+      >
         {copyLabel}
       </div>
 
       {/* 2. Cabecera principal: Emisor | Letra Central | Datos de Comprobante */}
-      <div className="border border-black relative mb-[-1px]">
+      <div
+        className="border border-black relative mb-[-1px]"
+        style={{ backgroundColor: "#ffffff", color: "#000000" }}
+      >
         {/* Cuadro central con Letra y Código de comprobante */}
         <div
-          className="absolute left-1/2 -top-[1px] -translate-x-1/2 bg-white border-b border-x border-black px-4 py-1 flex flex-col items-center justify-center z-10 w-24"
-          style={{ height: "48px" }}
+          className="absolute left-1/2 -top-[1px] -translate-x-1/2 border-b border-x border-black px-4 py-1 flex flex-col items-center justify-center z-10 w-24"
+          style={{ height: "48px", backgroundColor: "#ffffff", color: "#000000" }}
         >
-          <span className="text-2xl font-black font-sans leading-none text-black">
+          <span className="text-2xl font-black font-sans leading-none" style={{ color: "#000000" }}>
             {invoice.document_type}
           </span>
-          <span className="text-[9px] font-bold tracking-tight text-black mt-0.5">
+          <span className="text-[9px] font-bold tracking-tight mt-0.5" style={{ color: "#000000" }}>
             COD. {docCode}
           </span>
         </div>
 
         <div className="grid grid-cols-2">
           {/* Lado izquierdo: Emisor */}
-          <div className="p-3 pr-8 space-y-1.5 border-r border-black flex flex-col justify-between">
+          <div
+            className="p-3 pr-8 space-y-1.5 border-r border-black flex flex-col justify-between"
+            style={{ backgroundColor: "#ffffff", color: "#000000" }}
+          >
             <div className="text-center pt-1 pb-2">
-              <h1 className="text-base sm:text-lg font-black uppercase text-black leading-tight">
+              <h1 className="text-base sm:text-lg font-black uppercase leading-tight" style={{ color: "#000000" }}>
                 {emisorTradeName}
               </h1>
             </div>
-            <div className="space-y-1 text-[11px] leading-snug">
+            <div className="space-y-1 text-[11px] leading-snug" style={{ color: "#000000" }}>
               <p>
                 <span className="font-bold">Razón Social:</span> {emisorRazonSocial}
               </p>
@@ -311,24 +324,27 @@ const ArcaInvoiceSingleSheet: React.FC<{
           </div>
 
           {/* Lado derecho: Datos de Comprobante */}
-          <div className="p-3 pl-8 space-y-1 text-[11px] leading-snug">
-            <h2 className="text-xl sm:text-2xl font-black tracking-wide text-black mb-2">
+          <div
+            className="p-3 pl-8 space-y-1 text-[11px] leading-snug"
+            style={{ backgroundColor: "#ffffff", color: "#000000" }}
+          >
+            <h2 className="text-xl sm:text-2xl font-black tracking-wide mb-2" style={{ color: "#000000" }}>
               {docTitle}
             </h2>
-            <div className="flex gap-4 font-bold text-[12px]">
+            <div className="flex gap-4 font-bold text-[12px]" style={{ color: "#000000" }}>
               <span>Punto de Venta: {ptoVta}</span>
               <span>Comp. Nro: {compNro}</span>
             </div>
-            <p>
+            <p style={{ color: "#000000" }}>
               <span className="font-bold">Fecha de Emisión:</span> {formatDate(invoice.issue_date)}
             </p>
-            <p>
+            <p style={{ color: "#000000" }}>
               <span className="font-bold">CUIT:</span> {emisorCuit.replace(/\D/g, "")}
             </p>
-            <p>
+            <p style={{ color: "#000000" }}>
               <span className="font-bold">Ingresos Brutos:</span> {emisorIibb}
             </p>
-            <p>
+            <p style={{ color: "#000000" }}>
               <span className="font-bold">Fecha de Inicio de Actividades:</span>{" "}
               {formatDate(emisorInicioActividades)}
             </p>
@@ -337,70 +353,76 @@ const ArcaInvoiceSingleSheet: React.FC<{
       </div>
 
       {/* 3. Cuadro de Datos del Cliente / Receptor */}
-      <div className="border border-black p-2.5 space-y-1 text-[11px] mb-[-1px] leading-snug">
+      <div
+        className="border border-black p-2.5 space-y-1 text-[11px] mb-[-1px] leading-snug"
+        style={{ backgroundColor: "#ffffff", color: "#000000" }}
+      >
         <div className="grid grid-cols-2 gap-x-4">
-          <p>
+          <p style={{ color: "#000000" }}>
             <span className="font-bold">{customerDocType}:</span> {customerDocNum}
           </p>
-          <p>
+          <p style={{ color: "#000000" }}>
             <span className="font-bold">Apellido y Nombre / Razón Social:</span> {customerName}
           </p>
         </div>
         <div className="grid grid-cols-2 gap-x-4">
-          <p>
+          <p style={{ color: "#000000" }}>
             <span className="font-bold">Condición frente al IVA:</span> {customerCondicionIva}
           </p>
-          <p>
+          <p style={{ color: "#000000" }}>
             <span className="font-bold">Domicilio:</span> {customerAddress}
           </p>
         </div>
         <div>
-          <p>
+          <p style={{ color: "#000000" }}>
             <span className="font-bold">Condición de venta:</span> {resolvedPaymentCondition}
           </p>
         </div>
       </div>
 
       {/* 4. Tabla de Ítems / Productos */}
-      <div className="border border-black mb-[-1px] flex flex-col justify-between min-h-[300px]">
-        <table className="w-full border-collapse text-[10px] sm:text-[11px]">
+      <div
+        className="border border-black mb-[-1px] flex flex-col justify-between min-h-[300px]"
+        style={{ backgroundColor: "#ffffff", color: "#000000" }}
+      >
+        <table className="w-full border-collapse text-[10px] sm:text-[11px]" style={{ backgroundColor: "#ffffff", color: "#000000" }}>
           <thead>
-            <tr className="bg-slate-200 border-b border-black text-black">
-              <th className="py-1 px-2 text-left font-bold border-r border-black w-16">Código</th>
-              <th className="py-1 px-2 text-left font-bold border-r border-black">Producto / Servicio</th>
-              <th className="py-1 px-2 text-right font-bold border-r border-black w-14">Cantidad</th>
-              <th className="py-1 px-2 text-center font-bold border-r border-black w-16">U. Medida</th>
-              <th className="py-1 px-2 text-right font-bold border-r border-black w-24">Precio Unit.</th>
-              <th className="py-1 px-2 text-right font-bold border-r border-black w-14">% Bonif</th>
-              <th className="py-1 px-2 text-right font-bold border-r border-black w-16">Imp. Bonif.</th>
-              <th className="py-1 px-2 text-right font-bold w-24">Subtotal</th>
+            <tr style={{ backgroundColor: "#e2e8f0", color: "#000000" }} className="border-b border-black">
+              <th style={{ backgroundColor: "#e2e8f0", color: "#000000" }} className="py-1 px-2 text-left font-bold border-r border-black w-16">Código</th>
+              <th style={{ backgroundColor: "#e2e8f0", color: "#000000" }} className="py-1 px-2 text-left font-bold border-r border-black">Producto / Servicio</th>
+              <th style={{ backgroundColor: "#e2e8f0", color: "#000000" }} className="py-1 px-2 text-right font-bold border-r border-black w-14">Cantidad</th>
+              <th style={{ backgroundColor: "#e2e8f0", color: "#000000" }} className="py-1 px-2 text-center font-bold border-r border-black w-16">U. Medida</th>
+              <th style={{ backgroundColor: "#e2e8f0", color: "#000000" }} className="py-1 px-2 text-right font-bold border-r border-black w-24">Precio Unit.</th>
+              <th style={{ backgroundColor: "#e2e8f0", color: "#000000" }} className="py-1 px-2 text-right font-bold border-r border-black w-14">% Bonif</th>
+              <th style={{ backgroundColor: "#e2e8f0", color: "#000000" }} className="py-1 px-2 text-right font-bold border-r border-black w-16">Imp. Bonif.</th>
+              <th style={{ backgroundColor: "#e2e8f0", color: "#000000" }} className="py-1 px-2 text-right font-bold w-24">Subtotal</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody style={{ backgroundColor: "#ffffff", color: "#000000" }}>
             {invoice.items_snapshot.map((it, idx) => (
-              <tr key={idx} className="border-b border-slate-100 last:border-b-0">
-                <td className="py-1 px-2 text-left border-r border-slate-300 font-mono text-[10px]">
+              <tr key={idx} className="border-b border-slate-100 last:border-b-0" style={{ backgroundColor: "#ffffff", color: "#000000" }}>
+                <td style={{ backgroundColor: "#ffffff", color: "#000000" }} className="py-1 px-2 text-left border-r border-slate-300 font-mono text-[10px]">
                   {it.product_id ? it.product_id.slice(0, 8).toUpperCase() : "-"}
                 </td>
-                <td className="py-1 px-2 text-left border-r border-slate-300 font-medium">
+                <td style={{ backgroundColor: "#ffffff", color: "#000000" }} className="py-1 px-2 text-left border-r border-slate-300 font-medium">
                   {it.product_name}
                 </td>
-                <td className="py-1 px-2 text-right border-r border-slate-300 font-mono">
+                <td style={{ backgroundColor: "#ffffff", color: "#000000" }} className="py-1 px-2 text-right border-r border-slate-300 font-mono">
                   {formatNumber(it.quantity)}
                 </td>
-                <td className="py-1 px-2 text-center border-r border-slate-300 text-slate-700">
+                <td style={{ backgroundColor: "#ffffff", color: "#475569" }} className="py-1 px-2 text-center border-r border-slate-300">
                   unidades
                 </td>
-                <td className="py-1 px-2 text-right border-r border-slate-300 font-mono">
+                <td style={{ backgroundColor: "#ffffff", color: "#000000" }} className="py-1 px-2 text-right border-r border-slate-300 font-mono">
                   {formatNumber(it.unit_price)}
                 </td>
-                <td className="py-1 px-2 text-right border-r border-slate-300 font-mono">
+                <td style={{ backgroundColor: "#ffffff", color: "#000000" }} className="py-1 px-2 text-right border-r border-slate-300 font-mono">
                   0,00
                 </td>
-                <td className="py-1 px-2 text-right border-r border-slate-300 font-mono">
+                <td style={{ backgroundColor: "#ffffff", color: "#000000" }} className="py-1 px-2 text-right border-r border-slate-300 font-mono">
                   0,00
                 </td>
-                <td className="py-1 px-2 text-right font-mono font-medium">
+                <td style={{ backgroundColor: "#ffffff", color: "#000000" }} className="py-1 px-2 text-right font-mono font-medium">
                   {formatNumber(it.total)}
                 </td>
               </tr>
@@ -409,11 +431,14 @@ const ArcaInvoiceSingleSheet: React.FC<{
         </table>
 
         {/* Espaciador vertical natural para mantener altura A4 auténtica */}
-        <div className="flex-1 min-h-[140px]" />
+        <div className="flex-1 min-h-[140px]" style={{ backgroundColor: "#ffffff" }} />
 
         {/* 5. Cuadro de Subtotales y Totales */}
-        <div className="border-t border-black p-2 flex flex-col items-end">
-          <div className="w-full sm:w-72 space-y-1 text-[11px]">
+        <div
+          className="border-t border-black p-2 flex flex-col items-end"
+          style={{ backgroundColor: "#ffffff", color: "#000000" }}
+        >
+          <div className="w-full sm:w-72 space-y-1 text-[11px]" style={{ color: "#000000" }}>
             {isFacturaA ? (
               <>
                 <div className="flex justify-between">
@@ -445,11 +470,14 @@ const ArcaInvoiceSingleSheet: React.FC<{
 
       {/* 6. Régimen de Transparencia Fiscal al Consumidor (Ley 27.743) */}
       {showLeyTransparencia && (
-        <div className="border border-black p-2 mb-[-1px] text-[11px]">
-          <p className="font-bold mb-1">
+        <div
+          className="border border-black p-2 mb-[-1px] text-[11px]"
+          style={{ backgroundColor: "#ffffff", color: "#000000" }}
+        >
+          <p className="font-bold mb-1" style={{ color: "#000000" }}>
             Régimen de Transparencia Fiscal al Consumidor (Ley 27.743)
           </p>
-          <p className="text-right sm:text-center sm:pr-8">
+          <p className="text-right sm:text-center sm:pr-8" style={{ color: "#000000" }}>
             <span className="font-bold">IVA Contenido: $</span>{" "}
             <span className="font-mono font-bold">{formatNumber(ivaContenido)}</span>
           </p>
@@ -457,38 +485,41 @@ const ArcaInvoiceSingleSheet: React.FC<{
       )}
 
       {/* 7. Pie oficial ARCA (Código QR, Logotipo, Comprobante Autorizado y CAE) */}
-      <div className="border border-black p-3">
+      <div
+        className="border border-black p-3"
+        style={{ backgroundColor: "#ffffff", color: "#000000" }}
+      >
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           {/* Lado izquierdo: Código QR oficial */}
           <div className="flex items-center gap-2">
-            <div className="bg-white p-1 border border-black shrink-0">
+            <div style={{ backgroundColor: "#ffffff" }} className="p-1 border border-black shrink-0">
               <QRCodeSVG value={qrUrl} size={84} level="M" />
             </div>
           </div>
 
           {/* Centro: Logotipo ARCA y leyenda oficial */}
-          <div className="text-center space-y-1 flex-1 px-2">
+          <div className="text-center space-y-1 flex-1 px-2" style={{ color: "#000000" }}>
             <div>
-              <p className="text-xl sm:text-2xl font-black font-sans leading-none tracking-tight text-black">
+              <p className="text-xl sm:text-2xl font-black font-sans leading-none tracking-tight" style={{ color: "#000000" }}>
                 ARCA
               </p>
-              <p className="text-[8px] uppercase tracking-wider text-slate-700 font-bold mt-0.5">
+              <p className="text-[8px] uppercase tracking-wider font-bold mt-0.5" style={{ color: "#334155" }}>
                 AGENCIA DE RECAUDACIÓN Y CONTROL ADUANERO
               </p>
             </div>
-            <p className="font-bold text-[11px] text-black pt-0.5">
+            <p className="font-bold text-[11px] pt-0.5" style={{ color: "#000000" }}>
               Comprobante Autorizado
             </p>
-            <p className="text-[8px] sm:text-[9px] italic text-slate-600 leading-tight">
+            <p className="text-[8px] sm:text-[9px] italic leading-tight" style={{ color: "#475569" }}>
               Esta Agencia no se responsabiliza por los datos ingresados en el detalle de la operación
             </p>
-            <p className="text-[10px] font-bold text-black pt-1">
+            <p className="text-[10px] font-bold pt-1" style={{ color: "#000000" }}>
               Pág. 1/1
             </p>
           </div>
 
           {/* Lado derecho: CAE y Vencimiento */}
-          <div className="text-right space-y-1 text-[11px] shrink-0 min-w-[200px]">
+          <div className="text-right space-y-1 text-[11px] shrink-0 min-w-[200px]" style={{ color: "#000000" }}>
             <p>
               <span className="font-bold">CAE Nº:</span>{" "}
               <span className="font-mono font-bold text-sm">

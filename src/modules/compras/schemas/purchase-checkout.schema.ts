@@ -6,6 +6,10 @@ export const purchaseHeaderSchema = z.object({
     "FACTURA_A",
     "FACTURA_B",
     "FACTURA_C",
+    "NOTA_CREDITO_A",
+    "NOTA_CREDITO_B",
+    "NOTA_CREDITO_C",
+    "NOTA_CREDITO",
     "REMITO",
     "TICKET",
     "PRESUPUESTO",
@@ -71,4 +75,3 @@ export const purchaseCheckoutSchema = purchaseHeaderSchema.extend({
 });
 
 export type PurchaseCheckoutValues = z.infer<typeof purchaseCheckoutSchema>;
-

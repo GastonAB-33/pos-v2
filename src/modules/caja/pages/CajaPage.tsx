@@ -21,7 +21,7 @@ import { useAuthStore } from "@/features/auth/store/auth.store";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { CashCloseForm } from "@/modules/caja/components/CashCloseForm";
 import { CashDailyTrackingTable } from "@/modules/caja/components/CashDailyTrackingTable";
-import { CashMovementForm } from "@/modules/caja/components/CashMovementForm";
+import { ManualCashMovementModal } from "@/modules/caja/components/ManualCashMovementModal";
 import { CashMovementsTable } from "@/modules/caja/components/CashMovementsTable";
 import { CashOpenForm } from "@/modules/caja/components/CashOpenForm";
 import { CashSessionCloseDetailModal } from "@/modules/caja/components/CashSessionCloseDetailModal";
@@ -122,8 +122,6 @@ export const CajaPage = () => {
     openCash,
     closeCash,
     updateSessionNotes,
-    registerIncome,
-    registerExpense,
   } = useCashModule(tenantId, user?.id ?? null);
 
   const handleOpenCloseDetailForDate = (date: string | null) => {
@@ -840,89 +838,15 @@ export const CajaPage = () => {
         )}
       </div>
 
-      {/* MODAL: Movimiento Manual (sin scroll, visible en una sola pantalla) */}
-      {isManualMovementModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-3 sm:p-4">
-          <div className="w-full max-w-lg flex flex-col bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            <header className="shrink-0 px-4 py-2.5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/70 dark:bg-slate-800/60">
-              <div className="flex items-center gap-2">
-                <ArrowLeftRight className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-                <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-100">Movimiento Manual de Caja</h3>
-              </div>
-              <ModalCloseButton onClick={() => setIsManualMovementModalOpen(false)} />
-            </header>
-
-            {/* Selector de Pestañas Ingreso / Egreso */}
-            <div className="shrink-0 px-4 pt-2.5 pb-1">
-              <div className="grid grid-cols-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                <button
-                  type="button"
-                  onClick={() => setManualMovementTab("income")}
-                  className={`h-7 text-xs font-semibold rounded-md transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
-                    manualMovementTab === "income"
-                      ? "bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 shadow-xs"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                  }`}
-                >
-                  <span>+ Ingreso</span>
-                  <kbd className="hidden sm:inline-block text-[10px] px-1 py-0.2 rounded font-mono font-medium opacity-60 border border-current">
-                    F2
-                  </kbd>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setManualMovementTab("expense")}
-                  className={`h-7 text-xs font-semibold rounded-md transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
-                    manualMovementTab === "expense"
-                      ? "bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-400 shadow-xs"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                  }`}
-                >
-                  <span>- Retiro / Egreso</span>
-                  <kbd className="hidden sm:inline-block text-[10px] px-1 py-0.2 rounded font-mono font-medium opacity-60 border border-current">
-                    F2
-                  </kbd>
-                </button>
-              </div>
-            </div>
-
-            {/* Contenido sin scroll */}
-            <div className="px-4 pb-4 pt-2">
-              {manualMovementTab === "income" ? (
-                <CashMovementForm
-                  mode="income"
-                  paymentMethods={paymentMethods}
-                  bankAccounts={bankAccounts}
-                  canWrite={canWriteCaja}
-                  disabled={isSubmitting}
-                  onSubmit={async (values) => {
-                    await registerIncome(values);
-                    setIsManualMovementModalOpen(false);
-                  }}
-                  onSuccess={() => setIsManualMovementModalOpen(false)}
-                  onCancel={() => setIsManualMovementModalOpen(false)}
-                  onToggleMode={(next) => setManualMovementTab(next)}
-                />
-              ) : (
-                <CashMovementForm
-                  mode="expense"
-                  paymentMethods={paymentMethods}
-                  bankAccounts={bankAccounts}
-                  canWrite={canWriteCaja}
-                  disabled={isSubmitting}
-                  onSubmit={async (values) => {
-                    await registerExpense(values);
-                    setIsManualMovementModalOpen(false);
-                  }}
-                  onSuccess={() => setIsManualMovementModalOpen(false)}
-                  onCancel={() => setIsManualMovementModalOpen(false)}
-                  onToggleMode={(next) => setManualMovementTab(next)}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* MODAL: Movimiento Manual */}
+      <ManualCashMovementModal
+        isOpen={isManualMovementModalOpen}
+        onClose={() => setIsManualMovementModalOpen(false)}
+        defaultMode={manualMovementTab}
+        paymentMethods={paymentMethods}
+        bankAccounts={bankAccounts}
+        canWrite={canWriteCaja}
+      />
 
       {/* MODAL: Apertura de Caja */}
       {isOpenCashModalOpen && (

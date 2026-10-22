@@ -160,7 +160,8 @@ export const PurchaseCheckoutPanel = ({
       if (
         selectedDocumentType === "FACTURA_C" ||
         selectedDocumentType === "REMITO" ||
-        selectedDocumentType === "PRESUPUESTO"
+        selectedDocumentType === "PRESUPUESTO" ||
+        selectedDocumentType === "NOTA_CREDITO_C"
       ) {
         setValue("vatPercent", 0);
         onVatPercentChange(0);
@@ -445,7 +446,10 @@ export const PurchaseCheckoutPanel = ({
             >
               <option value="FACTURA_A">Factura A</option>
               <option value="FACTURA_B">Factura B</option>
-              <option value="FACTURA_C">Factura C</option>
+              <option value="FACTURA_C">Factura C (Monotributo)</option>
+              <option value="NOTA_CREDITO_A">Nota de Crédito A</option>
+              <option value="NOTA_CREDITO_B">Nota de Crédito B</option>
+              <option value="NOTA_CREDITO_C">Nota de Crédito C</option>
               <option value="REMITO">Remito</option>
               <option value="TICKET">Ticket</option>
               <option value="PRESUPUESTO">Presupuesto</option>

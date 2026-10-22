@@ -409,13 +409,15 @@ export const ReceiptTicketPanel = ({
           </div>
 
           {/* HOJA OFICIAL ARCA */}
-          <ArcaInvoiceSheet
-            invoice={resolvedInvoice!}
-            facturacionSettings={facturacionSettings}
-            businessSettings={businessSettings}
-            copiesMode={invoiceCopy}
-            paymentMethodLabel={getPaymentMethodLabel(receipt.payment_method)}
-          />
+          <div className="py-4 px-2 sm:px-6 bg-slate-200/50 dark:bg-slate-950/70 rounded-xl overflow-x-auto flex justify-center border border-slate-300 dark:border-slate-800">
+            <ArcaInvoiceSheet
+              invoice={resolvedInvoice!}
+              facturacionSettings={facturacionSettings}
+              businessSettings={businessSettings}
+              copiesMode={invoiceCopy}
+              paymentMethodLabel={getPaymentMethodLabel(receipt.payment_method)}
+            />
+          </div>
         </div>
       ) : null}
 

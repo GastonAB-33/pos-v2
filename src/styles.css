@@ -3226,3 +3226,87 @@ html.dark .ui-toast-icon--info {
     break-after: avoid;
   }
 }
+
+
+/* ==========================================================================
+   ARCA INVOICE SHEET - ALWAYS PURE WHITE PAPER (LIGHT & DARK / MIDNIGHT MODES)
+   ========================================================================== */
+html.dark .arca-invoice-page,
+html.midnight .arca-invoice-page,
+.arca-invoice-page {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  color-scheme: light !important;
+}
+
+html.dark .arca-invoice-page *,
+html.midnight .arca-invoice-page *,
+.arca-invoice-page * {
+  color-scheme: light !important;
+}
+
+html.dark .arca-invoice-page table,
+html.midnight .arca-invoice-page table,
+.arca-invoice-page table {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+html.dark .arca-invoice-page thead,
+html.dark .arca-invoice-page thead tr,
+html.dark .arca-invoice-page thead th,
+html.midnight .arca-invoice-page thead,
+html.midnight .arca-invoice-page thead tr,
+html.midnight .arca-invoice-page thead th,
+.arca-invoice-page thead,
+.arca-invoice-page thead tr,
+.arca-invoice-page thead th {
+  background-color: #e2e8f0 !important;
+  color: #000000 !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  border-color: #000000 !important;
+}
+
+html.dark .arca-invoice-page tbody,
+html.dark .arca-invoice-page tbody tr,
+html.dark .arca-invoice-page tbody td,
+html.midnight .arca-invoice-page tbody,
+html.midnight .arca-invoice-page tbody tr,
+html.midnight .arca-invoice-page tbody td,
+.arca-invoice-page tbody,
+.arca-invoice-page tbody tr,
+.arca-invoice-page tbody td {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+html.dark .arca-invoice-page tbody tr:hover td,
+html.midnight .arca-invoice-page tbody tr:hover td,
+.arca-invoice-page tbody tr:hover td {
+  background-color: #ffffff !important;
+}
+
+html.dark .arca-invoice-page p,
+html.dark .arca-invoice-page span,
+html.dark .arca-invoice-page h1,
+html.dark .arca-invoice-page h2,
+html.dark .arca-invoice-page h3,
+html.midnight .arca-invoice-page p,
+html.midnight .arca-invoice-page span,
+html.midnight .arca-invoice-page h1,
+html.midnight .arca-invoice-page h2,
+html.midnight .arca-invoice-page h3,
+.arca-invoice-page p,
+.arca-invoice-page span,
+.arca-invoice-page h1,
+.arca-invoice-page h2,
+.arca-invoice-page h3 {
+  color: #000000 !important;
+}
+
+html.dark .arca-invoice-page .border-black,
+html.midnight .arca-invoice-page .border-black,
+.arca-invoice-page .border-black {
+  border-color: #000000 !important;
+}

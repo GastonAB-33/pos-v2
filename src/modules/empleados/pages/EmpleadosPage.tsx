@@ -12,6 +12,7 @@ import {
   PlusCircle,
   RefreshCw,
   Search,
+  Globe,
 } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import type { Employee } from "@/types/entities";
@@ -27,7 +28,8 @@ import { EmployeeProductConsumptionModal } from "@/modules/empleados/components/
 import { EmployeeDetailView } from "@/modules/empleados/components/EmployeeDetailView";
 import { employeeCurrentAccountsService } from "@/services/employee-current-accounts.service";
 
-type ActiveTab = "personal" | "horarios" | "cuentas-corrientes" | "sueldos";
+type ActiveTab = "personal" | "globales";
+type GlobalSubTab = "horarios" | "cuentas-corrientes" | "sueldos";
 
 export const EmpleadosPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -39,11 +41,18 @@ export const EmpleadosPage = () => {
   const canWriteEmpleados = canWrite("empleados");
 
   // Pestaña activa desde URL o por defecto 'personal'
-  const initialTab = (searchParams.get("tab") as ActiveTab) || "personal";
+  const rawTab = searchParams.get("tab");
+  const isGlobalParam =
+    rawTab === "globales" ||
+    rawTab === "horarios" ||
+    rawTab === "cuentas-corrientes" ||
+    rawTab === "sueldos";
+
   const [activeTab, setActiveTab] = useState<ActiveTab>(
-    ["personal", "horarios", "cuentas-corrientes", "sueldos"].includes(initialTab)
-      ? initialTab
-      : "personal"
+    isGlobalParam ? "globales" : "personal"
+  );
+  const [globalSubTab, setGlobalSubTab] = useState<GlobalSubTab>(
+    rawTab === "cuentas-corrientes" || rawTab === "sueldos" ? rawTab : "horarios"
   );
 
   // Hook 1: CRUD Empleados
@@ -120,8 +129,8 @@ export const EmpleadosPage = () => {
   // Empleado seleccionado para Ver Ficha / Legajo Individual
   const [selectedEmployeeForDetail, setSelectedEmployeeForDetail] = useState<Employee | null>(null);
   const [detailSubTab, setDetailSubTab] = useState<
-    "horarios" | "cuenta-corriente" | "sueldos" | "legajo"
-  >("legajo");
+    "horarios" | "cuenta-corriente" | "sueldos"
+  >("horarios");
 
   // Empleado seleccionado para Cuenta Corriente global
   const initialEmpId = searchParams.get("empleadoId");
@@ -159,7 +168,7 @@ export const EmpleadosPage = () => {
 
   const handleSelectEmployeeForDetail = (
     employee: Employee,
-    subTab: "horarios" | "cuenta-corriente" | "sueldos" | "legajo" = "legajo"
+    subTab: "horarios" | "cuenta-corriente" | "sueldos" = "horarios"
   ) => {
     setSelectedEmployeeForDetail(employee);
     setDetailSubTab(subTab);
@@ -188,15 +197,16 @@ export const EmpleadosPage = () => {
       const match = employees.find((e) => e.id === initialEmpId);
       if (match) {
         const view = searchParams.get("view");
-        if (view === "legajo" || initialTab === "personal") {
+        if (view === "legajo" || rawTab === "personal") {
           setSelectedEmployeeForDetail(match);
-        } else if (initialTab === "cuentas-corrientes") {
+        } else if (rawTab === "cuentas-corrientes") {
           setCurrentAccountEmployee(match);
-          setActiveTab("cuentas-corrientes");
+          setActiveTab("globales");
+          setGlobalSubTab("cuentas-corrientes");
         }
       }
     }
-  }, [initialEmpId, employees, initialTab, searchParams]);
+  }, [initialEmpId, employees, rawTab, searchParams]);
 
   useEffect(() => {
     if (selectedEmployeeForDetail && employees.length > 0) {
@@ -209,8 +219,22 @@ export const EmpleadosPage = () => {
     setActiveTab(tab);
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
-      next.set("tab", tab);
-      if (tab !== "cuentas-corrientes") {
+      if (tab === "globales") {
+        next.set("tab", globalSubTab);
+      } else {
+        next.set("tab", "personal");
+        next.delete("empleadoId");
+      }
+      return next;
+    });
+  };
+
+  const handleGlobalSubTabChange = (subTab: GlobalSubTab) => {
+    setGlobalSubTab(subTab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("tab", subTab);
+      if (subTab !== "cuentas-corrientes") {
         next.delete("empleadoId");
       }
       return next;
@@ -223,7 +247,8 @@ export const EmpleadosPage = () => {
 
   const handleOpenSalaryDisbursementFromAccount = (employee: Employee) => {
     setDisbursementEmployee(employee);
-    setActiveTab("sueldos");
+    setActiveTab("globales");
+    setGlobalSubTab("sueldos");
   };
 
   const handleReloadAll = async () => {
@@ -292,7 +317,7 @@ export const EmpleadosPage = () => {
                 <button
                   type="button"
                   onClick={() => handleTabChange("personal")}
-                  className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                  className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
                     activeTab === "personal"
                       ? "bg-slate-900 text-white shadow dark:bg-slate-100 dark:text-slate-900"
                       : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
@@ -304,44 +329,18 @@ export const EmpleadosPage = () => {
 
                 <button
                   type="button"
-                  onClick={() => handleTabChange("horarios")}
-                  className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                    activeTab === "horarios"
+                  onClick={() => handleTabChange("globales")}
+                  className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
+                    activeTab === "globales"
                       ? "bg-slate-900 text-white shadow dark:bg-slate-100 dark:text-slate-900"
                       : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
                   }`}
                 >
-                  <Clock size={14} />
-                  <span>Horarios Globales</span>
+                  <Globe size={14} />
+                  <span>Datos Globales</span>
                   {todayActiveByEmployee.size > 0 && (
-                    <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" title="Hay empleados en turno activo" />
                   )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleTabChange("cuentas-corrientes")}
-                  className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                    activeTab === "cuentas-corrientes"
-                      ? "bg-slate-900 text-white shadow dark:bg-slate-100 dark:text-slate-900"
-                      : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                  }`}
-                >
-                  <CreditCard size={14} />
-                  <span>Cuentas Corrientes Global</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleTabChange("sueldos")}
-                  className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                    activeTab === "sueldos"
-                      ? "bg-slate-900 text-white shadow dark:bg-slate-100 dark:text-slate-900"
-                      : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                  }`}
-                >
-                  <Receipt size={14} />
-                  <span>Saldos Pagados / Sueldos</span>
                 </button>
               </div>
 
@@ -408,7 +407,7 @@ export const EmpleadosPage = () => {
                   employees={filteredEmployees}
                   todayActiveByEmployee={todayActiveByEmployee}
                   canWrite={canWriteEmpleados}
-                  onSelectEmployee={(emp) => handleSelectEmployeeForDetail(emp, "legajo")}
+                  onSelectEmployee={(emp) => handleSelectEmployeeForDetail(emp, "horarios")}
                   onOpenCurrentAccount={handleOpenCurrentAccount}
                   onOpenProductConsumption={setProductConsumptionEmployee}
                   onEdit={(emp) => {
@@ -431,81 +430,131 @@ export const EmpleadosPage = () => {
               </div>
             )}
 
-            {/* 2. HORARIOS Y ASISTENCIA */}
-            {activeTab === "horarios" && (
-              <AttendanceSection
-                employees={employees}
-                attendances={attendances}
-                filteredAttendances={filteredAttendances}
-                todayActiveByEmployee={todayActiveByEmployee}
-                selectedEmployeeId={attendanceEmpFilter}
-                onSelectEmployeeId={setAttendanceEmpFilter}
-                filterDate={attendanceDateFilter}
-                onFilterDateChange={setAttendanceDateFilter}
-                filterStatus={attendanceStatusFilter}
-                onFilterStatusChange={setAttendanceStatusFilter}
-                canWrite={canWriteEmpleados}
-                onPunchIn={punchCheckIn}
-                onPunchOut={punchCheckOut}
-                onCreateManual={createManualAttendance}
-                onUpdateAttendance={updateAttendance}
-                onDeleteAttendance={deleteAttendance}
-              />
-            )}
+            {/* 2. DATOS GLOBALES (UNIFICADO: HORARIOS, CUENTAS CORRIENTES Y SALDOS) */}
+            {activeTab === "globales" && (
+              <div className="space-y-4">
+                {/* Sub-pestañas de Datos Globales */}
+                <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2 overflow-x-auto">
+                  <button
+                    type="button"
+                    onClick={() => handleGlobalSubTabChange("horarios")}
+                    className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
+                      globalSubTab === "horarios"
+                        ? "bg-slate-900 text-white shadow dark:bg-slate-100 dark:text-slate-900"
+                        : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    <Clock size={14} />
+                    <span>Horarios Globales</span>
+                    {todayActiveByEmployee.size > 0 && (
+                      <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    )}
+                  </button>
 
-            {/* 3. CUENTAS CORRIENTES */}
-            {activeTab === "cuentas-corrientes" && (
-              <EmployeeCurrentAccountsSection
-                tenantId={tenantId}
-                userId={user?.id ?? null}
-                employees={employees}
-                canWrite={canWriteEmpleados}
-                selectedEmployee={currentAccountEmployee}
-                onSelectEmployee={(emp) => {
-                  setCurrentAccountEmployee(emp);
-                  if (!emp) {
-                    setSearchParams((prev) => {
-                      const next = new URLSearchParams(prev);
-                      next.delete("empleadoId");
-                      return next;
-                    });
-                  }
-                }}
-                onBalanceUpdated={reloadEmployees}
-                onOpenSalaryDisbursement={handleOpenSalaryDisbursementFromAccount}
-              />
-            )}
+                  <button
+                    type="button"
+                    onClick={() => handleGlobalSubTabChange("cuentas-corrientes")}
+                    className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
+                      globalSubTab === "cuentas-corrientes"
+                        ? "bg-slate-900 text-white shadow dark:bg-slate-100 dark:text-slate-900"
+                        : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    <CreditCard size={14} />
+                    <span>Cuentas Corrientes Globales</span>
+                  </button>
 
-            {/* 4. SALDOS PAGADOS / SUELDOS */}
-            {activeTab === "sueldos" && (
-              <SalaryPaymentsSection
-                employees={employees}
-                payments={payments}
-                filteredPayments={filteredPayments}
-                totalPaid={totalPaid}
-                totalSalariesPaid={totalSalariesPaid}
-                totalAdvancesPaid={totalAdvancesPaid}
-                totalCurrentAccountDiscounts={totalCurrentAccountDiscounts}
-                selectedEmployeeId={salaryEmpFilter}
-                onSelectEmployeeId={setSalaryEmpFilter}
-                selectedPeriod={salaryPeriodFilter}
-                onSelectPeriod={setSalaryPeriodFilter}
-                selectedType={salaryTypeFilter}
-                onSelectType={setSalaryTypeFilter}
-                datePreset={salaryDatePreset}
-                onSelectDatePreset={setSalaryDatePreset}
-                customStartDate={salaryCustomStartDate}
-                onSelectCustomStartDate={setSalaryCustomStartDate}
-                customEndDate={salaryCustomEndDate}
-                onSelectCustomEndDate={setSalaryCustomEndDate}
-                canWrite={canWriteEmpleados}
-                initialEmployeeForDisbursement={disbursementEmployee}
-                onDisbursementModalClosed={() => setDisbursementEmployee(null)}
-                onCreateSalaryPayment={createSalaryPayment}
-                onCreateSalaryAdvance={createSalaryAdvance}
-                onDeletePayment={deletePayment}
-                onBalanceUpdated={reloadEmployees}
-              />
+                  <button
+                    type="button"
+                    onClick={() => handleGlobalSubTabChange("sueldos")}
+                    className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition cursor-pointer ${
+                      globalSubTab === "sueldos"
+                        ? "bg-slate-900 text-white shadow dark:bg-slate-100 dark:text-slate-900"
+                        : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    <Receipt size={14} />
+                    <span>Saldos Globales</span>
+                  </button>
+                </div>
+
+                {/* 2.1. HORARIOS Y ASISTENCIA */}
+                {globalSubTab === "horarios" && (
+                  <AttendanceSection
+                    employees={employees}
+                    attendances={attendances}
+                    filteredAttendances={filteredAttendances}
+                    todayActiveByEmployee={todayActiveByEmployee}
+                    selectedEmployeeId={attendanceEmpFilter}
+                    onSelectEmployeeId={setAttendanceEmpFilter}
+                    filterDate={attendanceDateFilter}
+                    onFilterDateChange={setAttendanceDateFilter}
+                    filterStatus={attendanceStatusFilter}
+                    onFilterStatusChange={setAttendanceStatusFilter}
+                    canWrite={canWriteEmpleados}
+                    onPunchIn={punchCheckIn}
+                    onPunchOut={punchCheckOut}
+                    onCreateManual={createManualAttendance}
+                    onUpdateAttendance={updateAttendance}
+                    onDeleteAttendance={deleteAttendance}
+                  />
+                )}
+
+                {/* 2.2. CUENTAS CORRIENTES */}
+                {globalSubTab === "cuentas-corrientes" && (
+                  <EmployeeCurrentAccountsSection
+                    tenantId={tenantId}
+                    userId={user?.id ?? null}
+                    employees={employees}
+                    canWrite={canWriteEmpleados}
+                    selectedEmployee={currentAccountEmployee}
+                    onSelectEmployee={(emp) => {
+                      setCurrentAccountEmployee(emp);
+                      if (!emp) {
+                        setSearchParams((prev) => {
+                          const next = new URLSearchParams(prev);
+                          next.delete("empleadoId");
+                          return next;
+                        });
+                      }
+                    }}
+                    onBalanceUpdated={reloadEmployees}
+                    onOpenSalaryDisbursement={handleOpenSalaryDisbursementFromAccount}
+                  />
+                )}
+
+                {/* 2.3. SALDOS PAGADOS / SUELDOS */}
+                {globalSubTab === "sueldos" && (
+                  <SalaryPaymentsSection
+                    employees={employees}
+                    payments={payments}
+                    filteredPayments={filteredPayments}
+                    totalPaid={totalPaid}
+                    totalSalariesPaid={totalSalariesPaid}
+                    totalAdvancesPaid={totalAdvancesPaid}
+                    totalCurrentAccountDiscounts={totalCurrentAccountDiscounts}
+                    selectedEmployeeId={salaryEmpFilter}
+                    onSelectEmployeeId={setSalaryEmpFilter}
+                    selectedPeriod={salaryPeriodFilter}
+                    onSelectPeriod={setSalaryPeriodFilter}
+                    selectedType={salaryTypeFilter}
+                    onSelectType={setSalaryTypeFilter}
+                    datePreset={salaryDatePreset}
+                    onSelectDatePreset={setSalaryDatePreset}
+                    customStartDate={salaryCustomStartDate}
+                    onSelectCustomStartDate={setSalaryCustomStartDate}
+                    customEndDate={salaryCustomEndDate}
+                    onSelectCustomEndDate={setSalaryCustomEndDate}
+                    canWrite={canWriteEmpleados}
+                    initialEmployeeForDisbursement={disbursementEmployee}
+                    onDisbursementModalClosed={() => setDisbursementEmployee(null)}
+                    onCreateSalaryPayment={createSalaryPayment}
+                    onCreateSalaryAdvance={createSalaryAdvance}
+                    onDeletePayment={deletePayment}
+                    onBalanceUpdated={reloadEmployees}
+                  />
+                )}
+              </div>
             )}
           </>
         )}
