@@ -1,10 +1,11 @@
-import { useState, type FC } from "react";
-import { Package, X, Plus, Minus, Check } from "lucide-react";
-import { COMMON_RETURNABLE_PACKAGES } from "@/utils/returnable-packages";
+import { useState, useEffect, type FC } from "react";
+import { Package, X, Plus, Minus, Check, AlertCircle } from "lucide-react";
+import type { ReturnablePackageType } from "@/types/entities";
 
 interface Props {
   isOpen: boolean;
   customerName: string;
+  configuredPackages?: ReturnablePackageType[];
   onClose: () => void;
   onSubmit: (packageName: string, quantity: number) => Promise<boolean | void>;
 }
@@ -12,14 +13,30 @@ interface Props {
 export const ManualPackageLoanModal: FC<Props> = ({
   isOpen,
   customerName,
+  configuredPackages = [],
   onClose,
   onSubmit,
 }) => {
-  const [selectedPackage, setSelectedPackage] = useState<string>(COMMON_RETURNABLE_PACKAGES[0]?.name || "Garrafa 10kg");
-  const [isCustom, setIsCustom] = useState(false);
+  const hasConfigured = configuredPackages.length > 0;
+  const [selectedPackage, setSelectedPackage] = useState<string>(
+    hasConfigured ? configuredPackages[0].name : ""
+  );
+  const [isCustom, setIsCustom] = useState(!hasConfigured);
   const [customPackageName, setCustomPackageName] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (configuredPackages.length > 0) {
+      setSelectedPackage(configuredPackages[0].name);
+      setIsCustom(false);
+    } else {
+      setSelectedPackage("");
+      setIsCustom(true);
+    }
+    setCustomPackageName("");
+    setQuantity(1);
+  }, [configuredPackages, isOpen]);
 
   if (!isOpen) return null;
 
@@ -76,48 +93,68 @@ export const ManualPackageLoanModal: FC<Props> = ({
               Tipo de envase a prestar <span className="text-red-500">*</span>
             </label>
 
-            {/* PRESETS RÁPIDOS */}
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 max-h-40 overflow-y-auto pr-1">
-              {COMMON_RETURNABLE_PACKAGES.map((pkg) => {
-                const active = !isCustom && selectedPackage === pkg.name;
-                return (
-                  <button
-                    key={pkg.name}
-                    type="button"
-                    onClick={() => {
-                      setSelectedPackage(pkg.name);
-                      setIsCustom(false);
-                    }}
-                    className={`rounded-lg border px-2.5 py-1.5 text-left text-[11px] font-medium transition ${
-                      active
-                        ? "border-amber-500 bg-amber-50 text-amber-900 shadow-2xs dark:border-amber-600 dark:bg-amber-950/60 dark:text-amber-200 font-bold"
-                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300 dark:hover:bg-slate-700/60"
-                    }`}
-                  >
-                    {pkg.name}
-                  </button>
-                );
-              })}
-              <button
-                type="button"
-                onClick={() => setIsCustom(true)}
-                className={`rounded-lg border px-2.5 py-1.5 text-left text-[11px] font-medium transition ${
-                  isCustom
-                    ? "border-amber-500 bg-amber-50 text-amber-900 shadow-2xs dark:border-amber-600 dark:bg-amber-950/60 dark:text-amber-200 font-bold"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300"
-                }`}
-              >
-                + Otro envase...
-              </button>
-            </div>
+            {hasConfigured ? (
+              /* PRESETS CONFIGURADOS POR EL COMERCIO */
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 max-h-40 overflow-y-auto pr-1">
+                {configuredPackages.map((pkg) => {
+                  const active = !isCustom && selectedPackage === pkg.name;
+                  return (
+                    <button
+                      key={pkg.name}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPackage(pkg.name);
+                        setIsCustom(false);
+                      }}
+                      className={`rounded-lg border px-2.5 py-2 text-left text-xs font-medium transition ${
+                        active
+                          ? "border-amber-500 bg-amber-50 text-amber-900 shadow-2xs dark:border-amber-600 dark:bg-amber-950/60 dark:text-amber-200 font-bold ring-1 ring-amber-500/50"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300 dark:hover:bg-slate-700/60"
+                      }`}
+                    >
+                      <div className="truncate">{pkg.name}</div>
+                      {pkg.suggestedPrice ? (
+                        <div className="text-[10px] text-slate-400 dark:text-slate-500">
+                          $${pkg.suggestedPrice.toLocaleString("es-AR")}
+                        </div>
+                      ) : null}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setIsCustom(true)}
+                  className={`rounded-lg border px-2.5 py-2 text-left text-xs font-medium transition ${
+                    isCustom
+                      ? "border-amber-500 bg-amber-50 text-amber-900 shadow-2xs dark:border-amber-600 dark:bg-amber-950/60 dark:text-amber-200 font-bold ring-1 ring-amber-500/50"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300"
+                  }`}
+                >
+                  + Otro envase...
+                </button>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300 space-y-1">
+                <div className="flex items-center gap-1.5 font-semibold">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>Sin envases predefinidos</span>
+                </div>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                  Escribe el nombre del envase a continuación. Puedes registrar tus envases habituales en <strong>Configuración &gt; Stock</strong> o activándolos en tus productos.
+                </p>
+              </div>
+            )}
 
-            {/* INPUT DE OTRO ENVASE */}
+            {/* INPUT DE OTRO ENVASE O ENVASE LIBRE */}
             {isCustom ? (
-              <div className="mt-2">
+              <div className="mt-2.5">
+                <label className="mb-1 block text-[11px] font-medium text-slate-600 dark:text-slate-400">
+                  {hasConfigured ? "Nombre del otro envase:" : "Nombre del envase:"}
+                </label>
                 <input
                   type="text"
                   autoFocus
-                  placeholder="Ej: Bidón 5L, Cajón de gaseosa, etc."
+                  placeholder="Ej: Envase de Coca, Garrafa 10kg, Bidón 20L..."
                   value={customPackageName}
                   onChange={(e) => setCustomPackageName(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500"

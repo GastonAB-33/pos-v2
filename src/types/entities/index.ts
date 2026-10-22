@@ -47,6 +47,7 @@ export type {
   PosRoundingRule,
   PosRoundingTarget,
   StockSettings,
+  ReturnablePackageType,
   CashSettings,
   CustomerRequiredFieldsSettings,
   SupplierRequiredFieldsSettings,

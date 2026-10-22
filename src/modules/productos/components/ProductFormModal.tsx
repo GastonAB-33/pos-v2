@@ -17,7 +17,8 @@ import {
   type ProductFormValues,
 } from "@/modules/productos/schemas/product-form.schema";
 import type { ProductFormModalValues, ProductViewModel } from "@/modules/productos/types/product.types";
-import { parseReturnableConfig, COMMON_RETURNABLE_PACKAGES } from "@/utils/returnable-packages";
+import { parseReturnableConfig, COMMON_RETURNABLE_PACKAGES, useTenantReturnablePackages } from "@/utils/returnable-packages";
+import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { isStockTrackingEnabled } from "@/utils/stock-tracking";
 import { handleNumericInputFocus, handleNumericInputBlur } from "@/utils/input-helpers";
 import { useProductsStore } from "@/features/products/store/products.store";
@@ -308,6 +309,9 @@ export const ProductFormModal = ({
   const porcentajeIva = watch("porcentajeIva");
   const precioFinal = watch("precioFinal");
   const isReturnable = watch("isReturnable");
+  const { tenantId } = useTenant();
+  const { packages: tenantPackages } = useTenantReturnablePackages(tenantId);
+  const availableReturnables = tenantPackages.length > 0 ? tenantPackages : COMMON_RETURNABLE_PACKAGES;
 
   const imagenPreview = useMemo(() => {
     if (localPreviewUrl) return localPreviewUrl;
@@ -1153,7 +1157,7 @@ export const ProductFormModal = ({
                     disabled={disabled}
                   />
                   <datalist id="package-name-suggestions-modal">
-                    {COMMON_RETURNABLE_PACKAGES.map((pkg) => (
+                    {availableReturnables.map((pkg) => (
                       <option key={pkg.name} value={pkg.name} />
                     ))}
                   </datalist>

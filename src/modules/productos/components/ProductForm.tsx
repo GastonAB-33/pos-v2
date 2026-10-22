@@ -19,7 +19,8 @@ import {
   derivePricingFromStoredProduct,
 } from "@/modules/productos/utils/product-pricing";
 import { handleNumericInputFocus, handleNumericInputBlur, parseNumericField } from "@/utils/input-helpers";
-import { parseReturnableConfig, COMMON_RETURNABLE_PACKAGES } from "@/utils/returnable-packages";
+import { parseReturnableConfig, COMMON_RETURNABLE_PACKAGES, useTenantReturnablePackages } from "@/utils/returnable-packages";
+import { useTenant } from "@/features/tenant/hooks/useTenant";
 
 interface ProductFormProps {
   mode: "create" | "edit";
@@ -121,6 +122,9 @@ export const ProductForm = ({
 
   const nombre = watch("nombre");
   const saleMode = watch("saleMode");
+  const { tenantId } = useTenant();
+  const { packages: tenantPackages } = useTenantReturnablePackages(tenantId);
+  const availableReturnables = tenantPackages.length > 0 ? tenantPackages : COMMON_RETURNABLE_PACKAGES;
   const precioCosto = watch("precioCosto");
   const porcentajeGanancia = watch("porcentajeGanancia");
   const porcentajeIva = watch("porcentajeIva");
@@ -530,7 +534,7 @@ export const ProductForm = ({
                 disabled={disabled}
               />
               <datalist id="common-packages">
-                {COMMON_RETURNABLE_PACKAGES.map((pkg) => (
+                {availableReturnables.map((pkg) => (
                   <option key={pkg.name} value={pkg.name} />
                 ))}
               </datalist>

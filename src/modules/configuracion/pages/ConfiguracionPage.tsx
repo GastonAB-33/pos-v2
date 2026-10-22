@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LoadingState } from "@/components/ui/UiStates";
+import { useToast } from "@/components/ui/useToast";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
 import {
@@ -34,6 +35,7 @@ import {
   Store,
   Tag,
   Type,
+  Trash2,
   Users,
   Wallet,
   X,
@@ -43,6 +45,7 @@ import { ArcaAccountantGuideModal } from "@/modules/configuracion/components/Arc
 import { downloadFile } from "@/modules/configuracion/utils/arca-certificate-helper";
 import { arcaService } from "@/services/arca.service";
 import { productsService } from "@/services/products.service";
+import { parseReturnableConfig, COMMON_RETURNABLE_PACKAGES } from "@/utils/returnable-packages";
 import { broadcastEntityRequirementsChanged } from "@/modules/configuracion/hooks/useEntityRequirements";
 import { parseScaleBarcode } from "@/services/barcode/scale-barcode.service";
 import { useAuthStore } from "@/features/auth/store/auth.store";
@@ -66,6 +69,12 @@ import type {
   TenantSettings,
   TenantSettingsSectionKey,
 } from "@/types/entities";
+
+const currency = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  maximumFractionDigits: 2,
+});
 
 const toNumber = (value: string, fallback: number): number => {
   const parsed = Number(value);
@@ -296,6 +305,7 @@ interface ConfiguracionPageProps {
 export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => {
   const scopePreset = configuracionScopePresets[scope];
   const { tenantId } = useTenant();
+  const toast = useToast();
   const user = useAuthStore((state) => state.user);
   const { canRead, canWrite } = usePermissions();
   const canReadConfiguracion = canRead(scopePreset.permissionModule);
@@ -379,6 +389,91 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     if (!draft?.codigos_balanza) return null;
     return parseScaleBarcode(scaleTesterBarcode, draft.codigos_balanza);
   }, [scaleTesterBarcode, draft?.codigos_balanza]);
+
+    const [newPackageName, setNewPackageName] = useState("");
+  const [newPackagePrice, setNewPackagePrice] = useState<number | "">("");
+
+  const handleAddReturnablePackage = () => {
+    const trimmed = newPackageName.trim();
+    if (!trimmed || !draft) return;
+
+    const currentList = draft.stock.returnable_packages || [];
+    if (currentList.some((p) => p.name.toLowerCase() === trimmed.toLowerCase())) {
+      toast.error(`El envase "${trimmed}" ya está en la lista.`);
+      return;
+    }
+
+    const price = typeof newPackagePrice === "number" ? Math.max(0, newPackagePrice) : 0;
+    const updated = [...currentList, { name: trimmed, suggestedPrice: price }];
+    updateSection("stock", { returnable_packages: updated });
+    setNewPackageName("");
+    setNewPackagePrice("");
+    toast.success(`Envase "${trimmed}" agregado a la lista`);
+  };
+
+  const handleRemoveReturnablePackage = (packageName: string) => {
+    if (!draft) return;
+    const currentList = draft.stock.returnable_packages || [];
+    const updated = currentList.filter((p) => p.name !== packageName);
+    updateSection("stock", { returnable_packages: updated });
+    toast.success(`Envase "${packageName}" eliminado`);
+  };
+
+  const handleDetectPackagesFromProducts = async () => {
+    if (!tenantId || !draft) return;
+    try {
+      const products = await productsService.getAllByTenant(tenantId);
+      const currentList = [...(draft.stock.returnable_packages || [])];
+      const existingNames = new Set(currentList.map((p) => p.name.toLowerCase()));
+      let addedCount = 0;
+
+      for (const p of products) {
+        const config = parseReturnableConfig(p.description);
+        if (config && config.enabled && config.packageName.trim()) {
+          const lower = config.packageName.trim().toLowerCase();
+          if (!existingNames.has(lower)) {
+            existingNames.add(lower);
+            currentList.push({
+              name: config.packageName.trim(),
+              suggestedPrice: config.packagePrice,
+            });
+            addedCount++;
+          }
+        }
+      }
+
+      if (addedCount > 0) {
+        updateSection("stock", { returnable_packages: currentList });
+        toast.success(`Se detectaron y agregaron ${addedCount} envases desde tus productos`);
+      } else {
+        toast.info("No se encontraron envases nuevos en los productos actuales");
+      }
+    } catch {
+      toast.error("Error al detectar envases desde productos");
+    }
+  };
+
+  const handleLoadCommonPackages = () => {
+    if (!draft) return;
+    const currentList = [...(draft.stock.returnable_packages || [])];
+    const existingNames = new Set(currentList.map((p) => p.name.toLowerCase()));
+    let addedCount = 0;
+
+    for (const pkg of COMMON_RETURNABLE_PACKAGES) {
+      if (!existingNames.has(pkg.name.toLowerCase())) {
+        existingNames.add(pkg.name.toLowerCase());
+        currentList.push(pkg);
+        addedCount++;
+      }
+    }
+
+    if (addedCount > 0) {
+      updateSection("stock", { returnable_packages: currentList });
+      toast.success(`Se agregaron ${addedCount} tipos de envases habituales`);
+    } else {
+      toast.info("Los envases habituales ya se encuentran en la lista");
+    }
+  };
 
   const [isArcaWizardOpen, setIsArcaWizardOpen] = useState(false);
   const [isArcaGuideOpen, setIsArcaGuideOpen] = useState(false);
@@ -2090,6 +2185,147 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   </div>
                 </label>
               </div>
+            </div>
+
+            {/* SECCIÓN: TIPOS DE ENVASES RETORNABLES */}
+            <div className="md:col-span-2 space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                    <Package className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                      Tipos de Envases Retornables
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Define los envases que utiliza tu comercio (ej. Envase de Coca, Garrafa, Sifón). Solo estos envases aparecerán para prestar en Cuentas Corrientes y asociar a productos.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleDetectPackagesFromProducts()}
+                    title="Buscar envases configurados en tus productos actuales"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    <span>Detectar desde productos</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLoadCommonPackages}
+                    title="Cargar sugerencias habituales (Garrafas, Bidones, Cajones)"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    <span>+ Sugerencias habituales</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* FORMULARIO AGREGAR ENVASE */}
+              <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-800/40">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Nombre del tipo de envase
+                  </label>
+                  <input
+                    type="text"
+                    value={newPackageName}
+                    onChange={(e) => setNewPackageName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddReturnablePackage();
+                      }
+                    }}
+                    placeholder="Ej. ENVASE DE COCA, Bidón 20L, Garrafa 10kg..."
+                    className="ui-input w-full text-xs"
+                    disabled={!canWriteConfiguracion}
+                  />
+                </div>
+
+                <div className="w-44">
+                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Precio reposición ($)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={newPackagePrice}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setNewPackagePrice(v === "" ? "" : Number(v));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddReturnablePackage();
+                      }
+                    }}
+                    placeholder="0.00"
+                    className="ui-input w-full text-xs"
+                    disabled={!canWriteConfiguracion}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAddReturnablePackage}
+                  disabled={!canWriteConfiguracion || !newPackageName.trim()}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3.5 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-amber-700 transition disabled:opacity-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Agregar Envase</span>
+                </button>
+              </div>
+
+              {/* LISTA DE ENVASES REGISTRADOS */}
+              {draft.stock.returnable_packages && draft.stock.returnable_packages.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+                  {draft.stock.returnable_packages.map((pkg) => (
+                    <div
+                      key={pkg.name}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-2xs dark:border-slate-700 dark:bg-slate-900"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                          {pkg.name}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {pkg.suggestedPrice
+                            ? `Precio reposición: ${currency.format(pkg.suggestedPrice)}`
+                            : "Sin precio de reposición"}
+                        </div>
+                      </div>
+
+                      {canWriteConfiguracion && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveReturnablePackage(pkg.name)}
+                          title={`Eliminar ${pkg.name}`}
+                          className="shrink-0 rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-slate-400 dark:border-slate-800">
+                  <Package className="h-8 w-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
+                  <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                    No has registrado tipos de envases retornables aún.
+                  </p>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Agrega los envases que maneja tu comercio con el formulario de arriba o haz clic en "Detectar desde productos".
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </section>

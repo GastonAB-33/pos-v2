@@ -13,7 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, DollarSign, Package, Pencil, PlusCircle, RefreshCw } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { formatCustomerDocument } from "@/modules/configuracion/hooks/useEntityRequirements";
-import { parseCustomerPackageDebts, serializeCustomerPackageDebts } from "@/utils/returnable-packages";
+import { parseCustomerPackageDebts, serializeCustomerPackageDebts, useTenantReturnablePackages } from "@/utils/returnable-packages";
 import type { Customer } from "@/types/entities";
 
 interface CustomerCurrentAccountPanelProps {
@@ -58,6 +58,7 @@ export const CustomerCurrentAccountPanel = ({
   const [isAddPackageModalOpen, setIsAddPackageModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isUpdatingCustomer, setIsUpdatingCustomer] = useState(false);
+  const { packages: tenantPackageTypes } = useTenantReturnablePackages(tenantId);
 
   useEffect(() => {
     setCurrentCustomer(customer);
@@ -647,6 +648,7 @@ export const CustomerCurrentAccountPanel = ({
       <ManualPackageLoanModal
         isOpen={isAddPackageModalOpen}
         customerName={currentCustomer.full_name}
+        configuredPackages={tenantPackageTypes}
         onClose={() => setIsAddPackageModalOpen(false)}
         onSubmit={handleAddPackageDebt}
       />

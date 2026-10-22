@@ -80,6 +80,7 @@ const createDefaultStockSettings = (): StockSettings => ({
   allow_manual_adjustments: true,
   allow_negative_stock: false,
   allow_purchases_profit_margin_adjustment: true,
+  returnable_packages: [],
 });
 
 const createDefaultCashSettings = (): CashSettings => ({
@@ -212,6 +213,9 @@ const normalizeTenantSettings = (input: TenantSettings): TenantSettings => ({
   stock: {
     ...createDefaultStockSettings(),
     ...(input.stock ?? {}),
+    returnable_packages: Array.isArray(input.stock?.returnable_packages)
+      ? input.stock.returnable_packages
+      : (input.stock?.returnable_packages ?? []),
   },
   caja: {
     ...createDefaultCashSettings(),
@@ -323,6 +327,9 @@ const mergeSettingsPayload = (
   stock: {
     ...current.stock,
     ...(patch.stock ?? {}),
+    returnable_packages: patch.stock?.returnable_packages !== undefined
+      ? patch.stock.returnable_packages
+      : current.stock.returnable_packages,
   },
   caja: {
     ...current.caja,

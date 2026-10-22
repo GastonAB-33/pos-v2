@@ -512,6 +512,11 @@ export interface PosSettings {
   employee_discount_excluded_categories?: string[];
 }
 
+export interface ReturnablePackageType {
+  name: string;
+  suggestedPrice?: number;
+}
+
 export interface StockSettings {
   use_min_max: boolean;
   alerts_active: boolean;
@@ -519,6 +524,7 @@ export interface StockSettings {
   allow_manual_adjustments: boolean;
   allow_negative_stock: boolean;
   allow_purchases_profit_margin_adjustment?: boolean;
+  returnable_packages?: ReturnablePackageType[];
 }
 
 export type CashReconciliationMode = "cash_only" | "full";

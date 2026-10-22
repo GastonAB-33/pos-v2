@@ -1,3 +1,7 @@
+import { useState, useEffect, useCallback } from "react";
+import { settingsService } from "@/services/settings.service";
+import { productsService } from "@/services/products.service";
+import type { ReturnablePackageType } from "@/types/entities";
 /**
  * Utilidades y helpers para la gestión de envases retornables
  * (Garrafas de gas, bidones de agua, botellas de cerveza y gaseosas).
@@ -139,4 +143,75 @@ export const getCleanCustomerObservations = (
 ): string => {
   if (!observations) return "";
   return observations.replace(/\s*\[ENV_DEUDA:\{.*?\}\]\s*/g, " ").trim();
+};
+
+/**
+ * Obtiene los tipos de envases retornables configurados para el comercio (tenant).
+ * Si no están explícitamente en la configuración de stock, inspecciona los productos del catálogo.
+ */
+export const fetchTenantReturnablePackages = async (
+  tenantId: string
+): Promise<ReturnablePackageType[]> => {
+  try {
+    const settings = await settingsService.getByTenant(tenantId);
+    const configured = settings?.stock?.returnable_packages;
+
+    if (Array.isArray(configured) && configured.length > 0) {
+      return configured;
+    }
+
+    // Si no hay lista en configuración, extraer envases usados en productos
+    const products = await productsService.getAllByTenant(tenantId);
+    const map = new Map<string, ReturnablePackageType>();
+
+    for (const p of products) {
+      const config = parseReturnableConfig(p.description);
+      if (config && config.enabled && config.packageName.trim()) {
+        const key = config.packageName.trim().toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, {
+            name: config.packageName.trim(),
+            suggestedPrice: config.packagePrice,
+          });
+        }
+      }
+    }
+
+    return Array.from(map.values());
+  } catch (err) {
+    console.error("Error al obtener envases retornables del tenant:", err);
+    return [];
+  }
+};
+
+/**
+ * Hook para cargar los envases retornables reales del comercio.
+ */
+export const useTenantReturnablePackages = (tenantId: string | null) => {
+  const [packages, setPackages] = useState<ReturnablePackageType[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!tenantId) {
+      setPackages([]);
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const list = await fetchTenantReturnablePackages(tenantId);
+      setPackages(list);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return {
+    packages,
+    isLoading,
+    reload: load,
+  };
 };
