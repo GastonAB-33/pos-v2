@@ -1292,6 +1292,31 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     }
   };
 
+  const updateSupplier = async (supplierId: string, values: SupplierFormValues): Promise<Supplier | null> => {
+    if (!tenantId) return null;
+
+    setIsSubmitting(true);
+    try {
+      const updated = await suppliersService.update(tenantId, supplierId, toSupplierServiceInput(values));
+      if (!updated) {
+        setFeedback({ type: "error", message: "No se encontró el proveedor a actualizar" });
+        return null;
+      }
+      setSuppliers((current) =>
+        current.map((supplier) => (supplier.id === supplierId ? updated : supplier)).sort((a, b) =>
+          a.name.localeCompare(b.name)
+        )
+      );
+      setFeedback({ type: "success", message: `Proveedor ${updated.name} actualizado` });
+      return updated;
+    } catch {
+      setFeedback({ type: "error", message: "No se pudo actualizar el proveedor" });
+      return null;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return {
     products: filteredProducts,
     allProducts: products,
@@ -1330,6 +1355,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     findPotentialDuplicateProducts,
     createProductAndAddToCart,
     createSupplier,
+    updateSupplier,
     purchaseVatPercent,
     setPurchaseVatPercent,
     purchaseIibbPercent,

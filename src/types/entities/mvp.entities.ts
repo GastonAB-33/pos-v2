@@ -551,6 +551,11 @@ export interface EntityRequirementsSettings {
   supplier: SupplierRequiredFieldsSettings;
 }
 
+export interface PaymentMethodInvoiceRules {
+  mandatory_methods: string[];
+  disabled_methods: string[];
+}
+
 export interface FacturacionSettings {
   document_sequences: {
     A: number;
@@ -566,6 +571,7 @@ export interface FacturacionSettings {
   issuer_fiscal_condition: string;
   arca: ArcaSettings;
   entity_requirements?: EntityRequirementsSettings;
+  payment_method_rules?: PaymentMethodInvoiceRules;
 }
 
 export type ArcaMode = "mock" | "sandbox" | "real";

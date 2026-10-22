@@ -161,6 +161,7 @@ export const ComprasPage = () => {
   const [isSelectProductModalOpen, setIsSelectProductModalOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [newSupplierInitialName, setNewSupplierInitialName] = useState<string>("");
   const [newProductPrefill, setNewProductPrefill] = useState<{
     initialBarcode?: string | null;
@@ -215,6 +216,7 @@ export const ComprasPage = () => {
     findPotentialDuplicateProducts,
     createProductAndAddToCart,
     createSupplier,
+    updateSupplier,
     purchaseVatPercent,
     setPurchaseVatPercent,
     purchaseIibbPercent,
@@ -260,13 +262,27 @@ export const ComprasPage = () => {
     }
   };
 
-  const handleCreateSupplier = async (values: SupplierFormValues) => {
+  const handleEditSupplier = (supplier: Supplier) => {
+    setEditingSupplier(supplier);
+    setIsSupplierModalOpen(true);
+  };
+
+  const handleSupplierFormSubmit = async (values: SupplierFormValues) => {
     if (!canWritePurchases) return;
-    const created = await createSupplier(values);
-    if (created) {
-      setPreferredSupplierId(created.id);
-      setIsSupplierModalOpen(false);
-      setNewSupplierInitialName("");
+    if (editingSupplier) {
+      const updated = await updateSupplier(editingSupplier.id, values);
+      if (updated) {
+        setPreferredSupplierId(updated.id);
+        setIsSupplierModalOpen(false);
+        setEditingSupplier(null);
+      }
+    } else {
+      const created = await createSupplier(values);
+      if (created) {
+        setPreferredSupplierId(created.id);
+        setIsSupplierModalOpen(false);
+        setNewSupplierInitialName("");
+      }
     }
   };
 
@@ -509,9 +525,11 @@ export const ComprasPage = () => {
               iibbAmount={purchaseIibbAmount}
               extraTaxAmount={purchaseExtraTaxAmount}
               onCreateSupplier={(initialName) => {
+                setEditingSupplier(null);
                 setNewSupplierInitialName(initialName?.trim() || "");
                 setIsSupplierModalOpen(true);
               }}
+              onEditSupplier={handleEditSupplier}
               onSubmit={handleProceedToPayment}
             />
 
@@ -602,30 +620,37 @@ export const ComprasPage = () => {
           <div className="max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-panel dark:border-slate-800 dark:bg-slate-900">
             <div className="mb-4 flex items-start justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
               <div>
-                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Nuevo proveedor</h2>
+                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                  {editingSupplier ? "Editar proveedor" : "Nuevo proveedor"}
+                </h2>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  Se guardará en Proveedores y quedará seleccionado en esta compra.
+                  {editingSupplier
+                    ? "Actualizá el CUIT u otros datos fiscales del proveedor para esta compra."
+                    : "Se guardará en Proveedores y quedará seleccionado en esta compra."}
                 </p>
               </div>
               <IconButton
                 icon={X}
-                label="Cerrar alta de proveedor"
+                label="Cerrar formulario de proveedor"
                 onClick={() => {
                   setIsSupplierModalOpen(false);
+                  setEditingSupplier(null);
                   setNewSupplierInitialName("");
                 }}
                 disabled={isSubmitting}
               />
             </div>
             <SupplierForm
-              mode="create"
+              mode={editingSupplier ? "edit" : "create"}
+              supplier={editingSupplier ?? undefined}
               initialName={newSupplierInitialName}
               disabled={isSubmitting}
               onCancel={() => {
                 setIsSupplierModalOpen(false);
+                setEditingSupplier(null);
                 setNewSupplierInitialName("");
               }}
-              onSubmit={handleCreateSupplier}
+              onSubmit={handleSupplierFormSubmit}
             />
           </div>
         </section>

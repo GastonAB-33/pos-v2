@@ -9,6 +9,7 @@ import {
   ChevronRight,
   FileText,
   Maximize2,
+  Pencil,
   Plus,
   Search,
   StickyNote,
@@ -39,6 +40,7 @@ interface PurchaseCheckoutPanelProps {
   iibbAmount: number;
   extraTaxAmount?: number;
   onCreateSupplier: (initialName?: string) => void;
+  onEditSupplier?: (supplier: Supplier) => void;
   onSubmit: (values: PurchaseHeaderValues) => Promise<boolean | void> | boolean | void;
 }
 
@@ -57,6 +59,7 @@ export const PurchaseCheckoutPanel = ({
   iibbAmount,
   extraTaxAmount = 0,
   onCreateSupplier,
+  onEditSupplier,
   onSubmit,
 }: PurchaseCheckoutPanelProps) => {
   const {
@@ -331,17 +334,35 @@ export const PurchaseCheckoutPanel = ({
                       <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
                         CUIT: {currentSelectedSupplier.tax_id}
                       </p>
-                    ) : null}
+                    ) : (
+                      <p className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+                        ⚠️ Sin CUIT cargado
+                      </p>
+                    )}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleClearSupplier}
-                  disabled={disabled || !canWrite}
-                  className="shrink-0 rounded px-2 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-900/60"
-                >
-                  Cambiar
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {onEditSupplier ? (
+                    <button
+                      type="button"
+                      onClick={() => onEditSupplier(currentSelectedSupplier)}
+                      disabled={disabled || !canWrite}
+                      className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-white px-2 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-slate-800 shadow-2xs transition"
+                      title="Editar proveedor para asignarle CUIT u otros datos fiscales"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      <span>Editar</span>
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={handleClearSupplier}
+                    disabled={disabled || !canWrite}
+                    className="shrink-0 rounded px-2 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-900/60 transition"
+                  >
+                    Cambiar
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="relative">
