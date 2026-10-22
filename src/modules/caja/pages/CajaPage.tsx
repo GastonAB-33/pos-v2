@@ -838,6 +838,7 @@ export const CajaPage = () => {
         )}
       </div>
 
+
       {/* MODAL: Movimiento Manual */}
       <ManualCashMovementModal
         isOpen={isManualMovementModalOpen}
