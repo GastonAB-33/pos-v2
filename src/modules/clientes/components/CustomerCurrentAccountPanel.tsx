@@ -3,6 +3,7 @@ import { CurrentAccountAdjustmentModal } from "@/modules/clientes/components/Cur
 import { CurrentAccountMovementsTable } from "@/modules/clientes/components/CurrentAccountMovementsTable";
 import { CurrentAccountPaymentModal } from "@/modules/clientes/components/CurrentAccountPaymentModal";
 import { CustomerManualMovementModal } from "@/modules/cuentas-corrientes/components/CustomerManualMovementModal";
+import { ManualPackageLoanModal } from "@/modules/clientes/components/ManualPackageLoanModal";
 import { PosCustomerModal, type PosCustomerModalValues } from "@/modules/pos/components/PosCustomerModal";
 import { customersService } from "@/services/customers.service";
 import { posCustomerProfilesService } from "@/services/pos-customer-profiles.service";
@@ -54,6 +55,7 @@ export const CustomerCurrentAccountPanel = ({
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
   const [isManualDebtModalOpen, setIsManualDebtModalOpen] = useState(false);
+  const [isAddPackageModalOpen, setIsAddPackageModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isUpdatingCustomer, setIsUpdatingCustomer] = useState(false);
 
@@ -215,6 +217,63 @@ export const CustomerCurrentAccountPanel = ({
   const packageDebts = useMemo(() => {
     return parseCustomerPackageDebts(currentCustomer.observations);
   }, [currentCustomer.observations]);
+
+  
+  const handleAddPackageDebt = async (packageName: string, addQty: number = 1) => {
+    if (!tenantId) return false;
+    const currentDebts = { ...packageDebts };
+    const currentQty = currentDebts[packageName] || 0;
+    const newQty = currentQty + addQty;
+    currentDebts[packageName] = newQty;
+
+    const updatedObservations = serializeCustomerPackageDebts(currentCustomer.observations, currentDebts);
+    try {
+      const updated = await customersService.update(tenantId, currentCustomer.id, {
+        code: currentCustomer.code,
+        full_name: currentCustomer.full_name,
+        document_type: currentCustomer.document_type,
+        document_number: currentCustomer.document_number,
+        fiscal_business_name: currentCustomer.fiscal_business_name,
+        fiscal_address: currentCustomer.fiscal_address,
+        fiscal_condition: currentCustomer.fiscal_condition,
+        price_list_id: currentCustomer.price_list_id,
+        email: currentCustomer.email,
+        phone: currentCustomer.phone,
+        address: currentCustomer.address,
+        observations: updatedObservations,
+        current_balance: currentCustomer.current_balance,
+        current_account_enabled: currentCustomer.current_account_enabled,
+        current_account_limit: currentCustomer.current_account_limit,
+        is_active: currentCustomer.is_active,
+      });
+
+      await auditService.createSafe(tenantId, {
+        user_id: userId,
+        module: "clientes",
+        action: "update",
+        entity_type: "customer",
+        entity_id: currentCustomer.id,
+        description: `Préstamo de envase anotado: ${packageName} (+${addQty} u.)`,
+        metadata: {
+          borrowed_package: packageName,
+          borrowed_quantity: addQty,
+          total_package_debt: newQty,
+        },
+      });
+
+      if (updated) {
+        setCurrentCustomer(updated);
+      } else {
+        setCurrentCustomer((prev) => ({ ...prev, observations: updatedObservations }));
+      }
+      toast.success(`Se anotó el préstamo de ${addQty}x ${packageName}`);
+      onBalanceUpdated();
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al registrar el préstamo del envase");
+      return false;
+    }
+  };
 
   const handleReturnPackage = async (packageName: string, returnQty: number = 1) => {
     if (!tenantId) return;
@@ -405,7 +464,7 @@ export const CustomerCurrentAccountPanel = ({
       </div>
 
       {/* Envases retornables adeudados */}
-      {Object.keys(packageDebts).length > 0 && (
+      {Object.keys(packageDebts).length > 0 ? (
         <div className="rounded-xl border border-amber-300 dark:border-amber-800/80 bg-amber-50/70 dark:bg-amber-950/30 p-3.5 space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -414,9 +473,16 @@ export const CustomerCurrentAccountPanel = ({
                 Envases retornables pendientes
               </span>
             </div>
-            <span className="text-[11px] text-amber-700 dark:text-amber-400 font-medium">
-              Control de envases físicos
-            </span>
+            {canWrite && (
+              <button
+                type="button"
+                onClick={() => setIsAddPackageModalOpen(true)}
+                className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-800 shadow-2xs hover:bg-amber-100 transition dark:border-amber-700 dark:bg-slate-900 dark:text-amber-300 dark:hover:bg-slate-800"
+              >
+                <PlusCircle size={13} />
+                <span>+ Prestar otro envase</span>
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-1">
@@ -447,6 +513,23 @@ export const CustomerCurrentAccountPanel = ({
               </div>
             ))}
           </div>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between rounded-xl border border-dashed border-slate-200 dark:border-slate-800 p-3 bg-slate-50/50 dark:bg-slate-900/30">
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <Package className="h-4 w-4 text-slate-400 dark:text-slate-500" />
+            <span>No adeuda envases retornables</span>
+          </div>
+          {canWrite && (
+            <button
+              type="button"
+              onClick={() => setIsAddPackageModalOpen(true)}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300"
+            >
+              <PlusCircle size={13} />
+              <span>Anotar préstamo de envase</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -483,6 +566,15 @@ export const CustomerCurrentAccountPanel = ({
           >
             <PlusCircle size={14} />
             <span>Adeudar / Movimiento manual</span>
+          </button>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-xl shadow-xs transition dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+            onClick={() => setIsAddPackageModalOpen(true)}
+            disabled={isSubmitting}
+          >
+            <Package size={14} />
+            <span>Prestar / Anotar Envase</span>
           </button>
           <button
             type="button"
@@ -552,6 +644,12 @@ export const CustomerCurrentAccountPanel = ({
           onSubmit={handleEditCustomerSubmit}
         />
       )}
+      <ManualPackageLoanModal
+        isOpen={isAddPackageModalOpen}
+        customerName={currentCustomer.full_name}
+        onClose={() => setIsAddPackageModalOpen(false)}
+        onSubmit={handleAddPackageDebt}
+      />
     </section>
   );
 };
