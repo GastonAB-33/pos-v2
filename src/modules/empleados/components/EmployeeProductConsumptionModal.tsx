@@ -42,8 +42,10 @@ export const EmployeeProductConsumptionModal = ({
   onSubmit,
 }: EmployeeProductConsumptionModalProps) => {
   const toast = useToast();
+
   const [products, setProducts] = useState<Product[]>([]);
   const [primaryBarcodes, setPrimaryBarcodes] = useState<Record<string, string>>({});
+  const [excludedCategories, setExcludedCategories] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -56,6 +58,16 @@ export const EmployeeProductConsumptionModal = ({
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Helper para verificar si la categoría del producto está excluida del descuento
+  const isCategoryExcluded = useCallback(
+    (category?: string | null) => {
+      if (!category || !category.trim()) return false;
+      const norm = category.trim().toLowerCase();
+      return excludedCategories.some((cat) => cat.trim().toLowerCase() === norm);
+    },
+    [excludedCategories]
+  );
 
   // Cargar catálogo de productos, códigos de barras y configuración del tenant
   useEffect(() => {
@@ -75,6 +87,7 @@ export const EmployeeProductConsumptionModal = ({
         setPrimaryBarcodes((barcodesMap as Record<string, string>) || {});
         const defaultDiscount = tenantSettings?.pos?.employee_discount_percent ?? 10;
         setDiscountPercent(employee.discount_percent ?? defaultDiscount);
+        setExcludedCategories(tenantSettings?.pos?.employee_discount_excluded_categories ?? []);
       })
       .catch(() => {
         toast.error("Error al cargar productos o configuración");
@@ -99,20 +112,31 @@ export const EmployeeProductConsumptionModal = ({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, []);
 
-  // Agregar al carrito (por defecto con applyDiscount: true)
-  const addToCart = useCallback((product: Product) => {
-    setCart((prev) => {
-      const existing = prev.find((item) => item.product.id === product.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.product.id === product.id
-            ? { ...item, quantity: Number((item.quantity + 1).toFixed(3)) }
-            : item
-        );
-      }
-      return [...prev, { product, quantity: 1, applyDiscount: true }];
-    });
-  }, []);
+  // Agregar al carrito (si la categoría está excluida, arranca destildado sin descuento)
+  const addToCart = useCallback(
+    (product: Product) => {
+      const isExcluded = isCategoryExcluded(product.category);
+      setCart((prev) => {
+        const existing = prev.find((item) => item.product.id === product.id);
+        if (existing) {
+          return prev.map((item) =>
+            item.product.id === product.id
+              ? { ...item, quantity: Number((item.quantity + 1).toFixed(3)) }
+              : item
+          );
+        }
+        return [
+          ...prev,
+          {
+            product,
+            quantity: 1,
+            applyDiscount: !isExcluded,
+          },
+        ];
+      });
+    },
+    [isCategoryExcluded]
+  );
 
   // Escaneo global de código de barras (con pistola USB sin necesidad de foco en el buscador)
   const handleBarcodeScan = useCallback(
@@ -357,9 +381,10 @@ export const EmployeeProductConsumptionModal = ({
       updated_at: new Date().toISOString(),
     };
 
+    const isExcluded = isCategoryExcluded(input.category);
     setCart((prev) => [
       ...prev,
-      { product: manualProduct, quantity: input.quantity, applyDiscount: true },
+      { product: manualProduct, quantity: input.quantity, applyDiscount: !isExcluded },
     ]);
 
     toast.success(`"${name}" agregado al retiro`);
@@ -407,7 +432,8 @@ export const EmployeeProductConsumptionModal = ({
 
       setProducts((prev) => [...prev, created]);
       useProductsStore.getState().upsertProduct(created);
-      setCart((prev) => [...prev, { product: created, quantity: input.quantity, applyDiscount: true }]);
+      const isExcluded = isCategoryExcluded(created.category);
+      setCart((prev) => [...prev, { product: created, quantity: input.quantity, applyDiscount: !isExcluded }]);
 
       toast.success(`"${name}" creado y agregado al retiro`);
       return true;
@@ -739,7 +765,7 @@ export const EmployeeProductConsumptionModal = ({
                           </button>
                           <input
                             type="number"
-                            step={item.product.sale_mode === "weight" ? "0.001" : "1"}
+                            step="any"
                             min="0.001"
                             value={item.quantity}
                             onChange={(e) => setItemExactQuantity(item.product.id, parseFloat(e.target.value))}
@@ -813,21 +839,12 @@ export const EmployeeProductConsumptionModal = ({
                     <div className="flex items-center gap-1.5">
                       <Tag size={13} />
                       <span className="font-semibold">Descuento aplicado:</span>
-                      <div className="inline-flex items-center rounded border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-950 px-1 py-0.5 text-[11px] font-bold">
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          step={1}
-                          value={discountPercent}
-                          onChange={(e) => {
-                            const val = parseFloat(e.target.value);
-                            setDiscountPercent(isNaN(val) ? 0 : Math.max(0, Math.min(100, val)));
-                          }}
-                          className="w-8 text-center bg-transparent outline-none font-mono text-emerald-700 dark:text-emerald-300"
-                        />
-                        <span className="text-[10px]">%</span>
-                      </div>
+                      <span
+                        className="inline-flex items-center rounded-md border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 text-[11px] font-bold font-mono text-emerald-800 dark:text-emerald-300 shadow-2xs"
+                        title="Porcentaje fijo establecido en Configuración"
+                      >
+                        {discountPercent}% OFF
+                      </span>
                     </div>
                     <span className="font-bold font-mono">-{currency.format(discountAmount)}</span>
                   </div>

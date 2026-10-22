@@ -298,6 +298,8 @@ export interface CurrentAccountMovement extends TenantScopedEntity {
   balance_after: number;
   notes: string | null;
   created_by: string | null;
+  payment_type?: 'salary' | 'advance';
+  advances_discount_applied?: number;
 }
 
 export type SupplierCurrentAccountMovementType = "debt" | "payment" | "adjustment";
@@ -312,6 +314,8 @@ export interface SupplierCurrentAccountMovement extends TenantScopedEntity {
   payment_method_id?: string | null;
   notes: string | null;
   created_by: string | null;
+  payment_type?: 'salary' | 'advance';
+  advances_discount_applied?: number;
 }
 
 export type EmployeeAttendanceStatus = "present" | "late" | "absent" | "justified" | "early_leave";
@@ -325,6 +329,8 @@ export interface EmployeeAttendance extends TenantScopedEntity {
   status: EmployeeAttendanceStatus;
   notes: string | null;
   created_by: string | null;
+  payment_type?: 'salary' | 'advance';
+  advances_discount_applied?: number;
 }
 
 export type EmployeeCurrentAccountMovementType = "debt" | "payment" | "adjustment";
@@ -359,6 +365,8 @@ export interface EmployeeSalaryPayment extends TenantScopedEntity {
   payment_date: string;
   notes: string | null;
   created_by: string | null;
+  payment_type?: 'salary' | 'advance';
+  advances_discount_applied?: number;
 }
 
 export type GeneralCashMovementType = "income" | "expense";
@@ -379,6 +387,8 @@ export interface GeneralCashMovement extends TenantScopedEntity {
   reference_id: string | null;
   notes: string | null;
   created_by: string | null;
+  payment_type?: 'salary' | 'advance';
+  advances_discount_applied?: number;
 }
 
 export type SaleStatus = "draft" | "completed" | "cancelled";
@@ -449,6 +459,8 @@ export interface Receipt extends TenantScopedEntity {
   total: number;
   notes: string | null;
   created_by: string | null;
+  payment_type?: 'salary' | 'advance';
+  advances_discount_applied?: number;
 }
 
 export interface AuditLog {

@@ -1,14 +1,11 @@
 import {
-  CreditCard,
+  Clock,
   Edit2,
   Trash2,
   Power,
-  Clock,
-  LogOut,
-  LogIn,
   CheckCircle,
   AlertTriangle,
-  ShoppingBag,
+  UserCheck,
 } from "lucide-react";
 import type { Employee, EmployeeAttendance } from "@/types/entities";
 
@@ -16,6 +13,7 @@ interface EmployeesTableProps {
   employees: Employee[];
   todayActiveByEmployee: Map<string, EmployeeAttendance>;
   canWrite: boolean;
+  onSelectEmployee: (employee: Employee) => void;
   onOpenCurrentAccount: (employee: Employee) => void;
   onOpenProductConsumption?: (employee: Employee) => void;
   onEdit: (employee: Employee) => void;
@@ -35,13 +33,10 @@ export const EmployeesTable = ({
   employees,
   todayActiveByEmployee,
   canWrite,
-  onOpenCurrentAccount,
-  onOpenProductConsumption,
+  onSelectEmployee,
   onEdit,
   onDelete,
   onToggleActive,
-  onPunchIn,
-  onPunchOut,
 }: EmployeesTableProps) => {
   if (employees.length === 0) {
     return (
@@ -85,12 +80,17 @@ export const EmployeesTable = ({
                   className="transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
                 >
                   <td className="py-3 px-4">
-                    <div className="flex items-center gap-2.5">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 font-bold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
+                    <button
+                      type="button"
+                      onClick={() => onSelectEmployee(employee)}
+                      className="flex items-center gap-2.5 text-left group cursor-pointer"
+                      title={`Abrir legajo integral de ${employee.full_name}`}
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 font-bold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300 group-hover:scale-105 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/60 transition">
                         {employee.full_name.charAt(0).toUpperCase()}
                       </span>
                       <div>
-                        <span className="block font-bold text-slate-900 dark:text-slate-100">
+                        <span className="block font-bold text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">
                           {employee.full_name}
                         </span>
                         <span className="text-[11px] text-slate-400 font-mono">
@@ -98,7 +98,7 @@ export const EmployeesTable = ({
                           {employee.phone ? ` • ${employee.phone}` : ""}
                         </span>
                       </div>
-                    </div>
+                    </button>
                   </td>
 
                   <td className="py-3 px-4 font-mono">
@@ -164,54 +164,16 @@ export const EmployeesTable = ({
                   </td>
 
                   <td className="py-3 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {/* Botón rápido fichar */}
-                      {canWrite && employee.is_active && (
-                        activeShift ? (
-                          <button
-                            type="button"
-                            title="Fichar Egreso de Turno"
-                            onClick={() => onPunchOut(activeShift.id, employee)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300"
-                          >
-                            <LogOut size={12} />
-                            <span>Egreso</span>
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            title="Fichar Ingreso a Turno"
-                            onClick={() => onPunchIn(employee)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300"
-                          >
-                            <LogIn size={12} />
-                            <span>Ingreso</span>
-                          </button>
-                        )
-                      )}
-
-                      {/* Botón Cargar Productos */}
-                      {canWrite && employee.is_active && onOpenProductConsumption && (
-                        <button
-                          type="button"
-                          title="Cargar productos a cuenta corriente"
-                          onClick={() => onOpenProductConsumption(employee)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/70 dark:text-indigo-300"
-                        >
-                          <ShoppingBag size={12} />
-                          <span>Productos</span>
-                        </button>
-                      )}
-
-                      {/* Botón Cuenta Corriente */}
+                    <div className="flex items-center justify-end gap-1.5">
+                      {/* Botón Principal: Ver Ficha */}
                       <button
                         type="button"
-                        title="Ver Cuenta Corriente y Consumos"
-                        onClick={() => onOpenCurrentAccount(employee)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-900/50 dark:bg-indigo-950/40 dark:text-indigo-300"
+                        title="Ver Ficha Integral del Empleado (Horarios, Cta Cte, Sueldos)"
+                        onClick={() => onSelectEmployee(employee)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/70 dark:text-blue-300 transition cursor-pointer shadow-2xs"
                       >
-                        <CreditCard size={12} />
-                        <span>Cta. Cte.</span>
+                        <UserCheck size={13} />
+                        <span>Ver Ficha</span>
                       </button>
 
                       {/* Editar */}

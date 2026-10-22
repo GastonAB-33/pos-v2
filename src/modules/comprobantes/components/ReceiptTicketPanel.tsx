@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Download, ExternalLink, FileText, Printer, QrCode } from "lucide-react";
+import { CheckCircle2, Download, FileText, Printer } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
-import { ARCA_DOCUMENT_TYPE_CODES } from "@/services/arca.service";
 import { settingsService } from "@/services/settings.service";
-import type { FacturacionSettings, Invoice, Receipt } from "@/types/entities";
+import { invoicesService } from "@/services/invoices.service";
+import { ArcaInvoiceSheet, type ArcaInvoiceCopy } from "@/components/arca/ArcaInvoiceSheet";
+import type { BusinessSettings, FacturacionSettings, Invoice, Receipt } from "@/types/entities";
 
 interface ReceiptTicketPanelProps {
   receipt: Receipt;
@@ -117,6 +118,24 @@ export const ReceiptTicketPanel = ({
 }: ReceiptTicketPanelProps) => {
   const { tenantId } = useTenant();
   const [facturacionSettings, setFacturacionSettings] = useState<FacturacionSettings | null>(null);
+  const [businessSettings, setBusinessSettings] = useState<BusinessSettings | null>(null);
+  const [loadedInvoice, setLoadedInvoice] = useState<Invoice | null>(invoice ?? null);
+  const [invoiceCopy, setInvoiceCopy] = useState<ArcaInvoiceCopy>("ORIGINAL");
+  const [activeTab, setActiveTab] = useState<"ticket" | "invoice">(
+    mode === "invoice" ? "invoice" : "ticket"
+  );
+
+  useEffect(() => {
+    if (invoice !== undefined) {
+      setLoadedInvoice(invoice);
+      return;
+    }
+    if (!tenantId || !receipt.sale_id) return;
+    invoicesService
+      .getBySaleId(tenantId, receipt.sale_id)
+      .then((invList) => setLoadedInvoice(invList && invList.length > 0 ? invList[0] : null))
+      .catch(() => setLoadedInvoice(null));
+  }, [tenantId, receipt.sale_id, invoice]);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -126,20 +145,26 @@ export const ReceiptTicketPanel = ({
         if (settings?.facturacion) {
           setFacturacionSettings(settings.facturacion);
         }
+        if (settings?.negocio) {
+          setBusinessSettings(settings.negocio);
+        }
       })
       .catch(() => {});
   }, [tenantId]);
 
-  const showTicket = mode !== "invoice";
-  const showInvoice = mode !== "ticket";
-  const hasInvoice = Boolean(invoice);
+  const resolvedInvoice = loadedInvoice;
+  const hasInvoice = Boolean(resolvedInvoice);
+
+  const showTabs = mode === "both" && hasInvoice;
+  const showTicket = mode === "ticket" || (mode === "both" && (!hasInvoice || activeTab === "ticket"));
+  const showInvoice = mode === "invoice" || (mode === "both" && activeTab === "invoice");
 
   const printDocument = () => {
     window.print();
   };
 
   const downloadTicket = () => {
-    const content = buildPlainTextTicket(receipt, invoice);
+    const content = buildPlainTextTicket(receipt, resolvedInvoice);
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -150,23 +175,49 @@ export const ReceiptTicketPanel = ({
   };
 
   const downloadInvoice = () => {
-    if (!invoice) return;
-    const content = buildPlainTextInvoice(invoice, facturacionSettings);
+    if (!resolvedInvoice) return;
+    const content = buildPlainTextInvoice(resolvedInvoice, facturacionSettings);
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `Factura_${invoice.document_type}_${invoice.document_number}.txt`;
+    link.download = `Factura_${resolvedInvoice.document_type}_${resolvedInvoice.document_number}.txt`;
     link.click();
     URL.revokeObjectURL(url);
   };
 
-  const invoiceDocCode = invoice
-    ? String(ARCA_DOCUMENT_TYPE_CODES[invoice.document_type] ?? 0).padStart(3, "0")
-    : "000";
-
   return (
-    <article className="mx-auto w-full max-w-2xl space-y-4">
+    <article className="mx-auto w-full max-w-4xl space-y-4">
+      {/* PESTAÑAS SELECTORAS (CUANDO AMBOS COMPROBANTES ESTÁN DISPONIBLES) */}
+      {showTabs && (
+        <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2 print:hidden">
+          <button
+            type="button"
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              activeTab === "ticket"
+                ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-xs"
+                : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+            }`}
+            onClick={() => setActiveTab("ticket")}
+          >
+            <Printer size={13} />
+            Ticket de Venta
+          </button>
+          <button
+            type="button"
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              activeTab === "invoice"
+                ? "bg-blue-600 text-white shadow-xs"
+                : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+            }`}
+            onClick={() => setActiveTab("invoice")}
+          >
+            <FileText size={13} />
+            Factura Oficial ARCA ({resolvedInvoice?.document_type} {resolvedInvoice?.document_number})
+          </button>
+        </div>
+      )}
+
       {/* VISTA: TICKET INTERNO / COMERCIAL */}
       {showTicket ? (
         <div className="rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-900 p-5 shadow-panel space-y-3">
@@ -232,25 +283,34 @@ export const ReceiptTicketPanel = ({
           </div>
 
           {/* SELLO FISCAL EN TICKET (SI TIENE CAE) */}
-          {invoice?.cae ? (
+          {resolvedInvoice?.cae ? (
             <div className="rounded-lg border border-emerald-300 dark:border-emerald-800/80 bg-emerald-50/50 dark:bg-emerald-950/30 p-3 flex items-center justify-between gap-3">
               <div className="space-y-0.5 text-xs">
                 <div className="flex items-center gap-1.5 font-bold text-emerald-800 dark:text-emerald-300">
                   <CheckCircle2 size={13} className="text-emerald-600 dark:text-emerald-400" />
-                  <span>Factura {invoice.document_type} {invoice.document_number}</span>
+                  <span>Factura {resolvedInvoice.document_type} {resolvedInvoice.document_number}</span>
                 </div>
                 <p className="font-mono text-slate-700 dark:text-slate-300">
-                  CAE: <span className="font-bold">{invoice.cae}</span>
+                  CAE: <span className="font-bold">{resolvedInvoice.cae}</span>
                 </p>
-                {invoice.cae_due_date ? (
+                {resolvedInvoice.cae_due_date ? (
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Vto. CAE: {invoice.cae_due_date}
+                    Vto. CAE: {resolvedInvoice.cae_due_date}
                   </p>
                 ) : null}
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                    onClick={() => setActiveTab("invoice")}
+                  >
+                    Ver Factura Electrónica ARCA oficial →
+                  </button>
+                </div>
               </div>
-              {invoice.qr_data_url ? (
+              {resolvedInvoice.qr_data_url ? (
                 <div className="bg-white p-1 rounded border border-slate-200 shadow-xs shrink-0 flex flex-col items-center">
-                  <QRCodeSVG value={invoice.qr_data_url} size={64} level="M" />
+                  <QRCodeSVG value={resolvedInvoice.qr_data_url} size={64} level="M" />
                   <span className="text-[8px] font-mono text-slate-600 font-bold uppercase mt-0.5">
                     ARCA QR
                   </span>
@@ -267,7 +327,7 @@ export const ReceiptTicketPanel = ({
               </span>
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2 pt-1">
+            <div className="mt-4 flex flex-wrap gap-2 pt-1 print:hidden">
               <button
                 type="button"
                 className="ui-btn-primary flex items-center gap-1.5 text-xs"
@@ -298,216 +358,43 @@ export const ReceiptTicketPanel = ({
 
       {/* VISTA: FACTURA ELECTRÓNICA OFICIAL ARCA */}
       {showInvoice && hasInvoice ? (
-        <div className="rounded-xl border border-slate-300 dark:border-slate-700/90 bg-white dark:bg-slate-900 p-5 shadow-panel space-y-4">
-          {/* ENCABEZADO FISCAL CON LETRA EN EL MEDIO (NORMATIVA AFIP / ARCA) */}
-          <div className="relative border-b-2 border-slate-300 dark:border-slate-700 pb-4">
-            {/* CUADRO CENTRAL CON LA LETRA */}
-            <div className="absolute left-1/2 -top-1 -translate-x-1/2 flex flex-col items-center justify-center bg-white dark:bg-slate-900 px-3 py-1 border-2 border-slate-400 dark:border-slate-600 rounded-md shadow-xs z-10">
-              <span className="text-2xl font-black font-mono leading-none text-slate-900 dark:text-slate-100">
-                {invoice!.document_type}
-              </span>
-              <span className="text-[9px] font-mono font-bold text-slate-500 dark:text-slate-400 tracking-wider mt-0.5">
-                COD. {invoiceDocCode}
-              </span>
+        <div className="space-y-3">
+          {/* BARRA DE HERRAMIENTAS Y ACCIONES DE FACTURA (PRINT:HIDDEN) */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 print:hidden">
+            {/* SELECTOR DE COPIA */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="font-bold text-slate-600 dark:text-slate-300 mr-1">Copia:</span>
+              {(["ORIGINAL", "DUPLICADO", "TRIPLICADO", "ALL"] as const).map((copy) => (
+                <button
+                  key={copy}
+                  type="button"
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                    invoiceCopy === copy
+                      ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-xs"
+                      : "bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600"
+                  }`}
+                  onClick={() => setInvoiceCopy(copy)}
+                >
+                  {copy === "ALL" ? "Todas (3)" : copy}
+                </button>
+              ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-8 text-xs pt-2">
-              {/* LADO IZQUIERDO: EMISOR */}
-              <div className="space-y-1 pr-6">
-                <h2 className="text-base font-extrabold uppercase text-slate-900 dark:text-slate-100 leading-tight">
-                  {facturacionSettings?.issuer_tax_name || "Comercio Emisor"}
-                </h2>
-                <p className="text-slate-600 dark:text-slate-300">
-                  <span className="font-semibold">Condición IVA:</span>{" "}
-                  {facturacionSettings?.issuer_fiscal_condition || "Monotributo"}
-                </p>
-                <p className="text-slate-500 dark:text-slate-400 text-[11px]">
-                  Punto de Venta Oficial ARCA
-                </p>
-              </div>
-
-              {/* LADO DERECHO: DATOS COMPROBANTE */}
-              <div className="space-y-1 text-right pl-6">
-                <h3 className="text-sm font-bold uppercase tracking-wide text-slate-800 dark:text-slate-200">
-                  FACTURA
-                </h3>
-                <p className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
-                  Nº {invoice!.document_number}
-                </p>
-                <p className="text-slate-600 dark:text-slate-300">
-                  <span className="font-semibold">Fecha:</span>{" "}
-                  {new Date(invoice!.issue_date).toLocaleDateString("es-AR")}
-                </p>
-                <p className="font-mono text-slate-700 dark:text-slate-300">
-                  <span className="font-semibold">CUIT:</span>{" "}
-                  {facturacionSettings?.issuer_cuit || "-"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* DATOS DEL CLIENTE / RECEPTOR */}
-          <div className="rounded-lg border border-slate-200 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/60 p-3 text-xs space-y-1.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <span className="text-slate-500 dark:text-slate-400 font-medium">Receptor / Cliente: </span>
-                <span className="font-bold text-slate-900 dark:text-slate-100">
-                  {invoice!.customer_snapshot?.business_name ||
-                    invoice!.customer_snapshot?.full_name ||
-                    "Consumidor Final"}
-                </span>
-              </div>
-              <div className="font-mono">
-                <span className="text-slate-500 dark:text-slate-400 font-medium">
-                  {invoice!.customer_snapshot?.document_type?.toUpperCase() || "DNI"}:{" "}
-                </span>
-                <span className="font-semibold text-slate-900 dark:text-slate-100">
-                  {invoice!.customer_snapshot?.document_number || "0"}
-                </span>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 text-slate-600 dark:text-slate-300">
-              <div>
-                <span className="text-slate-500 dark:text-slate-400 font-medium">Condición frente al IVA: </span>
-                <span>{invoice!.customer_snapshot?.fiscal_condition || "Consumidor final"}</span>
-              </div>
-              <div>
-                <span className="text-slate-500 dark:text-slate-400 font-medium">Domicilio: </span>
-                <span>{invoice!.customer_snapshot?.address || "No especificado"}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* TABLA DE PRODUCTOS / ITEMS FACTURADOS */}
-          <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold border-b border-slate-200 dark:border-slate-700">
-                <tr>
-                  <th className="py-2 px-3">Descripción</th>
-                  <th className="py-2 px-3 text-right">Cant.</th>
-                  <th className="py-2 px-3 text-right">Precio Unit.</th>
-                  <th className="py-2 px-3 text-right">Subtotal</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-sans">
-                {invoice!.items_snapshot.map((it, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                    <td className="py-2 px-3 font-medium text-slate-800 dark:text-slate-200">
-                      {it.product_name}
-                    </td>
-                    <td className="py-2 px-3 text-right font-mono text-slate-600 dark:text-slate-400">
-                      {it.quantity.toLocaleString("es-AR")}
-                    </td>
-                    <td className="py-2 px-3 text-right font-mono text-slate-600 dark:text-slate-400">
-                      {currency.format(it.unit_price)}
-                    </td>
-                    <td className="py-2 px-3 text-right font-mono font-semibold text-slate-900 dark:text-slate-100">
-                      {currency.format(it.total)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* TOTALES */}
-          <div className="flex flex-col items-end gap-1 text-xs pt-1 border-t border-slate-200 dark:border-slate-700">
-            <div className="flex justify-between w-48 text-slate-600 dark:text-slate-400">
-              <span>Subtotal:</span>
-              <span className="font-mono font-medium">{currency.format(invoice!.subtotal)}</span>
-            </div>
-            {invoice!.tax_total > 0 && (
-              <div className="flex justify-between w-48 text-slate-600 dark:text-slate-400">
-                <span>IVA:</span>
-                <span className="font-mono font-medium">{currency.format(invoice!.tax_total)}</span>
-              </div>
-            )}
-            <div className="flex justify-between w-56 text-sm font-bold text-slate-900 dark:text-slate-100 pt-1 border-t border-slate-200 dark:border-slate-700">
-              <span>Total Facturado:</span>
-              <span className="font-kpi text-base text-emerald-600 dark:text-emerald-400">
-                {currency.format(invoice!.total)}
-              </span>
-            </div>
-          </div>
-
-          {/* PIE FISCAL OFICIAL ARCA (CAE + VTO + QR CODE) */}
-          <footer className="rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/70 p-4">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="space-y-1.5 text-xs w-full sm:w-auto">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-slate-700 dark:text-slate-300">CAE:</span>
-                  <span className="font-mono font-bold text-sm text-slate-900 dark:text-slate-100">
-                    {invoice!.cae || invoice!.arca_reference || "En trámite"}
-                  </span>
-                  <span
-                    className={
-                      invoice!.arca_status === "accepted"
-                        ? "ui-badge ui-badge--success text-[10px]"
-                        : invoice!.arca_status === "rejected"
-                          ? "ui-badge ui-badge--danger text-[10px]"
-                          : "ui-badge ui-badge--warn text-[10px]"
-                    }
-                  >
-                    ARCA {invoice!.arca_status.toUpperCase()}
-                  </span>
-                </div>
-
-                {invoice!.cae_due_date ? (
-                  <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                    <span className="font-medium">Fecha de Vto. de CAE:</span>
-                    <span className="font-mono font-semibold">{invoice!.cae_due_date}</span>
-                  </div>
-                ) : null}
-
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Comprobante Autorizado por ARCA (Agencia de Recaudación y Control Aduanero)
-                </p>
-
-                {invoice!.qr_data_url ? (
-                  <div className="pt-1">
-                    <a
-                      href={invoice!.qr_data_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline"
-                    >
-                      <ExternalLink size={12} /> Verificar validez en portal oficial de ARCA
-                    </a>
-                  </div>
-                ) : null}
-              </div>
-
-              {/* QR CODE VECTORIAL OFICIAL */}
-              {invoice!.qr_data_url ? (
-                <div className="bg-white p-2.5 rounded-lg border border-slate-300 shadow-xs flex flex-col items-center shrink-0">
-                  <QRCodeSVG value={invoice!.qr_data_url} size={96} level="M" />
-                  <span className="text-[9px] font-mono font-bold text-slate-700 uppercase mt-1">
-                    ARCA QR
-                  </span>
-                </div>
-              ) : (
-                <div className="bg-slate-100 dark:bg-slate-700/50 p-3 rounded-lg border border-dashed border-slate-300 dark:border-slate-600 flex flex-col items-center justify-center text-center w-24 h-24 shrink-0">
-                  <QrCode size={28} className="text-slate-400" />
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">Sin QR</span>
-                </div>
-              )}
-            </div>
-
-            {/* BOTONES DE ACCIÓN */}
-            <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-700/80 flex flex-wrap gap-2">
+            {/* BOTONES DE IMPRESIÓN Y DESCARGA */}
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 className="ui-btn-primary flex items-center gap-1.5 text-xs"
                 onClick={printDocument}
               >
-                <Printer size={14} /> Imprimir factura
+                <Printer size={14} /> Imprimir Factura / PDF
               </button>
               <button
                 type="button"
                 className="ui-btn-ghost flex items-center gap-1.5 text-xs"
                 onClick={downloadInvoice}
               >
-                <Download size={14} /> Descargar comprobante
+                <Download size={14} /> Descargar .txt
               </button>
               {onClose ? (
                 <button
@@ -519,19 +406,35 @@ export const ReceiptTicketPanel = ({
                 </button>
               ) : null}
             </div>
-          </footer>
+          </div>
+
+          {/* HOJA OFICIAL ARCA */}
+          <ArcaInvoiceSheet
+            invoice={resolvedInvoice!}
+            facturacionSettings={facturacionSettings}
+            businessSettings={businessSettings}
+            copiesMode={invoiceCopy}
+            paymentMethodLabel={getPaymentMethodLabel(receipt.payment_method)}
+          />
         </div>
       ) : null}
 
       {showInvoice && !hasInvoice ? (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 p-4 text-center text-sm text-slate-600 dark:text-slate-300">
-          <FileText size={28} className="mx-auto mb-2 text-slate-400" />
-          <p className="font-semibold text-slate-800 dark:text-slate-200">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/60 p-6 text-center text-sm text-slate-600 dark:text-slate-300 space-y-2">
+          <FileText size={32} className="mx-auto text-slate-400" />
+          <p className="font-bold text-slate-800 dark:text-slate-200 text-base">
             Este comprobante no tiene factura fiscal asociada
           </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Podés emitir una Factura Electrónica ARCA seleccionando el comprobante en la tabla.
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+            Podés emitir una Factura Electrónica ARCA oficial seleccionando el comprobante en el módulo de Comprobantes o desde Facturación.
           </p>
+          {onClose ? (
+            <div className="pt-2">
+              <button type="button" className="ui-btn-ghost text-xs" onClick={onClose}>
+                Cerrar
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </article>

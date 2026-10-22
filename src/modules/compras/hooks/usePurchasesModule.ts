@@ -419,6 +419,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     setPurchaseVatPercent(0);
     setPurchaseIibbPercent(0);
     setPurchaseIibbAmount(0);
+    setPurchaseExtraTaxAmount(0);
   };
 
   const summary: PurchaseSummary = useMemo(() => {
@@ -444,7 +445,8 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         ? purchaseIibbAmount
         : roundAmount(subtotal * ((purchaseIibbPercent || 0) / 100));
     const iibbTotal = roundAmount(calculatedIibb);
-    const total = roundAmount(subtotal + vatTotal + iibbTotal);
+    const extraTaxTotal = roundAmount(purchaseExtraTaxAmount || 0);
+    const total = roundAmount(subtotal + vatTotal + iibbTotal + extraTaxTotal);
     totalUnits = roundQty(totalUnits);
     totalDiscountAmount = roundAmount(totalDiscountAmount);
 
@@ -454,11 +456,13 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       vatTotal,
       iibbPercent: purchaseIibbPercent,
       iibbTotal,
+      extraTaxAmount: purchaseExtraTaxAmount,
+      extraTaxTotal,
       total,
       totalUnits,
       totalDiscountAmount,
     };
-  }, [cart, purchaseVatPercent, purchaseIibbPercent, purchaseIibbAmount]);
+  }, [cart, purchaseVatPercent, purchaseIibbPercent, purchaseIibbAmount, purchaseExtraTaxAmount]);
 
   const confirmPurchase = async (
     headerOrCheckoutValues: PurchaseHeaderValues | PurchaseCheckoutValues,
@@ -660,6 +664,9 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         headerValues.vatPercent > 0 ? `IVA ${headerValues.vatPercent}%: $${summary.vatTotal.toFixed(2)}` : null,
         (summary.iibbTotal ?? 0) > 0
           ? `Percep. IIBB${headerValues.iibbPercent > 0 ? ` ${headerValues.iibbPercent}%` : ""}: $${(summary.iibbTotal ?? 0).toFixed(2)}`
+          : null,
+        (summary.extraTaxTotal ?? 0) > 0
+          ? `Imp. Agregado: $${(summary.extraTaxTotal ?? 0).toFixed(2)}`
           : null,
       ].filter(Boolean);
       const fiscalNotes = fiscalParts.length > 0 ? `[Fiscal: ${fiscalParts.join(" | ")}]` : null;

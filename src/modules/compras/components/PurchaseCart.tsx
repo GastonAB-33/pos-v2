@@ -11,6 +11,7 @@ import {
   Package,
   PackagePlus,
   Percent,
+  Receipt,
   Search,
   ShoppingBag,
   Tag,
@@ -1175,173 +1176,223 @@ export const PurchaseCart = ({
         </div>
       )}
 
-      {/* Resumen Total y Botón de Confirmación Responsivo para Móvil (al final de la compra) */}
-      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/90 p-3.5 sm:p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/80 w-full max-w-full overflow-hidden">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between w-full max-w-full">
-          {/* Grid de Totales e Impuestos: fila 1 (IVA y Neto), fila 2 (IIBB), fila 3 (Imp. Agregado y Total) */}
-          <div className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_auto] items-center gap-x-2.5 sm:gap-x-4 gap-y-2 text-xs w-full max-w-full">
-            {/* Fila 1, Columna 1: % IVA */}
-            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/90">
-              <span className="flex items-center justify-center rounded bg-blue-50 dark:bg-blue-950/60 p-1 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50" title="Porcentaje de IVA">
-                <Percent className="h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={2.5} />
-              </span>
-              <label
-                htmlFor="purchase-vat-input"
-                className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 cursor-pointer"
-              >
-                IVA:
-              </label>
-              <div className="flex items-center">
-                <input
-                  id="purchase-vat-input"
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  data-lpignore="true"
-                  value={vatDraft ?? (vatPercent === 0 ? "0" : vatPercent.toString())}
-                  onFocus={handleNumericInputFocus}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    setVatDraft(raw);
-                    const val = raw.trim().replace(",", ".");
-                    if (val === "") {
-                      onVatPercentChange?.(0);
-                    } else {
-                      const parsed = Number(val);
-                      if (!isNaN(parsed) && parsed >= 0) {
-                        onVatPercentChange?.(Math.min(100, parsed));
-                      }
-                    }
-                  }}
-                  onBlur={() => setVatDraft(null)}
-                  disabled={disabled || !canWrite}
-                  placeholder="0"
-                  className="w-14 sm:w-16 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-center text-xs sm:text-sm font-bold text-slate-900 transition focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
-                />
-              </div>
-              <span className="font-bold text-[11px] sm:text-xs text-blue-700 dark:text-blue-400 whitespace-nowrap">
-                ({currency.format(summary.vatTotal)})
-              </span>
-            </div>
+      {/* Resumen Total y Botón de Confirmación Responsivo (al final de la compra) */}
+      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/90 p-3.5 sm:p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-800/80 w-full max-w-full">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between w-full max-w-full">
+          {/* LADO IZQUIERDO: Configuración de Impuestos y Percepciones */}
+          <div className="flex flex-col gap-2 flex-1 max-w-md w-full">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Impuestos y percepciones
+            </span>
 
-            {/* Fila 1, Columna 2: Subtotal neto */}
-            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap justify-self-end">
-              <span className="text-slate-500 dark:text-slate-400">Neto:</span>
-              <strong className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">
-                {currency.format(summary.subtotal)}
-              </strong>
-            </div>
-
-            {/* Fila 2, Columna 1: IIBB con selector dual (% o $) */}
-            <DualRateAmountInput
-              id="purchase-iibb-input"
-              label="IIBB"
-              mode={iibbMode}
-              onModeChange={setIibbMode}
-              percentValue={iibbPercent}
-              amountValue={iibbAmount > 0 ? iibbAmount : summary.iibbTotal ?? 0}
-              baseTotal={summary.subtotal}
-              onPercentChange={(val) => {
-                onIibbPercentChange?.(val);
-                onIibbAmountChange?.(0);
-              }}
-              onAmountChange={(val) => {
-                onIibbAmountChange?.(val);
-                const derivedPercent = summary.subtotal > 0 ? (val / summary.subtotal) * 100 : 0;
-                onIibbPercentChange?.(Math.min(100, Math.round(derivedPercent * 100) / 100));
-              }}
-              disabled={disabled || !canWrite}
-              accentColor="amber"
-            />
-
-            {/* Fila 2, Columna 2: Descuentos / Ahorro */}
-            <div className="flex items-center justify-end justify-self-end">
-              {summary.totalDiscountAmount != null && summary.totalDiscountAmount > 0 ? (
-                <div className="rounded-md border border-amber-300 bg-amber-100/80 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                  Ahorro: +{currency.format(summary.totalDiscountAmount)}
+            <div className="flex flex-col gap-2">
+              {/* 1. IVA */}
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-900/90 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="flex items-center justify-center rounded bg-blue-50 dark:bg-blue-950/60 p-1 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-900/50"
+                    title="Porcentaje de IVA"
+                  >
+                    <Percent className="h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={2.5} />
+                  </span>
+                  <label
+                    htmlFor="purchase-vat-input"
+                    className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 cursor-pointer"
+                  >
+                    IVA:
+                  </label>
+                  <div className="flex items-center">
+                    <input
+                      id="purchase-vat-input"
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-lpignore="true"
+                      value={vatDraft ?? (vatPercent === 0 ? "0" : vatPercent.toString())}
+                      onFocus={handleNumericInputFocus}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setVatDraft(raw);
+                        const val = raw.trim().replace(",", ".");
+                        if (val === "") {
+                          onVatPercentChange?.(0);
+                        } else {
+                          const parsed = Number(val);
+                          if (!isNaN(parsed) && parsed >= 0) {
+                            onVatPercentChange?.(Math.min(100, parsed));
+                          }
+                        }
+                      }}
+                      onBlur={() => setVatDraft(null)}
+                      disabled={disabled || !canWrite}
+                      placeholder="0"
+                      className="w-16 rounded border border-slate-300 bg-white px-2 py-0.5 text-center text-xs sm:text-sm font-bold text-slate-900 transition focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
+                    />
+                  </div>
                 </div>
-              ) : null}
-            </div>
-
-            {/* Fila 3, Columna 1: Impuesto Agregado (solo por monto) */}
-            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/90">
-              <span
-                className="flex items-center justify-center rounded bg-purple-50 dark:bg-purple-950/60 p-1 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-900/50"
-                title="Impuesto por monto fijo"
-              >
-                <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={2.5} />
-              </span>
-              <label
-                htmlFor="purchase-extra-tax-input"
-                className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 cursor-pointer"
-                title="Impuesto agregado o percepción adicional por monto fijo"
-              >
-                Imp. Agregado:
-              </label>
-              <div className="flex items-center">
-                <input
-                  id="purchase-extra-tax-input"
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  data-lpignore="true"
-                  value={extraTaxDraft ?? (extraTaxAmount === 0 ? "0" : extraTaxAmount.toString())}
-                  onFocus={handleNumericInputFocus}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    setExtraTaxDraft(raw);
-                    const val = raw.trim().replace(",", ".");
-                    if (val === "") {
-                      onExtraTaxAmountChange?.(0);
-                    } else {
-                      const parsed = Number(val);
-                      if (!isNaN(parsed) && parsed >= 0) {
-                        onExtraTaxAmountChange?.(Math.round(parsed * 100) / 100);
-                      }
-                    }
-                  }}
-                  onBlur={() => setExtraTaxDraft(null)}
-                  disabled={disabled || !canWrite}
-                  placeholder="0"
-                  className="w-14 sm:w-16 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-center text-xs sm:text-sm font-bold text-slate-900 transition focus:border-purple-500 focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
-                />
+                <span className="font-bold text-[11px] sm:text-xs text-blue-700 dark:text-blue-400 whitespace-nowrap">
+                  ({currency.format(summary.vatTotal)})
+                </span>
               </div>
-              <span className="font-bold text-[11px] sm:text-xs text-purple-700 dark:text-purple-400 whitespace-nowrap">
-                ({currency.format(summary.extraTaxTotal ?? 0)})
-              </span>
-            </div>
 
-            {/* Fila 3, Columna 2: Total a pagar */}
-            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap justify-self-end">
-              <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Total:</span>
-              <strong className="text-base sm:text-lg font-black text-brand-700 dark:text-brand-400">
-                {currency.format(summary.total)}
-              </strong>
+              {/* 2. IIBB con selector dual (% o $) */}
+              <DualRateAmountInput
+                id="purchase-iibb-input"
+                label="IIBB"
+                mode={iibbMode}
+                onModeChange={setIibbMode}
+                percentValue={iibbPercent}
+                amountValue={iibbAmount > 0 ? iibbAmount : summary.iibbTotal ?? 0}
+                baseTotal={summary.subtotal}
+                onPercentChange={(val) => {
+                  onIibbPercentChange?.(val);
+                  onIibbAmountChange?.(0);
+                }}
+                onAmountChange={(val) => {
+                  onIibbAmountChange?.(val);
+                  const derivedPercent = summary.subtotal > 0 ? (val / summary.subtotal) * 100 : 0;
+                  onIibbPercentChange?.(Math.min(100, Math.round(derivedPercent * 100) / 100));
+                }}
+                disabled={disabled || !canWrite}
+                accentColor="amber"
+              />
+
+              {/* 3. Impuesto Agregado (por monto fijo) */}
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-900/90 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="flex items-center justify-center rounded bg-purple-50 dark:bg-purple-950/60 p-1 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-900/50"
+                    title="Impuesto por monto fijo"
+                  >
+                    <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={2.5} />
+                  </span>
+                  <label
+                    htmlFor="purchase-extra-tax-input"
+                    className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 cursor-pointer"
+                    title="Impuesto agregado o percepción adicional por monto fijo"
+                  >
+                    Imp. Agregado:
+                  </label>
+                  <div className="flex items-center">
+                    <input
+                      id="purchase-extra-tax-input"
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      min="0"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-lpignore="true"
+                      value={extraTaxDraft ?? (extraTaxAmount === 0 ? "0" : extraTaxAmount.toString())}
+                      onFocus={handleNumericInputFocus}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setExtraTaxDraft(raw);
+                        const val = raw.trim().replace(",", ".");
+                        if (val === "") {
+                          onExtraTaxAmountChange?.(0);
+                        } else {
+                          const parsed = Number(val);
+                          if (!isNaN(parsed) && parsed >= 0) {
+                            onExtraTaxAmountChange?.(Math.round(parsed * 100) / 100);
+                          }
+                        }
+                      }}
+                      onBlur={() => setExtraTaxDraft(null)}
+                      disabled={disabled || !canWrite}
+                      placeholder="0.00"
+                      className="w-20 sm:w-24 rounded border border-slate-300 bg-white px-2 py-0.5 text-center text-xs sm:text-sm font-bold text-slate-900 transition focus:border-purple-500 focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
+                    />
+                  </div>
+                </div>
+                <span className="font-bold text-[11px] sm:text-xs text-purple-700 dark:text-purple-400 whitespace-nowrap">
+                  ({currency.format(summary.extraTaxTotal ?? 0)})
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Botón de confirmación / pago */}
-          <button
-            type="submit"
-            form={formId}
-            disabled={disabled || !canWrite || items.length === 0}
-            title={items.length === 0 ? "Agregá productos al carrito para proceder al pago" : "Proceder al registro del pago"}
-            className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-brand-500 dark:hover:bg-brand-600"
-          >
-            <span>Proceder al pago</span>
-            <ArrowRight className="h-5 w-5" strokeWidth={2.5} />
-          </button>
+          {/* LADO DERECHO: Detalle de Pago Completo + Botón Proceder al Pago */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 shrink-0 justify-end w-full lg:w-auto">
+            {/* Panel de desglose de liquidación / pago */}
+            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/90 p-3 sm:p-3.5 shadow-sm min-w-[260px] sm:min-w-[280px] space-y-1.5 text-xs">
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1">
+                  <Receipt className="h-3 w-3 text-slate-400 dark:text-slate-500" />
+                  Detalle de pago
+                </span>
+                {summary.totalDiscountAmount != null && summary.totalDiscountAmount > 0 && (
+                  <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 lowercase first-letter:uppercase">
+                    Ahorro: +{currency.format(summary.totalDiscountAmount)}
+                  </span>
+                )}
+              </div>
+
+              {/* 1. Neto */}
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Neto:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  {currency.format(summary.subtotal)}
+                </span>
+              </div>
+
+              {/* 2. IVA */}
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 dark:text-slate-400 font-medium">
+                  IVA {vatPercent > 0 ? `(${vatPercent}%)` : ""}:
+                </span>
+                <span className="font-semibold text-blue-700 dark:text-blue-400">
+                  +{currency.format(summary.vatTotal)}
+                </span>
+              </div>
+
+              {/* 3. IIBB */}
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 dark:text-slate-400 font-medium">
+                  IIBB {iibbMode === "percent" && iibbPercent > 0 ? `(${iibbPercent}%)` : ""}:
+                </span>
+                <span className="font-semibold text-amber-700 dark:text-amber-400">
+                  +{currency.format(summary.iibbTotal ?? 0)}
+                </span>
+              </div>
+
+              {/* 4. Impuesto Agregado */}
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Imp. Agregado:</span>
+                <span className="font-semibold text-purple-700 dark:text-purple-400">
+                  +{currency.format(summary.extraTaxTotal ?? 0)}
+                </span>
+              </div>
+
+              {/* Línea divisoria y Total */}
+              <div className="border-t border-slate-200 dark:border-slate-700 pt-1.5 mt-1 flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Total a pagar:</span>
+                <span className="text-base sm:text-lg font-black text-brand-700 dark:text-brand-400">
+                  {currency.format(summary.total)}
+                </span>
+              </div>
+            </div>
+
+            {/* Botón de confirmación / pago */}
+            <button
+              type="submit"
+              form={formId}
+              disabled={disabled || !canWrite || items.length === 0}
+              title={items.length === 0 ? "Agregá productos al carrito para proceder al pago" : "Proceder al registro del pago"}
+              className="inline-flex h-10 px-4 py-2 items-center justify-center gap-2 rounded-lg bg-brand-600 font-bold text-xs text-white shadow-sm transition hover:bg-brand-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-brand-500 dark:hover:bg-brand-600 cursor-pointer shrink-0 w-full sm:w-auto"
+            >
+              <span>Proceder al pago</span>
+              <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
+            </button>
+          </div>
         </div>
       </div>
     </section>

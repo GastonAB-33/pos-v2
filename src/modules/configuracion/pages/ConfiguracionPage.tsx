@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { LoadingState } from "@/components/ui/UiStates";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
@@ -6,6 +6,7 @@ import {
   Activity,
   AlertTriangle,
   AppWindow,
+  Ban,
   Building2,
   Calculator,
   CheckCircle2,
@@ -14,8 +15,10 @@ import {
   ExternalLink,
   FileText,
   Key,
+  Lock,
   Package,
   Palette,
+  Plus,
   RefreshCw,
   Save,
   Scale,
@@ -25,14 +28,17 @@ import {
   ShoppingCart,
   Sparkles,
   Store,
+  Tag,
   Type,
   Users,
   Wallet,
+  X,
 } from "lucide-react";
 import { ArcaCertificateWizardModal } from "@/modules/configuracion/components/ArcaCertificateWizardModal";
 import { ArcaAccountantGuideModal } from "@/modules/configuracion/components/ArcaAccountantGuideModal";
 import { downloadFile } from "@/modules/configuracion/utils/arca-certificate-helper";
 import { arcaService } from "@/services/arca.service";
+import { productsService } from "@/services/products.service";
 import { broadcastEntityRequirementsChanged } from "@/modules/configuracion/hooks/useEntityRequirements";
 import { parseScaleBarcode } from "@/services/barcode/scale-barcode.service";
 import { useAuthStore } from "@/features/auth/store/auth.store";
@@ -89,6 +95,7 @@ interface ConfiguracionScopePreset {
     codigos_balanza: boolean;
     apariencia: boolean;
     sistema: boolean;
+    empleados: boolean;
   };
 }
 
@@ -108,11 +115,12 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       codigos_balanza: true,
       apariencia: true,
       sistema: true,
+      empleados: true,
     },
   },
   agenda: {
-    title: "Configuración de Agenda",
-    description: "Configuraciones relacionadas con agenda y datos base del negocio",
+    title: "Configuración de Agenda y Personal",
+    description: "Configuraciones del negocio, beneficios y cuenta corriente de empleados",
     permissionModule: "configuracion_agenda",
     allowSaveAll: false,
     visibleSections: {
@@ -125,6 +133,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       codigos_balanza: false,
       apariencia: false,
       sistema: false,
+      empleados: true,
     },
   },
   catalogo: {
@@ -142,6 +151,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       codigos_balanza: true,
       apariencia: false,
       sistema: false,
+      empleados: false,
     },
   },
   analisis: {
@@ -159,6 +169,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       codigos_balanza: false,
       apariencia: false,
       sistema: false,
+      empleados: false,
     },
   },
   sistema: {
@@ -176,6 +187,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       codigos_balanza: false,
       apariencia: true,
       sistema: true,
+      empleados: false,
     },
   },
   contable: {
@@ -193,6 +205,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       codigos_balanza: false,
       apariencia: false,
       sistema: false,
+      empleados: false,
     },
   },
 };
@@ -206,7 +219,8 @@ type ConfigTabKey =
   | "facturacion"
   | "contableCatalogos"
   | "codigos_balanza"
-  | "sistema";
+  | "sistema"
+  | "empleados";
 
 interface ConfigTabDefinition {
   id: ConfigTabKey;
@@ -219,6 +233,7 @@ interface ConfigTabDefinition {
 const configTabs: ConfigTabDefinition[] = [
   { id: "negocio", label: "Negocio", icon: Store, description: "Datos comerciales y de contacto" },
   { id: "pos", label: "Punto de Venta", icon: ShoppingCart, description: "Comportamiento de caja y scanner" },
+  { id: "empleados", label: "Empleados y Cta. Cte.", icon: Users, badge: "Personal", description: "Descuento en compras y categorías excluidas" },
   { id: "apariencia", label: "Apariencia y Letra", icon: Palette, badge: "Accesibilidad", description: "Tema y tamaño de letra/interfaz" },
   { id: "caja", label: "Caja y Tesorería", icon: Wallet, description: "Sesiones y movimientos iniciales" },
   { id: "stock", label: "Stock e Inventario", icon: Package, description: "Alertas y umbrales de stock" },
@@ -414,6 +429,91 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
       await handleSaveSection("facturacion", updatedFacturacion);
     }
   };
+
+  // Permiso para modificar beneficios de empleados (solo administradores del sistema)
+  const isAdminUser = useMemo(() => {
+    if (!user) return false;
+    const role = (user.role || "").toLowerCase();
+    const profileName = (user.permissionProfileName || "").toLowerCase();
+    return (
+      role === "admin" ||
+      role === "owner" ||
+      role === "superadmin" ||
+      role === "platform_admin" ||
+      profileName.includes("admin") ||
+      profileName.includes("dueño") ||
+      profileName.includes("propietario")
+    );
+  }, [user]);
+
+  const canModifyEmployeeBenefits = canWriteConfiguracion && isAdminUser;
+
+  // Categorías de productos del comercio para exclusión rápida
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [newExcludedCategoryInput, setNewExcludedCategoryInput] = useState("");
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let isMounted = true;
+    productsService
+      .getAllByTenant(tenantId)
+      .then((prods) => {
+        if (!isMounted) return;
+        const set = new Set<string>();
+        (prods || []).forEach((p) => {
+          if (p.category && p.category.trim()) {
+            set.add(p.category.trim());
+          }
+        });
+        setAvailableCategories(Array.from(set).sort((a, b) => a.localeCompare(b)));
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [tenantId]);
+
+  const handleToggleExcludedCategory = (categoryName: string) => {
+    if (!canModifyEmployeeBenefits || !draft?.pos) return;
+    const trimmed = categoryName.trim();
+    if (!trimmed) return;
+
+    const currentList = draft.pos.employee_discount_excluded_categories ?? [];
+    const exists = currentList.some((c) => c.toLowerCase() === trimmed.toLowerCase());
+    const nextList = exists
+      ? currentList.filter((c) => c.toLowerCase() !== trimmed.toLowerCase())
+      : [...currentList, trimmed];
+
+    updateSection("pos", {
+      employee_discount_excluded_categories: nextList,
+    });
+  };
+
+  const handleAddCustomExcludedCategory = () => {
+    if (!canModifyEmployeeBenefits || !draft?.pos) return;
+    const trimmed = newExcludedCategoryInput.trim();
+    if (!trimmed) return;
+
+    const currentList = draft.pos.employee_discount_excluded_categories ?? [];
+    if (!currentList.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
+      updateSection("pos", {
+        employee_discount_excluded_categories: [...currentList, trimmed],
+      });
+    }
+    setNewExcludedCategoryInput("");
+  };
+
+  const allDisplayedCategories = useMemo(() => {
+    const set = new Set<string>();
+    (draft?.pos?.employee_discount_excluded_categories ?? []).forEach((c) => {
+      if (c && c.trim()) set.add(c.trim());
+    });
+    availableCategories.forEach((c) => {
+      if (c && c.trim()) set.add(c.trim());
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [draft?.pos?.employee_discount_excluded_categories, availableCategories]);
 
   const visibleTabs = useMemo(
     () => configTabs.filter((tab) => scopePreset.visibleSections[tab.id]),
@@ -842,6 +942,203 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
           </div>
         </section>
 
+        {/* SECCIÓN: BENEFICIOS Y CUENTA CORRIENTE DE EMPLEADOS */}
+        <section
+          className="ui-card space-y-5"
+          hidden={!scopePreset.visibleSections.empleados || (visibleTabs.length > 1 && activeTab !== "empleados")}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400">
+                <Users size={20} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    Descuento y Beneficios para Empleados
+                  </h2>
+                  <span className="rounded-full bg-indigo-100 dark:bg-indigo-950 px-2 py-0.5 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                    Cta. Cte. Personal
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Porcentaje fijo de bonificación para retiros a cuenta corriente y exclusión de categorías
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="ui-btn-ghost"
+                onClick={() => { void resetSection("pos"); }}
+                disabled={!canModifyEmployeeBenefits || savingSection.pos}
+              >
+                Restablecer
+              </button>
+              <button
+                type="button"
+                className="ui-btn-primary bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white"
+                onClick={() => { void handleSaveSection("pos"); }}
+                disabled={!canModifyEmployeeBenefits || savingSection.pos}
+              >
+                {savingSection.pos ? "Guardando..." : "Guardar Beneficios"}
+              </button>
+            </div>
+          </div>
+
+          {/* Banner si el usuario actual NO es administrador */}
+          {!isAdminUser && (
+            <div className="flex items-center gap-2.5 rounded-xl border border-amber-300 dark:border-amber-800/80 bg-amber-50 dark:bg-amber-950/40 p-3.5 text-xs text-amber-900 dark:text-amber-200">
+              <ShieldAlert size={18} className="shrink-0 text-amber-600 dark:text-amber-400" />
+              <div>
+                <p className="font-bold">Acceso en modo solo lectura</p>
+                <p className="text-amber-800 dark:text-amber-300">
+                  Solo los usuarios con rol de <strong>Administrador</strong> pueden modificar el porcentaje de descuento fijo y las categorías excluidas de empleados.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Tarjeta 1: Porcentaje Fijo de Descuento */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Tag size={16} className="text-indigo-600 dark:text-indigo-400" />
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Porcentaje Fijo de Descuento para Empleados (%)
+                  </label>
+                  {!canModifyEmployeeBenefits && (
+                    <span className="flex items-center gap-1 rounded bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-400">
+                      <Lock size={10} /> Solo Admins
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl">
+                  Se aplica automáticamente cuando un empleado compra o retira productos a su cuenta corriente (ej. 10%). Si un empleado tiene un porcentaje particular cargado en su ficha, prevalecerá su porcentaje individual.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="relative w-36">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.5}
+                    value={draft.pos.employee_discount_percent ?? 10}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      updateSection("pos", {
+                        employee_discount_percent: isNaN(val) ? 0 : Math.max(0, Math.min(100, val)),
+                      });
+                    }}
+                    disabled={!canModifyEmployeeBenefits}
+                    className="ui-input pr-8 text-right font-bold font-mono text-base border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
+                  />
+                  <span className="absolute right-3.5 top-2.5 text-sm font-bold text-slate-400 dark:text-slate-500 pointer-events-none">
+                    %
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Tarjeta 2: Categorías Excluidas del Descuento (Minimalista) */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4 space-y-3">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <Ban size={15} className="text-rose-600 dark:text-rose-400" />
+                <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Categorías Excluidas del Descuento
+                </h3>
+                {(draft.pos.employee_discount_excluded_categories ?? []).length > 0 && (
+                  <span className="rounded-full bg-rose-100 dark:bg-rose-950 px-2 py-0.5 text-[10px] font-bold text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                    {(draft.pos.employee_discount_excluded_categories ?? []).length} excluidas
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Hacé clic sobre cualquier categoría para excluirla del descuento o volver a incluirla.
+              </p>
+            </div>
+
+            {/* Chips unificados de categorías + Input inline */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              {allDisplayedCategories.map((cat) => {
+                const isExcluded = (draft.pos.employee_discount_excluded_categories ?? []).some(
+                  (c) => c.toLowerCase() === cat.toLowerCase()
+                );
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => handleToggleExcludedCategory(cat)}
+                    disabled={!canModifyEmployeeBenefits}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition cursor-pointer border select-none ${
+                      isExcluded
+                        ? "border-rose-400 dark:border-rose-700 bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200 shadow-2xs"
+                        : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-600 hover:text-slate-900 dark:hover:text-white"
+                    } ${!canModifyEmployeeBenefits ? "opacity-60 cursor-not-allowed" : ""}`}
+                    title={
+                      isExcluded
+                        ? `Clic para reactivar descuento en ${cat}`
+                        : `Clic para excluir ${cat} del descuento`
+                    }
+                  >
+                    {isExcluded ? (
+                      <>
+                        <X size={12} className="text-rose-600 dark:text-rose-400" />
+                        <span>{cat}</span>
+                        <span className="text-[10px] font-bold opacity-80">(Sin desc.)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus size={12} className="text-slate-400" />
+                        <span>{cat}</span>
+                      </>
+                    )}
+                  </button>
+                );
+              })}
+
+              {/* Input inline para escribir otra categoría */}
+              {canModifyEmployeeBenefits && (
+                <div className="inline-flex items-center gap-1">
+                  <input
+                    type="text"
+                    value={newExcludedCategoryInput}
+                    onChange={(e) => setNewExcludedCategoryInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleAddCustomExcludedCategory();
+                      }
+                    }}
+                    placeholder="+ Otra categoría..."
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-lpignore="true"
+                    className="h-7 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:border-indigo-500 focus:border-solid focus:outline-none w-36 sm:w-44"
+                  />
+                  {newExcludedCategoryInput.trim() && (
+                    <button
+                      type="button"
+                      onClick={handleAddCustomExcludedCategory}
+                      className="h-7 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold cursor-pointer"
+                    >
+                      Excluir
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
         {/* SECCIÓN: PUNTO DE VENTA (POS) */}
         <section
           className="ui-card space-y-4"
@@ -1135,9 +1432,16 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                     <Users size={18} />
                   </div>
                   <div>
-                    <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                      Descuento en compras a cuenta corriente de empleados
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                        Descuento en compras a cuenta corriente de empleados
+                      </span>
+                      {!canModifyEmployeeBenefits && (
+                        <span className="flex items-center gap-1 rounded bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-400">
+                          <Lock size={10} /> Solo Admins
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                       Porcentaje de bonificación que se aplica automáticamente cuando un empleado compra o retira productos a su cuenta corriente.
                     </p>
@@ -1159,12 +1463,94 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                         });
                       }}
                       className="ui-input pr-8 text-right font-bold font-mono"
-                      disabled={!canWriteConfiguracion}
+                      disabled={!canModifyEmployeeBenefits}
                     />
                     <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-500 dark:text-slate-400 pointer-events-none">
                       %
                     </span>
                   </div>
+                </div>
+              </div>
+
+              {/* Categorías Excluidas del Descuento (Minimalista) */}
+              <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                    <Ban size={14} className="text-rose-600 dark:text-rose-400" />
+                    <span>Categorías excluidas del descuento de empleados:</span>
+                  </div>
+                  {(draft.pos.employee_discount_excluded_categories ?? []).length > 0 && (
+                    <span className="rounded-full bg-rose-100 dark:bg-rose-950 px-2 py-0.5 text-[10px] font-bold text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                      {(draft.pos.employee_discount_excluded_categories ?? []).length} excluidas
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  {allDisplayedCategories.map((cat) => {
+                    const isExcluded = (draft.pos.employee_discount_excluded_categories ?? []).some(
+                      (c) => c.toLowerCase() === cat.toLowerCase()
+                    );
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => handleToggleExcludedCategory(cat)}
+                        disabled={!canModifyEmployeeBenefits}
+                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition cursor-pointer border select-none ${
+                          isExcluded
+                            ? "border-rose-400 dark:border-rose-700 bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200 shadow-2xs"
+                            : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-600 hover:text-slate-900 dark:hover:text-white"
+                        } ${!canModifyEmployeeBenefits ? "opacity-60 cursor-not-allowed" : ""}`}
+                        title={
+                          isExcluded
+                            ? `Clic para reactivar descuento en ${cat}`
+                            : `Clic para excluir ${cat} del descuento`
+                        }
+                      >
+                        {isExcluded ? (
+                          <>
+                            <X size={12} className="text-rose-600 dark:text-rose-400" />
+                            <span>{cat}</span>
+                            <span className="text-[10px] font-bold opacity-80">(Sin desc.)</span>
+                          </>
+                        ) : (
+                          <>
+                            <Plus size={12} className="text-slate-400" />
+                            <span>{cat}</span>
+                          </>
+                        )}
+                      </button>
+                    );
+                  })}
+
+                  {canModifyEmployeeBenefits && (
+                    <div className="inline-flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={newExcludedCategoryInput}
+                        onChange={(e) => setNewExcludedCategoryInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddCustomExcludedCategory();
+                          }
+                        }}
+                        placeholder="+ Otra categoría..."
+                        autoComplete="off"
+                        className="h-7 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:border-indigo-500 focus:border-solid focus:outline-none w-36 sm:w-44"
+                      />
+                      {newExcludedCategoryInput.trim() && (
+                        <button
+                          type="button"
+                          onClick={handleAddCustomExcludedCategory}
+                          className="h-7 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold cursor-pointer"
+                        >
+                          Excluir
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 

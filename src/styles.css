@@ -3177,3 +3177,52 @@ html.dark .ui-toast-icon--info {
   color: #38bdf8 !important;
 }
 
+
+
+/* ==========================================================================
+   ARCA / AFIP OFICIAL INVOICE PRINT STYLES
+   ========================================================================== */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm;
+  }
+
+  body:has(.arca-invoice-printable-root) {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  body:has(.arca-invoice-printable-root) * {
+    visibility: hidden;
+  }
+
+  body:has(.arca-invoice-printable-root) .arca-invoice-printable-root,
+  body:has(.arca-invoice-printable-root) .arca-invoice-printable-root * {
+    visibility: visible;
+  }
+
+  body:has(.arca-invoice-printable-root) .arca-invoice-printable-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .arca-invoice-page {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .arca-invoice-page:last-child {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+}

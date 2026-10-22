@@ -18,7 +18,8 @@ interface EmployeeCurrentAccountPanelProps {
   userId: string | null;
   employee: Employee;
   canWrite: boolean;
-  onClose: () => void;
+  onClose?: () => void;
+  hideBackButton?: boolean;
   onBalanceUpdated: () => void;
   onOpenSalaryDisbursement?: (employee: Employee) => void;
 }
@@ -62,6 +63,7 @@ export const EmployeeCurrentAccountPanel = ({
   employee,
   canWrite,
   onClose,
+  hideBackButton = false,
   onBalanceUpdated,
   onOpenSalaryDisbursement,
 }: EmployeeCurrentAccountPanelProps) => {
@@ -124,16 +126,18 @@ export const EmployeeCurrentAccountPanel = ({
 
   return (
     <section className="current-account-detail ui-card space-y-4">
-      {/* Barra de navegación superior con botón Volver */}
-      <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
-        <button
-          type="button"
-          onClick={onClose}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-        >
-          <ArrowLeft size={14} />
-          <span>Volver al listado de cuentas corrientes</span>
-        </button>
+      {/* Barra de navegación / utilidades superior */}
+      <div className={`flex items-center ${hideBackButton ? "justify-end" : "justify-between"} border-b border-slate-100 pb-3 dark:border-slate-800`}>
+        {!hideBackButton && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+          >
+            <ArrowLeft size={14} />
+            <span>Volver al listado de cuentas corrientes</span>
+          </button>
+        )}
 
         <div className="flex items-center gap-2">
           <button

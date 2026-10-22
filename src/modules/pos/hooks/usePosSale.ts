@@ -1240,7 +1240,21 @@ export const usePosSale = (tenantId: string | null) => {
       };
     });
 
-    const eligibleItems = itemsWithProductPromotions.filter((item) => !item.is_debt_payment_item);
+    const isEmployeeDiscount = cartManualDiscount?.reason === "Descuento Empleado";
+    const excludedCategories = (posSettings.employee_discount_excluded_categories || []).map((c) =>
+      c.trim().toLowerCase()
+    );
+
+    const isItemEligible = (item: PosCartItemComputed) => {
+      if (item.is_debt_payment_item) return false;
+      if (isEmployeeDiscount && item.category) {
+        const cat = item.category.trim().toLowerCase();
+        if (excludedCategories.includes(cat)) return false;
+      }
+      return true;
+    };
+
+    const eligibleItems = itemsWithProductPromotions.filter(isItemEligible);
     const subtotalAfterProductPromotions = roundAmount(
       eligibleItems.reduce((acc, item) => acc + item.line_total, 0)
     );
@@ -1274,7 +1288,7 @@ export const usePosSale = (tenantId: string | null) => {
 
     let accumulated = 0;
     const eligibleIndices = allocated
-      .map((item, idx) => (!item.is_debt_payment_item ? idx : -1))
+      .map((item, idx) => (isItemEligible(item) ? idx : -1))
       .filter((idx) => idx !== -1);
 
     for (let i = 0; i < eligibleIndices.length; i += 1) {
@@ -1299,7 +1313,7 @@ export const usePosSale = (tenantId: string | null) => {
     }
 
     return allocated;
-  }, [cartManualDiscount, cartState, promotions, promotionsResolution]);
+  }, [cartManualDiscount, cartState, promotions, promotionsResolution, posSettings.employee_discount_excluded_categories]);
 
   const debtPaymentTotal = useMemo(
     () =>
@@ -1337,9 +1351,21 @@ export const usePosSale = (tenantId: string | null) => {
 
   const manualCartDiscountTotal = useMemo(() => {
     if (!cartManualDiscount || cartManualDiscount.value <= 0) return 0;
+    const isEmployeeDiscount = cartManualDiscount.reason === "Descuento Empleado";
+    const excludedCategories = (posSettings.employee_discount_excluded_categories || []).map((c) =>
+      c.trim().toLowerCase()
+    );
+
     const eligibleSubtotal = roundAmount(
       cart
-        .filter((item) => !item.is_debt_payment_item)
+        .filter((item) => {
+          if (item.is_debt_payment_item) return false;
+          if (isEmployeeDiscount && item.category) {
+            const cat = item.category.trim().toLowerCase();
+            if (excludedCategories.includes(cat)) return false;
+          }
+          return true;
+        })
         .reduce((acc, item) => acc + item.line_subtotal - item.product_promotion_discount_total, 0)
     );
     if (eligibleSubtotal <= 0) return 0;
@@ -1347,7 +1373,7 @@ export const usePosSale = (tenantId: string | null) => {
       return roundAmount(eligibleSubtotal * (cartManualDiscount.value / 100));
     }
     return roundAmount(Math.min(eligibleSubtotal, cartManualDiscount.value));
-  }, [cart, cartManualDiscount]);
+  }, [cart, cartManualDiscount, posSettings.employee_discount_excluded_categories]);
 
   const totalPromotionDiscount = useMemo(
     () => roundAmount(promotionDiscountTotal + cartPromotionDiscountTotal),

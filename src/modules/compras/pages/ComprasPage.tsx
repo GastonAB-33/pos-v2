@@ -222,6 +222,7 @@ export const ComprasPage = () => {
     purchaseIibbAmount,
     setPurchaseIibbAmount,
     purchaseExtraTaxAmount,
+    setPurchaseExtraTaxAmount,
   } = usePurchasesModule(tenantId, user?.id ?? null);
   const toast = useToast();
   const [backgroundSavingProduct, setBackgroundSavingProduct] = useState<string | null>(null);
@@ -528,6 +529,8 @@ export const ComprasPage = () => {
               onIibbPercentChange={setPurchaseIibbPercent}
               iibbAmount={purchaseIibbAmount}
               onIibbAmountChange={setPurchaseIibbAmount}
+              extraTaxAmount={purchaseExtraTaxAmount}
+              onExtraTaxAmountChange={setPurchaseExtraTaxAmount}
               onSetQuantity={setItemQuantity}
               onSetUnitCost={setItemUnitCost}
               onSetDiscountPercent={setItemDiscountPercent}

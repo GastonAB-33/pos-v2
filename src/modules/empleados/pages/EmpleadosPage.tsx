@@ -24,6 +24,7 @@ import { AttendanceSection } from "@/modules/empleados/components/AttendanceSect
 import { EmployeeCurrentAccountsSection } from "@/modules/empleados/components/EmployeeCurrentAccountsSection";
 import { SalaryPaymentsSection } from "@/modules/empleados/components/SalaryPaymentsSection";
 import { EmployeeProductConsumptionModal } from "@/modules/empleados/components/EmployeeProductConsumptionModal";
+import { EmployeeDetailView } from "@/modules/empleados/components/EmployeeDetailView";
 import { employeeCurrentAccountsService } from "@/services/employee-current-accounts.service";
 
 type ActiveTab = "personal" | "horarios" | "cuentas-corrientes" | "sueldos";
@@ -87,13 +88,24 @@ export const EmpleadosPage = () => {
     payments,
     filteredPayments,
     totalPaid,
+    totalSalariesPaid,
+    totalAdvancesPaid,
     totalCurrentAccountDiscounts,
     selectedEmployeeId: salaryEmpFilter,
     setSelectedEmployeeId: setSalaryEmpFilter,
     selectedPeriod: salaryPeriodFilter,
     setSelectedPeriod: setSalaryPeriodFilter,
+    selectedType: salaryTypeFilter,
+    setSelectedType: setSalaryTypeFilter,
+    datePreset: salaryDatePreset,
+    setDatePreset: setSalaryDatePreset,
+    customStartDate: salaryCustomStartDate,
+    setCustomStartDate: setSalaryCustomStartDate,
+    customEndDate: salaryCustomEndDate,
+    setCustomEndDate: setSalaryCustomEndDate,
     isLoading: isLoadingSalary,
     createSalaryPayment,
+    createSalaryAdvance,
     deletePayment,
     reload: reloadSalary,
   } = useEmployeeSalaryPayments(tenantId, user?.id ?? null);
@@ -105,7 +117,13 @@ export const EmpleadosPage = () => {
     undefined
   );
 
-  // Empleado seleccionado para Cuenta Corriente
+  // Empleado seleccionado para Ver Ficha / Legajo Individual
+  const [selectedEmployeeForDetail, setSelectedEmployeeForDetail] = useState<Employee | null>(null);
+  const [detailSubTab, setDetailSubTab] = useState<
+    "horarios" | "cuenta-corriente" | "sueldos" | "legajo"
+  >("legajo");
+
+  // Empleado seleccionado para Cuenta Corriente global
   const initialEmpId = searchParams.get("empleadoId");
   const [currentAccountEmployee, setCurrentAccountEmployee] = useState<Employee | null>(null);
 
@@ -139,16 +157,53 @@ export const EmpleadosPage = () => {
     }
   };
 
+  const handleSelectEmployeeForDetail = (
+    employee: Employee,
+    subTab: "horarios" | "cuenta-corriente" | "sueldos" | "legajo" = "legajo"
+  ) => {
+    setSelectedEmployeeForDetail(employee);
+    setDetailSubTab(subTab);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("empleadoId", employee.id);
+      next.set("view", "legajo");
+      return next;
+    });
+  };
+
+  const handleBackToList = () => {
+    setSelectedEmployeeForDetail(null);
+    setCurrentAccountEmployee(null);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("empleadoId");
+      next.delete("view");
+      return next;
+    });
+  };
+
   // Sincronizar parámetro inicial de empleadoId
   useEffect(() => {
     if (initialEmpId && employees.length > 0) {
       const match = employees.find((e) => e.id === initialEmpId);
       if (match) {
-        setCurrentAccountEmployee(match);
-        setActiveTab("cuentas-corrientes");
+        const view = searchParams.get("view");
+        if (view === "legajo" || initialTab === "personal") {
+          setSelectedEmployeeForDetail(match);
+        } else if (initialTab === "cuentas-corrientes") {
+          setCurrentAccountEmployee(match);
+          setActiveTab("cuentas-corrientes");
+        }
       }
     }
-  }, [initialEmpId, employees]);
+  }, [initialEmpId, employees, initialTab, searchParams]);
+
+  useEffect(() => {
+    if (selectedEmployeeForDetail && employees.length > 0) {
+      const fresh = employees.find((e) => e.id === selectedEmployeeForDetail.id);
+      if (fresh) setSelectedEmployeeForDetail(fresh);
+    }
+  }, [employees]);
 
   const handleTabChange = (tab: ActiveTab) => {
     setActiveTab(tab);
@@ -163,14 +218,7 @@ export const EmpleadosPage = () => {
   };
 
   const handleOpenCurrentAccount = (employee: Employee) => {
-    setCurrentAccountEmployee(employee);
-    setActiveTab("cuentas-corrientes");
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set("tab", "cuentas-corrientes");
-      next.set("empleadoId", employee.id);
-      return next;
-    });
+    handleSelectEmployeeForDetail(employee, "cuenta-corriente");
   };
 
   const handleOpenSalaryDisbursementFromAccount = (employee: Employee) => {
@@ -206,214 +254,260 @@ export const EmpleadosPage = () => {
       description="Legajos de personal, control de horarios de ingreso y egreso, cuentas corrientes y liquidación de sueldos"
     >
       <div className="empleados-module space-y-4 w-full min-w-0 max-w-full">
-        {/* Barra superior de pestañas del submódulo */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-2 dark:border-slate-800">
-          <div className="flex items-center gap-1.5 overflow-x-auto">
-            <button
-              type="button"
-              onClick={() => handleTabChange("personal")}
-              className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                activeTab === "personal"
-                  ? "bg-slate-900 text-white shadow dark:bg-slate-100 dark:text-slate-900"
-                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-              }`}
-            >
-              <Users size={14} />
-              <span>Personal ({employees.length})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTabChange("horarios")}
-              className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                activeTab === "horarios"
-                  ? "bg-slate-900 text-white shadow dark:bg-slate-100 dark:text-slate-900"
-                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-              }`}
-            >
-              <Clock size={14} />
-              <span>Horarios & Asistencia</span>
-              {todayActiveByEmployee.size > 0 && (
-                <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTabChange("cuentas-corrientes")}
-              className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                activeTab === "cuentas-corrientes"
-                  ? "bg-slate-900 text-white shadow dark:bg-slate-100 dark:text-slate-900"
-                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-              }`}
-            >
-              <CreditCard size={14} />
-              <span>Cuentas Corrientes</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTabChange("sueldos")}
-              className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
-                activeTab === "sueldos"
-                  ? "bg-slate-900 text-white shadow dark:bg-slate-100 dark:text-slate-900"
-                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-              }`}
-            >
-              <Receipt size={14} />
-              <span>Saldos Pagados / Sueldos</span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <IconButton
-              icon={RefreshCw}
-              label="Recargar módulo"
-              onClick={() => void handleReloadAll()}
-              loading={isLoadingEmployees || isLoadingAttendance || isLoadingSalary}
-            />
-
-            {canWriteEmpleados && activeTab === "personal" && (
-              <button
-                type="button"
-                onClick={() => {
-                  clearEmployeesFeedback();
-                  setFormMode("create");
-                  setSelectedEmployeeForEdit(undefined);
-                  setFormModalOpen(true);
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white shadow hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
-              >
-                <PlusCircle size={14} />
-                <span>Nuevo Empleado</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {employeesFeedback && (
-          <div
-            className={
-              employeesFeedback.type === "success" ? "ui-success-state" : "ui-error-state"
-            }
-          >
-            {employeesFeedback.message}
-          </div>
-        )}
-
-        {/* CONTENIDO SEGÚN LA PESTAÑA ACTIVA */}
-
-        {/* 1. PERSONAL */}
-        {activeTab === "personal" && (
-          <div className="space-y-4">
-            {/* Buscador de Personal */}
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar empleado por nombre, DNI, legajo o puesto..."
-                  className="w-full rounded-xl border border-slate-300 pl-9 pr-3 py-1.5 text-xs focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                />
-              </div>
-              <p className="text-xs text-slate-500">
-                Mostrando {filteredEmployees.length} de {employees.length} empleados
-              </p>
-            </div>
-
-            {/* Tabla de Empleados */}
-            <EmployeesTable
-              employees={filteredEmployees}
-              todayActiveByEmployee={todayActiveByEmployee}
-              canWrite={canWriteEmpleados}
-              onOpenCurrentAccount={handleOpenCurrentAccount}
-              onOpenProductConsumption={setProductConsumptionEmployee}
-              onEdit={(emp) => {
-                clearEmployeesFeedback();
-                setFormMode("edit");
-                setSelectedEmployeeForEdit(emp);
-                setFormModalOpen(true);
-              }}
-              onDelete={async (emp) => {
-                const confirmed = window.confirm(
-                  `¿Estás seguro de eliminar al empleado ${emp.full_name}?`
-                );
-                if (!confirmed) return;
-                await deleteEmployee(emp.id);
-              }}
-              onToggleActive={(emp) => void toggleEmployeeActive(emp.id)}
-              onPunchIn={(emp) => void punchCheckIn(emp.id)}
-              onPunchOut={(attendanceId) => void punchCheckOut(attendanceId)}
-            />
-          </div>
-        )}
-
-        {/* 2. HORARIOS Y ASISTENCIA */}
-        {activeTab === "horarios" && (
-          <AttendanceSection
-            employees={employees}
-            attendances={attendances}
-            filteredAttendances={filteredAttendances}
-            todayActiveByEmployee={todayActiveByEmployee}
-            selectedEmployeeId={attendanceEmpFilter}
-            onSelectEmployeeId={setAttendanceEmpFilter}
-            filterDate={attendanceDateFilter}
-            onFilterDateChange={setAttendanceDateFilter}
-            filterStatus={attendanceStatusFilter}
-            onFilterStatusChange={setAttendanceStatusFilter}
-            canWrite={canWriteEmpleados}
-            onPunchIn={punchCheckIn}
-            onPunchOut={punchCheckOut}
-            onCreateManual={createManualAttendance}
-            onUpdateAttendance={updateAttendance}
-            onDeleteAttendance={deleteAttendance}
-          />
-        )}
-
-        {/* 3. CUENTAS CORRIENTES */}
-        {activeTab === "cuentas-corrientes" && (
-          <EmployeeCurrentAccountsSection
+        {selectedEmployeeForDetail ? (
+          <EmployeeDetailView
+            employee={selectedEmployeeForDetail}
+            allEmployees={employees}
             tenantId={tenantId}
             userId={user?.id ?? null}
-            employees={employees}
             canWrite={canWriteEmpleados}
-            selectedEmployee={currentAccountEmployee}
-            onSelectEmployee={(emp) => {
-              setCurrentAccountEmployee(emp);
-              if (!emp) {
-                setSearchParams((prev) => {
-                  const next = new URLSearchParams(prev);
-                  next.delete("empleadoId");
-                  return next;
-                });
-              }
+            initialSubTab={detailSubTab}
+            onBackToList={handleBackToList}
+            onSelectEmployee={(emp) => handleSelectEmployeeForDetail(emp, detailSubTab)}
+            onEditEmployee={(emp) => {
+              clearEmployeesFeedback();
+              setFormMode("edit");
+              setSelectedEmployeeForEdit(emp);
+              setFormModalOpen(true);
             }}
-            onBalanceUpdated={reloadEmployees}
-            onOpenSalaryDisbursement={handleOpenSalaryDisbursementFromAccount}
-          />
-        )}
-
-        {/* 4. SALDOS PAGADOS / SUELDOS */}
-        {activeTab === "sueldos" && (
-          <SalaryPaymentsSection
-            employees={employees}
+            onReloadAll={handleReloadAll}
+            attendances={attendances}
+            todayActiveShift={todayActiveByEmployee.get(selectedEmployeeForDetail.id)}
+            onPunchIn={(empId) => punchCheckIn(empId)}
+            onPunchOut={(attendanceId) => punchCheckOut(attendanceId)}
+            onCreateManualAttendance={createManualAttendance}
+            onUpdateAttendance={updateAttendance}
+            onDeleteAttendance={deleteAttendance}
             payments={payments}
-            filteredPayments={filteredPayments}
-            totalPaid={totalPaid}
-            totalCurrentAccountDiscounts={totalCurrentAccountDiscounts}
-            selectedEmployeeId={salaryEmpFilter}
-            onSelectEmployeeId={setSalaryEmpFilter}
-            selectedPeriod={salaryPeriodFilter}
-            onSelectPeriod={setSalaryPeriodFilter}
-            canWrite={canWriteEmpleados}
-            initialEmployeeForDisbursement={disbursementEmployee}
-            onDisbursementModalClosed={() => setDisbursementEmployee(null)}
             onCreateSalaryPayment={createSalaryPayment}
+            onCreateSalaryAdvance={createSalaryAdvance}
             onDeletePayment={deletePayment}
-            onBalanceUpdated={reloadEmployees}
+            onOpenProductConsumption={setProductConsumptionEmployee}
           />
+        ) : (
+          <>
+            {/* Barra superior de pestañas del submódulo */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-2 dark:border-slate-800">
+              <div className="flex items-center gap-1.5 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("personal")}
+                  className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                    activeTab === "personal"
+                      ? "bg-slate-900 text-white shadow dark:bg-slate-100 dark:text-slate-900"
+                      : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  <Users size={14} />
+                  <span>Personal ({employees.length})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("horarios")}
+                  className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                    activeTab === "horarios"
+                      ? "bg-slate-900 text-white shadow dark:bg-slate-100 dark:text-slate-900"
+                      : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  <Clock size={14} />
+                  <span>Horarios Globales</span>
+                  {todayActiveByEmployee.size > 0 && (
+                    <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("cuentas-corrientes")}
+                  className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                    activeTab === "cuentas-corrientes"
+                      ? "bg-slate-900 text-white shadow dark:bg-slate-100 dark:text-slate-900"
+                      : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  <CreditCard size={14} />
+                  <span>Cuentas Corrientes Global</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("sueldos")}
+                  className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                    activeTab === "sueldos"
+                      ? "bg-slate-900 text-white shadow dark:bg-slate-100 dark:text-slate-900"
+                      : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  <Receipt size={14} />
+                  <span>Saldos Pagados / Sueldos</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <IconButton
+                  icon={RefreshCw}
+                  label="Recargar módulo"
+                  onClick={() => void handleReloadAll()}
+                  loading={isLoadingEmployees || isLoadingAttendance || isLoadingSalary}
+                />
+
+                {canWriteEmpleados && activeTab === "personal" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearEmployeesFeedback();
+                      setFormMode("create");
+                      setSelectedEmployeeForEdit(undefined);
+                      setFormModalOpen(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white shadow hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+                  >
+                    <PlusCircle size={14} />
+                    <span>Nuevo Empleado</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {employeesFeedback && (
+              <div
+                className={
+                  employeesFeedback.type === "success" ? "ui-success-state" : "ui-error-state"
+                }
+              >
+                {employeesFeedback.message}
+              </div>
+            )}
+
+            {/* CONTENIDO SEGÚN LA PESTAÑA ACTIVA */}
+
+            {/* 1. PERSONAL */}
+            {activeTab === "personal" && (
+              <div className="space-y-4">
+                {/* Buscador de Personal */}
+                <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Buscar empleado por nombre, DNI, legajo o puesto..."
+                      className="w-full rounded-xl border border-slate-300 pl-9 pr-3 py-1.5 text-xs focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Mostrando {filteredEmployees.length} de {employees.length} empleados
+                  </p>
+                </div>
+
+                {/* Tabla de Empleados */}
+                <EmployeesTable
+                  employees={filteredEmployees}
+                  todayActiveByEmployee={todayActiveByEmployee}
+                  canWrite={canWriteEmpleados}
+                  onSelectEmployee={(emp) => handleSelectEmployeeForDetail(emp, "legajo")}
+                  onOpenCurrentAccount={handleOpenCurrentAccount}
+                  onOpenProductConsumption={setProductConsumptionEmployee}
+                  onEdit={(emp) => {
+                    clearEmployeesFeedback();
+                    setFormMode("edit");
+                    setSelectedEmployeeForEdit(emp);
+                    setFormModalOpen(true);
+                  }}
+                  onDelete={async (emp) => {
+                    const confirmed = window.confirm(
+                      `¿Estás seguro de eliminar al empleado ${emp.full_name}?`
+                    );
+                    if (!confirmed) return;
+                    await deleteEmployee(emp.id);
+                  }}
+                  onToggleActive={(emp) => void toggleEmployeeActive(emp.id)}
+                  onPunchIn={(emp) => void punchCheckIn(emp.id)}
+                  onPunchOut={(attendanceId) => void punchCheckOut(attendanceId)}
+                />
+              </div>
+            )}
+
+            {/* 2. HORARIOS Y ASISTENCIA */}
+            {activeTab === "horarios" && (
+              <AttendanceSection
+                employees={employees}
+                attendances={attendances}
+                filteredAttendances={filteredAttendances}
+                todayActiveByEmployee={todayActiveByEmployee}
+                selectedEmployeeId={attendanceEmpFilter}
+                onSelectEmployeeId={setAttendanceEmpFilter}
+                filterDate={attendanceDateFilter}
+                onFilterDateChange={setAttendanceDateFilter}
+                filterStatus={attendanceStatusFilter}
+                onFilterStatusChange={setAttendanceStatusFilter}
+                canWrite={canWriteEmpleados}
+                onPunchIn={punchCheckIn}
+                onPunchOut={punchCheckOut}
+                onCreateManual={createManualAttendance}
+                onUpdateAttendance={updateAttendance}
+                onDeleteAttendance={deleteAttendance}
+              />
+            )}
+
+            {/* 3. CUENTAS CORRIENTES */}
+            {activeTab === "cuentas-corrientes" && (
+              <EmployeeCurrentAccountsSection
+                tenantId={tenantId}
+                userId={user?.id ?? null}
+                employees={employees}
+                canWrite={canWriteEmpleados}
+                selectedEmployee={currentAccountEmployee}
+                onSelectEmployee={(emp) => {
+                  setCurrentAccountEmployee(emp);
+                  if (!emp) {
+                    setSearchParams((prev) => {
+                      const next = new URLSearchParams(prev);
+                      next.delete("empleadoId");
+                      return next;
+                    });
+                  }
+                }}
+                onBalanceUpdated={reloadEmployees}
+                onOpenSalaryDisbursement={handleOpenSalaryDisbursementFromAccount}
+              />
+            )}
+
+            {/* 4. SALDOS PAGADOS / SUELDOS */}
+            {activeTab === "sueldos" && (
+              <SalaryPaymentsSection
+                employees={employees}
+                payments={payments}
+                filteredPayments={filteredPayments}
+                totalPaid={totalPaid}
+                totalSalariesPaid={totalSalariesPaid}
+                totalAdvancesPaid={totalAdvancesPaid}
+                totalCurrentAccountDiscounts={totalCurrentAccountDiscounts}
+                selectedEmployeeId={salaryEmpFilter}
+                onSelectEmployeeId={setSalaryEmpFilter}
+                selectedPeriod={salaryPeriodFilter}
+                onSelectPeriod={setSalaryPeriodFilter}
+                selectedType={salaryTypeFilter}
+                onSelectType={setSalaryTypeFilter}
+                datePreset={salaryDatePreset}
+                onSelectDatePreset={setSalaryDatePreset}
+                customStartDate={salaryCustomStartDate}
+                onSelectCustomStartDate={setSalaryCustomStartDate}
+                customEndDate={salaryCustomEndDate}
+                onSelectCustomEndDate={setSalaryCustomEndDate}
+                canWrite={canWriteEmpleados}
+                initialEmployeeForDisbursement={disbursementEmployee}
+                onDisbursementModalClosed={() => setDisbursementEmployee(null)}
+                onCreateSalaryPayment={createSalaryPayment}
+                onCreateSalaryAdvance={createSalaryAdvance}
+                onDeletePayment={deletePayment}
+                onBalanceUpdated={reloadEmployees}
+              />
+            )}
+          </>
         )}
 
         {/* Modal de Alta / Edición de Empleado */}
