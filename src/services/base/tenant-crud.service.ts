@@ -117,6 +117,7 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
             .from(this.tableName)
             .select("*")
             .eq("tenant_id", tenantId)
+            .order("created_at", { ascending: false })
             .range(from, to)
         );
 

@@ -5,6 +5,12 @@ import { cashService } from "@/services/cash.service";
 import { generalCashService } from "@/services/general-cash.service";
 import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
 import { useCashStore } from "@/modules/caja/store/cash.store";
+import {
+  formatLocalDateKey,
+  getShiftLabel,
+  formatLocalTime,
+  type ShiftPeriod,
+} from "@/modules/caja/utils/cash-date.utils";
 import type {
   CashMovement,
   CashSession,
@@ -24,6 +30,25 @@ interface CashFeedback {
 
 type CashMovementFilter = "all" | CashMovement["movement_type"];
 
+export interface CashDailyShiftSummary {
+  session: CashSession;
+  shiftLabel: string;
+  period: ShiftPeriod;
+  timeRange: string;
+  openedByUserId: string;
+  closedByUserId: string | null;
+  status: CashSession["status"];
+  openingAmount: number;
+  incomes: number;
+  expenses: number;
+  expectedBalance: number;
+  realClosingAmount: number | null;
+  differenceAmount: number | null;
+  movementsCount: number;
+  saleMovementsCount: number;
+  manualMovementsCount: number;
+}
+
 export interface CashDailyTrackingRow {
   date: string;
   sessionsCount: number;
@@ -36,6 +61,8 @@ export interface CashDailyTrackingRow {
   differenceAmount: number;
   saleMovementsCount: number;
   manualMovementsCount: number;
+  shifts: CashDailyShiftSummary[];
+  sessions: CashSession[];
 }
 
 export interface CashCloseSnapshot {
@@ -200,6 +227,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     bankAccounts,
     salePayments,
     salesById,
+    invoicesBySaleId,
     usersById,
     cashSettings,
     isLoading,
@@ -281,8 +309,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       if (movementTypeFilter !== "all" && movement.movement_type !== movementTypeFilter) {
         return false;
       }
-      if (dateFrom && movement.created_at.slice(0, 10) < dateFrom) return false;
-      if (dateTo && movement.created_at.slice(0, 10) > dateTo) return false;
+      if (dateFrom && formatLocalDateKey(movement.created_at) < dateFrom) return false;
+      if (dateTo && formatLocalDateKey(movement.created_at) > dateTo) return false;
       return true;
     });
   }, [movements, selectedSession, movementTypeFilter, dateFrom, dateTo]);
@@ -515,10 +543,16 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
   }, [currentSession, sessionSummariesById]);
 
   const dailyTracking = useMemo(() => {
-    const rowsByDate = new Map<string, CashDailyTrackingRow>();
+    const rowsByDate = new Map<
+      string,
+      {
+        row: CashDailyTrackingRow;
+        daySessions: CashSession[];
+      }
+    >();
 
     for (const session of sessions) {
-      const date = session.opened_at.slice(0, 10);
+      const date = formatLocalDateKey(session.opened_at);
       const sessionSummary = sessionSummariesById.get(session.id);
       const openingAmount = sessionSummary?.openingAmount ?? session.opening_amount;
       const incomes = sessionSummary?.incomes ?? 0;
@@ -526,20 +560,27 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       const expectedClosingAmount =
         sessionSummary?.expectedBalance ?? roundAmount(session.opening_amount + incomes - expenses);
 
-      const current = rowsByDate.get(date) ?? {
-        date,
-        sessionsCount: 0,
-        openSessionsCount: 0,
-        openingAmount: 0,
-        incomes: 0,
-        expenses: 0,
-        expectedClosingAmount: 0,
-        realClosingAmount: 0,
-        differenceAmount: 0,
-        saleMovementsCount: 0,
-        manualMovementsCount: 0,
+      const entry = rowsByDate.get(date) ?? {
+        row: {
+          date,
+          sessionsCount: 0,
+          openSessionsCount: 0,
+          openingAmount: 0,
+          incomes: 0,
+          expenses: 0,
+          expectedClosingAmount: 0,
+          realClosingAmount: 0,
+          differenceAmount: 0,
+          saleMovementsCount: 0,
+          manualMovementsCount: 0,
+          shifts: [],
+          sessions: [],
+        },
+        daySessions: [],
       };
 
+      entry.daySessions.push(session);
+      const current = entry.row;
       current.sessionsCount += 1;
       current.openSessionsCount += session.status === "open" ? 1 : 0;
       current.openingAmount = roundAmount(current.openingAmount + openingAmount);
@@ -557,16 +598,67 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       current.saleMovementsCount += sessionSummary?.saleMovementsCount ?? 0;
       current.manualMovementsCount += sessionSummary?.manualMovementsCount ?? 0;
 
-      rowsByDate.set(date, current);
+      rowsByDate.set(date, entry);
     }
 
-    return [...rowsByDate.values()].sort((a, b) => b.date.localeCompare(a.date));
+    const result: CashDailyTrackingRow[] = [];
+    for (const { row, daySessions } of rowsByDate.values()) {
+      // Ordenar cronológicamente ascendente: primero la mañana, luego la tarde
+      const sortedDaySessions = [...daySessions].sort((a, b) =>
+        a.opened_at.localeCompare(b.opened_at)
+      );
+      row.sessions = sortedDaySessions;
+
+      row.shifts = sortedDaySessions.map((session, idx) => {
+        const sessionSummary = sessionSummariesById.get(session.id);
+        const shiftInfo = getShiftLabel(session.opened_at, idx);
+        const openTime = formatLocalTime(session.opened_at);
+        const closeTime = session.closed_at
+          ? formatLocalTime(session.closed_at)
+          : session.status === "open"
+          ? "En curso"
+          : "--:--";
+        const timeRange = `${openTime} - ${closeTime}`;
+
+        const openingAmount = sessionSummary?.openingAmount ?? session.opening_amount;
+        const incomes = sessionSummary?.incomes ?? 0;
+        const expenses = sessionSummary?.expenses ?? 0;
+        const expectedBalance =
+          sessionSummary?.expectedBalance ??
+          roundAmount(session.opening_amount + incomes - expenses);
+
+        return {
+          session,
+          shiftLabel: sortedDaySessions.length > 1 ? shiftInfo.label : "Turno único",
+          period: shiftInfo.period,
+          timeRange,
+          openedByUserId: session.opened_by_user_id,
+          closedByUserId: session.closed_by_user_id,
+          status: session.status,
+          openingAmount,
+          incomes,
+          expenses,
+          expectedBalance,
+          realClosingAmount: session.closing_amount,
+          differenceAmount: session.closing_difference,
+          movementsCount:
+            (sessionSummary?.saleMovementsCount ?? 0) +
+            (sessionSummary?.manualMovementsCount ?? 0),
+          saleMovementsCount: sessionSummary?.saleMovementsCount ?? 0,
+          manualMovementsCount: sessionSummary?.manualMovementsCount ?? 0,
+        };
+      });
+
+      result.push(row);
+    }
+
+    return result.sort((a, b) => b.date.localeCompare(a.date));
   }, [sessionSummariesById, sessions]);
 
   const sessionDateById = useMemo(
     () =>
       sessions.reduce<Record<string, string>>((acc, session) => {
-        acc[session.id] = session.opened_at.slice(0, 10);
+        acc[session.id] = formatLocalDateKey(session.opened_at);
         return acc;
       }, {}),
     [sessions]
@@ -596,6 +688,14 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     }
     return map;
   }, [salePayments]);
+
+  const getSessionMovements = useCallback(
+    (sessionId: string | null): CashMovement[] => {
+      if (!sessionId) return [];
+      return movements.filter((m) => m.cash_session_id === sessionId);
+    },
+    [movements]
+  );
 
   const getDailyMovements = useCallback(
     (date: string | null, movementType: CashMovementFilter = "all"): CashMovement[] => {
@@ -930,7 +1030,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       >();
 
       for (const movement of currentAccountMovements) {
-        if (movement.created_at.slice(0, 10) !== date) continue;
+        if (formatLocalDateKey(movement.created_at) !== date) continue;
         const current = byCustomer.get(movement.customer_id) ?? {
           dailyDebitsAmount: 0,
           dailyPaymentsAmount: 0,
@@ -1468,7 +1568,10 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     getSessionBreakdown,
     getCurrentAccountDailySummary,
     getDailyMovements,
+    getSessionMovements,
     saleNumbersById,
+    salesById,
+    invoicesBySaleId,
     movementTypeFilter,
     setMovementTypeFilter,
     dateFrom,

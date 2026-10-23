@@ -83,6 +83,7 @@ interface EmployeeDetailViewProps {
   onDeletePayment: (id: string) => Promise<boolean>;
   // Product consumption
   onOpenProductConsumption: (emp: Employee) => void;
+  usersById?: Record<string, string>;
 }
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -144,6 +145,7 @@ export const EmployeeDetailView = ({
   onCreateSalaryAdvance,
   onDeletePayment,
   onOpenProductConsumption,
+  usersById = {},
 }: EmployeeDetailViewProps) => {
   const [activeSubTab, setActiveSubTab] = useState<DetailSubTab>(initialSubTab);
 
@@ -685,6 +687,7 @@ export const EmployeeDetailView = ({
           employee={employee}
           canWrite={canWrite}
           hideBackButton={true}
+          usersById={usersById}
           onBalanceUpdated={onReloadAll}
           onOpenSalaryDisbursement={() => setActiveSubTab("sueldos")}
         />
@@ -698,7 +701,7 @@ export const EmployeeDetailView = ({
             <div className="space-y-0.5">
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
                 <Receipt size={16} className="text-emerald-600" />
-                <span>Liquidaciones y Vales / Anticipos de Sueldo</span>
+                <span>Liquidaciones y Adelantos de Sueldo</span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 Historial de cobros y retenciones de cuenta corriente de {employee.full_name}
@@ -713,7 +716,7 @@ export const EmployeeDetailView = ({
                   className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-3.5 py-1.5 text-xs font-bold text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/50 shadow-xs transition cursor-pointer"
                 >
                   <Coins size={14} />
-                  <span>Nuevo Vale / Adelanto</span>
+                  <span>Adelanto</span>
                 </button>
               )}
 
@@ -773,6 +776,7 @@ export const EmployeeDetailView = ({
                     <th className="py-3 px-4">Desc. Cta Cte</th>
                     <th className="py-3 px-4">Neto Pagado</th>
                     <th className="py-3 px-4">Medio de Pago</th>
+                    <th className="py-3 px-4">Registrado por</th>
                     <th className="py-3 px-4">Observaciones</th>
                     <th className="py-3 px-4 text-right">Acciones</th>
                   </tr>
@@ -781,7 +785,7 @@ export const EmployeeDetailView = ({
                   {employeePayments.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={9}
+                        colSpan={10}
                         className="py-10 text-center text-slate-600 dark:text-slate-300 font-medium"
                       >
                         No se registraron liquidaciones ni adelantos para este empleado.
@@ -821,6 +825,18 @@ export const EmployeeDetailView = ({
                           </td>
                           <td className="py-3 px-4 uppercase text-[10px] font-semibold text-slate-500">
                             {p.payment_method_code}
+                          </td>
+                          <td className="py-3 px-4 text-xs whitespace-nowrap">
+                            {p.created_by ? (
+                              <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
+                                <User size={12} className="text-slate-400 shrink-0" />
+                                <span className="truncate max-w-[130px]" title={usersById[p.created_by] || p.created_by}>
+                                  {usersById[p.created_by] || p.created_by}
+                                </span>
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">-</span>
+                            )}
                           </td>
                           <td className="py-3 px-4 text-slate-500 max-w-xs truncate">
                             {p.notes || "-"}

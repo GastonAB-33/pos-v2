@@ -6,6 +6,7 @@ import {
   Trash2,
   ShoppingBag,
   Coins,
+  User,
 } from "lucide-react";
 import type { Employee, EmployeeSalaryPayment } from "@/types/entities";
 import { SalaryPaymentModal } from "@/modules/empleados/components/SalaryPaymentModal";
@@ -62,6 +63,7 @@ interface SalaryPaymentsSectionProps {
   }) => Promise<boolean>;
   onDeletePayment: (id: string) => Promise<boolean>;
   onBalanceUpdated: () => void;
+  usersById?: Record<string, string>;
 }
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -104,6 +106,7 @@ export const SalaryPaymentsSection = ({
   onCreateSalaryAdvance,
   onDeletePayment,
   onBalanceUpdated,
+  usersById = {},
 }: SalaryPaymentsSectionProps) => {
   const [modalOpen, setModalOpen] = useState(Boolean(initialEmployeeForDisbursement));
   const [modalEmployee, setModalEmployee] = useState<Employee | null>(
@@ -345,7 +348,7 @@ export const SalaryPaymentsSection = ({
                 className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-500 hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500 px-3.5 py-2 text-xs font-bold text-white shadow-2xs transition cursor-pointer"
               >
                 <Coins size={14} />
-                <span>+ Registrar Adelanto</span>
+                <span>+ Adelanto</span>
               </button>
             )}
 
@@ -377,6 +380,7 @@ export const SalaryPaymentsSection = ({
                 <th className="py-3 px-3 text-right">Desc. Cta Cte</th>
                 <th className="py-3 px-3.5 text-right font-black">Neto Desembolsado</th>
                 <th className="py-3 px-3">Medio de Pago</th>
+                <th className="py-3 px-3">Registrado por</th>
                 <th className="py-3 px-3.5">Notas / Observaciones</th>
                 <th className="py-3 px-3 text-right">Acción</th>
               </tr>
@@ -384,7 +388,7 @@ export const SalaryPaymentsSection = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-700 dark:text-slate-300">
               {filteredPayments.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-slate-500 dark:text-slate-400">
+                  <td colSpan={13} className="py-12 text-center text-slate-500 dark:text-slate-400">
                     <p className="font-semibold text-sm">No hay registros de sueldos o adelantos con los filtros seleccionados.</p>
                     <p className="text-xs text-slate-400 mt-1">Probá cambiando el rango de fechas o el empleado seleccionado.</p>
                   </td>
@@ -490,6 +494,19 @@ export const SalaryPaymentsSection = ({
                         <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                           {paymentMethodLabels[p.payment_method_code] || p.payment_method_code}
                         </span>
+                      </td>
+
+                      <td className="py-3 px-3 text-xs whitespace-nowrap">
+                        {p.created_by ? (
+                          <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
+                            <User size={12} className="text-slate-400 shrink-0" />
+                            <span className="truncate max-w-[120px]" title={usersById[p.created_by] || p.created_by}>
+                              {usersById[p.created_by] || p.created_by}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
                       </td>
 
                       <td className="py-3 px-3.5 text-slate-500 dark:text-slate-400 max-w-xs truncate" title={p.notes || ""}>

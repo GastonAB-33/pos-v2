@@ -7,6 +7,7 @@ import { paymentMethodsService } from "@/services/payment-methods.service";
 import { salesService } from "@/services/sales.service";
 import { settingsService } from "@/services/settings.service";
 import { usersService } from "@/services/users.service";
+import { invoicesService } from "@/services/invoices.service";
 import type {
   BankAccount,
   CashMovement,
@@ -17,6 +18,7 @@ import type {
   PaymentMethod,
   Sale,
   SalePayment,
+  Invoice,
 } from "@/types/entities";
 
 const normalizeKey = (value: string | null | undefined): string =>
@@ -41,6 +43,7 @@ interface CashStoreState {
   bankAccounts: BankAccount[];
   salePayments: SalePayment[];
   salesById: Record<string, Sale>;
+  invoicesBySaleId: Record<string, Invoice[]>;
   usersById: Record<string, string>;
   cashSettings: CashSettings;
   loadedTenantId: string | null;
@@ -63,6 +66,7 @@ export const useCashStore = create<CashStoreState>()((set, get) => ({
   bankAccounts: [],
   salePayments: [],
   salesById: {},
+  invoicesBySaleId: {},
   usersById: {},
   cashSettings: defaultCashSettings,
   loadedTenantId: null,
@@ -77,6 +81,7 @@ export const useCashStore = create<CashStoreState>()((set, get) => ({
       movements: [],
       currentAccountMovements: [],
       customersById: {},
+      invoicesBySaleId: {},
       paymentMethods: [],
       paymentMethodsByCode: {},
       bankAccounts: [],
@@ -122,6 +127,7 @@ export const useCashStore = create<CashStoreState>()((set, get) => ({
         allSales,
         allBankAccounts,
         allSalePayments,
+        allInvoices,
       ] = await Promise.all([
         cashService.getAllByTenant(tenantId),
         cashService.getAllMovementsByTenant(tenantId),
@@ -133,6 +139,7 @@ export const useCashStore = create<CashStoreState>()((set, get) => ({
         salesService.getAllByTenant(tenantId),
         bankAccountsService.getActiveByTenant(tenantId).catch(() => []),
         salesService.getAllPaymentsByTenant(tenantId).catch(() => []),
+        invoicesService.getAllByTenant(tenantId).catch(() => []),
       ]);
 
       const sortedSessions = allSessions.sort((a, b) => b.opened_at.localeCompare(a.opened_at));
@@ -158,6 +165,14 @@ export const useCashStore = create<CashStoreState>()((set, get) => ({
         return acc;
       }, {});
 
+      const invoicesMap = (allInvoices ?? []).reduce<Record<string, Invoice[]>>((acc, inv) => {
+        if (inv.sale_id) {
+          if (!acc[inv.sale_id]) acc[inv.sale_id] = [];
+          acc[inv.sale_id].push(inv);
+        }
+        return acc;
+      }, {});
+
       const usersMap = allUsers.reduce<Record<string, string>>((acc, user) => {
         const fullName = user.full_name?.trim() ?? "";
         if (fullName) {
@@ -179,6 +194,7 @@ export const useCashStore = create<CashStoreState>()((set, get) => ({
         bankAccounts: allBankAccounts,
         salePayments: allSalePayments,
         salesById: salesMap,
+        invoicesBySaleId: invoicesMap,
         usersById: usersMap,
         cashSettings: tenantSettings.caja ?? defaultCashSettings,
         loadedTenantId: tenantId,
