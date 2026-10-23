@@ -7,6 +7,11 @@ import {
   DollarSign,
   Lock,
   LockOpen,
+  Banknote,
+  ChevronDown,
+  Coins,
+  Clock,
+  X,
   Eye,
   EyeOff,
   RefreshCw,
@@ -21,12 +26,18 @@ import { useAuthStore } from "@/features/auth/store/auth.store";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { CashCloseForm } from "@/modules/caja/components/CashCloseForm";
 import { CashDailyTrackingTable } from "@/modules/caja/components/CashDailyTrackingTable";
+import {
+  formatLocalDateKey,
+  formatLocalDateDisplay,
+  getShiftLabel,
+  formatLocalTime,
+} from "@/modules/caja/utils/cash-date.utils";
 import { ManualCashMovementModal } from "@/modules/caja/components/ManualCashMovementModal";
 import { CashMovementsTable } from "@/modules/caja/components/CashMovementsTable";
 import { CashOpenForm } from "@/modules/caja/components/CashOpenForm";
 import { CashSessionCloseDetailModal } from "@/modules/caja/components/CashSessionCloseDetailModal";
 import { ReceiptTicketPanel } from "@/modules/comprobantes/components/ReceiptTicketPanel";
-import { useCashModule } from "@/modules/caja/hooks/useCashModule";
+import { useCashModule, parseCloseSnapshot } from "@/modules/caja/hooks/useCashModule";
 import { invoicesService } from "@/services/invoices.service";
 import { receiptsService } from "@/services/receipts.service";
 import type { CashSession, Invoice, Receipt } from "@/types/entities";
@@ -92,10 +103,15 @@ export const CajaPage = () => {
   const [saleDocumentError, setSaleDocumentError] = useState<string | null>(null);
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [saleDocumentInitialTab, setSaleDocumentInitialTab] = useState<"ticket" | "invoice">("ticket");
   const [activeViewTab, setActiveViewTab] = useState<"shift" | "history">("shift");
   const [revealBlindAmounts, setRevealBlindAmounts] = useState(false);
   const [isCloseDetailModalOpen, setIsCloseDetailModalOpen] = useState(false);
   const [selectedCloseSession, setSelectedCloseSession] = useState<CashSession | null>(null);
+  const [selectedCloseDateSessions, setSelectedCloseDateSessions] = useState<CashSession[]>([]);
+  const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
+  const [isShiftPopoverOpen, setIsShiftPopoverOpen] = useState(false);
+  const [isBillsPopoverOpen, setIsBillsPopoverOpen] = useState(false);
 
   const {
     currentSession,
@@ -107,12 +123,15 @@ export const CajaPage = () => {
     saleBankAccountsById,
     usersById,
     saleNumbersById,
+    salesById,
+    invoicesBySaleId,
     cashSettings,
     currentSessionSummary,
     currentSessionIncomeSummary,
     getSessionBreakdown,
     getCurrentAccountDailySummary,
     getDailyMovements,
+    getSessionMovements,
     isLoading,
     isBackgroundRefreshing,
     isSubmitting,
@@ -124,13 +143,24 @@ export const CajaPage = () => {
     updateSessionNotes,
   } = useCashModule(tenantId, user?.id ?? null);
 
-  const handleOpenCloseDetailForDate = (date: string | null) => {
+  const handleOpenCloseDetailForDate = (
+    date: string | null,
+    targetSessionOverride?: CashSession
+  ) => {
     if (!date) return;
-    const sessionsOnDate = sessionHistory.filter((s) => s.opened_at.slice(0, 10) === date);
+    const sessionsOnDate = sessionHistory
+      .filter((s) => formatLocalDateKey(s.opened_at) === date)
+      .sort((a, b) => a.opened_at.localeCompare(b.opened_at));
+
     const targetSession =
-      sessionsOnDate.find((s) => s.status === "closed") ?? sessionsOnDate[0] ?? null;
+      targetSessionOverride ??
+      sessionsOnDate.find((s) => s.status === "closed") ??
+      sessionsOnDate[sessionsOnDate.length - 1] ??
+      null;
+
     if (targetSession) {
       setSelectedCloseSession(targetSession);
+      setSelectedCloseDateSessions(sessionsOnDate);
       setIsCloseDetailModalOpen(true);
     }
   };
@@ -176,7 +206,7 @@ export const CajaPage = () => {
     [currentSession, sessionHistory]
   );
 
-  const dailyDate = dailySession?.opened_at.slice(0, 10) ?? null;
+  const dailyDate = dailySession ? formatLocalDateKey(dailySession.opened_at) : null;
   const activeDetailDate = detailDate ?? dailyDate;
   const dailySessionBreakdown = useMemo(
     () => getSessionBreakdown(dailySession?.id ?? null),
@@ -196,10 +226,19 @@ export const CajaPage = () => {
   const totalExpenses = dailySessionBreakdown?.expenses.total ?? dailySessionTotals.expenses;
   const cashExpenses = dailySessionTotals.expenses;
   const digitalExpenses = Math.max(0, totalExpenses - cashExpenses);
-  const detailMovements = useMemo(
-    () => getDailyMovements(activeDetailDate, "all"),
-    [activeDetailDate, getDailyMovements]
-  );
+  const detailMovements = useMemo(() => {
+    if (detailSessionId) {
+      return getSessionMovements(detailSessionId);
+    }
+    return getDailyMovements(activeDetailDate, "all");
+  }, [detailSessionId, activeDetailDate, getSessionMovements, getDailyMovements]);
+
+  const activeDateSessions = useMemo(() => {
+    if (!activeDetailDate) return [];
+    return sessionHistory
+      .filter((s) => formatLocalDateKey(s.opened_at) === activeDetailDate)
+      .sort((a, b) => a.opened_at.localeCompare(b.opened_at));
+  }, [activeDetailDate, sessionHistory]);
   const currentAccountDailySummary = useMemo(
     () => getCurrentAccountDailySummary(dailyDate),
     [dailyDate, getCurrentAccountDailySummary]
@@ -317,13 +356,17 @@ export const CajaPage = () => {
     }
   };
 
-  const openDailyDetail = (date: string | null) => {
+  const openDailyDetail = (date: string | null, sessionId?: string) => {
     if (!date) return;
     setDetailDate(date);
+    setDetailSessionId(sessionId ?? null);
     setIsDailyDetailModalOpen(true);
   };
 
-  const handleViewSaleDocument = async (saleId: string) => {
+  const handleViewSaleDocument = async (
+    saleId: string,
+    preferredTab: "ticket" | "invoice" = "ticket"
+  ) => {
     if (!tenantId) return;
 
     setIsSaleDocumentModalOpen(true);
@@ -331,6 +374,7 @@ export const CajaPage = () => {
     setSaleDocumentError(null);
     setSelectedReceipt(null);
     setSelectedInvoice(null);
+    setSaleDocumentInitialTab(preferredTab);
 
     try {
       const [receipt, invoices] = await Promise.all([
@@ -827,11 +871,12 @@ export const CajaPage = () => {
           ) : (
             <CashDailyTrackingTable
               rows={dailyTracking}
-              onViewDetail={(date) => {
-                openDailyDetail(date);
+              usersById={usersById}
+              onViewDetail={(date, sessionId) => {
+                openDailyDetail(date, sessionId);
               }}
-              onViewCloseDetail={(date) => {
-                handleOpenCloseDetailForDate(date);
+              onViewCloseDetail={(date, session) => {
+                handleOpenCloseDetailForDate(date, session);
               }}
             />
           )
@@ -1216,36 +1261,403 @@ export const CajaPage = () => {
         </div>
       )}
 
-      {/* MODAL: Detalle de Movimientos del Día */}
+      {/* MODAL: Detalle de Caja Unificado (Arqueo de Cierre + Movimientos de la Jornada) */}
       {isDailyDetailModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="w-full max-w-5xl max-h-[88vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
-            <header className="shrink-0 px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/70 dark:bg-slate-800/60">
-              <div>
-                <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-100">
-                  Movimientos de la Jornada
-                </h3>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                  Fecha:{" "}
-                  {activeDetailDate
-                    ? new Date(`${activeDetailDate}T00:00:00`).toLocaleDateString("es-AR")
-                    : "-"}
-                </p>
-              </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-5xl max-h-[90vh] flex flex-col bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            {/* 1. CABECERA: TÍTULO Y SELECTOR ADAPTATIVO DE TURNOS */}
+            <header className="shrink-0 px-4 sm:px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-50/80 dark:bg-slate-800/60">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleOpenCloseDetailForDate(activeDetailDate)}
-                  className="h-8 inline-flex items-center gap-1.5 px-3 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-300 dark:border-emerald-800 rounded-lg transition-colors cursor-pointer shadow-2xs"
-                  title="Ver detalle del arqueo y billetes de cierre"
-                >
-                  <Lock className="h-3.5 w-3.5" />
-                  <span>Detalle de cierre</span>
-                </button>
-                <ModalCloseButton onClick={() => setIsDailyDetailModalOpen(false)} />
+                <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/80 dark:border-blue-800/80">
+                  <CalendarClock className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <span>Detalle de Caja</span>
+                    <span className="text-xs font-normal text-slate-400">·</span>
+                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                      {activeDetailDate ? formatLocalDateDisplay(activeDetailDate) : "-"}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                    Arqueo de cierre y registro completo de movimientos
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* SELECTOR ADAPTATIVO DE TURNOS */}
+                {activeDateSessions.length > 1 && (
+                  activeDateSessions.length <= 3 ? (
+                    /* Si son 1 a 3 turnos: Pastillitas directas a un clic */
+                    <div className="flex items-center gap-1 bg-white dark:bg-slate-900/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDetailSessionId(null);
+                          setIsBillsPopoverOpen(false);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                          !detailSessionId
+                            ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-2xs"
+                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+                        }`}
+                      >
+                        Toda la jornada
+                      </button>
+                      {activeDateSessions.map((s, sIdx) => {
+                        const sInfo = getShiftLabel(s.opened_at, sIdx);
+                        const isSelected = detailSessionId === s.id;
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => {
+                              setDetailSessionId(s.id);
+                              setIsBillsPopoverOpen(false);
+                            }}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                              isSelected
+                                ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-2xs"
+                                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+                            }`}
+                          >
+                            <span>{sInfo.label}</span>
+                            <span className="font-mono text-[10px] opacity-70">
+                              ({formatLocalTime(s.opened_at)})
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    /* Si son 4 o más turnos: Selector desplegable compacto flotante (Popover) */
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsShiftPopoverOpen(!isShiftPopoverOpen);
+                          setIsBillsPopoverOpen(false);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-2xs transition cursor-pointer"
+                      >
+                        <Clock size={13} className="text-blue-500" />
+                        <span>
+                          {detailSessionId
+                            ? (() => {
+                                const activeS = activeDateSessions.find((s) => s.id === detailSessionId);
+                                return activeS
+                                  ? `${getShiftLabel(activeS.opened_at).label} (${formatLocalTime(activeS.opened_at)})`
+                                  : "Turno seleccionado";
+                              })()
+                            : `Toda la jornada (${activeDateSessions.length} turnos)`}
+                        </span>
+                        <ChevronDown size={13} className="text-slate-400" />
+                      </button>
+
+                      {isShiftPopoverOpen && (
+                        <div className="absolute right-0 top-full mt-1.5 z-50 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl p-2 space-y-1 animate-in fade-in zoom-in-95">
+                          <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            Seleccionar turno a auditar:
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDetailSessionId(null);
+                              setIsShiftPopoverOpen(false);
+                              setIsBillsPopoverOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition flex items-center justify-between cursor-pointer ${
+                              !detailSessionId
+                                ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                                : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                            }`}
+                          >
+                            <span>Toda la jornada (Consolidado)</span>
+                            <span className="text-[10px] opacity-75">
+                              {getDailyMovements(activeDetailDate, "all").length} movs
+                            </span>
+                          </button>
+                          {activeDateSessions.map((s, sIdx) => {
+                            const sInfo = getShiftLabel(s.opened_at, sIdx);
+                            const isSel = detailSessionId === s.id;
+                            const shiftMovsCount = getSessionMovements(s.id).length;
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => {
+                                  setDetailSessionId(s.id);
+                                  setIsShiftPopoverOpen(false);
+                                  setIsBillsPopoverOpen(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition flex items-center justify-between cursor-pointer ${
+                                  isSel
+                                    ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                                    : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                                }`}
+                              >
+                                <div>
+                                  <p className="font-bold text-xs">{sInfo.label}</p>
+                                  <p className="text-[10px] opacity-70 font-normal">
+                                    {formatLocalTime(s.opened_at)} -{" "}
+                                    {s.closed_at ? formatLocalTime(s.closed_at) : "En curso"} ·{" "}
+                                    {usersById[s.opened_by_user_id] ?? "Cajero"}
+                                  </p>
+                                </div>
+                                <span className="px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-700 text-[10px]">
+                                  {shiftMovsCount}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                )}
+
+                <ModalCloseButton
+                  onClick={() => {
+                    setIsDailyDetailModalOpen(false);
+                    setIsBillsPopoverOpen(false);
+                    setIsShiftPopoverOpen(false);
+                  }}
+                />
               </div>
             </header>
 
+            {/* 2. FRANJA SUPERIOR COMPACTA: RESUMEN DE CIERRE / ARQUEO Y POPOVER DE BILLETES */}
+            {(() => {
+              const activeModalSession = detailSessionId
+                ? activeDateSessions.find((s) => s.id === detailSessionId) ?? null
+                : activeDateSessions.find((s) => s.status === "closed") ??
+                  activeDateSessions[activeDateSessions.length - 1] ??
+                  null;
+
+              const { snapshot: activeModalSnapshot, cleanNotes: activeModalNotes } = parseCloseSnapshot(
+                activeModalSession?.notes
+              );
+
+              const modalRealAmount =
+                activeModalSession?.closing_amount ?? activeModalSnapshot?.realAmount ?? 0;
+              const modalExpectedAmount =
+                activeModalSession?.expected_closing_amount ?? activeModalSnapshot?.expectedAmount ?? 0;
+              const modalDifference =
+                activeModalSession?.closing_difference ??
+                activeModalSnapshot?.difference ??
+                Number((modalRealAmount - modalExpectedAmount).toFixed(2));
+
+              const billCounts =
+                activeModalSnapshot?.billCounts ??
+                (activeModalSession?.closing_bill_counts as Record<number, number> | undefined);
+              const coinsAmount =
+                activeModalSnapshot?.coinsAmount ?? activeModalSession?.closing_coins_amount ?? 0;
+              const hasBillBreakdown =
+                billCounts && Object.values(billCounts).some((c) => Number(c) > 0);
+
+              const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 200, 100] as const;
+              const totalBillsCounted = hasBillBreakdown
+                ? BILL_DENOMINATIONS.reduce(
+                    (acc, denom) => acc + denom * (Number(billCounts?.[denom]) || 0),
+                    0
+                  ) + coinsAmount
+                : modalRealAmount;
+
+              const openedByName = activeModalSession
+                ? usersById[activeModalSession.opened_by_user_id] ?? activeModalSession.opened_by_user_id
+                : "-";
+              const closedByName = activeModalSession?.closed_by_user_id
+                ? usersById[activeModalSession.closed_by_user_id] ?? activeModalSession.closed_by_user_id
+                : null;
+
+              return (
+                <div className="relative shrink-0 px-4 sm:px-5 py-2.5 bg-slate-50/90 dark:bg-slate-800/50 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                        Esperado (Sistema)
+                      </span>
+                      <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-sm">
+                        {formatMoney(modalExpectedAmount)}
+                      </span>
+                    </div>
+
+                    <div className="pl-3 sm:pl-4 border-l border-slate-200 dark:border-slate-700">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                        Real Contado
+                      </span>
+                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                        {activeModalSession?.status === "open" && !activeModalSession.closing_amount
+                          ? "En curso"
+                          : formatMoney(modalRealAmount)}
+                      </span>
+                    </div>
+
+                    <div className="pl-3 sm:pl-4 border-l border-slate-200 dark:border-slate-700">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                        Diferencia
+                      </span>
+                      <span
+                        className={`font-mono font-black text-sm ${
+                          modalDifference === 0
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : modalDifference > 0
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-rose-600 dark:text-rose-400"
+                        }`}
+                      >
+                        {modalDifference > 0
+                          ? `+${formatMoney(modalDifference)} (Sobrante)`
+                          : modalDifference < 0
+                          ? `${formatMoney(modalDifference)} (Faltante)`
+                          : "Exacta ($0,00)"}
+                      </span>
+                    </div>
+
+                    {activeModalSession && (
+                      <div className="hidden md:block pl-3 sm:pl-4 border-l border-slate-200 dark:border-slate-700 text-[11px] text-slate-500 dark:text-slate-400">
+                        <span>
+                          Abierta por:{" "}
+                          <strong className="text-slate-700 dark:text-slate-200">{openedByName}</strong>
+                          <span className="font-mono text-[10px] opacity-75 ml-1">
+                            ({formatLocalTime(activeModalSession.opened_at)})
+                          </span>
+                        </span>
+                        {closedByName && (
+                          <span>
+                            {" "}· Cerrada por:{" "}
+                            <strong className="text-slate-700 dark:text-slate-200">{closedByName}</strong>
+                            <span className="font-mono text-[10px] opacity-75 ml-1">
+                              ({formatLocalTime(activeModalSession.closed_at)})
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* BOTÓN Y PANEL FLOTANTE (POPOVER) DE BILLETES - NO EMPUJA LA TABLA */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsBillsPopoverOpen(!isBillsPopoverOpen);
+                        setIsShiftPopoverOpen(false);
+                      }}
+                      className={`h-7 inline-flex items-center gap-1.5 px-3 text-xs font-bold rounded-lg border transition shadow-2xs cursor-pointer ${
+                        isBillsPopoverOpen
+                          ? "bg-emerald-600 text-white border-emerald-600 dark:bg-emerald-500 dark:border-emerald-500"
+                          : "bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
+                      }`}
+                      title="Ver conteo y desglose de billetes"
+                    >
+                      <Banknote size={14} />
+                      <span>Conteo de billetes</span>
+                      <ChevronDown
+                        size={12}
+                        className={`transition-transform duration-150 ${
+                          isBillsPopoverOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {/* POPOVER FLOTANTE POR ENCIMA */}
+                    {isBillsPopoverOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setIsBillsPopoverOpen(false)}
+                        />
+                        <div className="absolute left-0 top-full mt-2 z-50 w-80 max-w-[calc(100vw-2rem)] max-h-[70vh] overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-4 space-y-3 animate-in fade-in zoom-in-95">
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-900 dark:text-slate-100">
+                            <Banknote className="text-emerald-500" size={15} />
+                            <span>Desglose Físico de Billetes</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setIsBillsPopoverOpen(false)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+
+                        {hasBillBreakdown ? (
+                          <div className="rounded-xl border border-slate-100 dark:border-slate-800 overflow-hidden text-xs">
+                            <table className="w-full">
+                              <thead className="bg-slate-50/80 dark:bg-slate-800/80 text-[10px] uppercase font-bold text-slate-400">
+                                <tr>
+                                  <th className="py-1.5 px-2.5 text-left">Billetes</th>
+                                  <th className="py-1.5 px-2 text-center">Cant.</th>
+                                  <th className="py-1.5 px-2.5 text-right">Subtotal</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                                {BILL_DENOMINATIONS.map((denom) => {
+                                  const count = Number(billCounts?.[denom]) || 0;
+                                  if (count === 0) return null;
+                                  return (
+                                    <tr key={denom}>
+                                      <td className="py-1 px-2.5 font-semibold text-slate-700 dark:text-slate-300">
+                                        ${denom.toLocaleString("es-AR")}
+                                      </td>
+                                      <td className="py-1 px-2 text-center font-mono text-slate-500">
+                                        {count}
+                                      </td>
+                                      <td className="py-1 px-2.5 text-right font-mono font-bold text-slate-900 dark:text-slate-100">
+                                        {formatMoney(count * denom)}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                                {coinsAmount > 0 && (
+                                  <tr>
+                                    <td className="py-1 px-2.5 font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                                      <Coins size={11} className="text-amber-500" />
+                                      <span>Monedas</span>
+                                    </td>
+                                    <td className="py-1 px-2 text-center text-slate-400 font-mono">-</td>
+                                    <td className="py-1 px-2.5 text-right font-mono font-bold text-slate-900 dark:text-slate-100">
+                                      {formatMoney(coinsAmount)}
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                              <tfoot className="bg-slate-50/80 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700 font-bold">
+                                <tr>
+                                  <td colSpan={2} className="py-1.5 px-2.5 text-slate-700 dark:text-slate-300">
+                                    Total Contado:
+                                  </td>
+                                  <td className="py-1.5 px-2.5 text-right font-mono text-emerald-600 dark:text-emerald-400">
+                                    {formatMoney(totalBillsCounted)}
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400 py-3 text-center">
+                            Cierre directo sin conteo desglosado de billetes.
+                          </p>
+                        )}
+
+                        {activeModalNotes && (
+                          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400">
+                            <strong className="block text-slate-800 dark:text-slate-200">Observaciones:</strong>
+                            <p className="mt-0.5 whitespace-pre-wrap">{activeModalNotes}</p>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 3. TABLA DE MOVIMIENTOS EN EL RESTO DE LA PANTALLA */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {isLoading && detailMovements.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-500 dark:text-slate-400">
@@ -1259,6 +1671,8 @@ export const CajaPage = () => {
                   paymentMethods={paymentMethods}
                   usersById={usersById}
                   saleNumbersById={saleNumbersById}
+                  salesById={salesById}
+                  invoicesBySaleId={invoicesBySaleId}
                   onViewSaleDocument={handleViewSaleDocument}
                   blindMode={isBlindModeActive && activeDetailDate === dailyDate}
                 />
@@ -1298,6 +1712,7 @@ export const CajaPage = () => {
                 <ReceiptTicketPanel
                   receipt={selectedReceipt}
                   invoice={selectedInvoice}
+                  mode={saleDocumentInitialTab === "invoice" ? "invoice" : "both"}
                   onClose={() => {
                     setIsSaleDocumentModalOpen(false);
                     setSelectedReceipt(null);
@@ -1318,7 +1733,11 @@ export const CajaPage = () => {
       <CashSessionCloseDetailModal
         isOpen={isCloseDetailModalOpen}
         session={selectedCloseSession}
-        onClose={() => setIsCloseDetailModalOpen(false)}
+        availableSessions={selectedCloseDateSessions}
+        onClose={() => {
+          setIsCloseDetailModalOpen(false);
+          setSelectedCloseDateSessions([]);
+        }}
         usersById={usersById}
       />
     </PagePlaceholder>

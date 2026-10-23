@@ -18,7 +18,8 @@ import { IconButton } from "@/components/ui/IconButton";
 import type { Employee } from "@/types/entities";
 import { useEmployeesCrud } from "@/modules/empleados/hooks/useEmployeesCrud";
 import { useEmployeeAttendance } from "@/modules/empleados/hooks/useEmployeeAttendance";
-import { useEmployeeSalaryPayments } from "@/modules/empleados/hooks/useEmployeeSalaryPayments";
+import { useEmployeeSalaryPayments, isAdvancePayment } from "@/modules/empleados/hooks/useEmployeeSalaryPayments";
+import { useMemo } from "react";
 import { EmployeeFormModal } from "@/modules/empleados/components/EmployeeFormModal";
 import { EmployeesTable } from "@/modules/empleados/components/EmployeesTable";
 import { AttendanceSection } from "@/modules/empleados/components/AttendanceSection";
@@ -27,6 +28,7 @@ import { SalaryPaymentsSection } from "@/modules/empleados/components/SalaryPaym
 import { EmployeeProductConsumptionModal } from "@/modules/empleados/components/EmployeeProductConsumptionModal";
 import { EmployeeDetailView } from "@/modules/empleados/components/EmployeeDetailView";
 import { employeeCurrentAccountsService } from "@/services/employee-current-accounts.service";
+import { usersService } from "@/services/users.service";
 
 type ActiveTab = "personal" | "globales";
 type GlobalSubTab = "horarios" | "cuentas-corrientes" | "sueldos";
@@ -118,6 +120,59 @@ export const EmpleadosPage = () => {
     deletePayment,
     reload: reloadSalary,
   } = useEmployeeSalaryPayments(tenantId, user?.id ?? null);
+
+  const [usersById, setUsersById] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!tenantId) return;
+    usersService
+      .getAllByTenant(tenantId)
+      .then((allUsers) => {
+        const map: Record<string, string> = {};
+        for (const u of allUsers) {
+          const displayName = u.full_name || u.username || u.email || "Usuario";
+          map[u.id] = displayName;
+          if (u.auth_user_id) {
+            map[u.auth_user_id] = displayName;
+          }
+        }
+        if (user?.id) {
+          map[user.id] = user.fullName || user.username || user.email || "Usuario actual";
+        }
+        setUsersById(map);
+      })
+      .catch((err) => {
+        console.error("Error loading users for EmpleadosPage:", err);
+      });
+  }, [tenantId, user]);
+
+  // Adelantos pendientes por empleado (otorgados - deducidos en liquidaciones)
+  const pendingAdvancesByEmployee = useMemo(() => {
+    const advancesMap = new Map<string, number>();
+    const deductionsMap = new Map<string, number>();
+
+    for (const p of payments) {
+      if (!p.employee_id) continue;
+      if (isAdvancePayment(p)) {
+        const amt = p.net_amount_paid || p.gross_amount || 0;
+        advancesMap.set(p.employee_id, (advancesMap.get(p.employee_id) || 0) + amt);
+      } else {
+        const ded = p.advances_discount_applied || 0;
+        deductionsMap.set(p.employee_id, (deductionsMap.get(p.employee_id) || 0) + ded);
+      }
+    }
+
+    const resultMap = new Map<string, number>();
+    for (const [empId, totalAdv] of advancesMap.entries()) {
+      const totalDed = deductionsMap.get(empId) || 0;
+      const pending = Math.max(0, totalAdv - totalDed);
+      if (pending > 0) {
+        resultMap.set(empId, pending);
+      }
+    }
+
+    return resultMap;
+  }, [payments]);
 
   // Estados locales para Modales y Navegación
   const [formModalOpen, setFormModalOpen] = useState(false);
@@ -308,6 +363,7 @@ export const EmpleadosPage = () => {
             onCreateSalaryAdvance={createSalaryAdvance}
             onDeletePayment={deletePayment}
             onOpenProductConsumption={setProductConsumptionEmployee}
+            usersById={usersById}
           />
         ) : (
           <>
@@ -406,6 +462,7 @@ export const EmpleadosPage = () => {
                 <EmployeesTable
                   employees={filteredEmployees}
                   todayActiveByEmployee={todayActiveByEmployee}
+                  pendingAdvancesByEmployee={pendingAdvancesByEmployee}
                   canWrite={canWriteEmpleados}
                   onSelectEmployee={(emp) => handleSelectEmployeeForDetail(emp, "horarios")}
                   onOpenCurrentAccount={handleOpenCurrentAccount}
@@ -520,6 +577,7 @@ export const EmpleadosPage = () => {
                     }}
                     onBalanceUpdated={reloadEmployees}
                     onOpenSalaryDisbursement={handleOpenSalaryDisbursementFromAccount}
+                    usersById={usersById}
                   />
                 )}
 
@@ -552,6 +610,7 @@ export const EmpleadosPage = () => {
                     onCreateSalaryAdvance={createSalaryAdvance}
                     onDeletePayment={deletePayment}
                     onBalanceUpdated={reloadEmployees}
+                    usersById={usersById}
                   />
                 )}
               </div>

@@ -2,12 +2,10 @@ import { useState } from "react";
 import {
   ArrowLeft,
   DollarSign,
-  PlusCircle,
   RefreshCw,
-  ShoppingBag,
-  Receipt,
+  User,
+    ShoppingBag,
 } from "lucide-react";
-import { IconButton } from "@/components/ui/IconButton";
 import type { Employee, EmployeeCurrentAccountCategory } from "@/types/entities";
 import { useEmployeeCurrentAccount } from "@/modules/empleados/hooks/useEmployeeCurrentAccount";
 import { EmployeeManualMovementModal } from "@/modules/empleados/components/EmployeeManualMovementModal";
@@ -22,6 +20,7 @@ interface EmployeeCurrentAccountPanelProps {
   hideBackButton?: boolean;
   onBalanceUpdated: () => void;
   onOpenSalaryDisbursement?: (employee: Employee) => void;
+  usersById?: Record<string, string>;
 }
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -65,7 +64,8 @@ export const EmployeeCurrentAccountPanel = ({
   onClose,
   hideBackButton = false,
   onBalanceUpdated,
-  onOpenSalaryDisbursement,
+  onOpenSalaryDisbursement: _onOpenSalaryDisbursement,
+  usersById = {},
 }: EmployeeCurrentAccountPanelProps) => {
   const [manualModalOpen, setManualModalOpen] = useState(false);
   const [manualType, setManualType] = useState<"debt" | "payment" | "adjustment">("debt");
@@ -74,15 +74,11 @@ export const EmployeeCurrentAccountPanel = ({
   const {
     movements,
     balance,
-    isLoading,
     isSubmitting,
     feedback,
-    clearFeedback,
-    reload,
     registerDebt,
     registerPayment,
     registerAdjustment,
-    recalculate,
   } = useEmployeeCurrentAccount(tenantId, employee, userId);
 
   const hasDebt = balance > 0;
@@ -119,50 +115,23 @@ export const EmployeeCurrentAccountPanel = ({
     return ok;
   };
 
-  const handleRecalculate = async () => {
-    await recalculate();
-    onBalanceUpdated();
-  };
+
 
   return (
     <section className="current-account-detail ui-card space-y-4">
-      {/* Barra de navegación / utilidades superior */}
-      <div className={`flex items-center ${hideBackButton ? "justify-end" : "justify-between"} border-b border-slate-100 pb-3 dark:border-slate-800`}>
-        {!hideBackButton && (
+      {/* Barra de navegación superior si no está en ficha integrada */}
+      {!hideBackButton && onClose && (
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
           >
             <ArrowLeft size={14} />
             <span>Volver al listado de cuentas corrientes</span>
           </button>
-        )}
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleRecalculate}
-            disabled={isSubmitting || isLoading}
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-            title="Recalcular saldo acumulado a partir de todos los movimientos históricos"
-          >
-            <RefreshCw size={12} className={isLoading ? "animate-spin" : ""} />
-            <span>Recalcular Saldo</span>
-          </button>
-
-          <IconButton
-            icon={RefreshCw}
-            label="Recargar cuenta corriente"
-            onClick={() => {
-              clearFeedback();
-              void reload();
-            }}
-            loading={isLoading}
-            disabled={isSubmitting}
-          />
         </div>
-      </div>
+      )}
 
       {/* Encabezado y Saldo Destacado */}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -228,20 +197,6 @@ export const EmployeeCurrentAccountPanel = ({
             <span>+ Cargar / Retiro de productos</span>
           </button>
 
-          {/* Botón Adeudar manual / Anticipo */}
-          <button
-            type="button"
-            onClick={() => {
-              setManualType("debt");
-              setManualModalOpen(true);
-            }}
-            disabled={isSubmitting}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl shadow-sm transition dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300"
-          >
-            <PlusCircle size={14} />
-            <span>Adeudar / Anticipo manual</span>
-          </button>
-
           {/* Botón Registrar Cobro / Pago */}
           <button
             type="button"
@@ -250,23 +205,11 @@ export const EmployeeCurrentAccountPanel = ({
               setManualModalOpen(true);
             }}
             disabled={isSubmitting}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl shadow-sm transition dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl shadow-sm transition dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300 cursor-pointer"
           >
             <DollarSign size={14} />
             <span>Registrar cobro</span>
           </button>
-
-          {/* Botón Descontar de Sueldo */}
-          {onOpenSalaryDisbursement && (
-            <button
-              type="button"
-              onClick={() => onOpenSalaryDisbursement(employee)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl shadow-sm transition dark:bg-slate-800 dark:text-slate-200"
-            >
-              <Receipt size={14} />
-              <span>Descontar de sueldo / Liquidar</span>
-            </button>
-          )}
 
           {/* Botón Ajuste */}
           <button
@@ -303,6 +246,7 @@ export const EmployeeCurrentAccountPanel = ({
                 <th className="py-2.5 px-4">Operación</th>
                 <th className="py-2.5 px-4">Categoría</th>
                 <th className="py-2.5 px-4">Detalle / Concepto</th>
+                <th className="py-2.5 px-4">Registrado por</th>
                 <th className="py-2.5 px-4 text-right">Importe</th>
                 <th className="py-2.5 px-4 text-right">Saldo Posterior</th>
               </tr>
@@ -310,7 +254,7 @@ export const EmployeeCurrentAccountPanel = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-700 dark:text-slate-300">
               {movements.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-500">
+                  <td colSpan={7} className="py-8 text-center text-slate-500">
                     No hay movimientos registrados para este empleado.
                   </td>
                 </tr>
@@ -353,6 +297,19 @@ export const EmployeeCurrentAccountPanel = ({
 
                       <td className="py-2.5 px-4 text-slate-800 dark:text-slate-200">
                         {mov.notes || "-"}
+                      </td>
+
+                      <td className="py-2.5 px-4 text-xs whitespace-nowrap">
+                        {mov.created_by ? (
+                          <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
+                            <User size={12} className="text-slate-400 shrink-0" />
+                            <span className="truncate max-w-[130px]" title={usersById[mov.created_by] || mov.created_by}>
+                              {usersById[mov.created_by] || mov.created_by}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
                       </td>
 
                       <td

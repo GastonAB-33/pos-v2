@@ -38,10 +38,10 @@ import {
   Trash2,
   Users,
   Wallet,
-  X,
 } from "lucide-react";
 import { ArcaCertificateWizardModal } from "@/modules/configuracion/components/ArcaCertificateWizardModal";
 import { ArcaAccountantGuideModal } from "@/modules/configuracion/components/ArcaAccountantGuideModal";
+import { EmployeeExcludedCategoriesSelector } from "@/modules/configuracion/components/EmployeeExcludedCategoriesSelector";
 import { downloadFile } from "@/modules/configuracion/utils/arca-certificate-helper";
 import { arcaService } from "@/services/arca.service";
 import { productsService } from "@/services/products.service";
@@ -549,7 +549,6 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
 
   // Categorías de productos del comercio para exclusión rápida
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
-  const [newExcludedCategoryInput, setNewExcludedCategoryInput] = useState("");
 
   useEffect(() => {
     if (!tenantId) return;
@@ -572,47 +571,6 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
       isMounted = false;
     };
   }, [tenantId]);
-
-  const handleToggleExcludedCategory = (categoryName: string) => {
-    if (!canModifyEmployeeBenefits || !draft?.pos) return;
-    const trimmed = categoryName.trim();
-    if (!trimmed) return;
-
-    const currentList = draft.pos.employee_discount_excluded_categories ?? [];
-    const exists = currentList.some((c) => c.toLowerCase() === trimmed.toLowerCase());
-    const nextList = exists
-      ? currentList.filter((c) => c.toLowerCase() !== trimmed.toLowerCase())
-      : [...currentList, trimmed];
-
-    updateSection("pos", {
-      employee_discount_excluded_categories: nextList,
-    });
-  };
-
-  const handleAddCustomExcludedCategory = () => {
-    if (!canModifyEmployeeBenefits || !draft?.pos) return;
-    const trimmed = newExcludedCategoryInput.trim();
-    if (!trimmed) return;
-
-    const currentList = draft.pos.employee_discount_excluded_categories ?? [];
-    if (!currentList.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
-      updateSection("pos", {
-        employee_discount_excluded_categories: [...currentList, trimmed],
-      });
-    }
-    setNewExcludedCategoryInput("");
-  };
-
-  const allDisplayedCategories = useMemo(() => {
-    const set = new Set<string>();
-    (draft?.pos?.employee_discount_excluded_categories ?? []).forEach((c) => {
-      if (c && c.trim()) set.add(c.trim());
-    });
-    availableCategories.forEach((c) => {
-      if (c && c.trim()) set.add(c.trim());
-    });
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [draft?.pos?.employee_discount_excluded_categories, availableCategories]);
 
   const visibleTabs = useMemo(
     () => configTabs.filter((tab) => scopePreset.visibleSections[tab.id]),
@@ -1240,97 +1198,18 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
             </div>
           </div>
 
-          {/* Tarjeta 2: Categorías Excluidas del Descuento (Minimalista) */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4 space-y-3">
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <Ban size={15} className="text-rose-600 dark:text-rose-400" />
-                <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                  Categorías Excluidas del Descuento
-                </h3>
-                {(draft.pos.employee_discount_excluded_categories ?? []).length > 0 && (
-                  <span className="rounded-full bg-rose-100 dark:bg-rose-950 px-2 py-0.5 text-[10px] font-bold text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
-                    {(draft.pos.employee_discount_excluded_categories ?? []).length} excluidas
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Hacé clic sobre cualquier categoría para excluirla del descuento o volver a incluirla.
-              </p>
-            </div>
-
-            {/* Chips unificados de categorías + Input inline */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-1">
-              {allDisplayedCategories.map((cat) => {
-                const isExcluded = (draft.pos.employee_discount_excluded_categories ?? []).some(
-                  (c) => c.toLowerCase() === cat.toLowerCase()
-                );
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => handleToggleExcludedCategory(cat)}
-                    disabled={!canModifyEmployeeBenefits}
-                    className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition cursor-pointer border select-none ${
-                      isExcluded
-                        ? "border-rose-400 dark:border-rose-700 bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200 shadow-2xs"
-                        : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-600 hover:text-slate-900 dark:hover:text-white"
-                    } ${!canModifyEmployeeBenefits ? "opacity-60 cursor-not-allowed" : ""}`}
-                    title={
-                      isExcluded
-                        ? `Clic para reactivar descuento en ${cat}`
-                        : `Clic para excluir ${cat} del descuento`
-                    }
-                  >
-                    {isExcluded ? (
-                      <>
-                        <X size={12} className="text-rose-600 dark:text-rose-400" />
-                        <span>{cat}</span>
-                        <span className="text-[10px] font-bold opacity-80">(Sin desc.)</span>
-                      </>
-                    ) : (
-                      <>
-                        <Plus size={12} className="text-slate-400" />
-                        <span>{cat}</span>
-                      </>
-                    )}
-                  </button>
-                );
-              })}
-
-              {/* Input inline para escribir otra categoría */}
-              {canModifyEmployeeBenefits && (
-                <div className="inline-flex items-center gap-1">
-                  <input
-                    type="text"
-                    value={newExcludedCategoryInput}
-                    onChange={(e) => setNewExcludedCategoryInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleAddCustomExcludedCategory();
-                      }
-                    }}
-                    placeholder="+ Otra categoría..."
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    data-lpignore="true"
-                    className="h-7 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:border-indigo-500 focus:border-solid focus:outline-none w-36 sm:w-44"
-                  />
-                  {newExcludedCategoryInput.trim() && (
-                    <button
-                      type="button"
-                      onClick={handleAddCustomExcludedCategory}
-                      className="h-7 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold cursor-pointer"
-                    >
-                      Excluir
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+          {/* Tarjeta 2: Categorías Excluidas del Descuento */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
+            <EmployeeExcludedCategoriesSelector
+              excludedCategories={draft.pos.employee_discount_excluded_categories ?? []}
+              availableCategories={availableCategories}
+              onChange={(nextList) => {
+                updateSection("pos", {
+                  employee_discount_excluded_categories: nextList,
+                });
+              }}
+              disabled={!canModifyEmployeeBenefits}
+            />
           </div>
         </section>
 
@@ -1667,86 +1546,18 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                 </div>
               </div>
 
-              {/* Categorías Excluidas del Descuento (Minimalista) */}
-              <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
-                    <Ban size={14} className="text-rose-600 dark:text-rose-400" />
-                    <span>Categorías excluidas del descuento de empleados:</span>
-                  </div>
-                  {(draft.pos.employee_discount_excluded_categories ?? []).length > 0 && (
-                    <span className="rounded-full bg-rose-100 dark:bg-rose-950 px-2 py-0.5 text-[10px] font-bold text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
-                      {(draft.pos.employee_discount_excluded_categories ?? []).length} excluidas
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  {allDisplayedCategories.map((cat) => {
-                    const isExcluded = (draft.pos.employee_discount_excluded_categories ?? []).some(
-                      (c) => c.toLowerCase() === cat.toLowerCase()
-                    );
-                    return (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => handleToggleExcludedCategory(cat)}
-                        disabled={!canModifyEmployeeBenefits}
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition cursor-pointer border select-none ${
-                          isExcluded
-                            ? "border-rose-400 dark:border-rose-700 bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200 shadow-2xs"
-                            : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-600 hover:text-slate-900 dark:hover:text-white"
-                        } ${!canModifyEmployeeBenefits ? "opacity-60 cursor-not-allowed" : ""}`}
-                        title={
-                          isExcluded
-                            ? `Clic para reactivar descuento en ${cat}`
-                            : `Clic para excluir ${cat} del descuento`
-                        }
-                      >
-                        {isExcluded ? (
-                          <>
-                            <X size={12} className="text-rose-600 dark:text-rose-400" />
-                            <span>{cat}</span>
-                            <span className="text-[10px] font-bold opacity-80">(Sin desc.)</span>
-                          </>
-                        ) : (
-                          <>
-                            <Plus size={12} className="text-slate-400" />
-                            <span>{cat}</span>
-                          </>
-                        )}
-                      </button>
-                    );
-                  })}
-
-                  {canModifyEmployeeBenefits && (
-                    <div className="inline-flex items-center gap-1">
-                      <input
-                        type="text"
-                        value={newExcludedCategoryInput}
-                        onChange={(e) => setNewExcludedCategoryInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleAddCustomExcludedCategory();
-                          }
-                        }}
-                        placeholder="+ Otra categoría..."
-                        autoComplete="off"
-                        className="h-7 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:border-indigo-500 focus:border-solid focus:outline-none w-36 sm:w-44"
-                      />
-                      {newExcludedCategoryInput.trim() && (
-                        <button
-                          type="button"
-                          onClick={handleAddCustomExcludedCategory}
-                          className="h-7 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold cursor-pointer"
-                        >
-                          Excluir
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
+              {/* Categorías Excluidas del Descuento */}
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
+                <EmployeeExcludedCategoriesSelector
+                  excludedCategories={draft.pos.employee_discount_excluded_categories ?? []}
+                  availableCategories={availableCategories}
+                  onChange={(nextList) => {
+                    updateSection("pos", {
+                      employee_discount_excluded_categories: nextList,
+                    });
+                  }}
+                  disabled={!canModifyEmployeeBenefits}
+                />
               </div>
 
               <div className="flex items-center gap-2 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 p-2.5 text-xs text-indigo-800 dark:text-indigo-300">

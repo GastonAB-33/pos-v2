@@ -130,65 +130,53 @@ export const SalaryAdvanceModal = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-          {/* Selección de Empleado */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-              Empleado receptor *
-            </label>
-            <select
-              value={employeeId}
-              onChange={(e) => setEmployeeId(e.target.value)}
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold text-slate-900 dark:text-slate-100 focus:border-amber-500 focus:outline-none"
-              required
-            >
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.full_name} ({emp.position || "Personal"}) {emp.base_salary ? `• Sueldo: ${currency.format(emp.base_salary)}` : ""}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Importe del Adelanto y Fecha */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                Monto del Adelanto ($) *
-              </label>
-              <div className="relative">
-                <DollarSign
-                  size={16}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
-                />
-                <input
-                  type="number"
-                  step="any"
-                  min="0.01"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                  data-lpignore="true"
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 py-2 pl-9 pr-3 text-base font-bold font-mono text-slate-900 dark:text-slate-100 focus:border-amber-500 focus:outline-none"
-                  required
-                  autoFocus
-                />
+          {/* Ficha Empleado Receptor (Informativa, sin dropdown redundante) */}
+          {selectedEmployee && (
+            <div className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 p-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-xs">
+                {selectedEmployee.full_name.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                    {selectedEmployee.full_name}
+                  </span>
+                  <span className="font-mono text-[10px] font-semibold text-slate-500 bg-slate-200/60 dark:bg-slate-700 px-1.5 py-0.5 rounded">
+                    {selectedEmployee.code}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                  {selectedEmployee.position || "Personal"} {selectedEmployee.base_salary ? `• Sueldo Base: ${currency.format(selectedEmployee.base_salary)}` : ""}
+                </p>
               </div>
             </div>
+          )}
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                Fecha de entrega *
-              </label>
+          {/* Importe del Adelanto */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+              Monto del Adelanto ($) *
+            </label>
+            <div className="relative">
+              <DollarSign
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+              />
               <input
-                type="date"
-                value={paymentDate}
-                onChange={(e) => setPaymentDate(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-amber-500 focus:outline-none font-medium"
+                type="number"
+                step="any"
+                min="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-lpignore="true"
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 py-2.5 pl-9 pr-3 text-base font-bold font-mono text-slate-900 dark:text-slate-100 focus:border-amber-500 focus:outline-none"
                 required
+                autoFocus
               />
             </div>
           </div>

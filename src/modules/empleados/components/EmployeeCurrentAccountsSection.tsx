@@ -22,6 +22,7 @@ interface EmployeeCurrentAccountsSectionProps {
   onSelectEmployee: (employee: Employee | null) => void;
   onBalanceUpdated: () => void;
   onOpenSalaryDisbursement?: (employee: Employee) => void;
+  usersById?: Record<string, string>;
 }
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -39,6 +40,7 @@ export const EmployeeCurrentAccountsSection = ({
   onSelectEmployee,
   onBalanceUpdated,
   onOpenSalaryDisbursement,
+  usersById = {},
 }: EmployeeCurrentAccountsSectionProps) => {
   const [search, setSearch] = useState("");
   const [filterMode, setFilterMode] = useState<"all" | "debt" | "upToDate">("all");
@@ -53,6 +55,7 @@ export const EmployeeCurrentAccountsSection = ({
         userId={userId}
         employee={selectedEmployee}
         canWrite={canWrite}
+        usersById={usersById}
         onClose={() => onSelectEmployee(null)}
         onBalanceUpdated={onBalanceUpdated}
         onOpenSalaryDisbursement={onOpenSalaryDisbursement}

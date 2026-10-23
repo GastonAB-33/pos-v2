@@ -13,6 +13,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   ArrowUpRight,
+  ChevronDown,
   FileText,
   Receipt as ReceiptIcon,
   RotateCcw,
@@ -23,7 +24,8 @@ import {
   UserCheck,
   X,
 } from "lucide-react";
-import type { BankAccount, CashMovement, PaymentMethod } from "@/types/entities";
+import type { BankAccount, CashMovement, Invoice, PaymentMethod, Sale } from "@/types/entities";
+import { formatLocalTime } from "@/modules/caja/utils/cash-date.utils";
 
 interface CashMovementsTableProps {
   movements: CashMovement[];
@@ -32,7 +34,9 @@ interface CashMovementsTableProps {
   paymentMethods?: PaymentMethod[];
   usersById?: Record<string, string>;
   saleNumbersById?: Record<string, string>;
-  onViewSaleDocument?: (saleId: string) => void;
+  salesById?: Record<string, Sale>;
+  invoicesBySaleId?: Record<string, Invoice[]>;
+  onViewSaleDocument?: (saleId: string, preferredTab?: "ticket" | "invoice") => void;
   blindMode?: boolean;
 }
 
@@ -232,6 +236,8 @@ export const CashMovementsTable = ({
   saleBankAccountsById = {},
   usersById = {},
   saleNumbersById = {},
+  salesById = {},
+  invoicesBySaleId = {},
   onViewSaleDocument,
   blindMode = false,
 }: CashMovementsTableProps) => {
@@ -240,6 +246,7 @@ export const CashMovementsTable = ({
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("date_desc");
+  const [openDocDropdownSaleId, setOpenDocDropdownSaleId] = useState<string | null>(null);
 
   // Estado de ordenamiento de TanStack Table
   const [sorting, setSorting] = useState<SortingState>([
@@ -409,9 +416,9 @@ export const CashMovementsTable = ({
           <div
             className="flex items-center gap-1 cursor-pointer select-none group"
             onClick={column.getToggleSortingHandler()}
-            title="Clic para ordenar por fecha"
+            title="Clic para ordenar por hora"
           >
-            <span>Fecha / Hora</span>
+            <span>Hora</span>
             {column.getIsSorted() === "asc" ? (
               <ArrowUp size={12} className="text-blue-500" />
             ) : column.getIsSorted() === "desc" ? (
@@ -421,17 +428,17 @@ export const CashMovementsTable = ({
             )}
           </div>
         ),
-        cell: (info) => (
-          <span className="whitespace-nowrap text-slate-500 dark:text-slate-400 font-mono text-[11px]">
-            {new Date(info.getValue()).toLocaleString("es-AR", {
-              day: "2-digit",
-              month: "2-digit",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </span>
-        ),
+        cell: (info) => {
+          const rawDate = info.getValue();
+          return (
+            <span
+              className="whitespace-nowrap text-slate-600 dark:text-slate-300 font-mono text-[11px] font-semibold"
+              title={new Date(rawDate).toLocaleString("es-AR")}
+            >
+              {formatLocalTime(rawDate)} hs
+            </span>
+          );
+        },
       }),
       columnHelper.accessor((row) => getMovementCategory(row), {
         id: "movement_type",
@@ -622,29 +629,89 @@ export const CashMovementsTable = ({
       }),
       columnHelper.display({
         id: "actions",
-        header: () => <div className="text-right">Ticket</div>,
+        header: () => <div className="text-right">Comprobante</div>,
         cell: (info) => {
           const movement = info.row.original;
           if (movement.movement_type !== "sale_payment" || !movement.reference_id) {
             return <div className="text-right text-slate-400 dark:text-slate-600">-</div>;
           }
+          const saleId = movement.reference_id;
+          const hasInvoice =
+            Boolean(invoicesBySaleId?.[saleId]?.length) ||
+            Boolean(salesById?.[saleId]?.arca_document_id);
+
+          if (!hasInvoice) {
+            return (
+              <div className="text-right">
+                <button
+                  type="button"
+                  className="h-6 inline-flex items-center gap-1 px-2 text-[11px] font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg transition-colors shadow-2xs cursor-pointer"
+                  onClick={() => onViewSaleDocument?.(saleId, "ticket")}
+                  title="Ver ticket de venta"
+                >
+                  <ReceiptIcon className="h-3 w-3 text-slate-400" />
+                  <span>Ticket</span>
+                </button>
+              </div>
+            );
+          }
+
+          const isDropdownOpen = openDocDropdownSaleId === saleId;
+
           return (
-            <div className="text-right">
+            <div className="relative inline-block text-right">
               <button
                 type="button"
-                className="h-6 inline-flex items-center gap-1 px-2 text-[11px] font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-700 rounded-lg transition-colors shadow-2xs cursor-pointer"
-                onClick={() => onViewSaleDocument?.(movement.reference_id!)}
-                title="Ver comprobante de venta"
+                onClick={() => setOpenDocDropdownSaleId(isDropdownOpen ? null : saleId)}
+                className="h-6 inline-flex items-center gap-1 px-2 text-[11px] font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-300 dark:border-blue-700 rounded-lg transition-colors shadow-2xs cursor-pointer"
+                title="Seleccionar comprobante fiscal o ticket"
               >
-                <FileText className="h-3 w-3 text-slate-400 dark:text-slate-400" />
-                Ticket
+                <FileText className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                <span>Factura</span>
+                <ChevronDown
+                  size={11}
+                  className={`transition-transform duration-150 ${isDropdownOpen ? "rotate-180" : ""}`}
+                />
               </button>
+
+              {isDropdownOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-30"
+                    onClick={() => setOpenDocDropdownSaleId(null)}
+                  />
+                  <div className="absolute right-0 top-full mt-1 z-40 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl py-1 text-xs animate-in fade-in zoom-in-95 text-left">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenDocDropdownSaleId(null);
+                        onViewSaleDocument?.(saleId, "invoice");
+                      }}
+                      className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-slate-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-blue-950/60 hover:text-blue-600 dark:hover:text-blue-300 font-semibold cursor-pointer"
+                    >
+                      <FileText size={13} className="text-blue-500" />
+                      <span>Factura</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenDocDropdownSaleId(null);
+                        onViewSaleDocument?.(saleId, "ticket");
+                      }}
+                      className="w-full text-left px-3 py-1.5 flex items-center gap-2 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold cursor-pointer"
+                    >
+                      <ReceiptIcon size={13} className="text-slate-400" />
+                      <span>Ticket</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           );
         },
       }),
     ],
-    [bankAccounts, blindMode, onViewSaleDocument, saleBankAccountsById, saleNumbersById, usersById]
+    [bankAccounts, blindMode, onViewSaleDocument, saleBankAccountsById, saleNumbersById, usersById, salesById, invoicesBySaleId, openDocDropdownSaleId]
   );
 
   const table = useReactTable({
@@ -660,16 +727,16 @@ export const CashMovementsTable = ({
 
   return (
     <div className="space-y-3">
-      {/* BARRA MINIMALISTA DE FILTROS, BÚSQUEDA Y TOTALES */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 p-2.5 px-3 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 shadow-2xs">
-        {/* Controles de filtro compactos en fila horizontal */}
-        <div className="flex flex-wrap items-center gap-2 min-w-0 flex-1">
+      {/* BARRA MINIMALISTA Y COMPACTA DE FILTROS, BÚSQUEDA Y TOTALES (1 SOLA FILA) */}
+      <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-2 p-1.5 px-2.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 shadow-2xs text-xs">
+        {/* Controles de filtro compactos */}
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1">
           {/* Búsqueda rápida */}
-          <div className="relative min-w-[140px] sm:w-48 flex-1 sm:flex-initial">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+          <div className="relative w-32 sm:w-40 focus-within:w-48 transition-all shrink-0">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500 pointer-events-none" />
             <input
               type="text"
-              placeholder="Buscar movimiento..."
+              placeholder="Buscar..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               autoComplete="off"
@@ -677,13 +744,13 @@ export const CashMovementsTable = ({
               autoCapitalize="off"
               spellCheck={false}
               data-lpignore="true"
-              className="w-full h-7 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 pl-8 pr-6 outline-none focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/20 transition placeholder:text-slate-400 dark:placeholder:text-slate-500"
+              className="w-full h-7 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 pl-7 pr-5 outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition placeholder:text-slate-400"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 cursor-pointer"
                 title="Limpiar búsqueda"
               >
                 <X size={12} />
@@ -696,13 +763,13 @@ export const CashMovementsTable = ({
             value={movementTypeFilter}
             onChange={(e) => setMovementTypeFilter(e.target.value)}
             className="h-7 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 px-2 outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition cursor-pointer font-medium"
-            title="Filtrar por tipo de movimiento"
+            title="Filtrar por tipo"
           >
             <option value="all">Todos los tipos</option>
             <option value="pos_sale">Ventas POS</option>
-            <option value="manual">Manuales (Ing/Egr)</option>
-            <option value="current_account">Cuentas corrientes</option>
-            <option value="purchase">Proveedores / Compras</option>
+            <option value="manual">Manuales</option>
+            <option value="current_account">Cta. Cte.</option>
+            <option value="purchase">Proveedores</option>
             <option value="adjustment">Ajustes</option>
           </select>
 
@@ -710,8 +777,8 @@ export const CashMovementsTable = ({
           <select
             value={paymentMethodFilter}
             onChange={(e) => setPaymentMethodFilter(e.target.value)}
-            className="h-7 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 px-2 outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition cursor-pointer font-medium max-w-[210px] truncate"
-            title="Filtrar por medio de pago o cuenta bancaria"
+            className="h-7 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 px-2 outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition cursor-pointer font-medium max-w-[130px] sm:max-w-[160px] truncate"
+            title="Filtrar por medio"
           >
             {availablePaymentMethodOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -725,14 +792,12 @@ export const CashMovementsTable = ({
             value={sortBy}
             onChange={(e) => handleSortChange(e.target.value)}
             className="h-7 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 px-2 outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition cursor-pointer font-medium"
-            title="Ordenar movimientos"
+            title="Ordenar"
           >
             <option value="date_desc">Más recientes</option>
             <option value="date_asc">Más antiguos</option>
             <option value="amount_desc">Mayor importe</option>
             <option value="amount_asc">Menor importe</option>
-            <option value="type_asc">Tipo (A-Z)</option>
-            <option value="reference_asc">Origen / Medio (A-Z)</option>
           </select>
 
           {/* Botón Restablecer si hay filtro activo */}
@@ -749,29 +814,29 @@ export const CashMovementsTable = ({
           )}
         </div>
 
-        {/* Lado Derecho: Totales y métricas en la misma fila */}
-        <div className="flex items-center justify-between sm:justify-end gap-3 text-xs font-mono shrink-0 pt-1 lg:pt-0 border-t lg:border-t-0 border-slate-200 dark:border-slate-800">
-          <span className="text-[11px] font-sans text-slate-400 dark:text-slate-500 whitespace-nowrap">
-            {summary.count} {summary.count === 1 ? "movimiento" : "movimientos"}
+        {/* Lado Derecho: Totales y métricas compactas inline */}
+        <div className="flex items-center gap-2.5 font-mono shrink-0 text-xs text-slate-500 dark:text-slate-400 ml-auto whitespace-nowrap">
+          <span className="text-[11px] font-sans">
+            {summary.count} {summary.count === 1 ? "mov." : "movs."}
           </span>
           {summary.count > 0 && !blindMode && (
-            <div className="flex items-center gap-2.5 font-bold whitespace-nowrap text-xs">
-              <span className="text-emerald-600 dark:text-emerald-400" title="Total ingresos filtrados">
+            <div className="flex items-center gap-2 font-bold text-xs">
+              <span className="text-emerald-600 dark:text-emerald-400" title="Ingresos">
                 +{currency.format(summary.incomesTotal)}
               </span>
               {summary.expensesTotal > 0 && (
-                <span className="text-rose-600 dark:text-rose-400" title="Total egresos filtrados">
+                <span className="text-rose-600 dark:text-rose-400" title="Egresos">
                   -{currency.format(summary.expensesTotal)}
                 </span>
               )}
-              <span className="text-slate-800 dark:text-slate-200 pl-2.5 border-l border-slate-300 dark:border-slate-700" title="Balance neto filtrado">
+              <span className="text-slate-800 dark:text-slate-200 pl-2 border-l border-slate-300 dark:border-slate-700 font-black" title="Balance neto">
                 Neto: {currency.format(summary.netTotal)}
               </span>
             </div>
           )}
           {summary.count > 0 && blindMode && (
             <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800">
-              Montos protegidos en caja a ciegas
+              Montos protegidos
             </span>
           )}
         </div>

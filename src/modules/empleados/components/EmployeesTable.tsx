@@ -12,6 +12,7 @@ import type { Employee, EmployeeAttendance } from "@/types/entities";
 interface EmployeesTableProps {
   employees: Employee[];
   todayActiveByEmployee: Map<string, EmployeeAttendance>;
+  pendingAdvancesByEmployee?: Map<string, number>;
   canWrite: boolean;
   onSelectEmployee: (employee: Employee) => void;
   onOpenCurrentAccount: (employee: Employee) => void;
@@ -32,6 +33,7 @@ const currency = new Intl.NumberFormat("es-AR", {
 export const EmployeesTable = ({
   employees,
   todayActiveByEmployee,
+  pendingAdvancesByEmployee,
   canWrite,
   onSelectEmployee,
   onEdit,
@@ -61,7 +63,7 @@ export const EmployeesTable = ({
               <th className="py-3 px-4">Documento</th>
               <th className="py-3 px-4">Puesto</th>
               <th className="py-3 px-4">Sueldo Base</th>
-              <th className="py-3 px-4">Cta. Corriente (Deuda)</th>
+              <th className="py-3 px-4" title="Saldo negativo total: Cuenta corriente + Adelantos pendientes de descuento">Saldo Total (Deuda)</th>
               <th className="py-3 px-4">Turno Hoy</th>
               <th className="py-3 px-4">Estado</th>
               <th className="py-3 px-4 text-right">Acciones</th>
@@ -70,9 +72,13 @@ export const EmployeesTable = ({
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-700 dark:text-slate-300">
             {employees.map((employee) => {
               const activeShift = todayActiveByEmployee.get(employee.id);
-              const balance = employee.current_balance ?? 0;
-              const hasDebt = balance > 0;
-              const hasCredit = balance < 0;
+              const ctaCteBalance = employee.current_balance ?? 0;
+              const pendingAdv = pendingAdvancesByEmployee?.get(employee.id) ?? 0;
+              const totalDebt = (ctaCteBalance > 0 ? ctaCteBalance : 0) + pendingAdv;
+              const totalCredit = ctaCteBalance < 0 ? Math.abs(ctaCteBalance) : 0;
+              const netBalance = totalCredit - totalDebt;
+              const hasTotalDebt = netBalance < 0;
+              const hasTotalCredit = netBalance > 0;
 
               return (
                 <tr
@@ -115,25 +121,33 @@ export const EmployeesTable = ({
                   </td>
 
                   <td className="py-3 px-4">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
-                          hasDebt
-                            ? "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900"
-                            : hasCredit
-                            ? "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900"
-                            : "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900"
-                        }`}
-                      >
-                        {hasDebt && <AlertTriangle size={11} />}
-                        {!hasDebt && !hasCredit && <CheckCircle size={11} />}
-                        {currency.format(balance)}
-                      </span>
-                      {employee.current_account_limit ? (
-                        <span className="text-[10px] text-slate-400" title="Límite autorizado">
-                          (Lím: {currency.format(employee.current_account_limit)})
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                            hasTotalDebt
+                              ? "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900"
+                              : hasTotalCredit
+                              ? "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900"
+                              : "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900"
+                          }`}
+                          title={`Saldo total: ${hasTotalDebt ? `-${currency.format(Math.abs(netBalance))}` : currency.format(netBalance)} (Cta. Corriente: ${currency.format(ctaCteBalance)}${pendingAdv > 0 ? ` + Adelantos pendientes: ${currency.format(pendingAdv)}` : ""})`}
+                        >
+                          {hasTotalDebt && <AlertTriangle size={11} />}
+                          {!hasTotalDebt && !hasTotalCredit && <CheckCircle size={11} />}
+                          {hasTotalDebt ? `-${currency.format(Math.abs(netBalance))}` : hasTotalCredit ? `+${currency.format(netBalance)}` : currency.format(0)}
                         </span>
-                      ) : null}
+                        {employee.current_account_limit ? (
+                          <span className="text-[10px] text-slate-400" title="Límite autorizado">
+                            (Lím: {currency.format(employee.current_account_limit)})
+                          </span>
+                        ) : null}
+                      </div>
+                      {pendingAdv > 0 && (
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          Cta: {currency.format(ctaCteBalance)} • Adel: {currency.format(pendingAdv)}
+                        </span>
+                      )}
                     </div>
                   </td>
 
