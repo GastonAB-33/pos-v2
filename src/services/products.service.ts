@@ -424,7 +424,7 @@ export const productsService = {
 
   ensureSpecialProduct: async (
     tenantId: string,
-    specialCode: "SISTEMA_VENTA_MANUAL" | "SISTEMA_COBRO_CTA_CTE" | "SISTEMA_COBRO_ENVASE",
+    specialCode: "SISTEMA_VENTA_MANUAL" | "SISTEMA_COBRO_CTA_CTE" | "SISTEMA_COBRO_ENVASE" | "SISTEMA_DEVOLUCION_ENVASE",
     defaultName: string
   ): Promise<Product> => {
     // 1. Buscar si ya existe este producto del sistema para el tenant

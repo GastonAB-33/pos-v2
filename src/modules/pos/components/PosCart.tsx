@@ -22,6 +22,7 @@ interface PosCartItemView {
   scale_barcode: string | null;
   is_debt_payment_item?: boolean;
   is_returnable_package_item?: boolean;
+  is_package_refund_item?: boolean;
   returnable_config?: ReturnableConfig | null;
   returnable_status?: ReturnableCartStatus;
   manual_discount?: { type: "percent" | "amount"; value: number; reason: string } | null;
@@ -405,9 +406,15 @@ export const PosCart = ({
                         </span>
                       ) : null}
                       {item.is_returnable_package_item ? (
-                        <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-200 border border-amber-300 dark:border-amber-800">
-                          📦 Cobro de Envase
-                        </span>
+                        item.unit_price < 0 || item.is_package_refund_item ? (
+                          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800">
+                            ♻️ Devolución de Envase
+                          </span>
+                        ) : (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-200 border border-amber-300 dark:border-amber-800">
+                            📦 Cobro de Envase
+                          </span>
+                        )
                       ) : null}
                       {item.sale_mode === "weight" ? (
                         <span className="rounded bg-amber-100 px-1 py-0.2 text-[9px] font-bold text-amber-800 dark:bg-amber-950 dark:text-amber-200">
@@ -457,7 +464,7 @@ export const PosCart = ({
                   </div>
 
                   <div className="text-right shrink-0">
-                    <p className="text-sm font-bold text-blue-700 dark:text-blue-400">
+                    <p className={cn("text-sm font-bold", item.line_total < 0 ? "text-rose-600 dark:text-rose-400" : "text-blue-700 dark:text-blue-400")}>
                       {currency.format(item.line_total)}
                     </p>
                     {item.promotion_discount_total > 0 ? (
@@ -474,7 +481,7 @@ export const PosCart = ({
                     <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                       Pago único
                     </span>
-                  ) : item.is_returnable_package_item ? (
+                  ) : item.is_returnable_package_item && !item.is_package_refund_item && item.unit_price >= 0 ? (
                     <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60">
                       {item.quantity} {item.quantity === 1 ? "envase" : "envases"}
                     </span>
@@ -601,7 +608,7 @@ export const PosCart = ({
                       disabled={disabled || !canWrite}
                       aria-label={`Eliminar ${item.name}`}
                       className="flex h-6 w-6 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/50"
-                      title={item.is_returnable_package_item ? "Quitar cobro de envase" : "Eliminar producto"}
+                      title={item.is_package_refund_item || item.unit_price < 0 ? "Quitar devolución de envase" : item.is_returnable_package_item ? "Quitar cobro de envase" : "Eliminar producto"}
                     >
                       <Trash2 size={13} />
                     </button>

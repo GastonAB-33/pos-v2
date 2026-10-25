@@ -24,6 +24,7 @@ create table if not exists public.employees (
   current_balance numeric(14,2) not null default 0,
   current_account_enabled boolean not null default true,
   current_account_limit numeric(14,2),
+  discount_percent numeric(5,2),
   observations text,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),

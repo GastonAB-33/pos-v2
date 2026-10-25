@@ -778,7 +778,11 @@ export const PurchaseCart = ({
                 </div>
 
                 {/* Controles de edición en cuadrícula responsiva de 7 columnas */}
-                <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7 w-full max-w-full">
+                <div className={`mt-2.5 grid gap-2 w-full max-w-full ${
+                  canAdjustProfitMargin
+                    ? "grid-cols-2 sm:grid-cols-4 lg:grid-cols-7"
+                    : "grid-cols-2 sm:grid-cols-4"
+                }`}>
                   {/* 1. Cantidad a pagar */}
                   <div className="min-w-0">
                     <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate" title={`Cant. a pagar (${getUnitLabel(item)})`}>
@@ -961,8 +965,10 @@ export const PurchaseCart = ({
                     />
                   </div>
 
-                  {/* 5. % Ganancia */}
-                  <div className="min-w-0">
+                  {canAdjustProfitMargin ? (
+                    <>
+                      {/* 5. % Ganancia */}
+                      <div className="min-w-0">
                     <label className="mb-0.5 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-purple-700 dark:text-purple-400 truncate" title="Margen de ganancia (%)">
                       <span className="flex items-center gap-0.5 truncate">
                         <Percent className="h-2.5 w-2.5 text-purple-600 dark:text-purple-400 shrink-0" />
@@ -1082,6 +1088,8 @@ export const PurchaseCart = ({
                       spellCheck={false}
                     />
                   </div>
+                    </>
+                  ) : null}
                 </div>
 
                 {/* Subtotal, Costo antes, Opciones de Actualización de Venta y Totales por fila */}
@@ -1115,7 +1123,7 @@ export const PurchaseCart = ({
                   </div>
 
                   {/* Opciones inline de actualización de precio (SOLO aparecen si hubo cambio de costo) */}
-                  {hasCostDiff && (
+                  {hasCostDiff && canAdjustProfitMargin && (
                     <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-md border border-slate-200/60 bg-slate-50/80 px-2 py-1 text-[11px] text-slate-700 dark:border-slate-700/60 dark:bg-slate-900/80 dark:text-slate-300 w-full sm:w-auto max-w-full">
                       {/* Casilla 1: Mantener precio venta */}
                       <label className="inline-flex cursor-pointer items-center gap-1.5 select-none text-[10px] sm:text-[11px]">

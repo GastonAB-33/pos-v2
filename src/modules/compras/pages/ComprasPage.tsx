@@ -11,6 +11,8 @@ import { PurchaseCheckoutPanel } from "@/modules/compras/components/PurchaseChec
 import { PurchaseProductSelectModal } from "@/modules/compras/components/PurchaseProductSelectModal";
 import { PurchasesHistoryTable } from "@/modules/compras/components/PurchasesHistoryTable";
 import { PurchaseReturnModal } from "@/modules/compras/components/PurchaseReturnModal";
+import { PurchasePricingConfirmationModal } from "@/modules/compras/components/PurchasePricingConfirmationModal";
+import { PurchasePricingReviewPanel } from "@/modules/compras/components/PurchasePricingReviewPanel";
 import { PurchasePaymentModal } from "@/modules/compras/components/PurchasePaymentModal";
 import { usePurchasesModule } from "@/modules/compras/hooks/usePurchasesModule";
 import { ProductFormModal } from "@/modules/productos/components/ProductFormModal";
@@ -141,13 +143,17 @@ export const ComprasPage = () => {
   const canWritePurchases = canWrite("compras");
   const canAdjustProfitMarginPerm = canWrite("compras_margen");
   const [allowProfitMarginBySetting, setAllowProfitMarginBySetting] = useState(true);
+  const [isDoubleConfirmationSetting, setIsDoubleConfirmationSetting] = useState(false);
 
   useEffect(() => {
     if (!tenantId) return;
     let active = true;
     void settingsService.getByTenant(tenantId).then((settings) => {
-      if (active && settings?.stock?.allow_purchases_profit_margin_adjustment !== undefined) {
-        setAllowProfitMarginBySetting(settings.stock.allow_purchases_profit_margin_adjustment);
+      if (active) {
+        if (settings?.stock?.allow_purchases_profit_margin_adjustment !== undefined) {
+          setAllowProfitMarginBySetting(settings.stock.allow_purchases_profit_margin_adjustment);
+        }
+        setIsDoubleConfirmationSetting(Boolean(settings?.stock?.purchase_double_confirmation_enabled));
       }
     });
     return () => {
@@ -155,9 +161,15 @@ export const ComprasPage = () => {
     };
   }, [tenantId]);
 
-  const canAdjustProfitMargin = allowProfitMarginBySetting && canAdjustProfitMarginPerm;
+  // Si no está permitido por configuración, o no tiene permiso, o está activa la doble confirmación:
+  // los empleados no pueden ni modificar ni ver porcentaje de ganancia ni precios de venta
+  const canAdjustProfitMargin = allowProfitMarginBySetting && canAdjustProfitMarginPerm && !isDoubleConfirmationSetting;
 
-  const [viewMode, setViewMode] = useState<"history" | "create">("history");
+  const [viewMode, setViewMode] = useState<"history" | "create" | "review">("history");
+  const [reviewPurchaseTarget, setReviewPurchaseTarget] = useState<{
+    purchase: Purchase;
+    supplier: Supplier | null;
+  } | null>(null);
   const [isSelectProductModalOpen, setIsSelectProductModalOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
@@ -172,6 +184,10 @@ export const ComprasPage = () => {
   const [duplicateReview, setDuplicateReview] = useState<DuplicateReviewState | null>(null);
   const [returnToProductSelectAfterCreate, setReturnToProductSelectAfterCreate] = useState(false);
   const [returnModalTarget, setReturnModalTarget] = useState<{
+    purchase: Purchase;
+    supplier: Supplier | null;
+  } | null>(null);
+  const [pricingModalTarget, setPricingModalTarget] = useState<{
     purchase: Purchase;
     supplier: Supplier | null;
   } | null>(null);
@@ -212,6 +228,9 @@ export const ComprasPage = () => {
     removeItem,
     clearCart,
     confirmPurchase,
+    confirmPurchasePricing,
+    confirmPurchaseReview,
+    usersById,
     createPurchaseReturn,
     findPotentialDuplicateProducts,
     createProductAndAddToCart,
@@ -408,7 +427,22 @@ export const ComprasPage = () => {
           </div>
         ) : null}
 
-        {viewMode === "history" ? (
+        {viewMode === "review" && reviewPurchaseTarget ? (
+          /* ========================================================================= */
+          /* VISTA: REVISIÓN Y 2DA CONFIRMACIÓN DE COMPRA (PANTALLA COMPLETA)         */
+          /* ========================================================================= */
+          <PurchasePricingReviewPanel
+            purchase={reviewPurchaseTarget.purchase}
+            supplier={reviewPurchaseTarget.supplier}
+            usersById={usersById}
+            disabled={isSubmitting}
+            onBack={() => {
+              setViewMode("history");
+              setReviewPurchaseTarget(null);
+            }}
+            onConfirmReview={confirmPurchaseReview}
+          />
+        ) : viewMode === "history" ? (
           /* ========================================================================= */
           /* VISTA: HISTORIAL DE COMPRAS                                              */
           /* ========================================================================= */
@@ -470,6 +504,14 @@ export const ComprasPage = () => {
                   onOpenReturnModal={(purchase, supplier) =>
                     setReturnModalTarget({ purchase, supplier })
                   }
+                  onOpenPricingModal={(purchase, supplier) =>
+                    setPricingModalTarget({ purchase, supplier })
+                  }
+                  onEnterReviewPurchase={(purchase, supplier) => {
+                    setReviewPurchaseTarget({ purchase, supplier });
+                    setViewMode("review");
+                  }}
+                  usersById={usersById}
                 />
               )}
             </section>
@@ -692,6 +734,19 @@ export const ComprasPage = () => {
         />
       ) : null}
 
+
+
+      {/* Modal: Fijación de Precios de Venta (Doble Confirmación) */}
+      {pricingModalTarget ? (
+        <PurchasePricingConfirmationModal
+          open={Boolean(pricingModalTarget)}
+          purchase={pricingModalTarget.purchase}
+          supplier={pricingModalTarget.supplier}
+          disabled={isSubmitting}
+          onClose={() => setPricingModalTarget(null)}
+          onConfirmPricing={confirmPurchasePricing}
+        />
+      ) : null}
       {/* Modal 6: Pago de la compra */}
       <PurchasePaymentModal
         open={isPaymentModalOpen && Boolean(pendingHeaderValues)}

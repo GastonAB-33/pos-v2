@@ -3,12 +3,14 @@ import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
+  getPaginationRowModel,
   useReactTable,
 } from "@tanstack/react-table";
 import {
   Eye,
   Calendar,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Sun,
   Sunset,
@@ -221,6 +223,13 @@ export const CashDailyTrackingTable = ({
     data: rows,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    initialState: {
+      pagination: {
+        pageSize: 10,
+        pageIndex: 0,
+      },
+    },
   });
 
   if (!rows.length) {
@@ -451,6 +460,64 @@ export const CashDailyTrackingTable = ({
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Barra de Paginación (10 jornadas por página) */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-200 dark:border-slate-800 pt-3 text-xs text-slate-600 dark:text-slate-400">
+        <div className="flex items-center gap-2">
+          <span>
+            Mostrando{" "}
+            <strong className="text-slate-900 dark:text-slate-100">
+              {rows.length === 0 ? 0 : table.getState().pagination.pageIndex * 10 + 1}
+            </strong>{" "}
+            a{" "}
+            <strong className="text-slate-900 dark:text-slate-100">
+              {Math.min((table.getState().pagination.pageIndex + 1) * 10, rows.length)}
+            </strong>{" "}
+            de{" "}
+            <strong className="text-slate-900 dark:text-slate-100">{rows.length}</strong> jornadas
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => table.setPageIndex(0)}
+            disabled={!table.getCanPreviousPage()}
+            className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+            title="Primera página"
+          >
+            «
+          </button>
+          <button
+            type="button"
+            onClick={() => table.previousPage()}
+            disabled={!table.getCanPreviousPage()}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" /> Anterior
+          </button>
+          <span className="px-2 font-medium">
+            Página {table.getPageCount() === 0 ? 1 : table.getState().pagination.pageIndex + 1} de {Math.max(1, table.getPageCount())}
+          </span>
+          <button
+            type="button"
+            onClick={() => table.nextPage()}
+            disabled={!table.getCanNextPage()}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+          >
+            Siguiente <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+            disabled={!table.getCanNextPage()}
+            className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+            title="Última página"
+          >
+            »
+          </button>
+        </div>
       </div>
     </div>
   );

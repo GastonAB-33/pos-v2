@@ -75,6 +75,8 @@ export interface PosCartItem {
   returnable_config?: ReturnableConfig | null;
   returnable_status?: ReturnableCartStatus;
   is_returnable_package_item?: boolean;
+  is_package_refund_item?: boolean;
+  package_refund_name?: string | null;
   parent_product_id?: string | null;
   code?: string | null;
   barcode?: string | null;
@@ -258,6 +260,18 @@ const calculateSummaryByMethod = (
   discountsEnabled: boolean = true,
   roundingEnabled: boolean = true
 ): PosCheckoutSummary => {
+  if (subtotal < 0) {
+    return {
+      subtotal,
+      surchargeTotal: 0,
+      discountTotal: 0,
+      paymentAdjustment: 0,
+      rawTotal: subtotal,
+      roundingAdjustment: 0,
+      total: subtotal,
+    };
+  }
+
   const isRoundingActive = Boolean(roundingEnabled && (posSettings?.rounding_enabled ?? true));
 
   if (!paymentMethod) {
@@ -1086,7 +1100,9 @@ export const usePosSale = (tenantId: string | null) => {
   const promotionsResolution = useMemo(
     () => {
       if (!discountsEnabled) {
-        const eligibleItems = cartState.filter((item) => !item.is_debt_payment_item && !item.is_promo_item);
+        const eligibleItems = cartState.filter(
+          (item) => !item.is_debt_payment_item && !item.is_promo_item && !item.is_package_refund_item && item.unit_price >= 0
+        );
         const subtotal = roundAmount(
           eligibleItems.reduce((acc, item) => acc + item.quantity * item.unit_price, 0)
         );
@@ -1111,7 +1127,7 @@ export const usePosSale = (tenantId: string | null) => {
 
       return promotionsService.resolveApplicablePromotions(
         cartState
-          .filter((item) => !item.is_debt_payment_item && !item.is_promo_item)
+          .filter((item) => !item.is_debt_payment_item && !item.is_promo_item && !item.is_package_refund_item && item.unit_price >= 0)
           .map((item) => ({
             product_id: item.product_id,
             quantity: item.quantity,
@@ -1130,7 +1146,7 @@ export const usePosSale = (tenantId: string | null) => {
     );
 
     const itemsWithProductPromotions = cartState.map((item) => {
-      if (item.is_debt_payment_item) {
+      if (item.is_debt_payment_item || item.is_package_refund_item || item.unit_price < 0) {
         return {
           ...item,
           line_subtotal: roundAmount(item.quantity * item.unit_price),
@@ -1249,7 +1265,7 @@ export const usePosSale = (tenantId: string | null) => {
     );
 
     const isItemEligible = (item: PosCartItemComputed) => {
-      if (item.is_debt_payment_item) return false;
+      if (item.is_debt_payment_item || item.is_package_refund_item || item.unit_price < 0) return false;
       if (isEmployeeDiscount && item.category) {
         const cat = item.category.trim().toLowerCase();
         if (excludedCategories.includes(cat)) return false;
@@ -1391,7 +1407,7 @@ export const usePosSale = (tenantId: string | null) => {
   );
 
   const subtotal = useMemo(
-    () => roundAmount(Math.max(0, subtotalBeforePromotions - totalPromotionDiscount)),
+    () => roundAmount(subtotalBeforePromotions - totalPromotionDiscount),
     [subtotalBeforePromotions, totalPromotionDiscount]
   );
 
@@ -1733,6 +1749,68 @@ export const usePosSale = (tenantId: string | null) => {
   const removeDebtPaymentFromCart = useCallback(() => {
     setCartState((prev) => prev.filter((i) => !i.is_debt_payment_item));
   }, []);
+
+  const addPackageRefundToCart = useCallback(
+    (input: {
+      packageName: string;
+      quantity: number;
+      unitPrice: number;
+      notes?: string;
+      customer?: Customer | null;
+    }): boolean => {
+      const quantity = Math.max(1, Math.round(input.quantity));
+      const unitPrice = roundAmount(Math.abs(input.unitPrice));
+      if (!input.packageName.trim()) {
+        setFeedback({ type: "error", message: "Selecciona el envase a devolver" });
+        return false;
+      }
+      if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+        setFeedback({ type: "error", message: "El valor del envase debe ser mayor a 0" });
+        return false;
+      }
+
+      const negativeUnitPrice = -unitPrice;
+      const refundId = `package-refund-${Date.now()}`;
+
+      const refundItem: PosCartItem = {
+        product_id: refundId,
+        name: `Devolución de envase: ${input.packageName.trim()}`,
+        category: "Envases",
+        sale_mode: "unit",
+        quantity,
+        unit_price: negativeUnitPrice,
+        base_unit_price: negativeUnitPrice,
+        stock_available: Number.MAX_SAFE_INTEGER,
+        price_list_id: null,
+        price_list_name: null,
+        price_list_is_active: null,
+        is_scale_item: false,
+        scale_weight: null,
+        scale_total_price: null,
+        scale_barcode: null,
+        is_manual_item: true,
+        is_price_overridden: true,
+        is_returnable_package_item: true,
+        is_package_refund_item: true,
+        package_refund_name: input.packageName.trim(),
+        code: "DEV-ENVASE",
+      };
+
+      if (input.customer && selectedCustomerId !== input.customer.id) {
+        setSelectedCustomerId(input.customer.id);
+      }
+
+      setLastAddedProductId(refundItem.product_id);
+      setCartState((prev) => [...prev, refundItem]);
+
+      setFeedback({
+        type: "success",
+        message: `Devolución de envase (${input.packageName}) agregada al carrito con valor en negativo`,
+      });
+      return true;
+    },
+    [selectedCustomerId]
+  );
 
   const cycleReturnableStatus = useCallback(
     (productId: string) => {
@@ -2953,6 +3031,7 @@ export const usePosSale = (tenantId: string | null) => {
       : isCurrentAccountMethod
       ? 0
       : summary.total;
+    const isCashRefund = summary.total < 0;
     const requiresCashMovementRegistration = splitCashAmount > 0;
 
     if (currentAccountDebtAmount > 0 && normalizedCustomerId) {
@@ -3054,6 +3133,14 @@ export const usePosSale = (tenantId: string | null) => {
           return null;
         }
       }
+    }
+
+    if (isCashRefund && !openSession) {
+      setFeedback({
+        type: "error",
+        message: "Debes tener una sesión de caja física abierta para reintegrar dinero en efectivo",
+      });
+      return null;
     }
 
     if ((requireOpenSessionForSale || requiresOpenCashSessionForSale) && !openSession) {
@@ -3207,7 +3294,9 @@ export const usePosSale = (tenantId: string | null) => {
           !item.is_debt_payment_item &&
           !item.product_id.startsWith("debt-") &&
           !item.is_returnable_package_item &&
-          !item.product_id.startsWith("returnable-pkg-")
+          !item.product_id.startsWith("returnable-pkg-") &&
+          !item.is_package_refund_item &&
+          !item.product_id.startsWith("package-refund-")
         ) {
           if (item.is_promo_item && item.promo_items?.length) {
             // Descontar stock correspondiente de cada artículo interno del pack o combo
@@ -3280,7 +3369,9 @@ export const usePosSale = (tenantId: string | null) => {
             item.is_debt_payment_item ||
             item.product_id.startsWith("debt-") ||
             item.is_returnable_package_item ||
-            item.product_id.startsWith("returnable-pkg-")
+            item.product_id.startsWith("returnable-pkg-") ||
+            item.is_package_refund_item ||
+            item.product_id.startsWith("package-refund-")
           ) {
             return itemPromise;
           }
@@ -3696,19 +3787,50 @@ export const usePosSale = (tenantId: string | null) => {
                 })
               : Promise.resolve();
 
-          const singleCashMovementPromise =
-            requiresCashMovementRegistration && openSession
+          const singleCashMovementPromise = isCashRefund
+            ? openSession
               ? cashService.createMovement(tenantId, {
                   cash_session_id: openSession.id,
-                  movement_type: "sale_payment",
-                  amount: summary.total,
+                  movement_type: "expense",
+                  amount: Math.abs(summary.total),
                   currency_code: "ARS",
-                  reference_type: paymentMethod.code,
+                  reference_type: "cash",
                   reference_id: sale.id,
-                  notes: `Cobro venta ${sale.sale_number} - ${paymentMethod.name}`,
+                  notes: `Reintegro por devolución de envases - Venta #${sale.sale_number}${
+                    selectedCustomerForSale ? ` (${selectedCustomerForSale.full_name})` : ""
+                  }`,
                   created_by: resolvedCreatedBy,
                 })
-              : Promise.resolve();
+              : Promise.resolve()
+            : requiresCashMovementRegistration && openSession
+            ? cashService.createMovement(tenantId, {
+                cash_session_id: openSession.id,
+                movement_type: "sale_payment",
+                amount: summary.total,
+                currency_code: "ARS",
+                reference_type: paymentMethod.code,
+                reference_id: sale.id,
+                notes: `Cobro venta ${sale.sale_number} - ${paymentMethod.name}`,
+                created_by: resolvedCreatedBy,
+              })
+            : Promise.resolve();
+
+          if (isCashRefund) {
+            void auditService.createSafe(tenantId, {
+              user_id: resolvedCreatedBy,
+              module: "pos",
+              action: "package_voucher_cash_refund",
+              entity_type: "sale",
+              entity_id: sale.id,
+              description: `Egreso de caja por reintegro de envases: ${currency.format(Math.abs(summary.total))} en Venta #${sale.sale_number}`,
+              metadata: {
+                sale_id: sale.id,
+                total_refund: Math.abs(summary.total),
+                cash_session_id: openSession?.id ?? null,
+                customer_id: selectedCustomerForSale?.id ?? null,
+              },
+            });
+          }
 
           await Promise.all([
             singlePaymentPromise,
@@ -4148,6 +4270,7 @@ export const usePosSale = (tenantId: string | null) => {
     addManualProductToCart,
     addDebtPaymentToCart,
     removeDebtPaymentFromCart,
+    addPackageRefundToCart,
     debtPaymentTotal,
     createProductFromPosAndAddToCart,
     addProductByBarcode,

@@ -12,6 +12,7 @@ import {
   Minus,
   Plus,
   Loader2,
+  ShoppingCart,
 } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useToast } from "@/components/ui/useToast";
@@ -41,6 +42,13 @@ interface PosDebtPaymentModalProps {
   onClose: () => void;
   onSelectCustomer: (customer: Customer | null) => void;
   onConfirm: (payload: { customer: Customer; amount: number; notes: string }) => void;
+  onAddPackageRefund?: (payload: {
+    packageName: string;
+    quantity: number;
+    unitPrice: number;
+    notes?: string;
+    customer?: Customer | null;
+  }) => void;
   onRemoveExisting?: () => void;
   onCustomerUpdated?: (customer: Customer) => void;
 }
@@ -64,6 +72,7 @@ export const PosDebtPaymentModal = ({
   onClose,
   onSelectCustomer,
   onConfirm,
+  onAddPackageRefund,
   onRemoveExisting,
   onCustomerUpdated,
 }: PosDebtPaymentModalProps) => {
@@ -286,16 +295,6 @@ export const PosDebtPaymentModal = ({
   // 3. Manejo de Devolución de Envases: Devolver Vale Cobrado (Reintegro de Caja)
   const handleConfirmCashVoucherRefund = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tenantId) {
-      setError("No se identificó el comercio.");
-      return;
-    }
-    if (!openCashSessionId) {
-      setError(
-        "Para devolver el vale y reintegrar el dinero en efectivo, debe haber una sesión de caja física abierta."
-      );
-      return;
-    }
     if (!selectedReturnPackage.trim()) {
       setError("Selecciona el tipo de envase devuelto.");
       return;
@@ -306,14 +305,32 @@ export const PosDebtPaymentModal = ({
     }
 
     const unitPriceNum = Number(refundUnitPrice.replace(",", "."));
-    if (!Number.isFinite(unitPriceNum) || unitPriceNum < 0) {
-      setError("Ingresa un valor unitario de envase válido.");
+    if (!Number.isFinite(unitPriceNum) || unitPriceNum <= 0) {
+      setError("Ingresa un valor unitario de envase válido mayor a $0.");
       return;
     }
 
     const totalRefund = Number((returnQuantity * unitPriceNum).toFixed(2));
     if (totalRefund <= 0) {
       setError("El importe a reintegrar debe ser mayor a $0.");
+      return;
+    }
+
+    if (onAddPackageRefund) {
+      onAddPackageRefund({
+        packageName: selectedReturnPackage,
+        quantity: returnQuantity,
+        unitPrice: unitPriceNum,
+        notes: returnNotes.trim() || undefined,
+        customer: activeCustomer,
+      });
+      onClose();
+      return;
+    }
+
+    // Fallback directo si no se proveyó handler del carrito
+    if (!tenantId || !openCashSessionId) {
+      setError("Se requiere sesión de caja abierta.");
       return;
     }
 
@@ -1207,22 +1224,18 @@ export const PosDebtPaymentModal = ({
                     </span>
                   </div>
 
-                  {/* Aviso de Impacto en Caja */}
-                  <div className="rounded-xl border border-amber-300 dark:border-amber-800/80 bg-amber-50/70 dark:bg-amber-950/40 p-3 text-xs text-amber-900 dark:text-amber-200">
-                    <p className="font-bold flex items-center gap-1.5">
+                  {/* Aviso de Impacto en Carrito y Caja */}
+                  <div className="rounded-xl border border-emerald-300 dark:border-emerald-800/80 bg-emerald-50/70 dark:bg-emerald-950/40 p-3 text-xs text-emerald-900 dark:text-emerald-200">
+                    <p className="font-bold flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300">
                       <Banknote size={15} />
-                      <span>Impacto contable en la caja:</span>
+                      <span>Impacto en la venta y carrito:</span>
                     </p>
-                    <p className="mt-1 text-[11px] text-amber-800 dark:text-amber-300">
-                      {openCashSessionId ? (
-                        <>
-                          Se asentará un <strong>egreso de {currency.format(totalRefundAmount)}</strong> en la sesión de caja física abierta en concepto de devolución de vale de envase.
-                        </>
-                      ) : (
-                        <span className="text-rose-600 dark:text-rose-400 font-bold">
-                          ⚠️ No hay una sesión de caja física abierta. Abrí la caja para asentar la salida de dinero en efectivo.
-                        </span>
-                      )}
+                    <p className="mt-1 text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed">
+                      Se agregará un artículo <strong>Devolución de envase: {selectedReturnPackage || "Envase"}</strong> con valor en <strong>negativo (-{currency.format(totalRefundAmount)})</strong>.
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">
+                      • Si el cliente lleva productos, se <strong>descontará automáticamente</strong> del total de la compra.<br />
+                      • Si no lleva productos o queda saldo a favor, figurará como un <strong>egreso de efectivo</strong> de la caja física.
                     </p>
                   </div>
 
@@ -1261,22 +1274,21 @@ export const PosDebtPaymentModal = ({
                       disabled={
                         disabled ||
                         isSubmittingInternal ||
-                        !openCashSessionId ||
                         !selectedReturnPackage ||
                         totalRefundAmount <= 0
                       }
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-amber-500 active:bg-amber-700 disabled:opacity-50 transition cursor-pointer"
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-50 transition cursor-pointer"
                     >
                       {isSubmittingInternal ? (
                         <>
                           <Loader2 size={14} className="animate-spin" />
-                          <span>Registrando egreso...</span>
+                          <span>Agregando al carrito...</span>
                         </>
                       ) : (
                         <>
-                          <Banknote size={14} />
+                          <ShoppingCart size={14} />
                           <span>
-                            Reintegrar {currency.format(totalRefundAmount)} y Descontar de Caja
+                            Agregar Devolución al Carrito (-{currency.format(totalRefundAmount)})
                           </span>
                         </>
                       )}

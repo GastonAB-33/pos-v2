@@ -1995,6 +1995,28 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                     </span>
                   </div>
                 </label>
+
+                <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 sm:col-span-2 lg:col-span-4">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 mt-0.5 rounded text-blue-600"
+                    checked={draft.stock.purchase_double_confirmation_enabled ?? false}
+                    onChange={(event) =>
+                      updateSection("stock", {
+                        purchase_double_confirmation_enabled: event.target.checked,
+                      })
+                    }
+                    disabled={!canWriteConfiguracion}
+                  />
+                  <div>
+                    <span className="font-semibold block text-slate-900 dark:text-slate-100">
+                      Carga de compras con doble confirmación (Recepción por empleados + Fijación de precios por administrador)
+                    </span>
+                    <span className="block text-xs text-slate-500 dark:text-slate-400 font-normal mt-0.5">
+                      Al activarse, la primera confirmación (empleado) ingresa el stock recibido y registra el egreso de dinero sin alterar los precios de venta. La compra queda en estado &ldquo;Pendiente fijar precios&rdquo; para que un administrador revise y apruebe las alícuotas de IVA y márgenes de venta.
+                    </span>
+                  </div>
+                </label>
               </div>
             </div>
 

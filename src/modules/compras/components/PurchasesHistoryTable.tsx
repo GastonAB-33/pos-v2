@@ -3,9 +3,10 @@ import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
+  getPaginationRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowLeftRight, Camera, ChevronLeft, ChevronRight, Download, Eye, Gift, Maximize2, Search, X } from "lucide-react";
+import { ArrowLeftRight, Camera, Tag, ChevronLeft, ChevronRight, Download, Eye, Gift, Maximize2, Search, X } from "lucide-react";
 import type { Product, Purchase, Supplier } from "@/types/entities";
 import { IconButton } from "@/components/ui/IconButton";
 import { parseInvoicePhotos } from "@/modules/compras/utils/invoice-photos";
@@ -20,6 +21,9 @@ interface PurchasesHistoryTableProps {
   canWrite: boolean;
   disabled?: boolean;
   onOpenReturnModal: (purchase: Purchase, supplier: Supplier | null) => void;
+  onOpenPricingModal?: (purchase: Purchase, supplier: Supplier | null) => void;
+  onEnterReviewPurchase?: (purchase: Purchase, supplier: Supplier | null) => void;
+  usersById?: Record<string, string>;
   products?: Product[];
 }
 
@@ -53,8 +57,20 @@ const getPaymentMethodLabel = (method: string | null | undefined): string => {
 };
 
 const renderStatusBadge = (status: string) => {
+  if (status === "pending_pricing") {
+    return (
+      <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-700 animate-pulse">
+        Pendiente precios
+      </span>
+    );
+  }
+
   if (status === "confirmed") {
-    return <span className="ui-badge ui-badge--success">Confirmada</span>;
+    return (
+      <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-800">
+        Confirmada
+      </span>
+    );
   }
 
   if (status === "partial_return") {
@@ -85,6 +101,9 @@ export const PurchasesHistoryTable = ({
   canWrite,
   disabled,
   onOpenReturnModal,
+  onOpenPricingModal,
+  onEnterReviewPurchase,
+  usersById = {},
   products,
 }: PurchasesHistoryTableProps) => {
   const [selectedPurchase, setSelectedPurchase] = useState<PurchaseHistoryRow | null>(null);
@@ -103,6 +122,11 @@ export const PurchasesHistoryTable = ({
   const productsById = useMemo(
     () => new Map((products ?? []).map((p) => [p.id, p])),
     [products]
+  );
+
+  const pendingPricingCount = useMemo(
+    () => rows.filter((r) => r.purchase.status === "pending_pricing").length,
+    [rows]
   );
 
   const filteredRows = useMemo(() => {
@@ -138,13 +162,17 @@ export const PurchasesHistoryTable = ({
           purchase.issue_date ? `${purchase.issue_date}T00:00:00` : purchase.created_at
         ).toLocaleDateString("es-AR");
 
+        const hasDoc = Boolean(purchase.document_number);
+        const docLabel = hasDoc
+          ? `${purchase.document_type || "Doc."} Nº ${purchase.document_number}`
+          : purchase.purchase_number;
+
         return (
           <div>
-            <span className="font-semibold text-slate-900 dark:text-slate-100">{purchase.purchase_number}</span>
+            <span className="font-semibold text-slate-900 dark:text-slate-100">{docLabel}</span>
             <div className="text-xs text-slate-500 dark:text-slate-400">
               {formattedDate}
-              {purchase.document_type ? ` • ${purchase.document_type}` : ""}
-              {purchase.document_number ? ` Nº ${purchase.document_number}` : ""}
+              {hasDoc ? ` • Ref. ${purchase.purchase_number}` : ""}
             </div>
           </div>
         );
@@ -237,6 +265,23 @@ export const PurchasesHistoryTable = ({
               Detalle
             </button>
 
+            {purchase.status === "pending_pricing" && canWrite && (onEnterReviewPurchase || onOpenPricingModal) ? (
+              <button
+                type="button"
+                onClick={() =>
+                  onEnterReviewPurchase
+                    ? onEnterReviewPurchase(purchase, supplier)
+                    : onOpenPricingModal?.(purchase, supplier)
+                }
+                disabled={disabled}
+                className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-700/80 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60 shadow-2xs cursor-pointer"
+                title="Entrar a la compra para revisar datos del empleado y fijar precios de venta"
+              >
+                <Tag className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                <span>Entrar a la compra</span>
+              </button>
+            ) : null}
+
             {isReturnable && canWrite ? (
               <button
                 type="button"
@@ -259,6 +304,13 @@ export const PurchasesHistoryTable = ({
     data: filteredRows,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    initialState: {
+      pagination: {
+        pageSize: 10,
+        pageIndex: 0,
+      },
+    },
   });
 
   if (!rows.length) {
@@ -295,6 +347,17 @@ export const PurchasesHistoryTable = ({
         </div>
 
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 sm:pb-0">
+          <button
+            type="button"
+            onClick={() => setStatusFilter("pending_pricing")}
+            className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+              statusFilter === "pending_pricing"
+                ? "bg-amber-600 text-white dark:bg-amber-500 dark:text-slate-950 shadow-xs"
+                : "border border-amber-300/80 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/60"
+            }`}
+          >
+            Pendiente precios ${pendingPricingCount > 0 ? `(${pendingPricingCount})` : ""}
+          </button>
           <button
             type="button"
             onClick={() => setStatusFilter("all")}
@@ -350,8 +413,11 @@ export const PurchasesHistoryTable = ({
         <>
           {/* 2. Vista Móvil: Tarjetas individuales (block md:hidden) */}
           <div className="space-y-3 md:hidden">
-            {filteredRows.map((row) => {
+            {table.getRowModel().rows.map((r) => {
+              const row = r.original;
               const { purchase, supplier } = row;
+              const isPending = purchase.status === "pending_pricing";
+              const isConfirmed = purchase.status === "confirmed";
               const formattedDate = new Date(
                 purchase.issue_date ? `${purchase.issue_date}T00:00:00` : purchase.created_at
               ).toLocaleDateString("es-AR");
@@ -365,22 +431,35 @@ export const PurchasesHistoryTable = ({
               return (
                 <article
                   key={purchase.id}
-                  className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs transition dark:border-slate-800 dark:bg-slate-900"
+                  className={`rounded-xl p-3.5 shadow-xs transition ${
+                    isPending
+                      ? "border border-amber-300 bg-amber-50/40 dark:border-amber-700/80 dark:bg-amber-950/20 border-l-4 border-l-amber-500"
+                      : isConfirmed
+                      ? "border border-emerald-200 bg-emerald-50/20 dark:border-emerald-800/60 dark:bg-emerald-950/10 border-l-4 border-l-emerald-500"
+                      : "border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+                  }`}
                 >
                   {/* Encabezado: Nº Compra + Fecha y Badge */}
-                  <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5 dark:border-slate-800/80">
-                    <div>
-                      <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
-                        {purchase.purchase_number}
-                      </span>
-                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        {formattedDate}
-                        {purchase.document_type ? ` • ${purchase.document_type}` : ""}
-                        {purchase.document_number ? ` Nº ${purchase.document_number}` : ""}
+                  {(() => {
+                    const hasDoc = Boolean(purchase.document_number);
+                    const docLabel = hasDoc
+                      ? `${purchase.document_type || "Doc."} Nº ${purchase.document_number}`
+                      : purchase.purchase_number;
+                    return (
+                      <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5 dark:border-slate-800/80">
+                        <div>
+                          <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                            {docLabel}
+                          </span>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            {formattedDate}
+                            {hasDoc ? ` • Ref. ${purchase.purchase_number}` : ""}
+                          </div>
+                        </div>
+                        <div>{renderStatusBadge(purchase.status)}</div>
                       </div>
-                    </div>
-                    <div>{renderStatusBadge(purchase.status)}</div>
-                  </div>
+                    );
+                  })()}
 
                   {/* Contenido: Proveedor, Pago e Ítems */}
                   <div className="grid grid-cols-2 gap-2.5 py-3 text-xs border-b border-slate-100 dark:border-slate-800/80">
@@ -442,6 +521,22 @@ export const PurchasesHistoryTable = ({
                       Ver detalle
                     </button>
 
+                    {purchase.status === "pending_pricing" && canWrite && (onEnterReviewPurchase || onOpenPricingModal) ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onEnterReviewPurchase
+                            ? onEnterReviewPurchase(purchase, supplier)
+                            : onOpenPricingModal?.(purchase, supplier)
+                        }
+                        disabled={disabled}
+                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-300 cursor-pointer"
+                      >
+                        <Tag className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                        <span>Entrar a la compra</span>
+                      </button>
+                    ) : null}
+
                     {isReturnable && canWrite ? (
                       <button
                         type="button"
@@ -476,17 +571,83 @@ export const PurchasesHistoryTable = ({
                 ))}
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800 bg-white dark:bg-slate-900">
-                {table.getRowModel().rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-4 py-2.5 text-slate-700 dark:text-slate-300">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
+                {table.getRowModel().rows.map((row) => {
+                  const isPending = row.original.purchase.status === "pending_pricing";
+                  const isConfirmed = row.original.purchase.status === "confirmed";
+                  const rowClass = isPending
+                    ? "bg-amber-50/60 hover:bg-amber-100/60 dark:bg-amber-950/20 dark:hover:bg-amber-950/35 border-l-4 border-l-amber-500 transition-colors"
+                    : isConfirmed
+                    ? "bg-emerald-50/30 hover:bg-emerald-50/60 dark:bg-emerald-950/15 dark:hover:bg-emerald-950/25 border-l-4 border-l-emerald-500 transition-colors"
+                    : "hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors";
+
+                  return (
+                    <tr key={row.id} className={rowClass}>
+                      {row.getVisibleCells().map((cell) => (
+                        <td key={cell.id} className="px-4 py-2.5 text-slate-700 dark:text-slate-300">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+          </div>
+
+          {/* Barra de Paginación (10 ítems por página) */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-200 dark:border-slate-800 pt-3 text-xs text-slate-600 dark:text-slate-400">
+            <div>
+              Mostrando{" "}
+              <strong className="text-slate-900 dark:text-slate-100">
+                {filteredRows.length === 0 ? 0 : table.getState().pagination.pageIndex * 10 + 1}
+              </strong>{" "}
+              a{" "}
+              <strong className="text-slate-900 dark:text-slate-100">
+                {Math.min((table.getState().pagination.pageIndex + 1) * 10, filteredRows.length)}
+              </strong>{" "}
+              de{" "}
+              <strong className="text-slate-900 dark:text-slate-100">{filteredRows.length}</strong> compras
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => table.setPageIndex(0)}
+                disabled={!table.getCanPreviousPage()}
+                className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                title="Primera página"
+              >
+                «
+              </button>
+              <button
+                type="button"
+                onClick={() => table.previousPage()}
+                disabled={!table.getCanPreviousPage()}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" /> Anterior
+              </button>
+              <span className="px-2 font-medium">
+                Página {table.getPageCount() === 0 ? 1 : table.getState().pagination.pageIndex + 1} de {Math.max(1, table.getPageCount())}
+              </span>
+              <button
+                type="button"
+                onClick={() => table.nextPage()}
+                disabled={!table.getCanNextPage()}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Siguiente <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+                disabled={!table.getCanNextPage()}
+                className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                title="Última página"
+              >
+                »
+              </button>
+            </div>
           </div>
         </>
       )}
@@ -501,10 +662,20 @@ export const PurchasesHistoryTable = ({
                   Detalle de Compra
                 </p>
                 <h2 className="mt-1 text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
-                  {selectedPurchase.purchase.purchase_number}
+                  {selectedPurchase.purchase.document_number
+                    ? `${selectedPurchase.purchase.document_type || "Factura"} Nº ${selectedPurchase.purchase.document_number}`
+                    : selectedPurchase.purchase.purchase_number}
                 </h2>
+                {selectedPurchase.purchase.document_number && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                    Ref. interna: {selectedPurchase.purchase.purchase_number}
+                  </p>
+                )}
                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                   Proveedor: {selectedPurchase.supplier?.name || "Sin proveedor"}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                  Cargada por: <strong className="text-slate-700 dark:text-slate-300">{selectedPurchase.purchase.created_by ? usersById[selectedPurchase.purchase.created_by] || selectedPurchase.purchase.created_by : "Empleado"}</strong> el {new Date(selectedPurchase.purchase.created_at).toLocaleString("es-AR")}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">

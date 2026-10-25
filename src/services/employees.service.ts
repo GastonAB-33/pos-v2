@@ -111,6 +111,7 @@ export const employeesService = {
       current_balance: Number(input.current_balance) || 0,
       current_account_enabled: input.current_account_enabled ?? true,
       current_account_limit: input.current_account_limit ? Number(input.current_account_limit) : null,
+      discount_percent: input.discount_percent != null ? Number(input.discount_percent) : null,
       observations: input.observations?.trim() || null,
       is_active: input.is_active ?? true,
     };

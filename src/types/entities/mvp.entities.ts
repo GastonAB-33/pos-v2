@@ -247,7 +247,7 @@ export interface PromotionBarcode extends TenantScopedEntity {
   is_primary: boolean;
 }
 
-export type PurchaseStatus = "confirmed" | "cancelled" | "partial_return" | "returned";
+export type PurchaseStatus = "confirmed" | "cancelled" | "partial_return" | "returned" | "pending_pricing";
 
 export interface Purchase extends TenantScopedEntity {
   supplier_id: string;
@@ -524,6 +524,7 @@ export interface StockSettings {
   allow_manual_adjustments: boolean;
   allow_negative_stock: boolean;
   allow_purchases_profit_margin_adjustment?: boolean;
+  purchase_double_confirmation_enabled?: boolean;
   returnable_packages?: ReturnablePackageType[];
 }
 
