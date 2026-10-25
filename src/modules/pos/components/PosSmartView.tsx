@@ -673,9 +673,15 @@ export const PosSmartView = ({
                         </span>
                       ) : null}
                       {"is_returnable_package_item" in item && item.is_returnable_package_item ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/60">
-                          📦 Cobro de Envase
-                        </span>
+                        item.unit_price < 0 || ("is_package_refund_item" in item && item.is_package_refund_item) ? (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/60">
+                            ♻️ Devolución de Envase
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/60">
+                            📦 Cobro de Envase
+                          </span>
+                        )
                       ) : null}
                       {"is_promo_item" in item && item.is_promo_item ? (
                         <span className="inline-flex items-center gap-1 rounded-md bg-purple-100 dark:bg-purple-950/60 px-1.5 py-0.5 text-[10px] font-bold text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800/60">
@@ -794,7 +800,7 @@ export const PosSmartView = ({
                       <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60">
                         Pago único
                       </span>
-                    ) : "is_returnable_package_item" in item && item.is_returnable_package_item ? (
+                    ) : "is_returnable_package_item" in item && item.is_returnable_package_item && !("is_package_refund_item" in item && item.is_package_refund_item) && item.unit_price >= 0 ? (
                       <span className="text-[11px] font-bold text-amber-700 dark:text-amber-300 px-2.5 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60">
                         {item.quantity} {item.quantity === 1 ? "envase" : "envases"}
                       </span>
@@ -912,7 +918,10 @@ export const PosSmartView = ({
                   <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200 dark:border-slate-800/60">
                     <div className="text-left sm:text-right min-w-[90px]">
                       <span className="text-[10px] block text-slate-400 sm:hidden">Subtotal</span>
-                      <span className="font-extrabold text-sm sm:text-base text-blue-600 dark:text-sky-400 tracking-tight">
+                      <span className={cn(
+                        "font-extrabold text-sm sm:text-base tracking-tight",
+                        itemSubtotal < 0 ? "text-rose-600 dark:text-rose-400" : "text-blue-600 dark:text-sky-400"
+                      )}>
                         {currency.format(itemSubtotal)}
                       </span>
                       {"promotion_discount_total" in item && typeof item.promotion_discount_total === "number" && item.promotion_discount_total > 0 ? (
@@ -965,7 +974,7 @@ export const PosSmartView = ({
                         onClick={() => onRemove(item.product_id)}
                         disabled={disabled || !canWrite}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition disabled:opacity-40"
-                        title={"is_returnable_package_item" in item && item.is_returnable_package_item ? "Quitar cobro de envase" : "Eliminar producto"}
+                        title={"is_package_refund_item" in item && item.is_package_refund_item || item.unit_price < 0 ? "Quitar devolución de envase" : "is_returnable_package_item" in item && item.is_returnable_package_item ? "Quitar cobro de envase" : "Eliminar producto"}
                       >
                         <Trash2 size={15} />
                       </button>

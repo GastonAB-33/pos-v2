@@ -223,6 +223,7 @@ export const PosPage = () => {
     addManualProductToCart,
     addDebtPaymentToCart,
     removeDebtPaymentFromCart,
+    addPackageRefundToCart,
     debtPaymentTotal,
     createProductFromPosAndAddToCart,
     addProductByBarcode,
@@ -2197,6 +2198,10 @@ export const PosPage = () => {
         }}
         onConfirm={({ customer, amount, notes }) => {
           addDebtPaymentToCart({ customer, amount, notes });
+          triggerCartSuccessHighlight();
+        }}
+        onAddPackageRefund={({ packageName, quantity, unitPrice, notes, customer }) => {
+          addPackageRefundToCart({ packageName, quantity, unitPrice, notes, customer });
           triggerCartSuccessHighlight();
         }}
         onRemoveExisting={removeDebtPaymentFromCart}

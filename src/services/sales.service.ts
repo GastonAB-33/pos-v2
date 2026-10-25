@@ -29,15 +29,20 @@ export const salesService = {
       resolvedProductId.startsWith("manual-") ||
       resolvedProductId.startsWith("temp-") ||
       resolvedProductId.startsWith("debt-") ||
-      resolvedProductId.startsWith("returnable-pkg-")
+      resolvedProductId.startsWith("returnable-pkg-") ||
+      resolvedProductId.startsWith("package-refund-")
     ) {
       const specialCode = resolvedProductId.startsWith("debt-")
         ? "SISTEMA_COBRO_CTA_CTE"
+        : resolvedProductId.startsWith("package-refund-")
+        ? "SISTEMA_DEVOLUCION_ENVASE"
         : resolvedProductId.startsWith("returnable-pkg-")
         ? "SISTEMA_COBRO_ENVASE"
         : "SISTEMA_VENTA_MANUAL";
       const specialName = resolvedProductId.startsWith("debt-")
         ? "Cobro Cuenta Corriente"
+        : resolvedProductId.startsWith("package-refund-")
+        ? "Devolución de Envase Retornable"
         : resolvedProductId.startsWith("returnable-pkg-")
         ? "Cobro de Envase Retornable"
         : "Venta Manual / Producto Temporal";

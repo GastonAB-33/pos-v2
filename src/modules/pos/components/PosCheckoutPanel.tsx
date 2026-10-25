@@ -406,12 +406,20 @@ export const PosCheckoutPanel = ({
     if (!isInitializedRef.current) {
       isInitializedRef.current = true;
 
+      const isRefund = checkoutTotal < 0;
+      const cashIndex = paymentOptions.findIndex(
+        (opt) => normalizePaymentMethodCode(opt.code) === "cash"
+      );
       // Buscar si coincide con defaultPaymentMethodId o selectedPaymentMethodId
       const targetMethodId = defaultPaymentMethodId || selectedPaymentMethodId;
       const targetIndex = paymentOptions.findIndex(
         (opt) => opt.paymentMethodId === targetMethodId
       );
-      const chosenIndex = targetIndex >= 0 ? targetIndex : 0;
+      const chosenIndex = isRefund && cashIndex >= 0
+        ? cashIndex
+        : targetIndex >= 0
+        ? targetIndex
+        : 0;
       const initialOption = paymentOptions[chosenIndex];
       initialOptionIdRef.current = initialOption.id;
 
@@ -444,13 +452,18 @@ export const PosCheckoutPanel = ({
     return Number(sum.toFixed(2));
   }, [allocatedAmounts]);
 
+  const isRefundMode = checkoutTotal < 0;
+
   const totalPending = useMemo(() => {
+    if (isRefundMode) return 0;
     const diff = Number((checkoutTotal - totalAssigned).toFixed(2));
     return Math.max(0, diff);
-  }, [checkoutTotal, totalAssigned]);
+  }, [checkoutTotal, isRefundMode, totalAssigned]);
 
-  const isFullyAssigned = Math.abs(totalAssigned - checkoutTotal) <= 0.01 && totalAssigned > 0;
-  const isOverpaid = totalAssigned > checkoutTotal + 0.01;
+  const isFullyAssigned = isRefundMode
+    ? Math.abs(totalAssigned - checkoutTotal) <= 0.01 || Math.abs(Math.abs(totalAssigned) - Math.abs(checkoutTotal)) <= 0.01
+    : Math.abs(totalAssigned - checkoutTotal) <= 0.01 && totalAssigned > 0;
+  const isOverpaid = !isRefundMode && totalAssigned > checkoutTotal + 0.01;
 
   // Cliente seleccionado actual
   const selectedCustomer = useMemo(
@@ -742,6 +755,24 @@ export const PosCheckoutPanel = ({
       }
 
       // Validar si hay envases adeudados que requieren asignación obligatoria de cliente
+      if (isRefundMode) {
+        const cashOption =
+          paymentOptions.find((opt) => normalizePaymentMethodCode(opt.code) === "cash") ||
+          paymentOptions[0];
+        const payload: PosCheckoutValues = {
+          customerId: selectedCustomerId || undefined,
+          employeeId: selectedEmployeeId || undefined,
+          paymentMethodId: cashOption.paymentMethodId,
+          issueInvoice: false,
+          notes: notes.trim(),
+          isSplitPayment: false,
+          payments: undefined,
+          paymentDetails: null,
+        };
+        await onSubmit(payload);
+        return;
+      }
+
       if (hasOwedReturnables && !selectedCustomer) {
         setSubmitError(
           `Hay ${owedReturnablesCount > 1 ? `${owedReturnablesCount} envases` : "un envase"} para anotar. Debes seleccionar al cliente para registrar la deuda de envases antes de finalizar la venta.`
@@ -1184,7 +1215,9 @@ export const PosCheckoutPanel = ({
       {/* Cabecera minimalista con título y botón cerrar */}
       <div className="flex items-center justify-between pb-1">
         <div className="flex items-center gap-2">
-          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Cobro de Venta</h3>
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+            {isRefundMode ? "Reintegro al Cliente (Efectivo)" : "Cobro de Venta"}
+          </h3>
           <span className="rounded-md bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 font-mono">
             ARS
           </span>
@@ -1220,7 +1253,7 @@ export const PosCheckoutPanel = ({
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Total a Pagar
+              {isRefundMode ? "Monto a Devolver" : "Total a Pagar"}
             </span>
             {copiedField === "total" ? (
               <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 animate-in fade-in">
@@ -1249,7 +1282,13 @@ export const PosCheckoutPanel = ({
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider">
-              {isFullyAssigned ? "Cubierto al 100%" : isOverpaid ? "Monto Excedido" : "Total Pendiente"}
+              {isRefundMode
+                ? "Egreso de Caja"
+                : isFullyAssigned
+                ? "Cubierto al 100%"
+                : isOverpaid
+                ? "Monto Excedido"
+                : "Total Pendiente"}
             </span>
             {copiedField === "pending" ? (
               <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 animate-in fade-in">
@@ -1260,7 +1299,7 @@ export const PosCheckoutPanel = ({
             )}
           </div>
           <span className="block mt-1 text-2xl font-black tracking-tight font-mono">
-            {currency.format(totalPending)}
+            {isRefundMode ? currency.format(Math.abs(checkoutTotal)) : currency.format(totalPending)}
           </span>
         </div>
       </div>
@@ -1705,7 +1744,11 @@ export const PosCheckoutPanel = ({
           </div>
           <span className="text-xs font-black uppercase tracking-wider">
             {disabled || isSubmittingLocal
-              ? "Registrando..."
+              ? isRefundMode ? "Registrando reintegro..." : "Registrando..."
+              : isRefundMode
+              ? isReadyToSubmit
+                ? "Confirmar Reintegro en Efectivo (Enter)"
+                : "Confirmar Reintegro en Efectivo"
               : isFullyAssigned
               ? isReadyToSubmit
                 ? "Confirmar Venta (Enter)"
@@ -1713,7 +1756,7 @@ export const PosCheckoutPanel = ({
               : "Asignar Monto Total"}
           </span>
           <span className="font-mono text-sm font-black ml-1">
-            {currency.format(checkoutTotal)}
+            {isRefundMode ? currency.format(Math.abs(checkoutTotal)) : currency.format(checkoutTotal)}
           </span>
         </button>
       </div>
