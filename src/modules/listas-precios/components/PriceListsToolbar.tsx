@@ -1,4 +1,6 @@
-import { Plus, RefreshCw } from "lucide-react";
+import { ArrowLeft, Plus, RefreshCw } from "lucide-react";
+import { Link } from "react-router-dom";
+import { routePaths } from "@/app/router/route-paths";
 import { IconButton } from "@/components/ui/IconButton";
 
 interface PriceListsToolbarProps {
@@ -20,9 +22,20 @@ export const PriceListsToolbar = ({
 }: PriceListsToolbarProps) => {
   return (
     <div className="workspace-toolbar workspace-toolbar--inline">
-      <div className="grid gap-1">
-        <p className="ui-section-label">Precios</p>
-        <h2 className="mt-1 text-lg font-semibold text-slate-900">Listas de precios</h2>
+      <div className="flex items-center gap-3">
+        <Link
+          to={routePaths.productos}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 shadow-xs transition"
+          title="Volver a Productos"
+        >
+          <ArrowLeft size={14} />
+          <span>Volver a Productos</span>
+        </Link>
+        <div className="h-6 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block" />
+        <div className="grid gap-0.5">
+          <p className="ui-section-label">Inventario</p>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Listas de precios</h2>
+        </div>
       </div>
 
       <div className="workspace-toolbar__actions">

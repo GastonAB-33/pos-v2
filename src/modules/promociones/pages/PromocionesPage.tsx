@@ -26,6 +26,7 @@ export const PromocionesPage = () => {
   const {
     promotions,
     products,
+    primaryBarcodes,
     search,
     setSearch,
     isLoading,
@@ -220,6 +221,7 @@ export const PromocionesPage = () => {
                   mode={formMode}
                   promotion={selectedPromotion}
                   products={products}
+                  primaryBarcodes={primaryBarcodes}
                   disabled={isSubmitting}
                   onCancel={() => {
                     setFormOpen(false);

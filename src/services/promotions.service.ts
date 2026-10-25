@@ -245,8 +245,11 @@ export const promotionsService = {
     if (!barcode) return null;
 
     const activePromotions = await promotionsService.getActiveByTenantWithDetails(tenantId);
+    const now = Date.now();
+    const inRangePromotions = activePromotions.filter((promotion) => isPromotionInRange(promotion, now));
+
     return (
-      activePromotions.find((promotion) => {
+      inRangePromotions.find((promotion) => {
         if (normalizeBarcode(promotion.code).toLowerCase() === barcode) return true;
         if (normalizeBarcode(buildPromotionBarcode(promotion.code)).toLowerCase() === barcode) {
           return true;

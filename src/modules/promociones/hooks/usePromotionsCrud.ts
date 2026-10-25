@@ -70,6 +70,7 @@ const toServiceDetails = (values: PromotionFormValues) => {
 export const usePromotionsCrud = (tenantId: string | null, userId: string | null) => {
   const [promotions, setPromotions] = useState<PromotionWithDetails[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [primaryBarcodes, setPrimaryBarcodes] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -86,13 +87,15 @@ export const usePromotionsCrud = (tenantId: string | null, userId: string | null
 
     setIsLoading(true);
     try {
-      const [allPromotions, allProducts] = await Promise.all([
+      const [allPromotions, allProducts, allBarcodes] = await Promise.all([
         promotionsService.getAllByTenantWithDetails(tenantId),
         productsService.getAllByTenant(tenantId),
+        productsService.getPrimaryBarcodesMapByTenant(tenantId),
       ]);
 
       setPromotions(allPromotions);
       setProducts(allProducts.filter((product) => product.is_active));
+      setPrimaryBarcodes(allBarcodes);
     } catch {
       setFeedback({ type: "error", message: "No se pudieron cargar las promociones" });
     } finally {
@@ -257,6 +260,7 @@ export const usePromotionsCrud = (tenantId: string | null, userId: string | null
   return {
     promotions: filteredPromotions,
     products,
+    primaryBarcodes,
     search,
     setSearch,
     isLoading,

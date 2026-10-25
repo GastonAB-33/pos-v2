@@ -1,18 +1,28 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFieldArray, useForm } from "react-hook-form";
 import {
+  AlertCircle,
   BadgePercent,
   Calculator,
+  CheckCircle2,
   DollarSign,
   Package,
   Percent,
-  Plus,
   PlusCircle,
+  Search,
   Sparkles,
   Tag,
   Trash2,
+  X,
 } from "lucide-react";
+import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
+import {
+  PRODUCT_SEARCH_SCOPE_OPTIONS,
+  getSearchPlaceholder,
+  matchesProductSearch,
+  type ProductSearchScope,
+} from "@/utils/search";
 import { buildPromotionBarcode, type PromotionWithDetails } from "@/services/promotions.service";
 import type { Product } from "@/types/entities";
 import {
@@ -25,6 +35,7 @@ interface PromotionFormProps {
   mode: "create" | "edit";
   promotion?: PromotionWithDetails;
   products: Product[];
+  primaryBarcodes?: Record<string, string>;
   disabled?: boolean;
   onCancel: () => void;
   onSubmit: (values: PromotionFormValues) => Promise<void>;
@@ -84,6 +95,7 @@ export const PromotionForm = ({
   mode,
   promotion,
   products,
+  primaryBarcodes = {},
   disabled,
   onCancel,
   onSubmit,
@@ -91,7 +103,42 @@ export const PromotionForm = ({
   newlyCreatedProduct,
 }: PromotionFormProps) => {
   const [pricingMode, setPricingMode] = useState<PricingAssignmentMode>("final_price");
-  const [selectedProductToAdd, setSelectedProductToAdd] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchScope, setSearchScope] = useState<ProductSearchScope>("all");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [selectedResultIndex, setSelectedResultIndex] = useState(0);
+  const searchContainerRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const resultItemRefs = useRef<Array<HTMLDivElement | null>>([]);
+
+  const [flashFeedback, setFlashFeedback] = useState<{
+    type: "success" | "error";
+    message: string;
+    timestamp: number;
+  } | null>(null);
+
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerFlash = (type: "success" | "error", message: string) => {
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    setFlashFeedback({ type, message, timestamp: Date.now() });
+    flashTimerRef.current = setTimeout(() => {
+      setFlashFeedback(null);
+    }, 2200);
+  };
+
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(event.target as Node)
+      ) {
+        setIsSearchOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => window.removeEventListener("pointerdown", onPointerDown);
+  }, []);
 
   const {
     register,
@@ -268,18 +315,133 @@ export const PromotionForm = ({
     }
   }, [promoAnalysis.typeKey, watchedItems, setValue]);
 
-  // Handle adding an existing product to the items list
-  const handleAddProduct = () => {
-    if (!selectedProductToAdd) return;
-    const exists = watchedItems.some((item) => item.productId === selectedProductToAdd);
+  // Handle adding a product by ID with live feedback
+  const handleAddProductById = (productId: string, productName?: string) => {
+    const prod = productById.get(productId);
+    const name = productName || prod?.name || "Artículo";
+    const exists = watchedItems.some((item) => item.productId === productId);
     if (exists) {
-      const idx = watchedItems.findIndex((item) => item.productId === selectedProductToAdd);
+      const idx = watchedItems.findIndex((item) => item.productId === productId);
       const currentQty = Number(watchedItems[idx].quantity) || 1;
-      update(idx, { productId: selectedProductToAdd, quantity: currentQty + 1 });
+      update(idx, { productId, quantity: currentQty + 1 });
+      triggerFlash("success", `✓ "${name}" (+1 unidad agregada, total: ${currentQty + 1})`);
     } else {
-      append({ productId: selectedProductToAdd, quantity: 1 });
+      append({ productId, quantity: 1 });
+      triggerFlash("success", `✓ "${name}" agregado a la promoción`);
     }
-    setSelectedProductToAdd("");
+  };
+
+  const findProductByCodeOrBarcode = (query: string): Product | null => {
+    const clean = query.trim().toLowerCase();
+    if (!clean) return null;
+    const cleanNum = clean.replace(/^0+/, "");
+
+    // 1. Direct match in primaryBarcodes
+    for (const [pId, bCode] of Object.entries(primaryBarcodes)) {
+      if (!bCode) continue;
+      const bClean = bCode.trim().toLowerCase();
+      if (bClean === clean || (cleanNum && bClean.replace(/^0+/, "") === cleanNum)) {
+        const prod = productById.get(pId);
+        if (prod) return prod;
+      }
+    }
+
+    // 2. Direct match in product.code
+    for (const prod of products) {
+      if (prod.code) {
+        const cClean = prod.code.trim().toLowerCase();
+        if (cClean === clean || (cleanNum && cClean.replace(/^0+/, "") === cleanNum)) {
+          return prod;
+        }
+      }
+    }
+
+    // 3. Fallback: match by name
+    for (const prod of products) {
+      if (prod.name.trim().toLowerCase() === clean) {
+        return prod;
+      }
+    }
+
+    return null;
+  };
+
+  // Escáner de código de barras global: agrega el producto sin necesidad de tener el cursor en el buscador
+  useBarcodeScanner({
+    enabled: !disabled,
+    onScan: (scannedBarcode) => {
+      const clean = scannedBarcode.trim();
+      if (!clean) return;
+
+      const found = findProductByCodeOrBarcode(clean);
+      if (found) {
+        handleAddProductById(found.id, found.name);
+        setSearchQuery("");
+        setIsSearchOpen(false);
+      } else {
+        triggerFlash("error", `✕ No se encontró ningún artículo con el código "${clean}"`);
+      }
+    },
+  });
+
+  const searchResults = useMemo(() => {
+    const raw = searchQuery.trim();
+    if (!raw) return [];
+
+    return products
+      .filter((prod) =>
+        matchesProductSearch(
+          {
+            name: prod.name,
+            code: prod.code,
+            barcode: primaryBarcodes[prod.id],
+            category: prod.category,
+            subcategory: prod.subcategory,
+          },
+          raw,
+          searchScope
+        )
+      )
+      .slice(0, 15);
+  }, [products, primaryBarcodes, searchQuery, searchScope]);
+
+  useEffect(() => {
+    setSelectedResultIndex(0);
+  }, [searchResults]);
+
+  const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (searchResults.length > 0) {
+        setIsSearchOpen(true);
+        setSelectedResultIndex((prev) => Math.min(prev + 1, searchResults.length - 1));
+      }
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (searchResults.length > 0) {
+        setIsSearchOpen(true);
+        setSelectedResultIndex((prev) => Math.max(prev - 1, 0));
+      }
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      if (searchResults.length > 0) {
+        const selected = searchResults[selectedResultIndex] || searchResults[0];
+        handleAddProductById(selected.id, selected.name);
+        setSearchQuery("");
+        setIsSearchOpen(false);
+      } else if (searchQuery.trim()) {
+        const found = findProductByCodeOrBarcode(searchQuery.trim());
+        if (found) {
+          handleAddProductById(found.id, found.name);
+          setSearchQuery("");
+          setIsSearchOpen(false);
+        } else {
+          triggerFlash("error", `✕ No se encontró ningún artículo para "${searchQuery.trim()}"`);
+        }
+      }
+    } else if (event.key === "Escape") {
+      setIsSearchOpen(false);
+    }
   };
 
   // Sync active pricing mode with schema types
@@ -467,32 +629,166 @@ export const PromotionForm = ({
           ) : null}
         </div>
 
-        {/* Barra para agregar artículo existente */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          <div className="flex-1">
+        {/* Buscador inteligente idéntico al POS con soporte de escáner global y resaltado verde/rojo */}
+        <div
+          ref={searchContainerRef}
+          data-search-open={isSearchOpen ? "true" : undefined}
+          className={cn(
+            "relative rounded-xl p-3 border transition-all duration-300",
+            flashFeedback?.type === "success"
+              ? "bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-600 ring-2 ring-emerald-400/40"
+              : flashFeedback?.type === "error"
+              ? "bg-rose-50/70 dark:bg-rose-950/40 border-rose-400 dark:border-rose-600 ring-2 ring-rose-400/40"
+              : "bg-white dark:bg-slate-900/60 border-slate-200 dark:border-slate-700/80"
+          )}
+        >
+          <div className="flex items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3.5 py-2.5 focus-within:border-blue-500 dark:focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all shadow-inner">
+            <Search size={18} className="text-slate-400 shrink-0" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setIsSearchOpen(true);
+              }}
+              onFocus={() => {
+                if (searchQuery.trim()) setIsSearchOpen(true);
+              }}
+              onKeyDown={handleSearchKeyDown}
+              placeholder={getSearchPlaceholder(searchScope)}
+              className="flex-1 bg-transparent text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none min-w-0"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              data-lpignore="true"
+              disabled={disabled}
+            />
+
+            {searchQuery ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setIsSearchOpen(false);
+                  searchInputRef.current?.focus();
+                }}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+                title="Limpiar búsqueda"
+              >
+                <X size={15} />
+              </button>
+            ) : null}
+
+            <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-1 shrink-0" />
+
             <select
-              value={selectedProductToAdd}
-              onChange={(e) => setSelectedProductToAdd(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              value={searchScope}
+              onChange={(e) => {
+                setSearchScope(e.target.value as ProductSearchScope);
+                if (searchQuery.trim()) setIsSearchOpen(true);
+              }}
+              className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer py-0.5 px-1 shrink-0 max-w-[150px] truncate"
+              aria-label="Ámbito de búsqueda"
               disabled={disabled}
             >
-              <option value="">Seleccionar artículo del sistema para agregar...</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} — Precio: {currency.format(p.price)} | Stock: {p.stock_current} u.
+              {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
+                <option
+                  key={opt.value}
+                  value={opt.value}
+                  className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium py-1"
+                >
+                  {opt.label}
                 </option>
               ))}
             </select>
           </div>
-          <button
-            type="button"
-            onClick={handleAddProduct}
-            disabled={!selectedProductToAdd || disabled}
-            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white dark:bg-sky-600 dark:hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-2xs shrink-0 cursor-pointer"
-          >
-            <Plus size={16} />
-            <span>Agregar</span>
-          </button>
+
+          {/* Feedback visual con texto explicativo */}
+          {flashFeedback ? (
+            <div
+              className={cn(
+                "mt-2 text-xs font-semibold flex items-center gap-1.5 animate-fadeIn",
+                flashFeedback.type === "success"
+                  ? "text-emerald-700 dark:text-emerald-400"
+                  : "text-rose-600 dark:text-rose-400"
+              )}
+            >
+              {flashFeedback.type === "success" ? (
+                <CheckCircle2 size={14} className="shrink-0" />
+              ) : (
+                <AlertCircle size={14} className="shrink-0" />
+              )}
+              <span>{flashFeedback.message}</span>
+            </div>
+          ) : (
+            <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+              💡 Podés buscar por nombre, código o pistolear el código de barras con el lector desde cualquier parte de la pantalla.
+            </p>
+          )}
+
+          {/* Menú flotante de resultados del buscador */}
+          {isSearchOpen && searchResults.length > 0 ? (
+            <div className="absolute left-3 right-3 top-full mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1.5 shadow-2xl z-40 divide-y divide-slate-100 dark:divide-slate-800">
+              {searchResults.map((prod, index) => {
+                const barcode = primaryBarcodes[prod.id] || prod.code || "";
+                const isSelected = index === selectedResultIndex;
+                const isWeight = prod.sale_mode === "weight";
+
+                return (
+                  <div
+                    key={prod.id}
+                    ref={(el) => {
+                      resultItemRefs.current[index] = el;
+                    }}
+                    onClick={() => {
+                      handleAddProductById(prod.id, prod.name);
+                      setSearchQuery("");
+                      setIsSearchOpen(false);
+                      searchInputRef.current?.focus();
+                    }}
+                    className={cn(
+                      "flex items-center justify-between gap-3 p-2.5 rounded-lg cursor-pointer transition border",
+                      isSelected
+                        ? "border-blue-500 dark:border-sky-500 bg-blue-50/90 dark:bg-sky-950/80 ring-2 ring-blue-500/40 shadow-xs"
+                        : "border-transparent hover:bg-slate-100 dark:hover:bg-slate-800/70"
+                    )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                        {prod.name}
+                      </p>
+                      <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        {barcode && (
+                          <span>
+                            Cód: <strong className="font-mono">{barcode}</strong>
+                          </span>
+                        )}
+                        {prod.category && <span>• {prod.category}</span>}
+                        <span>
+                          • Stock:{" "}
+                          {isWeight
+                            ? `${(prod.stock_current * 1000).toLocaleString("es-AR")} g`
+                            : `${prod.stock_current} u.`}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-slate-100">
+                        {currency.format(prod.price)}
+                      </span>
+                      {isWeight && <span className="text-[10px] text-slate-400 block">/ kg</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : isSearchOpen && searchQuery.trim() ? (
+            <div className="absolute left-3 right-3 top-full mt-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-xl z-40 text-center text-xs text-slate-500 dark:text-slate-400">
+              No se encontraron artículos que coincidan con "{searchQuery.trim()}".
+            </div>
+          ) : null}
         </div>
 
         {/* Tabla de Artículos Agregados */}
@@ -817,6 +1113,9 @@ export const PromotionForm = ({
             {errors.endsAt ? <p className="mt-1 text-xs text-red-500">{errors.endsAt.message}</p> : null}
           </div>
         </div>
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+          ℹ️ Al definir una <strong>Fecha y hora de fin</strong>, una vez cumplido ese límite la promoción se deshabilita automáticamente y dejará de aplicarse en las ventas del POS.
+        </p>
       </div>
 
       {/* 6. Footer con Botones */}

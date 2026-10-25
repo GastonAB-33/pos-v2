@@ -176,16 +176,54 @@ export const PromotionsTable = ({
     }),
     columnHelper.accessor("is_active", {
       header: "Estado",
-      cell: (info) =>
-        info.getValue() ? (
+      cell: (info) => {
+        const promo = info.row.original;
+        const now = Date.now();
+        const isExpired =
+          Boolean(promo.ends_at) &&
+          !Number.isNaN(new Date(promo.ends_at!).getTime()) &&
+          new Date(promo.ends_at!).getTime() < now;
+        const isScheduled =
+          Boolean(promo.starts_at) &&
+          !Number.isNaN(new Date(promo.starts_at!).getTime()) &&
+          new Date(promo.starts_at!).getTime() > now;
+
+        if (!promo.is_active) {
+          return (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+              Inactiva
+            </span>
+          );
+        }
+
+        if (isExpired) {
+          return (
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+              title="La fecha límite de vigencia ya venció. La promoción se encuentra inhabilitada para el POS."
+            >
+              Vencida
+            </span>
+          );
+        }
+
+        if (isScheduled) {
+          return (
+            <span
+              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
+              title="Promoción programada para iniciar en una fecha futura."
+            >
+              Programada
+            </span>
+          );
+        }
+
+        return (
           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
             Activa
           </span>
-        ) : (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-            Inactiva
-          </span>
-        ),
+        );
+      },
     }),
     columnHelper.display({
       id: "actions",
