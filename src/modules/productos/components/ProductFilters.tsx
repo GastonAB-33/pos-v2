@@ -1,5 +1,23 @@
 import { useState } from "react";
-import { Camera, ChevronDown, Ellipsis, FileSpreadsheet, FileText, FilterX, Package, Plus, RefreshCw, Search, SlidersHorizontal, Upload, X } from "lucide-react";
+import { Link } from "react-router-dom";
+import {
+  Camera,
+  Ellipsis,
+  FileSpreadsheet,
+  FileText,
+  FilterX,
+  Package,
+  Plus,
+  RefreshCw,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  Tag,
+  Upload,
+  X,
+} from "lucide-react";
+import { routePaths } from "@/config/routes";
+import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { IconButton } from "@/components/ui/IconButton";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
@@ -52,8 +70,11 @@ export const ProductFilters = ({
   onClearSelection,
   onOpenReturnablePackages,
 }: ProductFiltersProps) => {
+  const { canRead } = usePermissions();
+  const canReadListasPrecios = canRead("listas_precios");
+  const canReadPromociones = canRead("promociones");
+
   const [actionsOpen, setActionsOpen] = useState(false);
-  const [priceListMenuOpen, setPriceListMenuOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [filtersModalOpen, setFiltersModalOpen] = useState(false);
   useBodyScrollLock(filtersModalOpen);
@@ -91,78 +112,26 @@ export const ProductFilters = ({
             </span>
           </button>
 
-          {/* Menú desplegable para Descargar Lista de Precios en PDF o Excel */}
-          <div className="relative z-30">
-            <button
-              type="button"
-              onClick={() => setPriceListMenuOpen((open) => !open)}
+          {canReadListasPrecios && (
+            <Link
+              to={routePaths.listasPrecios}
               className="ui-btn-ghost text-xs inline-flex items-center gap-1.5 border border-slate-300 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-              title="Descargar lista de precios (PDF o Excel)"
+              title="Ir al módulo de Listas de Precios"
             >
-              <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400" />
-              <span>Lista de Precios</span>
-              <ChevronDown size={13} className="text-slate-400" />
-            </button>
-            {priceListMenuOpen ? (
-              <>
-                <div
-                  className="fixed inset-0 z-40 bg-transparent"
-                  onClick={() => setPriceListMenuOpen(false)}
-                  aria-hidden="true"
-                />
-                <div
-                  className="absolute right-0 top-full mt-1.5 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-800 dark:bg-slate-900 z-50 animate-fadeIn"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {onExportPdf && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPriceListMenuOpen(false);
-                        onExportPdf();
-                      }}
-                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 text-left transition cursor-pointer"
-                    >
-                      <FileText size={16} className="text-red-500 shrink-0" />
-                      <div>
-                        <div>Descargar PDF</div>
-                        <div className="text-[10px] font-normal text-slate-400">
-                          {selectedCount > 0 ? `Imprimir ${selectedCount} seleccionados` : `Imprimir ${filteredCount} visibles`}
-                        </div>
-                      </div>
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPriceListMenuOpen(false);
-                      onExportXlsx();
-                    }}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 text-left transition cursor-pointer"
-                  >
-                    <FileSpreadsheet size={16} className="text-emerald-600 shrink-0" />
-                    <div>
-                      <div>Descargar Excel (.xlsx)</div>
-                      <div className="text-[10px] font-normal text-slate-400">
-                        {selectedCount > 0 ? `Exportar ${selectedCount} seleccionados` : `Exportar ${filteredCount} visibles`}
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              </>
-            ) : null}
-          </div>
+              <Tag size={14} className="text-blue-600 dark:text-blue-400" />
+              <span>Listas de precios</span>
+            </Link>
+          )}
 
-          {onOpenReturnablePackages && (
-            <button
-              type="button"
-              onClick={onOpenReturnablePackages}
-              className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
-              title="Ver y configurar tipos de envases retornables"
+          {canReadPromociones && (
+            <Link
+              to={routePaths.promociones}
+              className="ui-btn-ghost text-xs inline-flex items-center gap-1.5 border border-slate-300 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              title="Ir al módulo de Promociones"
             >
-              <Package size={14} className="text-amber-600 dark:text-amber-400" />
-              <span className="hidden sm:inline">Envases</span>
-            </button>
+              <Sparkles size={14} className="text-amber-600 dark:text-amber-400" />
+              <span>Promociones</span>
+            </Link>
           )}
 
           <div className="relative z-30">

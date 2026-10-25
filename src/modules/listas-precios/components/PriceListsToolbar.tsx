@@ -1,6 +1,6 @@
 import { ArrowLeft, Plus, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
-import { routePaths } from "@/app/router/route-paths";
+import { routePaths } from "@/config/routes";
 import { IconButton } from "@/components/ui/IconButton";
 
 interface PriceListsToolbarProps {
