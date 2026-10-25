@@ -4,6 +4,7 @@ import { cashService } from "@/services/cash.service";
 import { productsService } from "@/services/products.service";
 import { purchasesService } from "@/services/purchases.service";
 import { suppliersService } from "@/services/suppliers.service";
+import { usersService } from "@/services/users.service";
 import { useProductsStore } from "@/features/products/store/products.store";
 import type {
   BankAccount,
@@ -25,6 +26,7 @@ interface PurchasesStoreState {
   suppliers: Supplier[];
   purchases: EnrichedPurchase[];
   bankAccounts: BankAccount[];
+  usersById: Record<string, string>;
   openCashSession: CashSession | null;
   loadedTenantId: string | null;
   lastLoadedAt: number | null;
@@ -46,6 +48,7 @@ export const usePurchasesStore = create<PurchasesStoreState>()((set, get) => ({
   suppliers: [],
   purchases: [],
   bankAccounts: [],
+  usersById: {},
   openCashSession: null,
   loadedTenantId: null,
   lastLoadedAt: null,
@@ -84,6 +87,7 @@ export const usePurchasesStore = create<PurchasesStoreState>()((set, get) => ({
       suppliers: [],
       purchases: [],
       bankAccounts: [],
+      usersById: {},
       openCashSession: null,
       loadedTenantId: null,
       lastLoadedAt: null,
@@ -129,6 +133,7 @@ export const usePurchasesStore = create<PurchasesStoreState>()((set, get) => ({
         allPurchaseItems,
         allBankAccounts,
         activeCashSession,
+        allUsers,
       ] = await Promise.all([
         productsService.getAllByTenant(tenantId),
         productsService.getBarcodesByTenant(tenantId),
@@ -139,7 +144,13 @@ export const usePurchasesStore = create<PurchasesStoreState>()((set, get) => ({
         userId != null
           ? cashService.getOpenSessionByUser(tenantId, userId).then((s) => s ?? cashService.getOpenSession(tenantId))
           : cashService.getOpenSession(tenantId),
+        usersService.getAllByTenant(tenantId).catch(() => []),
       ]);
+
+      const usersMap = (allUsers || []).reduce<Record<string, string>>((acc, u) => {
+        acc[u.id] = u.full_name?.trim() || u.email?.trim() || u.username?.trim() || u.id;
+        return acc;
+      }, {});
 
       const purchaseItemsByPurchaseId = allPurchaseItems.reduce<Map<string, PurchaseItem[]>>(
         (acc, item) => {
@@ -172,6 +183,7 @@ export const usePurchasesStore = create<PurchasesStoreState>()((set, get) => ({
         productBarcodes: allProductBarcodes,
         bankAccounts: allBankAccounts,
         openCashSession: activeCashSession,
+        usersById: usersMap,
         suppliers: allSuppliers.filter((supplier) => supplier.is_active),
         purchases: enrichedPurchases,
         loadedTenantId: tenantId,

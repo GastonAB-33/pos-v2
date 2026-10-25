@@ -7,6 +7,7 @@ import { usePurchasesStore } from "@/modules/compras/store/purchases.store";
 import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
 import { generalCashService } from "@/services/general-cash.service";
 import { purchasesService } from "@/services/purchases.service";
+import { settingsService } from "@/services/settings.service";
 import { stockService } from "@/services/stock.service";
 import { suppliersService } from "@/services/suppliers.service";
 import { supplierCurrentAccountsService } from "@/services/supplier-current-accounts.service";
@@ -95,6 +96,38 @@ const toProductCreateInput = (values: ProductFormModalValues) => ({
   is_active: values.estadoActivo,
 });
 
+export interface PurchaseReviewItemPayload {
+  purchaseItemId: string;
+  productId: string;
+  quantity: number;
+  bonifiedQuantity: number;
+  unitCost: number;
+  discountPercent: number;
+  lineTotal: number;
+  vatPercent: number;
+  profitPercent: number;
+  newSalePrice: number;
+  priceWithoutVat: number;
+}
+
+export interface PurchaseReviewConfirmationPayload {
+  purchaseId: string;
+  items: PurchaseReviewItemPayload[];
+  subtotal: number;
+  vatTotal: number;
+  total: number;
+  finalize?: boolean;
+}
+
+export interface PurchasePricingItemUpdate {
+  purchaseItemId: string;
+  productId: string;
+  vatPercent: number;
+  profitPercent: number;
+  newSalePrice: number;
+  priceWithoutVat?: number;
+}
+
 export const usePurchasesModule = (tenantId: string | null, userId: string | null) => {
   const {
     products,
@@ -103,11 +136,13 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     purchases,
     bankAccounts,
     openCashSession,
+    usersById,
     isLoading,
     isBackgroundRefreshing,
     setSuppliers,
     setProducts,
     setProductBarcodes,
+    setPurchases,
   } = usePurchasesStore();
 
   const [search, setSearch] = useState("");
@@ -674,14 +709,31 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       const combinedNotes =
         [fiscalNotes, headerValues.notes?.trim(), paymentDetailNotes].filter(Boolean).join(" | ") || null;
 
+      const tenantSettings = await settingsService.getByTenant(tenantId).catch(() => null);
+      const isDoubleConfirmation = Boolean(tenantSettings?.stock?.purchase_double_confirmation_enabled);
+      const initialStatus = isDoubleConfirmation ? "pending_pricing" : "confirmed";
+
+      // Generar correlativo humano y ordenado: CP-00001, CP-00002...
+      const existingSeq = purchases
+        .map((p) => {
+          const match = p.purchase_number?.match(/^CP-(\d+)$/i);
+          if (!match) return 0;
+          const num = parseInt(match[1], 10);
+          return num > 0 && num < 1_000_000 ? num : 0;
+        })
+        .filter(Boolean);
+
+      const nextNumber = existingSeq.length > 0 ? Math.max(...existingSeq) + 1 : purchases.length + 1;
+      const formattedPurchaseNumber = `CP-${String(nextNumber).padStart(5, "0")}`;
+
       const purchase = await purchasesService.create(tenantId, {
         supplier_id: headerValues.supplierId,
-        purchase_number: `CP-${Date.now()}`,
+        purchase_number: formattedPurchaseNumber,
         document_type: headerValues.documentType,
         document_number: headerValues.documentNumber?.trim() || null,
         issue_date: headerValues.issueDate,
         payment_method: isSplit ? "other" : paymentValues.paymentMethod,
-        status: "confirmed",
+        status: initialStatus,
         subtotal: summary.subtotal,
         vat_total: summary.vatTotal,
         total: summary.total,
@@ -725,39 +777,52 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         const currentStock = currentProduct?.stock_current ?? item.stock_current;
         const newStock = roundQty(currentStock + totalIncomingQty);
 
-        const forward = computePricingForward({
-          precioCosto: item.unit_cost,
-          porcentajeGanancia: item.profit_percent,
-          porcentajeIva: item.vat_percent || 0,
-        });
-
-        const productUpdatePayload: Partial<Product> = {
-          stock_current: newStock,
-          cost_price: item.unit_cost > 0 ? item.unit_cost : currentProduct?.cost_price,
-          vat_percent: item.vat_percent,
-          profit_percent: item.profit_percent,
-          price: item.update_sale_price ? (item.new_sale_price || forward.precioFinal) : (currentProduct?.price ?? item.current_sale_price),
-          price_without_vat: forward.precioSinIva,
-        };
-
-        if (!item.update_sale_price && (currentProduct?.price || item.current_sale_price)) {
-          const backward = computePricingBackward({
+        if (isDoubleConfirmation) {
+          // Doble confirmación activada: se actualiza stock e ingreso físico sin alterar precios de venta
+          const updated = await productsService.update(tenantId, item.product_id, {
+            stock_current: newStock,
+            stock: newStock,
+            cost_price: item.unit_cost > 0 ? item.unit_cost : currentProduct?.cost_price,
+            cost: item.unit_cost > 0 ? item.unit_cost : currentProduct?.cost_price,
+          } as Partial<Product>);
+          if (updated) {
+            useProductsStore.getState().upsertProduct(updated);
+          }
+        } else {
+          const forward = computePricingForward({
             precioCosto: item.unit_cost,
-            precioFinal: currentProduct?.price ?? item.current_sale_price,
+            porcentajeGanancia: item.profit_percent,
             porcentajeIva: item.vat_percent || 0,
           });
-          productUpdatePayload.price = currentProduct?.price ?? item.current_sale_price;
-          productUpdatePayload.price_without_vat = backward.precioSinIva;
-          productUpdatePayload.profit_percent = backward.porcentajeGanancia;
-        }
 
-        const updated = await productsService.update(tenantId, item.product_id, {
-          ...productUpdatePayload,
-          stock: newStock,
-          cost: productUpdatePayload.cost_price,
-        } as Partial<Product>);
-        if (updated) {
-          useProductsStore.getState().upsertProduct(updated);
+          const productUpdatePayload: Partial<Product> = {
+            stock_current: newStock,
+            cost_price: item.unit_cost > 0 ? item.unit_cost : currentProduct?.cost_price,
+            vat_percent: item.vat_percent,
+            profit_percent: item.profit_percent,
+            price: item.update_sale_price ? (item.new_sale_price || forward.precioFinal) : (currentProduct?.price ?? item.current_sale_price),
+            price_without_vat: forward.precioSinIva,
+          };
+
+          if (!item.update_sale_price && (currentProduct?.price || item.current_sale_price)) {
+            const backward = computePricingBackward({
+              precioCosto: item.unit_cost,
+              precioFinal: currentProduct?.price ?? item.current_sale_price,
+              porcentajeIva: item.vat_percent || 0,
+            });
+            productUpdatePayload.price = currentProduct?.price ?? item.current_sale_price;
+            productUpdatePayload.price_without_vat = backward.precioSinIva;
+            productUpdatePayload.profit_percent = backward.porcentajeGanancia;
+          }
+
+          const updated = await productsService.update(tenantId, item.product_id, {
+            ...productUpdatePayload,
+            stock: newStock,
+            cost: productUpdatePayload.cost_price,
+          } as Partial<Product>);
+          if (updated) {
+            useProductsStore.getState().upsertProduct(updated);
+          }
         }
       }
 
@@ -915,7 +980,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
 
       setFeedback({
         type: "success",
-        message: `Compra ${purchase.purchase_number} registrada correctamente (${methodDesc})`,
+        message: isDoubleConfirmation ? `Compra ${purchase.purchase_number} registrada correctamente (${methodDesc}). Mercadería ingresada al stock y egreso asentado. Pendiente fijar precios por administración.` : `Compra ${purchase.purchase_number} registrada correctamente (${methodDesc})`,
       });
       clearCart();
       useProductsStore.getState().loadCatalog(tenantId, true).catch(() => {});
@@ -939,6 +1004,243 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       }
       setFeedback({ type: "error", message });
       return null;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const confirmPurchasePricing = async (
+    purchaseId: string,
+    itemsUpdates: PurchasePricingItemUpdate[]
+  ): Promise<boolean> => {
+    if (!tenantId) return false;
+    setIsSubmitting(true);
+    try {
+      for (const item of itemsUpdates) {
+        // 1. Actualizar catálogo del producto con el nuevo precio e IVA
+        const updated = await productsService.update(tenantId, item.productId, {
+          price: item.newSalePrice,
+          price_without_vat: item.priceWithoutVat,
+          vat_percent: item.vatPercent,
+          profit_percent: item.profitPercent,
+        } as Partial<Product>);
+        if (updated) {
+          useProductsStore.getState().upsertProduct(updated);
+        }
+
+        // 2. Actualizar el snapshot del item de la compra
+        await purchasesService.updateItem(tenantId, item.purchaseItemId, {
+          sale_price: item.newSalePrice,
+          vat_percent: item.vatPercent,
+        });
+      }
+
+      // 3. Pasar la compra a estado confirmed
+      await purchasesService.update(tenantId, purchaseId, {
+        status: "confirmed",
+      });
+
+      // 4. Actualizar store local de compras reactivamente
+      setPurchases((prev) =>
+        prev.map((p) =>
+          p.id === purchaseId
+            ? {
+                ...p,
+                status: "confirmed",
+                items: p.items.map((pi) => {
+                  const matched = itemsUpdates.find((u) => u.purchaseItemId === pi.id);
+                  if (!matched) return pi;
+                  return {
+                    ...pi,
+                    sale_price: matched.newSalePrice,
+                    vat_percent: matched.vatPercent,
+                  };
+                }),
+              }
+            : p
+        )
+      );
+
+      await auditService.createSafe(tenantId, {
+        user_id: userId,
+        module: "compras",
+        action: "confirm_purchase_pricing",
+        entity_type: "purchase",
+        entity_id: purchaseId,
+        description: `Confirmación de precios de venta para compra ID: ${purchaseId}`,
+        metadata: {
+          itemsCount: itemsUpdates.length,
+        },
+      });
+
+      setFeedback({
+        type: "success",
+        message: "Precios de venta confirmados y actualizados en el catálogo con éxito.",
+      });
+
+      useProductsStore.getState().loadCatalog(tenantId, true).catch(() => {});
+      await loadData(true);
+      return true;
+    } catch (error) {
+      console.error("[usePurchasesModule] confirmPurchasePricing failed:", error);
+      setFeedback({
+        type: "error",
+        message: "Error al confirmar los precios de venta. Intenta nuevamente.",
+      });
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const confirmPurchaseReview = async (
+    payload: PurchaseReviewConfirmationPayload
+  ): Promise<boolean> => {
+    if (!tenantId) return false;
+    setIsSubmitting(true);
+    const isFinalizing = payload.finalize !== false;
+    try {
+      const existingPurchase = purchases.find((p) => p.id === payload.purchaseId);
+
+      for (const item of payload.items) {
+        // 1. Verificar si hubo corrección en la cantidad cargada originalmente por el empleado
+        const originalItem = existingPurchase?.items?.find((pi) => pi.id === item.purchaseItemId);
+        const originalIncomingQty = originalItem
+          ? originalItem.quantity + (originalItem.bonified_quantity || 0)
+          : item.quantity + item.bonifiedQuantity;
+        const newIncomingQty = item.quantity + item.bonifiedQuantity;
+        const deltaQty = roundQty(newIncomingQty - originalIncomingQty);
+
+        const currentProduct = await productsService.getById(tenantId, item.productId);
+        const currentStock = currentProduct?.stock_current ?? 0;
+        const updatedStock = roundQty(currentStock + deltaQty);
+
+        if (deltaQty !== 0) {
+          // Registrar movimiento de ajuste si el admin corrigió cantidades físicas
+          await stockService.create(tenantId, {
+            product_id: item.productId,
+            movement_type: deltaQty > 0 ? "in" : "out",
+            quantity: Math.abs(deltaQty),
+            reference_type: "purchase_adjustment",
+            reference_id: payload.purchaseId,
+            notes: `Corrección en 2da confirmación compra ${existingPurchase?.purchase_number || payload.purchaseId}`,
+            created_by: userId,
+          });
+        }
+
+        // 2. Si se finaliza, actualizar catálogo con nuevo precio de venta, alícuota y margen
+        if (isFinalizing) {
+          const updated = await productsService.update(tenantId, item.productId, {
+            price: item.newSalePrice,
+            price_without_vat: item.priceWithoutVat,
+            vat_percent: item.vatPercent,
+            profit_percent: item.profitPercent,
+            cost_price: item.unitCost,
+            cost: item.unitCost,
+            stock_current: updatedStock,
+            stock: updatedStock,
+          } as Partial<Product>);
+          if (updated) {
+            useProductsStore.getState().upsertProduct(updated);
+          }
+        } else if (deltaQty !== 0) {
+          // Si guardó progreso pero cambió stock físico, sincronizar stock del producto
+          const updated = await productsService.update(tenantId, item.productId, {
+            stock_current: updatedStock,
+            stock: updatedStock,
+            cost_price: item.unitCost,
+            cost: item.unitCost,
+          } as Partial<Product>);
+          if (updated) {
+            useProductsStore.getState().upsertProduct(updated);
+          }
+        }
+
+        // 3. Actualizar el registro del ítem de la compra
+        await purchasesService.updateItem(tenantId, item.purchaseItemId, {
+          quantity: item.quantity,
+          bonified_quantity: item.bonifiedQuantity,
+          unit_cost: item.unitCost,
+          line_total: item.lineTotal,
+          sale_price: item.newSalePrice,
+          vat_percent: item.vatPercent,
+        });
+      }
+
+      // 4. Actualizar estado de la compra: "confirmed" si finalizó, o "pending_pricing" si guardó progreso
+      const newStatus = isFinalizing ? "confirmed" : "pending_pricing";
+      await purchasesService.update(tenantId, payload.purchaseId, {
+        status: newStatus,
+        subtotal: payload.subtotal,
+        vat_total: payload.vatTotal,
+        total: payload.total,
+      });
+
+      // 5. Actualizar store local reactivamente
+      setPurchases((prev) =>
+        prev.map((p) =>
+          p.id === payload.purchaseId
+            ? {
+                ...p,
+                status: newStatus,
+                subtotal: payload.subtotal,
+                vat_total: payload.vatTotal,
+                total: payload.total,
+                items: p.items.map((pi) => {
+                  const matched = payload.items.find((u) => u.purchaseItemId === pi.id);
+                  if (!matched) return pi;
+                  return {
+                    ...pi,
+                    quantity: matched.quantity,
+                    bonified_quantity: matched.bonifiedQuantity,
+                    unit_cost: matched.unitCost,
+                    line_total: matched.lineTotal,
+                    sale_price: matched.newSalePrice,
+                    vat_percent: matched.vatPercent,
+                  };
+                }),
+              }
+            : p
+        )
+      );
+
+      await auditService.createSafe(tenantId, {
+        user_id: userId,
+        module: "compras",
+        action: isFinalizing ? "confirm_purchase_review_step2" : "save_draft_purchase_review_step2",
+        entity_type: "purchase",
+        entity_id: payload.purchaseId,
+        description: isFinalizing
+          ? `2da Confirmación de precios y revisión de compra ID: ${payload.purchaseId}`
+          : `Guardado parcial de 2da confirmación compra ID: ${payload.purchaseId}`,
+        metadata: {
+          itemsCount: payload.items.length,
+          total: payload.total,
+          isFinalizing,
+        },
+      });
+
+      setFeedback({
+        type: "success",
+        message: isFinalizing
+          ? "Compra totalmente confirmada. Precios de venta actualizados en el catálogo con éxito."
+          : "Progreso guardado correctamente. La compra continúa pendiente para finalizar después.",
+      });
+
+      if (isFinalizing) {
+        useProductsStore.getState().loadCatalog(tenantId, true).catch(() => {});
+      }
+      await loadData(true);
+      return true;
+    } catch (error) {
+      console.error("[usePurchasesModule] confirmPurchaseReview failed:", error);
+      setFeedback({
+        type: "error",
+        message: isFinalizing
+          ? "Error al confirmar la revisión de la compra. Intenta nuevamente."
+          : "Error al guardar el progreso de la compra. Intenta nuevamente.",
+      });
+      return false;
     } finally {
       setIsSubmitting(false);
     }
@@ -1351,6 +1653,9 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     removeItem,
     clearCart,
     confirmPurchase,
+    confirmPurchasePricing,
+    confirmPurchaseReview,
+    usersById,
     createPurchaseReturn,
     findPotentialDuplicateProducts,
     createProductAndAddToCart,
