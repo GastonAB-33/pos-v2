@@ -91,7 +91,18 @@ export const hasModulePermission = (
   requirement: PermissionRequirement
 ): boolean => {
   const level = requirement.level ?? "read";
-  const directPermission = Boolean(profile[requirement.module]?.[level]);
+  const modulePerms = profile[requirement.module];
+
+  // Evaluación de acciones especiales granulares (ej: allow_price_override, allow_manual_adjustments)
+  if (level !== "read" && level !== "write") {
+    if (modulePerms && typeof modulePerms[level] === "boolean") {
+      return modulePerms[level] === true;
+    }
+    // Retrocompatibilidad: si no está definido explícitamente en el perfil, hereda del permiso de escritura
+    if (modulePerms?.write) return true;
+  }
+
+  const directPermission = Boolean(modulePerms?.[level]);
   if (directPermission) return true;
 
   // Fallbacks de compatibilidad hacia atrás para módulos contables añadidos

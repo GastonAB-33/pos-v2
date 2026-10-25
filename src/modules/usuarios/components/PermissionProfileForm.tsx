@@ -68,7 +68,7 @@ export const PermissionProfileForm = ({
     >
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Nombre</label>
+          <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-200">Nombre</label>
           <input
             {...register("name")}
             className="ui-input"
@@ -77,7 +77,7 @@ export const PermissionProfileForm = ({
           {errors.name ? <p className="mt-1 text-xs text-red-600">{errors.name.message}</p> : null}
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Descripcion</label>
+          <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-200">Descripción</label>
           <input
             {...register("description")}
             className="ui-input"
@@ -86,7 +86,7 @@ export const PermissionProfileForm = ({
         </div>
       </div>
 
-      <label className="inline-flex items-center gap-2 text-sm text-slate-700">
+      <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200 cursor-pointer">
         <input
           type="checkbox"
           {...register("isActive")}
@@ -96,7 +96,7 @@ export const PermissionProfileForm = ({
       </label>
 
       <div className="space-y-2">
-        <p className="text-sm font-medium text-slate-700">Permisos por modulos y submodulos</p>
+        <p className="text-sm font-bold text-slate-900 dark:text-slate-100">Permisos organizados por Dominios Operativos</p>
         <PermissionMatrix
           groups={moduleGroups}
           value={permissions}
@@ -109,7 +109,7 @@ export const PermissionProfileForm = ({
         Cada modulo puede quedar sin acceso, con acceso o con acceso y edicion para usuarios del perfil.
       </p>
 
-      <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4">
+      <div className="flex items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
         <button type="button" className="ui-btn-ghost" onClick={onCancel} disabled={disabled}>
           Cancelar
         </button>

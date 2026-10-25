@@ -194,37 +194,204 @@ export const useUsersModule = (tenantId: string | null) => {
   }, [profileSearch, profiles]);
 
   const moduleGroups = useMemo<ModuleGroup[]>(() => {
-    const generalModules = appModules.filter(
-      (module) => module !== "configuracion" && !module.startsWith("configuracion_")
-    );
-    const settingsSubmodules = appModules.filter((module) => module.startsWith("configuracion_"));
-
     return [
       {
-        id: "general",
-        label: "Modulos generales",
-        description: "Secciones principales operativas del sistema",
-        modules: generalModules.map((module) => ({
-          module,
-          label: appModuleLabels[module],
-          isSubmodule: module === "compras_margen",
-        })),
+        id: "ventas_pos",
+        label: "1. Ventas & Mostrador",
+        description: "Punto de venta, caja mostrador, comprobantes y facturación",
+        icon: "shopping-cart",
+        modules: [
+          {
+            module: "pos",
+            label: appModuleLabels.pos,
+            specialActions: [
+              {
+                id: "allow_price_override",
+                label: "Modificar precios unitarios en carrito",
+                description: "Permite cambiar el precio de venta de los artículos directamente desde el mostrador",
+              },
+              {
+                id: "allow_manual_discount",
+                label: "Aplicar descuentos manuales al carrito",
+                description: "Permite aplicar rebajas en % o monto fijo al total de la venta o por producto",
+              },
+              {
+                id: "allow_negative_stock",
+                label: "Autorizar ventas con stock en cero o negativo",
+                description: "Permite finalizar la venta aun cuando no haya existencia registrada en el inventario",
+              },
+            ],
+          },
+          {
+            module: "comprobantes",
+            label: appModuleLabels.comprobantes,
+          },
+          {
+            module: "facturacion",
+            label: appModuleLabels.facturacion,
+          },
+        ],
       },
       {
-        id: "configuracion",
-        label: "Configuracion",
-        description: "Permisos globales y submodulos de configuracion",
+        id: "catalogo_stock",
+        label: "2. Catálogo, Stock & Compras",
+        description: "Productos, inventario, compras a proveedores y listas de precios",
+        icon: "package",
         modules: [
+          {
+            module: "productos",
+            label: appModuleLabels.productos,
+          },
+          {
+            module: "stock",
+            label: appModuleLabels.stock,
+            specialActions: [
+              {
+                id: "allow_manual_adjustments",
+                label: "Realizar ajustes manuales de stock",
+                description: "Permite modificar directamente las cantidades de inventario (mermas, roturas, conteos)",
+              },
+              {
+                id: "view_cost_price",
+                label: "Ver costo de compra y margen de ganancia",
+                description: "Permite visualizar el costo real del producto y el margen de ganancia en el catálogo",
+              },
+            ],
+          },
+          {
+            module: "compras",
+            label: appModuleLabels.compras,
+          },
+          {
+            module: "compras_margen",
+            label: appModuleLabels.compras_margen,
+            isSubmodule: true,
+          },
+          {
+            module: "proveedores",
+            label: appModuleLabels.proveedores,
+          },
+          {
+            module: "promociones",
+            label: appModuleLabels.promociones,
+          },
+          {
+            module: "listas_precios",
+            label: appModuleLabels.listas_precios,
+          },
+        ],
+      },
+      {
+        id: "personas_cuentas",
+        label: "3. Personas, Equipo & Cuentas",
+        description: "Clientes, cuentas corrientes y gestión de empleados y sueldos",
+        icon: "users",
+        modules: [
+          {
+            module: "clientes",
+            label: appModuleLabels.clientes,
+          },
+          {
+            module: "cuentas_corrientes",
+            label: appModuleLabels.cuentas_corrientes,
+          },
+          {
+            module: "empleados",
+            label: appModuleLabels.empleados,
+          },
+        ],
+      },
+      {
+        id: "tesoreria_finanzas",
+        label: "4. Tesorería, Cajas & Finanzas",
+        description: "Cajas físicas de turno, caja fuerte, bancos y cta. cte. proveedores",
+        icon: "wallet",
+        modules: [
+          {
+            module: "caja",
+            label: appModuleLabels.caja,
+            specialActions: [
+              {
+                id: "allow_manual_movements",
+                label: "Registrar ingresos y retiros manuales de efectivo",
+                description: "Permite asentar movimientos de dinero sueltos sin asociar a un ticket de venta",
+              },
+              {
+                id: "view_theoretical_balance",
+                label: "Ver saldo teórico esperado en arqueo",
+                description: "Permite ver el total teórico en el cierre de turno (anula el cierre ciego)",
+              },
+            ],
+          },
+          {
+            module: "caja_general",
+            label: appModuleLabels.caja_general,
+          },
+          {
+            module: "bancos",
+            label: appModuleLabels.bancos,
+          },
+          {
+            module: "cuentas_corrientes_proveedores",
+            label: appModuleLabels.cuentas_corrientes_proveedores,
+          },
+          {
+            module: "medios_pago",
+            label: appModuleLabels.medios_pago,
+          },
+        ],
+      },
+      {
+        id: "gestion_sistema",
+        label: "5. Gestión, Reportes & Configuración",
+        description: "Métricas del negocio, auditoría, usuarios y parámetros del sistema",
+        icon: "settings",
+        modules: [
+          {
+            module: "dashboard",
+            label: appModuleLabels.dashboard,
+          },
+          {
+            module: "reportes",
+            label: appModuleLabels.reportes,
+          },
+          {
+            module: "auditoria",
+            label: appModuleLabels.auditoria,
+          },
+          {
+            module: "usuarios",
+            label: appModuleLabels.usuarios,
+          },
           {
             module: "configuracion",
             label: appModuleLabels.configuracion,
-            isSubmodule: false,
           },
-          ...settingsSubmodules.map((module) => ({
-            module,
-            label: appModuleLabels[module],
+          {
+            module: "configuracion_agenda",
+            label: appModuleLabels.configuracion_agenda,
             isSubmodule: true,
-          })),
+          },
+          {
+            module: "configuracion_catalogo",
+            label: appModuleLabels.configuracion_catalogo,
+            isSubmodule: true,
+          },
+          {
+            module: "configuracion_analisis",
+            label: appModuleLabels.configuracion_analisis,
+            isSubmodule: true,
+          },
+          {
+            module: "configuracion_contable",
+            label: appModuleLabels.configuracion_contable,
+            isSubmodule: true,
+          },
+          {
+            module: "configuracion_sistema",
+            label: appModuleLabels.configuracion_sistema,
+            isSubmodule: true,
+          },
         ],
       },
     ];

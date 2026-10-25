@@ -235,6 +235,60 @@ type ConfigTabKey =
   | "sistema"
   | "empleados";
 
+export type ConfigPillarKey = "ventas" | "catalogo" | "personas" | "tesoreria" | "sistema";
+
+export interface ConfigPillarDefinition {
+  id: ConfigPillarKey;
+  label: string;
+  shortLabel: string;
+  icon: typeof ShoppingCart;
+  description: string;
+  tabIds: ConfigTabKey[];
+}
+
+export const configPillars: ConfigPillarDefinition[] = [
+  {
+    id: "ventas",
+    label: "1. Ventas & POS",
+    shortLabel: "Ventas",
+    icon: ShoppingCart,
+    description: "Punto de venta, balanzas y facturación fiscal",
+    tabIds: ["pos", "codigos_balanza", "facturacion"],
+  },
+  {
+    id: "catalogo",
+    label: "2. Catálogo & Stock",
+    shortLabel: "Catálogo",
+    icon: Package,
+    description: "Parámetros de stock, inventario y envases",
+    tabIds: ["stock"],
+  },
+  {
+    id: "personas",
+    label: "3. Personas & Equipo",
+    shortLabel: "Equipo",
+    icon: Users,
+    description: "Descuento en compras a empleados y categorías excluidas",
+    tabIds: ["empleados"],
+  },
+  {
+    id: "tesoreria",
+    label: "4. Tesorería & Finanzas",
+    shortLabel: "Tesorería",
+    icon: Wallet,
+    description: "Cajas físicas, sesiones, bancos y planes de cuotas",
+    tabIds: ["caja", "contableCatalogos"],
+  },
+  {
+    id: "sistema",
+    label: "5. Gestión & Sistema",
+    shortLabel: "Sistema",
+    icon: Settings,
+    description: "Datos de la empresa, apariencia e integraciones",
+    tabIds: ["negocio", "apariencia", "sistema"],
+  },
+];
+
 interface ConfigTabDefinition {
   id: ConfigTabKey;
   label: string;
@@ -982,40 +1036,95 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
           </section>
         ) : null}
 
-        {/* Navegación por Pestañas / Menú Horizontal de Categorías */}
+        {/* Navegación por Pestañas Organizada por Pilares Operativos */}
         {visibleTabs.length > 1 ? (
-          <nav aria-label="Categorías de configuración" className="flex flex-wrap gap-2 border-b border-slate-200 pb-2 dark:border-slate-800">
-            {visibleTabs.map((tab) => {
-              const IconComp = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={[
-                    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all",
-                    isActive
-                      ? "bg-blue-600 text-white shadow-sm dark:bg-blue-600"
-                      : "bg-white text-slate-700 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800",
-                  ].join(" ")}
-                >
-                  <IconComp size={16} />
-                  <span>{tab.label}</span>
-                  {tab.badge ? (
+          <div className="space-y-3 pb-2 border-b border-slate-200 dark:border-slate-800">
+            {/* Barra superior de Pilares Funcionales */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mr-1 hidden sm:inline">
+                Dominio:
+              </span>
+              {configPillars.map((pillar) => {
+                const visiblePillarTabs = visibleTabs.filter((t) => pillar.tabIds.includes(t.id));
+                if (visiblePillarTabs.length === 0) return null;
+
+                const isPillarActive = visiblePillarTabs.some((t) => t.id === activeTab);
+                const PillarIconComp = pillar.icon;
+
+                return (
+                  <button
+                    key={pillar.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveTab(visiblePillarTabs[0].id);
+                    }}
+                    className={cn(
+                      "flex items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-bold transition-all cursor-pointer select-none",
+                      isPillarActive
+                        ? "bg-blue-600 text-white shadow-xs dark:bg-blue-600"
+                        : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-300 dark:hover:bg-slate-800"
+                    )}
+                  >
+                    <PillarIconComp size={15} />
+                    <span>{pillar.label}</span>
                     <span
-                      className={[
-                        "rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                        isActive ? "bg-white/20 text-white" : "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-                      ].join(" ")}
+                      className={cn(
+                        "rounded-full px-1.5 py-0.2 text-[9px] font-bold font-mono",
+                        isPillarActive
+                          ? "bg-white/20 text-white"
+                          : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                      )}
                     >
-                      {tab.badge}
+                      {visiblePillarTabs.length}
                     </span>
-                  ) : null}
-                </button>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Sub-barra de pestañas específicas dentro del pilar activo */}
+            {(() => {
+              const currentPillar = configPillars.find((p) => p.tabIds.includes(activeTab));
+              const currentSubTabs = visibleTabs.filter((t) => currentPillar?.tabIds.includes(t.id));
+              if (currentSubTabs.length <= 1) return null;
+
+              return (
+                <nav
+                  aria-label="Pestañas de la sección"
+                  className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100 dark:border-slate-800/80"
+                >
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mr-1.5">
+                    Secciones de {currentPillar?.shortLabel}:
+                  </span>
+                  {currentSubTabs.map((tab) => {
+                    const IconComp = tab.icon;
+                    const isActive = activeTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setActiveTab(tab.id)}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all cursor-pointer",
+                          isActive
+                            ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-2xs font-bold"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800/70 dark:text-slate-300 dark:hover:bg-slate-800"
+                        )}
+                      >
+                        <IconComp size={13} />
+                        <span>{tab.label}</span>
+                        {tab.badge ? (
+                          <span className="rounded px-1 text-[9px] font-bold uppercase bg-blue-100 text-blue-800 dark:bg-blue-900/80 dark:text-blue-300">
+                            {tab.badge}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </nav>
               );
-            })}
-          </nav>
+            })()}
+          </div>
         ) : null}
 
         {/* SECCIÓN: NEGOCIO */}
