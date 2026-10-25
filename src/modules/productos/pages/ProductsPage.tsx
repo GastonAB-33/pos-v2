@@ -13,6 +13,7 @@ import { ProductFilters } from "@/modules/productos/components/ProductFilters";
 import { ProductFormModal } from "@/modules/productos/components/ProductFormModal";
 import { ProductImportModal } from "@/modules/productos/components/ProductImportModal";
 import { ReturnablePackagesModal } from "@/modules/productos/components/ReturnablePackagesModal";
+import { exportPriceListXlsx, printPriceListPdf } from "@/modules/productos/utils/product-price-list-export";
 import { ProductQuickPriceModal } from "@/modules/productos/components/ProductQuickPriceModal";
 import { ProductTable } from "@/modules/productos/components/ProductTable";
 import { useProducts } from "@/modules/productos/hooks/useProducts";
@@ -28,7 +29,7 @@ type ProductModalState = {
 };
 
 export const ProductsPage = () => {
-  const { tenantId } = useTenant();
+  const { tenant, tenantId } = useTenant();
   const user = useAuthStore((state) => state.user);
   const { canRead, canWrite } = usePermissions();
   const canReadProductos = canRead("productos");
@@ -88,8 +89,8 @@ export const ProductsPage = () => {
   });
 
   const selectedCount = products.selectedIds.length;
-  const filteredProductsKey = JSON.stringify(products.filters);
-  const paginatedProducts = usePagination(products.filteredProducts, 10, filteredProductsKey);
+  const filteredProductsKey = JSON.stringify({ filters: products.filters, sort: products.sort });
+  const paginatedProducts = usePagination(products.sortedProducts, 10, filteredProductsKey);
   const pageProductIds = paginatedProducts.pageItems.map((product) => product.entity.id);
 
   const sortedAudit = useMemo(
@@ -159,6 +160,82 @@ export const ProductsPage = () => {
     }
   };
 
+  const getActiveFiltersSummary = () => {
+    const parts: string[] = [];
+    if (products.filters.search?.trim()) {
+      parts.push(`Búsqueda: "${products.filters.search.trim()}"`);
+    }
+    if (products.filters.saleMode && products.filters.saleMode !== "all") {
+      parts.push(`Modalidad: ${products.filters.saleMode === "weight" ? "Pesables" : "Por Unidad"}`);
+    }
+    if (products.filters.category) {
+      parts.push(`Categoría: ${products.filters.category}`);
+    }
+    if (products.filters.subcategory) {
+      parts.push(`Subcategoría: ${products.filters.subcategory}`);
+    }
+    if (products.filters.supplier) {
+      parts.push(`Proveedor: ${products.filters.supplier}`);
+    }
+    return parts.join(" • ") || undefined;
+  };
+
+  const getSortSummary = () => {
+    const fieldLabels: Record<string, string> = {
+      nombre: "Producto",
+      categoria: "Categoría",
+      subcategoria: "Subcategoría",
+      precioFinal: "Precio Final",
+      stock: "Stock",
+      trackStock: "Seguimiento",
+    };
+    const label = fieldLabels[products.sort.field] || products.sort.field;
+    const dir = products.sort.direction === "asc" ? "Ascendente" : "Descendente";
+    return `${label} (${dir})`;
+  };
+
+  const handleExportPriceListPdf = () => {
+    const targetProducts =
+      products.selectedIds.length > 0
+        ? products.sortedProducts.filter((p) => products.selectedIds.includes(p.entity.id))
+        : products.sortedProducts;
+
+    if (!targetProducts.length) {
+      toastError("No hay productos para exportar.");
+      return;
+    }
+
+    printPriceListPdf(targetProducts, {
+      businessName: tenant?.tradeName || tenant?.legalName || "Comercio",
+      filtersSummary: getActiveFiltersSummary(),
+      sortSummary: getSortSummary(),
+    });
+  };
+
+  const handleExportPriceListXlsx = async () => {
+    const targetProducts =
+      products.selectedIds.length > 0
+        ? products.sortedProducts.filter((p) => products.selectedIds.includes(p.entity.id))
+        : products.sortedProducts;
+
+    if (!targetProducts.length) {
+      toastError("No hay productos para exportar.");
+      return;
+    }
+
+    const ok = await exportPriceListXlsx(targetProducts, {
+      businessName: tenant?.tradeName || tenant?.legalName || "Comercio",
+      filtersSummary: getActiveFiltersSummary(),
+      sortSummary: getSortSummary(),
+    });
+
+    if (ok) {
+      toastSuccess(`Lista de precios descargada (${targetProducts.length} productos).`);
+    } else {
+      toastError("No se pudo generar el archivo Excel.");
+    }
+  };
+
   const handleOpenCreateFromQuickPrice = (query?: string) => {
     setQuickPriceOpen(false);
     const trimmed = query?.trim() ?? "";
@@ -192,16 +269,8 @@ export const ProductsPage = () => {
           onOpenCreate={() => setFormModal({ mode: "create", product: null })}
           onOpenImport={() => setImportOpen(true)}
           onOpenReturnablePackages={() => setReturnableModalOpen(true)}
-          onExportXlsx={() => {
-            const idsToExport = products.selectedIds.length > 0
-              ? products.selectedIds
-              : products.filteredProducts.map((item) => item.entity.id);
-            void products.exportProducts({
-              format: "xlsx",
-              priceListId: "base",
-              productIds: idsToExport,
-            });
-          }}
+          onExportPdf={handleExportPriceListPdf}
+          onExportXlsx={handleExportPriceListXlsx}
           onDeleteSelected={() => {
             if (!products.selectedIds.length) return;
             const ok = window.confirm(`¿Eliminar ${products.selectedIds.length} productos seleccionados?`);
@@ -224,6 +293,8 @@ export const ProductsPage = () => {
         <ProductTable
           products={paginatedProducts.pageItems}
           selectedIds={products.selectedIds}
+          sort={products.sort}
+          onToggleSort={products.toggleSort}
           canWrite={canWriteProductos}
           canDelete={canWriteProductos}
           onToggleSelect={products.toggleSelected}

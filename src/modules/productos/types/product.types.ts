@@ -29,6 +29,22 @@ export interface ProductFiltersState {
   category: string;
   subcategory: string;
   supplier: string;
+  saleMode?: "all" | "unit" | "weight" | "";
+}
+
+export type ProductSortField =
+  | "nombre"
+  | "categoria"
+  | "subcategoria"
+  | "precioFinal"
+  | "stock"
+  | "trackStock";
+
+export type ProductSortDirection = "asc" | "desc";
+
+export interface ProductSortState {
+  field: ProductSortField;
+  direction: ProductSortDirection;
 }
 
 export interface ProductAuditEntry {

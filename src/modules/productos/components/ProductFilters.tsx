@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Camera, Download, Ellipsis, FilterX, Package, Plus, RefreshCw, Search, SlidersHorizontal, Upload, X } from "lucide-react";
+import { Camera, ChevronDown, Ellipsis, FileSpreadsheet, FileText, FilterX, Package, Plus, RefreshCw, Search, SlidersHorizontal, Upload, X } from "lucide-react";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { IconButton } from "@/components/ui/IconButton";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
@@ -22,6 +22,7 @@ interface ProductFiltersProps {
   onReload: () => void;
   onOpenCreate: () => void;
   onOpenImport: () => void;
+  onExportPdf?: () => void;
   onExportXlsx: () => void;
   onDeleteSelected: () => void;
   onSelectAllFiltered: () => void;
@@ -44,6 +45,7 @@ export const ProductFilters = ({
   onReload,
   onOpenCreate,
   onOpenImport,
+  onExportPdf,
   onExportXlsx,
   onDeleteSelected,
   onSelectAllFiltered,
@@ -51,6 +53,7 @@ export const ProductFilters = ({
   onOpenReturnablePackages,
 }: ProductFiltersProps) => {
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [priceListMenuOpen, setPriceListMenuOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [filtersModalOpen, setFiltersModalOpen] = useState(false);
   useBodyScrollLock(filtersModalOpen);
@@ -58,7 +61,8 @@ export const ProductFilters = ({
   const activeAdvancedFiltersCount =
     (filters.category ? 1 : 0) +
     (filters.subcategory ? 1 : 0) +
-    (filters.supplier ? 1 : 0);
+    (filters.supplier ? 1 : 0) +
+    (filters.saleMode && filters.saleMode !== "all" ? 1 : 0);
 
   return (
     <div className="workspace-toolbar space-y-3">
@@ -86,6 +90,68 @@ export const ProductFilters = ({
               {isRefreshing ? "Actualizando..." : "Actualizar"}
             </span>
           </button>
+
+          {/* Menú desplegable para Descargar Lista de Precios en PDF o Excel */}
+          <div className="relative z-30">
+            <button
+              type="button"
+              onClick={() => setPriceListMenuOpen((open) => !open)}
+              className="ui-btn-ghost text-xs inline-flex items-center gap-1.5 border border-slate-300 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              title="Descargar lista de precios (PDF o Excel)"
+            >
+              <FileSpreadsheet size={14} className="text-emerald-600 dark:text-emerald-400" />
+              <span>Lista de Precios</span>
+              <ChevronDown size={13} className="text-slate-400" />
+            </button>
+            {priceListMenuOpen ? (
+              <>
+                <div
+                  className="fixed inset-0 z-40 bg-transparent"
+                  onClick={() => setPriceListMenuOpen(false)}
+                  aria-hidden="true"
+                />
+                <div
+                  className="absolute right-0 top-full mt-1.5 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-800 dark:bg-slate-900 z-50 animate-fadeIn"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {onExportPdf && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPriceListMenuOpen(false);
+                        onExportPdf();
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 text-left transition cursor-pointer"
+                    >
+                      <FileText size={16} className="text-red-500 shrink-0" />
+                      <div>
+                        <div>Descargar PDF</div>
+                        <div className="text-[10px] font-normal text-slate-400">
+                          {selectedCount > 0 ? `Imprimir ${selectedCount} seleccionados` : `Imprimir ${filteredCount} visibles`}
+                        </div>
+                      </div>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPriceListMenuOpen(false);
+                      onExportXlsx();
+                    }}
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 text-left transition cursor-pointer"
+                  >
+                    <FileSpreadsheet size={16} className="text-emerald-600 shrink-0" />
+                    <div>
+                      <div>Descargar Excel (.xlsx)</div>
+                      <div className="text-[10px] font-normal text-slate-400">
+                        {selectedCount > 0 ? `Exportar ${selectedCount} seleccionados` : `Exportar ${filteredCount} visibles`}
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
 
           {onOpenReturnablePackages && (
             <button
@@ -144,6 +210,20 @@ export const ProductFilters = ({
                     <Upload aria-hidden="true" className="h-4 w-4" />
                     Importar XLSX
                   </button>
+                  {onExportPdf && (
+                    <button
+                      type="button"
+                      className="ui-popover-action"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActionsOpen(false);
+                        onExportPdf();
+                      }}
+                    >
+                      <FileText aria-hidden="true" className="h-4 w-4 text-red-500" />
+                      Descargar Lista PDF
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="ui-popover-action"
@@ -153,8 +233,8 @@ export const ProductFilters = ({
                       onExportXlsx();
                     }}
                   >
-                    <Download aria-hidden="true" className="h-4 w-4" />
-                    Exportar XLSX
+                    <FileSpreadsheet aria-hidden="true" className="h-4 w-4 text-emerald-600" />
+                    Descargar Lista XLSX
                   </button>
                 </div>
               </>
@@ -204,8 +284,8 @@ export const ProductFilters = ({
             />
           </div>
 
-          {/* Fila de controles: ámbito de búsqueda y filtros avanzados */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Fila de controles: ámbito de búsqueda, modalidad y filtros avanzados */}
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0">
             <div className="flex-1 sm:flex-initial">
               <select
                 value={filters.searchScope ?? "all"}
@@ -220,6 +300,27 @@ export const ProductFilters = ({
                     {opt.label}
                   </option>
                 ))}
+              </select>
+            </div>
+
+            <div className="flex-1 sm:flex-initial">
+              <select
+                value={filters.saleMode ?? "all"}
+                onChange={(event) =>
+                  onFiltersChange({
+                    saleMode: (event.target.value || "all") as "all" | "unit" | "weight",
+                  })
+                }
+                className={`ui-input w-full sm:w-auto text-xs sm:text-sm font-medium py-2 px-3 rounded-xl cursor-pointer ${
+                  filters.saleMode && filters.saleMode !== "all"
+                    ? "border-blue-500 bg-blue-50/50 text-blue-700 font-bold dark:bg-blue-950/40 dark:text-blue-300"
+                    : ""
+                }`}
+                aria-label="Filtrar por modalidad de venta"
+              >
+                <option value="all">Modalidad: Todas</option>
+                <option value="unit">Por Unidad</option>
+                <option value="weight">Pesables (Por Peso)</option>
               </select>
             </div>
 
@@ -290,6 +391,20 @@ export const ProductFilters = ({
                   className="text-blue-600 hover:text-blue-900"
                   onClick={() => onFiltersChange({ supplier: "" })}
                   aria-label="Quitar filtro de proveedor"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ) : null}
+
+            {filters.saleMode && filters.saleMode !== "all" ? (
+              <span className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200">
+                <span>Modalidad: <strong>{filters.saleMode === "weight" ? "Pesables (Por Peso)" : "Por Unidad"}</strong></span>
+                <button
+                  type="button"
+                  className="text-blue-600 hover:text-blue-900"
+                  onClick={() => onFiltersChange({ saleMode: "all" })}
+                  aria-label="Quitar filtro de modalidad"
                 >
                   <X size={12} />
                 </button>
@@ -416,6 +531,26 @@ export const ProductFilters = ({
                   )}
                 </select>
               </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  Modalidad de venta
+                </label>
+                <select
+                  className="ui-input w-full text-base sm:text-sm cursor-pointer"
+                  value={filters.saleMode ?? "all"}
+                  onChange={(event) =>
+                    onFiltersChange({
+                      saleMode: (event.target.value || "all") as "all" | "unit" | "weight",
+                    })
+                  }
+                  aria-label="Filtrar por modalidad"
+                >
+                  <option value="all">Todas las modalidades</option>
+                  <option value="unit">Por Unidad</option>
+                  <option value="weight">Pesables (Por Peso)</option>
+                </select>
+              </div>
             </div>
 
             <div className="flex items-center justify-between border-t border-slate-200 pt-3 dark:border-slate-800">
@@ -423,7 +558,7 @@ export const ProductFilters = ({
                 type="button"
                 className="ui-btn-ghost text-xs text-slate-600 dark:text-slate-400"
                 onClick={() => {
-                  onFiltersChange({ category: "", subcategory: "", supplier: "" });
+                  onFiltersChange({ category: "", subcategory: "", supplier: "", saleMode: "all" });
                 }}
                 disabled={activeAdvancedFiltersCount === 0}
               >

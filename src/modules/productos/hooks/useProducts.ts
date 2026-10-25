@@ -9,6 +9,8 @@ import type {
   ProductAuditEntry,
   ProductFiltersState,
   ProductFormModalValues,
+  ProductSortField,
+  ProductSortState,
   ProductViewModel,
 } from "@/modules/productos/types/product.types";
 
@@ -18,11 +20,13 @@ const defaultFilters: ProductFiltersState = {
   category: "",
   subcategory: "",
   supplier: "",
+  saleMode: "all",
 };
 
 export const useProducts = (tenantId: string | null, userId: string | null) => {
   const crud = useProductsCrud(tenantId, userId);
   const [filters, setFilters] = useState<ProductFiltersState>(defaultFilters);
+  const [sort, setSort] = useState<ProductSortState>({ field: "nombre", direction: "asc" });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [auditLog, setAuditLog] = useState<ProductAuditEntry[]>([]);
   const [isLoadingAudit, setIsLoadingAudit] = useState(false);
@@ -100,9 +104,70 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
         if (filters.supplier && product.proveedor !== filters.supplier) return false;
       }
 
+      // Filtro por modalidad de venta (por unidad o pesables)
+      if (filters.saleMode && filters.saleMode !== "all") {
+        if (product.saleMode !== filters.saleMode) return false;
+      }
+
       return true;
     });
   }, [barcodesByProductId, filters, productsView]);
+
+  const sortedProducts = useMemo(() => {
+    const list = [...filteredProducts];
+    if (!sort) return list;
+
+    return list.sort((a, b) => {
+      let comparison = 0;
+      switch (sort.field) {
+        case "nombre":
+          comparison = (a.nombre || "").localeCompare(b.nombre || "", "es-AR", {
+            numeric: true,
+            sensitivity: "base",
+          });
+          break;
+        case "categoria":
+          comparison = (a.categoria || "").localeCompare(b.categoria || "", "es-AR", {
+            numeric: true,
+            sensitivity: "base",
+          });
+          break;
+        case "subcategoria":
+          comparison = (a.subcategoria || "").localeCompare(b.subcategoria || "", "es-AR", {
+            numeric: true,
+            sensitivity: "base",
+          });
+          break;
+        case "precioFinal":
+          comparison = (a.precioFinal ?? 0) - (b.precioFinal ?? 0);
+          break;
+        case "stock":
+          comparison = (a.stock ?? 0) - (b.stock ?? 0);
+          break;
+        case "trackStock":
+          comparison =
+            (Number(a.trackStock) - Number(b.trackStock)) ||
+            (Number(a.activo) - Number(b.activo));
+          break;
+      }
+      return sort.direction === "asc" ? comparison : -comparison;
+    });
+  }, [filteredProducts, sort]);
+
+  const toggleSort = (field: ProductSortField) => {
+    setSort((current) => {
+      if (current.field === field) {
+        return {
+          field,
+          direction: current.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return {
+        field,
+        direction: "asc",
+      };
+    });
+  };
 
   const visibleSelectedIds = useMemo(
     () => selectedIds.filter((id) => filteredProducts.some((product) => product.entity.id === id)),
@@ -257,6 +322,10 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
     resetFilters,
     selectedIds: visibleSelectedIds,
     filteredProducts,
+    sortedProducts,
+    sort,
+    setSort,
+    toggleSort,
     categoryOptions,
     subcategoryOptions,
     supplierOptions,

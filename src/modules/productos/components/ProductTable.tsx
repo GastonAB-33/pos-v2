@@ -1,10 +1,13 @@
 import { ProductActions } from "@/modules/productos/components/ProductActions";
 import type { ProductViewModel } from "@/modules/productos/types/product.types";
-import { CheckCircle2, CircleX, PackageCheck, PackageX } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, CircleX, PackageCheck, PackageX } from "lucide-react";
+import type { ProductSortField, ProductSortState } from "@/modules/productos/types/product.types";
 
 interface ProductTableProps {
   products: ProductViewModel[];
   selectedIds: string[];
+  sort?: ProductSortState;
+  onToggleSort?: (field: ProductSortField) => void;
   canWrite: boolean;
   canDelete: boolean;
   onToggleSelect: (productId: string, selected: boolean) => void;
@@ -25,6 +28,8 @@ const currency = new Intl.NumberFormat("es-AR", {
 export const ProductTable = ({
   products,
   selectedIds,
+  sort,
+  onToggleSort,
   canWrite,
   canDelete,
   onToggleSelect,
@@ -51,6 +56,32 @@ export const ProductTable = ({
     }
   };
 
+  const renderSortHeader = (label: string, field: ProductSortField) => {
+    if (!onToggleSort) return label;
+    const isActive = sort?.field === field;
+    const isAsc = sort?.direction === "asc";
+
+    return (
+      <button
+        type="button"
+        onClick={() => onToggleSort(field)}
+        className="group inline-flex items-center gap-1.5 font-bold hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer select-none transition"
+        title={`Ordenar por ${label} (${isActive && isAsc ? "descendente" : "ascendente"})`}
+      >
+        <span>{label}</span>
+        {isActive ? (
+          isAsc ? (
+            <ArrowUp className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+          ) : (
+            <ArrowDown className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 opacity-40 group-hover:opacity-100 transition-opacity shrink-0" />
+        )}
+      </button>
+    );
+  };
+
   return (
     <div className="ui-table-wrap">
       <table className="min-w-full text-sm">
@@ -64,12 +95,24 @@ export const ProductTable = ({
                 aria-label="Seleccionar todos"
               />
             </th>
-            <th className="px-3 py-3 text-left">Producto</th>
-            <th className="px-3 py-3 text-left">Categoría</th>
-            <th className="px-3 py-3 text-left">Subcategoría</th>
-            <th className="px-3 py-3 text-left">Precio Final</th>
-            <th className="px-3 py-3 text-left">Stock</th>
-            <th className="px-3 py-3 text-left">Seguimiento</th>
+            <th className="px-3 py-3 text-left">
+              {renderSortHeader("Producto", "nombre")}
+            </th>
+            <th className="px-3 py-3 text-left">
+              {renderSortHeader("Categoría", "categoria")}
+            </th>
+            <th className="px-3 py-3 text-left">
+              {renderSortHeader("Subcategoría", "subcategoria")}
+            </th>
+            <th className="px-3 py-3 text-left">
+              {renderSortHeader("Precio Final", "precioFinal")}
+            </th>
+            <th className="px-3 py-3 text-left">
+              {renderSortHeader("Stock", "stock")}
+            </th>
+            <th className="px-3 py-3 text-left">
+              {renderSortHeader("Seguimiento", "trackStock")}
+            </th>
             <th className="px-3 py-3 text-left">Acciones</th>
           </tr>
         </thead>
