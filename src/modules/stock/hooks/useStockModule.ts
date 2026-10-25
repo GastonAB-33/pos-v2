@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useProductsStore } from "@/features/products/store/products.store";
 import { auditService } from "@/services/audit.service";
+import { useAuthStore } from "@/features/auth/store/auth.store";
 import { productsService } from "@/services/products.service";
 import { settingsService } from "@/services/settings.service";
 import { stockService } from "@/services/stock.service";
@@ -108,10 +109,11 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
   ): Promise<boolean> => {
     if (!tenantId) return false;
 
-    if (!stockSettings.allow_manual_adjustments) {
+    const canAdjustPerm = useAuthStore.getState().hasPermission("stock", "allow_manual_adjustments");
+    if (!canAdjustPerm) {
       setFeedback({
         type: "error",
-        message: "Los ajustes manuales están desactivados en configuración",
+        message: "No tienes permiso para realizar ajustes manuales de stock",
       });
       return false;
     }

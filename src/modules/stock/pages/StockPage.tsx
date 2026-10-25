@@ -66,9 +66,10 @@ const formatCsvDateStamp = (): string => new Date().toISOString().slice(0, 10);
 export const StockPage = () => {
   const { tenantId } = useTenant();
   const user = useAuthStore((state) => state.user);
-  const { canRead, canWrite } = usePermissions();
+  const { canRead, canWrite, can } = usePermissions();
   const canReadStock = canRead("stock");
   const canWriteStock = canWrite("stock");
+  const canAdjustStock = can("stock", "allow_manual_adjustments");
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StockStatusFilter>("all");
 
@@ -153,7 +154,7 @@ export const StockPage = () => {
             />
           </div>
           <div className="flex items-center gap-2">
-            {canWriteStock && stockSettings.allow_manual_adjustments ? (
+            {canAdjustStock ? (
               <button
                 type="button"
                 onClick={() => {

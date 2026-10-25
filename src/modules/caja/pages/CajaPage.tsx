@@ -73,9 +73,10 @@ const formatDateTime = (dateStr: string | null | undefined): string => {
 export const CajaPage = () => {
   const { tenantId } = useTenant();
   const user = useAuthStore((state) => state.user);
-  const { canRead, canWrite } = usePermissions();
+  const { canRead, canWrite, can } = usePermissions();
   const canReadCaja = canRead("caja");
   const canWriteCaja = canWrite("caja");
+  const canManualMovement = can("caja", "allow_manual_movements");
 
   const [isOpenCashModalOpen, setIsOpenCashModalOpen] = useState(false);
   const [isManualMovementModalOpen, setIsManualMovementModalOpen] = useState(false);
@@ -476,7 +477,7 @@ export const CajaPage = () => {
                 isSubmitting ||
                 !canWriteCaja ||
                 !currentSession ||
-                !cashSettings.allow_manual_movements
+                !canManualMovement
               }
               onClick={() => {
                 setManualMovementTab("income");

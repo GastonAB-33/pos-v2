@@ -28,6 +28,7 @@ import {
   Save,
   Scale,
   Settings,
+  Shield,
   ShieldAlert,
   ShieldCheck,
   ShoppingCart,
@@ -1912,11 +1913,6 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                 </label>
 
                 <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.caja.allow_manual_movements} onChange={(event) => updateSection("caja", { allow_manual_movements: event.target.checked })} disabled={!canWriteConfiguracion} />
-                  <span>Permitir ingresos/egresos manuales</span>
-                </label>
-
-                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                   <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.caja.require_notes_on_manual_movements} onChange={(event) => updateSection("caja", { require_notes_on_manual_movements: event.target.checked })} disabled={!canWriteConfiguracion} />
                   <span>Exigir motivo en movimientos manuales</span>
                 </label>
@@ -1940,6 +1936,18 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                     </span>
                   </div>
                 </label>
+
+                <div className="sm:col-span-2 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/60 dark:bg-blue-950/30 p-3 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2.5">
+                  <Shield size={16} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block text-blue-950 dark:text-blue-100">
+                      Movimientos Manuales Centralizados en Usuarios:
+                    </span>
+                    <span className="text-slate-600 dark:text-slate-300 mt-0.5 block leading-relaxed">
+                      El permiso para registrar ingresos y retiros manuales de efectivo se administra por rol desde <strong>Usuarios &gt; Perfiles de Permisos</strong> (Pilar 4: Tesorería &amp; Cajas).
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -2062,7 +2070,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
             <div className="md:col-span-2 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Parámetros de Control</span>
 
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                   <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.stock.use_min_max} onChange={(event) => updateSection("stock", { use_min_max: event.target.checked })} disabled={!canWriteConfiguracion} />
                   <span>Usar stock mín/máx por producto</span>
@@ -2073,39 +2081,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   <span>Activar alertas de stock en Topbar</span>
                 </label>
 
-                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.stock.allow_manual_adjustments} onChange={(event) => updateSection("stock", { allow_manual_adjustments: event.target.checked })} disabled={!canWriteConfiguracion} />
-                  <span>Permitir ajustes manuales</span>
-                </label>
-
-                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.stock.allow_negative_stock} onChange={(event) => updateSection("stock", { allow_negative_stock: event.target.checked })} disabled={!canWriteConfiguracion} />
-                  <span>Permitir stock bajo cero</span>
-                </label>
-
-                <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 sm:col-span-2 lg:col-span-4">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 mt-0.5 rounded text-blue-600"
-                    checked={draft.stock.allow_purchases_profit_margin_adjustment ?? true}
-                    onChange={(event) =>
-                      updateSection("stock", {
-                        allow_purchases_profit_margin_adjustment: event.target.checked,
-                      })
-                    }
-                    disabled={!canWriteConfiguracion}
-                  />
-                  <div>
-                    <span className="font-semibold block text-slate-900 dark:text-slate-100">
-                      Permitir ajustar % de ganancias desde el módulo de compras a proveedores
-                    </span>
-                    <span className="block text-xs text-slate-500 dark:text-slate-400 font-normal mt-0.5">
-                      Habilita la edición libre de márgenes de ganancia (%) y precio de venta final al cargar facturas de compra. Si se desactiva, se bloquea la modificación y se mantiene el margen del catálogo.
-                    </span>
-                  </div>
-                </label>
-
-                <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 sm:col-span-2 lg:col-span-4">
+                <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 sm:col-span-2">
                   <input
                     type="checkbox"
                     className="h-4 w-4 mt-0.5 rounded text-blue-600"
@@ -2126,6 +2102,18 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                     </span>
                   </div>
                 </label>
+
+                <div className="sm:col-span-2 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/60 dark:bg-blue-950/30 p-3 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2.5">
+                  <Shield size={16} className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block text-blue-950 dark:text-blue-100">
+                      Permisos Operativos Centralizados en Usuarios:
+                    </span>
+                    <span className="text-slate-600 dark:text-slate-300 mt-0.5 block leading-relaxed">
+                      Las atribuciones de <strong>ajustes manuales de stock</strong>, <strong>ventas sin stock</strong> y <strong>ajuste de márgenes en compras</strong> ahora se administran con prioridad absoluta por rol desde <strong>Usuarios &gt; Perfiles de Permisos</strong> (Pilar 2: Catálogo &amp; Stock).
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 

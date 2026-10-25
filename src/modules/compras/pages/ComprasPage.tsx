@@ -142,7 +142,6 @@ export const ComprasPage = () => {
   const canReadPurchases = canRead("compras");
   const canWritePurchases = canWrite("compras");
   const canAdjustProfitMarginPerm = canWrite("compras_margen");
-  const [allowProfitMarginBySetting, setAllowProfitMarginBySetting] = useState(true);
   const [isDoubleConfirmationSetting, setIsDoubleConfirmationSetting] = useState(false);
 
   useEffect(() => {
@@ -150,9 +149,6 @@ export const ComprasPage = () => {
     let active = true;
     void settingsService.getByTenant(tenantId).then((settings) => {
       if (active) {
-        if (settings?.stock?.allow_purchases_profit_margin_adjustment !== undefined) {
-          setAllowProfitMarginBySetting(settings.stock.allow_purchases_profit_margin_adjustment);
-        }
         setIsDoubleConfirmationSetting(Boolean(settings?.stock?.purchase_double_confirmation_enabled));
       }
     });
@@ -163,7 +159,7 @@ export const ComprasPage = () => {
 
   // Si no está permitido por configuración, o no tiene permiso, o está activa la doble confirmación:
   // los empleados no pueden ni modificar ni ver porcentaje de ganancia ni precios de venta
-  const canAdjustProfitMargin = allowProfitMarginBySetting && canAdjustProfitMarginPerm && !isDoubleConfirmationSetting;
+  const canAdjustProfitMargin = canAdjustProfitMarginPerm && !isDoubleConfirmationSetting;
 
   const [viewMode, setViewMode] = useState<"history" | "create" | "review">("history");
   const [reviewPurchaseTarget, setReviewPurchaseTarget] = useState<{
