@@ -890,8 +890,8 @@ export const PromotionForm = ({
                         <div className="inline-flex items-center justify-center gap-1.5">
                           <input
                             type="number"
-                            min="0.001"
-                            step={isWeight ? "0.001" : "1"}
+                            min={isWeight ? "0.001" : "1"}
+                            step={isWeight ? "any" : "1"}
                             placeholder={isWeight ? "0.000" : "1"}
                             {...register(`bundleItems.${index}.quantity`, {
                               valueAsNumber: true,

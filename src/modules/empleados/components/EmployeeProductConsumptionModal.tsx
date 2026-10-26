@@ -770,8 +770,8 @@ export const EmployeeProductConsumptionModal = ({
                           </button>
                           <input
                             type="number"
-                            step={item.product.sale_mode === "weight" ? "0.001" : "1"}
-                            min="0.001"
+                            step={item.product.sale_mode === "weight" ? "any" : "1"}
+                            min={item.product.sale_mode === "weight" ? "0.001" : "1"}
                             placeholder={item.product.sale_mode === "weight" ? "0.000" : "1"}
                             value={quantityDrafts[item.product.id] ?? String(item.quantity)}
                             onFocus={() => {
