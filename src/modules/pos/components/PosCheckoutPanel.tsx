@@ -344,6 +344,7 @@ export const PosCheckoutPanel = ({
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [isReadyToSubmit, setIsReadyToSubmit] = useState(false);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const blockFinalSubmitUntilRef = useRef<number>(0);
 
   const posCashChangeEnabled = useUiStore((state) => state.posCashChangeEnabled);
   const [cashGivenAmount, setCashGivenAmount] = useState<string>("");
@@ -618,6 +619,8 @@ export const PosCheckoutPanel = ({
       const sum = Object.values(nextAllocated).reduce((acc, val) => acc + (val || 0), 0);
       const pending = Number(Math.max(0, checkoutTotal - sum).toFixed(2));
 
+      blockFinalSubmitUntilRef.current = Date.now() + 400;
+
       if (pending === 0 && Math.abs(sum - checkoutTotal) <= 0.01 && sum > 0) {
         window.setTimeout(() => {
           setIsReadyToSubmit(true);
@@ -639,6 +642,7 @@ export const PosCheckoutPanel = ({
       if (inputEl) {
         inputEl.blur();
       }
+      panelRef.current?.focus();
     },
     [allocatedAmounts, amountInputs, checkoutTotal, paymentOptions, selectedCustomer]
   );
@@ -947,6 +951,7 @@ export const PosCheckoutPanel = ({
 
   // Autofocus del panel al montarse para capturar teclas inmediatamente
   useEffect(() => {
+    blockFinalSubmitUntilRef.current = Date.now() + 500;
     panelRef.current?.focus();
     const timer = window.setTimeout(() => {
       panelRef.current?.focus();
@@ -965,6 +970,7 @@ export const PosCheckoutPanel = ({
       setHighlightedIndex(clampedIndex);
       onPaymentMethodChange(targetOption.paymentMethodId);
       setIsReadyToSubmit(false);
+      blockFinalSubmitUntilRef.current = Date.now() + 400;
 
       const targetTotal = getCheckoutSummary
         ? getCheckoutSummary(targetOption.paymentMethodId).total
@@ -1072,6 +1078,11 @@ export const PosCheckoutPanel = ({
 
         // Si el foco está en el campo 'Paga con' de efectivo
         if (isEditingCashGiven) {
+          if (Date.now() < blockFinalSubmitUntilRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
           if (isFullyAssigned) {
             e.stopPropagation();
             void handleFinalSubmit();
@@ -1081,6 +1092,7 @@ export const PosCheckoutPanel = ({
 
         // PASO 2: El cursor está actualmente dentro de la casilla de monto (editando/confirmando el importe)
         if (isEditingAmount) {
+          e.preventDefault();
           e.stopPropagation();
           activeInputEl?.blur();
           confirmOptionAmount(activeOption.id);
@@ -1089,6 +1101,12 @@ export const PosCheckoutPanel = ({
 
         // PASO 3: Ya se confirmó el monto (isReadyToSubmit) y el total está 100% asignado
         if (isReadyToSubmit && isFullyAssigned) {
+          if (Date.now() < blockFinalSubmitUntilRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
+          e.preventDefault();
           e.stopPropagation();
           void handleFinalSubmit();
           return;
@@ -1106,6 +1124,7 @@ export const PosCheckoutPanel = ({
         }
 
         setIsReadyToSubmit(false);
+        blockFinalSubmitUntilRef.current = Date.now() + 400;
 
         // Pone el cursor en el monto con el texto seleccionado por si hay que editarlo
         window.setTimeout(() => {
@@ -1705,6 +1724,7 @@ export const PosCheckoutPanel = ({
                         if (e.key === "Enter") {
                           e.preventDefault();
                           e.stopPropagation();
+                          if (Date.now() < blockFinalSubmitUntilRef.current) return;
                           if (isFullyAssigned) {
                             void handleFinalSubmit();
                           }
