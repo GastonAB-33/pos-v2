@@ -203,7 +203,34 @@ export const getBackendErrorMessage = (error: unknown): string | null => {
   const details = backendError.details?.trim() ?? "";
   const hint = backendError.hint?.trim() ?? "";
 
-  const parts = [message, details, hint].filter(Boolean);
+  const fullText = [message, details, hint, String(error)].join(" ").toLowerCase();
+  if (
+    fullText.includes("failed to fetch") ||
+    fullText.includes("fetch failed") ||
+    fullText.includes("networkerror") ||
+    fullText.includes("network request failed") ||
+    fullText.includes("load failed")
+  ) {
+    return "Error de conexión: No se pudo comunicar con el servidor en la nube. Verificá la conexión a internet de este equipo y volvé a presionar 'Confirmar venta'.";
+  }
+
+  if (
+    fullText.includes("502") ||
+    fullText.includes("503") ||
+    fullText.includes("504") ||
+    fullText.includes("gateway timeout") ||
+    fullText.includes("service unavailable")
+  ) {
+    return "El servidor está respondiendo con demoras temporales. Por favor, esperá unos segundos y volvé a presionar 'Confirmar venta'.";
+  }
+
+  const cleanMessage = message.split("\n")[0].trim();
+  const cleanDetails = details.split("\n")[0].trim();
+  const cleanHint = hint.split("\n")[0].trim();
+
+  const parts = [cleanMessage, cleanDetails, cleanHint].filter(
+    (part) => Boolean(part) && !part.includes("http://") && !part.includes("https://")
+  );
   if (!parts.length) return null;
   return parts.join(" | ");
 };
@@ -4195,10 +4222,15 @@ export const usePosSale = (tenantId: string | null) => {
       return sale;
     } catch (error) {
       const backendError = getBackendErrorMessage(error);
+      const isConnectionIssue =
+        backendError?.startsWith("Error de conexión") ||
+        backendError?.startsWith("El servidor está respondiendo");
       setFeedback({
         type: "error",
         message: backendError
-          ? `No se pudo confirmar la venta: ${backendError}`
+          ? isConnectionIssue
+            ? backendError
+            : `No se pudo confirmar la venta: ${backendError}`
           : "No se pudo confirmar la venta",
       });
       return null;

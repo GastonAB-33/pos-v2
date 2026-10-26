@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, CircleEllipsis, LifeBuoy, Menu, Moon, MoonStar, Newspaper, RefreshCw, Search, Sun, UserRound } from "lucide-react";
+import { Banknote, Bell, CircleEllipsis, LifeBuoy, Menu, Moon, MoonStar, Newspaper, RefreshCw, Search, Sun, UserRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/useToast";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
@@ -162,6 +162,8 @@ export const Topbar = () => {
   } = useOffline();
   const { canInstall, isInstalling, isInstalled, installApp, isInstallSupported } = usePwa();
   const theme = useUiStore((state) => state.theme);
+  const posCashChangeEnabled = useUiStore((state) => state.posCashChangeEnabled);
+  const setPosCashChangeEnabled = useUiStore((state) => state.setPosCashChangeEnabled);
   const setTheme = useUiStore((state) => state.setTheme);
   const cycleTheme = useUiStore((state) => state.cycleTheme);
   const sidebarTheme = useUiStore((state) => state.sidebarTheme);
@@ -1147,6 +1149,26 @@ export const Topbar = () => {
                 Claro
               </button>
             </div>
+          </div>
+
+          <div className="space-y-1.5 border-t border-slate-200/80 pt-2 dark:border-slate-800">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Punto de Venta
+            </p>
+            <label className="flex items-center justify-between gap-2 rounded-lg p-1.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+              <div className="flex items-center gap-2 min-w-0">
+                <Banknote size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">
+                  Calcular vuelto en efectivo
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={posCashChangeEnabled}
+                onChange={(e) => setPosCashChangeEnabled(e.target.checked)}
+                className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+              />
+            </label>
           </div>
 
           <div className="border-t border-slate-200/80 pt-2 dark:border-slate-800">

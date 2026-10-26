@@ -24,6 +24,7 @@ interface UiStore {
   fontSize: UiFontSize;
   posWindowMode: PosWindowMode;
   accentColor: string;
+  posCashChangeEnabled: boolean;
   toasts: UiToast[];
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
@@ -39,6 +40,7 @@ interface UiStore {
   pushToast: (toast: Omit<UiToast, "id">) => string;
   removeToast: (id: string) => void;
   clearToasts: () => void;
+  setPosCashChangeEnabled: (enabled: boolean) => void;
 }
 
 const getInitialTheme = (): UiTheme => {
@@ -97,6 +99,7 @@ export const useUiStore = create<UiStore>()(
       density: "standard",
       fontSize: "normal",
       posWindowMode: "same_tab",
+      posCashChangeEnabled: true,
       accentColor: "#0056b3",
       toasts: [],
 
@@ -114,6 +117,7 @@ export const useUiStore = create<UiStore>()(
       setDensity: (density) => set({ density }),
       setFontSize: (fontSize) => set({ fontSize }),
       setPosWindowMode: (posWindowMode) => set({ posWindowMode }),
+      setPosCashChangeEnabled: (posCashChangeEnabled) => set({ posCashChangeEnabled }),
       cycleFontSize: () =>
         set((state) => {
           const currentIndex = fontSizeCycleOrder.indexOf(state.fontSize);
@@ -157,6 +161,7 @@ export const useUiStore = create<UiStore>()(
         density: state.density,
         fontSize: state.fontSize,
         posWindowMode: state.posWindowMode,
+        posCashChangeEnabled: state.posCashChangeEnabled,
         accentColor: state.accentColor,
       }),
     }

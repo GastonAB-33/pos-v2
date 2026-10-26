@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownLeft,
+  Banknote,
   BadgePercent,
   Calculator,
   ChevronDown,
@@ -153,6 +154,8 @@ export const PosSmartView = ({
 }: PosSmartViewProps) => {
   const theme = useUiStore((state) => state.theme);
   const setTheme = useUiStore((state) => state.setTheme);
+  const posCashChangeEnabled = useUiStore((state) => state.posCashChangeEnabled);
+  const setPosCashChangeEnabled = useUiStore((state) => state.setPosCashChangeEnabled);
   const user = useAuthStore((state) => state.user);
   const clearSession = useAuthStore((state) => state.clearSession);
   const navigate = useNavigate();
@@ -1098,6 +1101,32 @@ export const PosSmartView = ({
                         <span>Oscuro</span>
                       </button>
                     </div>
+                  </div>
+
+                  {/* Preferencia de Cobro y Vuelto */}
+                  <div className="space-y-1.5 border-t border-slate-200/80 dark:border-slate-800 pt-2.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Cobro y Vuelto
+                    </p>
+                    <label className="flex items-center justify-between gap-2.5 rounded-xl p-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Banknote size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="block text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
+                            Calcular vuelto en efectivo
+                          </span>
+                          <span className="block text-[10px] text-slate-500 dark:text-slate-400">
+                            Ingresar billete y calcular cambio
+                          </span>
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={posCashChangeEnabled}
+                        onChange={(e) => setPosCashChangeEnabled(e.target.checked)}
+                        className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+                      />
+                    </label>
                   </div>
 
                   {/* Acciones de navegación y sesión */}

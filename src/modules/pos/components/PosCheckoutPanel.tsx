@@ -39,6 +39,7 @@ import type {
 } from "@/modules/pos/schemas/pos-checkout.schema";
 import { PosCustomerSelectModal } from "./PosCustomerSelectModal";
 import { cn } from "@/utils/cn";
+import { useUiStore } from "@/store/ui.store";
 
 interface PosCheckoutPanelProps {
   panelId?: string;
@@ -344,6 +345,10 @@ export const PosCheckoutPanel = ({
   const [isReadyToSubmit, setIsReadyToSubmit] = useState(false);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
+  const posCashChangeEnabled = useUiStore((state) => state.posCashChangeEnabled);
+  const [cashGivenAmount, setCashGivenAmount] = useState<string>("");
+  const cashGivenInputRef = useRef<HTMLInputElement | null>(null);
+
   // Política fiscal activa calculada a partir de los métodos con importe asignado o del método seleccionado
   const activeInvoiceRule = useMemo<{
     status: "mandatory" | "disabled" | "normal";
@@ -464,6 +469,28 @@ export const PosCheckoutPanel = ({
     ? Math.abs(totalAssigned - checkoutTotal) <= 0.01 || Math.abs(Math.abs(totalAssigned) - Math.abs(checkoutTotal)) <= 0.01
     : Math.abs(totalAssigned - checkoutTotal) <= 0.01 && totalAssigned > 0;
   const isOverpaid = !isRefundMode && totalAssigned > checkoutTotal + 0.01;
+
+  // Opción de Efectivo y cálculo de vuelto en tiempo real
+  const cashOption = useMemo(
+    () => paymentOptions.find((opt) => normalizePaymentMethodCode(opt.code) === "cash"),
+    [paymentOptions]
+  );
+  const cashAllocated = cashOption ? (allocatedAmounts[cashOption.id] || 0) : 0;
+  const isCashUsed = cashAllocated > 0;
+
+  const effectiveCashGiven = useMemo(() => {
+    if (!cashGivenAmount || cashGivenAmount.trim() === "") {
+      return cashAllocated;
+    }
+    const clean = cashGivenAmount.replace(",", ".");
+    const num = parseFloat(clean);
+    return isNaN(num) ? cashAllocated : num;
+  }, [cashAllocated, cashGivenAmount]);
+
+  const cashChange = useMemo(() => {
+    if (!isCashUsed || effectiveCashGiven <= cashAllocated) return 0;
+    return Number((effectiveCashGiven - cashAllocated).toFixed(2));
+  }, [effectiveCashGiven, isCashUsed, cashAllocated]);
 
   // Cliente seleccionado actual
   const selectedCustomer = useMemo(
@@ -595,6 +622,15 @@ export const PosCheckoutPanel = ({
         setIsReadyToSubmit(true);
       } else {
         setIsReadyToSubmit(false);
+      }
+
+      if (posCashChangeEnabled && normalizePaymentMethodCode(targetOption.code) === "cash") {
+        window.setTimeout(() => {
+          if (cashGivenInputRef.current) {
+            cashGivenInputRef.current.focus();
+            cashGivenInputRef.current.select();
+          }
+        }, 30);
       }
 
       const inputEl = inputRefs.current[optionId];
@@ -896,9 +932,9 @@ export const PosCheckoutPanel = ({
     totalPending,
   ]);
 
-  const [copiedField, setCopiedField] = useState<"total" | "pending" | null>(null);
+  const [copiedField, setCopiedField] = useState<"total" | "pending" | "change" | null>(null);
 
-  const handleCopyAmount = useCallback((amount: number, field: "total" | "pending") => {
+  const handleCopyAmount = useCallback((amount: number, field: "total" | "pending" | "change") => {
     const text = amount.toFixed(2);
     void navigator.clipboard.writeText(text);
     setCopiedField(field);
@@ -976,7 +1012,8 @@ export const PosCheckoutPanel = ({
 
       const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       const activeInputEl = targetTag === "input" ? (e.target as HTMLInputElement) : null;
-      const isEditingAmount = Boolean(activeInputEl && activeInputEl.type === "number");
+      const isEditingCashGiven = activeInputEl === cashGivenInputRef.current;
+      const isEditingAmount = Boolean(activeInputEl && activeInputEl.type === "number" && !isEditingCashGiven);
 
       // Flecha abajo: navega al siguiente método desplazando el monto pendiente dinámicamente
       if (e.key === "ArrowDown") {
@@ -1029,6 +1066,15 @@ export const PosCheckoutPanel = ({
         if (activeOption.isCurrentAccount && !selectedCustomer && !selectedEmployee) {
           setIsCustomerModalOpen(true);
           return;
+        }
+
+        // Si el foco está en el campo 'Paga con' de efectivo
+        if (isEditingCashGiven) {
+          if (isFullyAssigned) {
+            e.stopPropagation();
+            void handleFinalSubmit();
+            return;
+          }
         }
 
         // PASO 2: El cursor está actualmente dentro de la casilla de monto (editando/confirmando el importe)
@@ -1243,8 +1289,8 @@ export const PosCheckoutPanel = ({
         )}
       </div>
 
-      {/* 2 PANELES SUPERIORES MINIMALISTAS (CLIC PARA COPIAR MONTO) */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* PANELES SUPERIORES (CLIC PARA COPIAR MONTO) */}
+      <div className={posCashChangeEnabled ? "grid grid-cols-1 sm:grid-cols-3 gap-2.5" : "grid grid-cols-2 gap-3"}>
         {/* PANEL 1: TOTAL A PAGAR */}
         <div
           onClick={() => handleCopyAmount(checkoutTotal, "total")}
@@ -1302,6 +1348,35 @@ export const PosCheckoutPanel = ({
             {isRefundMode ? currency.format(Math.abs(checkoutTotal)) : currency.format(totalPending)}
           </span>
         </div>
+
+        {/* PANEL 3: VUELTO A ENTREGAR */}
+        {posCashChangeEnabled && (
+          <div
+            onClick={() => handleCopyAmount(cashChange, "change")}
+            title="Clic para copiar monto de vuelto"
+            className={`group relative flex flex-col justify-between rounded-xl p-3 border cursor-pointer transition active:scale-[0.99] ${
+              cashChange > 0
+                ? "border-emerald-400 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-950 dark:text-emerald-100 ring-2 ring-emerald-500/20 shadow-xs"
+                : "border-slate-300 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-wider">
+                {cashChange > 0 ? "💵 Vuelto a Entregar" : "💵 Vuelto"}
+              </span>
+              {copiedField === "change" ? (
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 animate-in fade-in">
+                  ¡Copiado!
+                </span>
+              ) : (
+                <Copy size={12} className="text-slate-400 opacity-0 group-hover:opacity-100 transition" />
+              )}
+            </div>
+            <span className="block mt-1 text-2xl font-black tracking-tight font-mono">
+              {currency.format(cashChange)}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* AVISO DESTACADO DE ENVASES ADEUDADOS / PARA ANOTAR */}
@@ -1604,6 +1679,44 @@ export const PosCheckoutPanel = ({
                 className="flex items-center gap-1.5 shrink-0"
                 onClick={(e) => e.stopPropagation()}
               >
+                {/* Campo 'Paga con' para cálculo de vuelto ágil en efectivo */}
+                {posCashChangeEnabled && normalizePaymentMethodCode(option.code) === "cash" && hasAmount && (
+                  <div
+                    className="relative flex items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50/90 dark:bg-slate-900/90 px-2 py-1 shadow-2xs"
+                    title="Monto que entrega el cliente (Enter para calcular vuelto y confirmar)"
+                  >
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 select-none">
+                      Paga:
+                    </span>
+                    <span className="text-xs font-black text-slate-400 select-none">$</span>
+                    <input
+                      ref={cashGivenInputRef}
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder={(allocatedAmounts[option.id] || 0).toFixed(2)}
+                      value={cashGivenAmount}
+                      onChange={(e) => setCashGivenAmount(e.target.value)}
+                      onFocus={(e) => e.target.select()}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (isFullyAssigned) {
+                            void handleFinalSubmit();
+                          }
+                        }
+                      }}
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-lpignore="true"
+                      className="w-20 text-right font-mono text-sm font-bold bg-transparent outline-none text-slate-900 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                )}
+
                 {/* Casilla de Importe con autoselección total al hacer clic / focus */}
                 <div className="relative w-32">
                   <span
