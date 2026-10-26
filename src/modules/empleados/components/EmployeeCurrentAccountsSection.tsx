@@ -7,10 +7,12 @@ import {
   ArrowRight,
   ShoppingBag,
   X,
+  PlusCircle,
 } from "lucide-react";
-import type { Employee } from "@/types/entities";
+import type { Employee, EmployeeCurrentAccountCategory } from "@/types/entities";
 import { EmployeeCurrentAccountPanel } from "@/modules/empleados/components/EmployeeCurrentAccountPanel";
 import { EmployeeProductConsumptionModal } from "@/modules/empleados/components/EmployeeProductConsumptionModal";
+import { EmployeeManualMovementModal } from "@/modules/empleados/components/EmployeeManualMovementModal";
 import { employeeCurrentAccountsService } from "@/services/employee-current-accounts.service";
 
 interface EmployeeCurrentAccountsSectionProps {
@@ -46,6 +48,8 @@ export const EmployeeCurrentAccountsSection = ({
   const [filterMode, setFilterMode] = useState<"all" | "debt" | "upToDate">("all");
   const [productModalEmployee, setProductModalEmployee] = useState<Employee | null>(null);
   const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
+  const [manualDebtModalEmployee, setManualDebtModalEmployee] = useState<Employee | null>(null);
+  const [employeeDebtPickerOpen, setEmployeeDebtPickerOpen] = useState(false);
 
   // Si hay un empleado seleccionado, mostramos directamente su panel detallado
   if (selectedEmployee) {
@@ -62,6 +66,30 @@ export const EmployeeCurrentAccountsSection = ({
       />
     );
   }
+
+  const handleManualDebtSubmit = async (values: {
+    amount: number;
+    notes: string;
+    category?: EmployeeCurrentAccountCategory;
+  }) => {
+    if (!manualDebtModalEmployee) return false;
+    try {
+      await employeeCurrentAccountsService.createMovement(tenantId, {
+        employee_id: manualDebtModalEmployee.id,
+        type: "debt",
+        amount: values.amount,
+        category: values.category || "advance",
+        notes: values.notes,
+        created_by: userId,
+      });
+      onBalanceUpdated();
+      setManualDebtModalEmployee(null);
+      return true;
+    } catch (err) {
+      console.error("Error al registrar deuda de empleado:", err);
+      return false;
+    }
+  };
 
   const handleProductSubmit = async (values: {
     amount: number;
@@ -225,21 +253,39 @@ export const EmployeeCurrentAccountsSection = ({
           </div>
 
           {canWrite && employees.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                if (filteredEmployees.length === 1) {
-                  setProductModalEmployee(filteredEmployees[0]);
-                } else {
-                  setEmployeePickerOpen(true);
-                }
-              }}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 cursor-pointer shrink-0"
-              title="Cargar productos a cuenta corriente de empleado"
-            >
-              <ShoppingBag size={14} />
-              <span>+ Cargar Productos</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  if (filteredEmployees.length === 1) {
+                    setManualDebtModalEmployee(filteredEmployees[0]);
+                  } else {
+                    setEmployeeDebtPickerOpen(true);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-1.5 text-xs font-bold text-rose-700 shadow-sm transition hover:bg-rose-100 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300 cursor-pointer shrink-0"
+                title="Agregar deuda / anticipo a cuenta corriente de empleado"
+              >
+                <PlusCircle size={14} />
+                <span>+ Agregar Deuda</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (filteredEmployees.length === 1) {
+                    setProductModalEmployee(filteredEmployees[0]);
+                  } else {
+                    setEmployeePickerOpen(true);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 cursor-pointer shrink-0"
+                title="Cargar productos a cuenta corriente de empleado"
+              >
+                <ShoppingBag size={14} />
+                <span>+ Cargar Productos</span>
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -329,15 +375,26 @@ export const EmployeeCurrentAccountsSection = ({
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           {canWrite && (
-                            <button
-                              type="button"
-                              onClick={() => setProductModalEmployee(emp)}
-                              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition dark:bg-indigo-600 dark:hover:bg-indigo-500 cursor-pointer"
-                              title={`Cargar productos a cuenta corriente de ${emp.full_name}`}
-                            >
-                              <ShoppingBag size={13} />
-                              <span>Cargar Productos</span>
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setManualDebtModalEmployee(emp)}
+                                className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 text-xs font-bold text-rose-700 shadow-sm transition dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300 cursor-pointer"
+                                title={`Agregar deuda / anticipo a ${emp.full_name}`}
+                              >
+                                <PlusCircle size={13} />
+                                <span>+ Deuda</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setProductModalEmployee(emp)}
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition dark:bg-indigo-600 dark:hover:bg-indigo-500 cursor-pointer"
+                                title={`Cargar productos a cuenta corriente de ${emp.full_name}`}
+                              >
+                                <ShoppingBag size={13} />
+                                <span>Cargar Productos</span>
+                              </button>
+                            </>
                           )}
                           <button
                             type="button"
@@ -415,6 +472,75 @@ export const EmployeeCurrentAccountsSection = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Selector modal si hay múltiples empleados y se pulsa + Agregar Deuda */}
+      {employeeDebtPickerOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div className="flex flex-col w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-2xl overflow-hidden p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300">
+                  <PlusCircle size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Agregar Deuda a Empleado
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Seleccioná el empleado al que se le imputará la deuda o adelanto
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEmployeeDebtPickerOpen(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="max-h-72 overflow-y-auto space-y-2">
+              {employees.map((emp) => (
+                <button
+                  key={emp.id}
+                  type="button"
+                  onClick={() => {
+                    setManualDebtModalEmployee(emp);
+                    setEmployeeDebtPickerOpen(false);
+                  }}
+                  className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-rose-50 dark:hover:bg-rose-950/50 hover:border-rose-300 dark:hover:border-rose-600 transition text-left cursor-pointer"
+                >
+                  <div>
+                    <p className="font-bold text-sm text-slate-900 dark:text-white">{emp.full_name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                      {emp.code} • {emp.position} • Saldo: {currency.format(emp.current_balance ?? 0)}
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                    Seleccionar <ArrowRight size={13} />
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Movimiento Manual de Deuda */}
+      {manualDebtModalEmployee && (
+        <EmployeeManualMovementModal
+          open={Boolean(manualDebtModalEmployee)}
+          employee={manualDebtModalEmployee}
+          initialType="debt"
+          onClose={() => setManualDebtModalEmployee(null)}
+          onSubmit={handleManualDebtSubmit}
+        />
       )}
 
       {/* Modal de Consumo / Retiro de Productos */}

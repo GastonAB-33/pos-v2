@@ -5,6 +5,7 @@ import {
   RefreshCw,
   User,
     ShoppingBag,
+  PlusCircle,
 } from "lucide-react";
 import type { Employee, EmployeeCurrentAccountCategory } from "@/types/entities";
 import { useEmployeeCurrentAccount } from "@/modules/empleados/hooks/useEmployeeCurrentAccount";
@@ -195,6 +196,20 @@ export const EmployeeCurrentAccountPanel = ({
           >
             <ShoppingBag size={14} />
             <span>+ Cargar / Retiro de productos</span>
+          </button>
+
+          {/* Botón Agregar Deuda / Adelanto / Vale */}
+          <button
+            type="button"
+            onClick={() => {
+              setManualType("debt");
+              setManualModalOpen(true);
+            }}
+            disabled={isSubmitting}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl shadow-sm transition dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300 cursor-pointer"
+          >
+            <PlusCircle size={14} />
+            <span>+ Agregar deuda</span>
           </button>
 
           {/* Botón Registrar Cobro / Pago */}

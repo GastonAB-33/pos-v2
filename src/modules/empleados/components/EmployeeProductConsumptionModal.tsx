@@ -305,15 +305,6 @@ export const EmployeeProductConsumptionModal = ({
     });
   };
 
-  const setItemExactQuantity = (productId: string, qty: number) => {
-    if (isNaN(qty) || qty <= 0) return;
-    setCart((prev) =>
-      prev.map((item) =>
-        item.product.id === productId ? { ...item, quantity: Number(qty.toFixed(3)) } : item
-      )
-    );
-  };
-
   // Tildar / Destildar descuento de empleado por renglón de producto
   const toggleItemDiscount = (productId: string) => {
     setCart((prev) =>
