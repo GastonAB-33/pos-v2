@@ -619,7 +619,9 @@ export const PosCheckoutPanel = ({
       const pending = Number(Math.max(0, checkoutTotal - sum).toFixed(2));
 
       if (pending === 0 && Math.abs(sum - checkoutTotal) <= 0.01 && sum > 0) {
-        setIsReadyToSubmit(true);
+        window.setTimeout(() => {
+          setIsReadyToSubmit(true);
+        }, 60);
       } else {
         setIsReadyToSubmit(false);
       }
@@ -1079,6 +1081,7 @@ export const PosCheckoutPanel = ({
 
         // PASO 2: El cursor está actualmente dentro de la casilla de monto (editando/confirmando el importe)
         if (isEditingAmount) {
+          e.stopPropagation();
           activeInputEl?.blur();
           confirmOptionAmount(activeOption.id);
           return;
@@ -1756,6 +1759,7 @@ export const PosCheckoutPanel = ({
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
+                        e.stopPropagation();
                         confirmOptionAmount(option.id);
                       }
                     }}
