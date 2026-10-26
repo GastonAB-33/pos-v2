@@ -1,5 +1,5 @@
-const APP_CACHE = "pos-v2-app-shell-v1";
-const RUNTIME_CACHE = "pos-v2-runtime-v1";
+const APP_CACHE = "pos-v2-app-shell-v2";
+const RUNTIME_CACHE = "pos-v2-runtime-v2";
 
 const APP_SHELL_ASSETS = [
   "/",

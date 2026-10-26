@@ -48,6 +48,41 @@ export const normalizePermissionProfile = (profile: PermissionProfile): Permissi
     };
   }
 
+  // Compatibilidad hacia atrás para módulos contables nuevos
+  if (profile.caja && !profile.caja_general) {
+    base.caja_general = { ...base.caja_general, ...profile.caja };
+  }
+  if (
+    (profile.proveedores || profile.compras || profile.cuentas_corrientes) &&
+    !profile.cuentas_corrientes_proveedores
+  ) {
+    base.cuentas_corrientes_proveedores = {
+      ...base.cuentas_corrientes_proveedores,
+      ...(profile.proveedores || profile.compras || profile.cuentas_corrientes),
+    };
+  }
+  if (
+    (profile.configuracion || profile.configuracion_contable || profile.caja) &&
+    !profile.bancos
+  ) {
+    base.bancos = {
+      ...base.bancos,
+      ...(profile.configuracion_contable || profile.configuracion || profile.caja),
+    };
+  }
+  if (
+    (profile.clientes || profile.configuracion_agenda || profile.usuarios) &&
+    !profile.empleados
+  ) {
+    base.empleados = {
+      ...base.empleados,
+      ...(profile.clientes || profile.configuracion_agenda || profile.usuarios),
+    };
+  }
+  if (profile.compras && profile.compras_margen === undefined) {
+    base.compras_margen = { ...profile.compras };
+  }
+
   return base;
 };
 
@@ -56,8 +91,51 @@ export const hasModulePermission = (
   requirement: PermissionRequirement
 ): boolean => {
   const level = requirement.level ?? "read";
-  const directPermission = Boolean(profile[requirement.module]?.[level]);
+  const modulePerms = profile[requirement.module];
+
+  // Evaluación de acciones especiales granulares (ej: allow_price_override, allow_manual_adjustments)
+  if (level !== "read" && level !== "write") {
+    if (modulePerms && typeof modulePerms[level] === "boolean") {
+      return modulePerms[level] === true;
+    }
+    // Retrocompatibilidad: si no está definido explícitamente en el perfil, hereda del permiso de escritura
+    if (modulePerms?.write) return true;
+  }
+
+  const directPermission = Boolean(modulePerms?.[level]);
   if (directPermission) return true;
+
+  // Fallbacks de compatibilidad hacia atrás para módulos contables añadidos
+  if (requirement.module === "caja_general") {
+    return Boolean(profile.caja?.[level]);
+  }
+  if (requirement.module === "cuentas_corrientes_proveedores") {
+    return Boolean(
+      profile.proveedores?.[level] ||
+        profile.compras?.[level] ||
+        profile.cuentas_corrientes?.[level]
+    );
+  }
+  if (requirement.module === "bancos") {
+    return Boolean(
+      profile.configuracion_contable?.[level] ||
+        profile.configuracion?.[level] ||
+        profile.caja?.[level]
+    );
+  }
+  if (requirement.module === "empleados") {
+    return Boolean(
+      profile.clientes?.[level] ||
+        profile.configuracion_agenda?.[level] ||
+        profile.usuarios?.[level]
+    );
+  }
+  if (requirement.module === "compras_margen") {
+    if (profile.compras_margen?.[level] !== undefined) {
+      return Boolean(profile.compras_margen[level]);
+    }
+    return Boolean(profile.compras?.[level]);
+  }
 
   const isScopedConfigModule = requirement.module.startsWith("configuracion_");
   if (!isScopedConfigModule) return false;

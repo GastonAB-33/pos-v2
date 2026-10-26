@@ -1,9 +1,10 @@
-﻿import { auditService } from "@/services/audit.service";
+import { auditService } from "@/services/audit.service";
 import { productsService as baseProductsService } from "@/services/products.service";
 import { usersService } from "@/services/users.service";
 import type { Product as ProductEntity } from "@/types/entities";
 import type { Product, ProductAuditEntry, ProductViewModel } from "@/modules/productos/types/product.types";
 import { DEFAULT_IVA_PERCENT, roundMoney, roundPercent } from "@/modules/productos/utils/product-pricing";
+import { isStockTrackingEnabled } from "@/utils/stock-tracking";
 
 const normalizeText = (value: string | null | undefined): string => value?.trim() ?? "";
 
@@ -140,7 +141,7 @@ export const mapEntityToProductViewModel = (
     barcode: barcode ?? "",
     imagenUrl: product.image_url ?? "",
     nombre: product.name,
-    codigoProducto: product.code,
+    codigoProducto: product.code ?? "",
     codigoBarras: barcode ?? "",
     saleMode: product.sale_mode,
     categoria: product.category,
@@ -154,6 +155,7 @@ export const mapEntityToProductViewModel = (
     stock: product.stock_current,
     favorito: product.is_favorite,
     activo: product.is_active,
+    trackStock: isStockTrackingEnabled(product.description),
   };
 };
 

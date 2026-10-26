@@ -3,16 +3,20 @@ import { z } from "zod";
 import { auditService } from "@/services/audit.service";
 import { priceListsService } from "@/services/price-lists.service";
 import { productsService } from "@/services/products.service";
-import type { PriceList, Product, ProductBarcode } from "@/types/entities";
+import { useProductsStore } from "@/features/products/store/products.store";
+import type { Product } from "@/types/entities";
 import { downloadCsv } from "@/utils/csv";
 import { downloadXlsx, parseXlsxFile, type XlsxRow } from "@/utils/xlsx";
 import type { ProductFormValues } from "@/modules/productos/schemas/product-form.schema";
 import {
   computePricingForward,
+  computePricingReverse,
   DEFAULT_IVA_PERCENT,
   roundMoney,
   roundPercent,
 } from "@/modules/productos/utils/product-pricing";
+import { serializeReturnableConfig } from "@/utils/returnable-packages";
+import { isStockTrackingEnabled, serializeStockTracking } from "@/utils/stock-tracking";
 
 type FeedbackType = "success" | "error";
 
@@ -20,33 +24,6 @@ interface CrudFeedback {
   type: FeedbackType;
   message: string;
 }
-
-const isProductDeleteConflictError = (error: unknown): boolean => {
-  if (!error || typeof error !== "object") return false;
-
-  const candidate = error as {
-    code?: unknown;
-    message?: unknown;
-    details?: unknown;
-    status?: unknown;
-  };
-
-  const code = typeof candidate.code === "string" ? candidate.code : "";
-  const status =
-    typeof candidate.status === "number"
-      ? candidate.status
-      : typeof candidate.status === "string"
-        ? Number(candidate.status)
-        : NaN;
-  const message =
-    `${typeof candidate.message === "string" ? candidate.message : ""} ${
-      typeof candidate.details === "string" ? candidate.details : ""
-    }`.toLowerCase();
-
-  if (status === 409) return true;
-  if (code === "23503") return true;
-  return message.includes("foreign key") || message.includes("update or delete on table");
-};
 
 export type ProductImportMode = "create_only" | "upsert";
 
@@ -96,19 +73,6 @@ type ProductWriteValues = ProductFormValues & {
   imagenEliminada?: boolean;
 };
 
-const buildProductCode = (name: string): string => {
-  const normalized = name
-    .toUpperCase()
-    .replace(/[^A-Z0-9\s]/g, "")
-    .trim()
-    .split(/\s+/)
-    .slice(0, 3)
-    .map((part) => part.slice(0, 3))
-    .join("");
-
-  return `${normalized || "PRD"}-${Date.now().toString().slice(-6)}`;
-};
-
 const toServiceInput = (
   values: ProductFormValues,
   options?: {
@@ -130,9 +94,13 @@ const toServiceInput = (
   const normalizedImageUrl =
     typeof values.imagenUrl === "string" ? values.imagenUrl.trim() : undefined;
   const hasForcedImageUrl = options && Object.prototype.hasOwnProperty.call(options, "forcedImageUrl");
+  const normalizedCode =
+    typeof values.codigoProducto === "string"
+      ? values.codigoProducto.trim() || null
+      : options?.existingCode ?? null;
 
   return {
-    code: values.codigoProducto || options?.existingCode || buildProductCode(values.nombre),
+    code: normalizedCode,
     name: values.nombre || options?.existingName || "Producto",
     image_url: hasForcedImageUrl
       ? options?.forcedImageUrl ?? null
@@ -142,7 +110,19 @@ const toServiceInput = (
     brand: options?.existingBrand ?? null,
     supplier: options?.existingSupplier ?? null,
     is_favorite: options?.isFavorite ?? false,
-    description: options?.existingDescription ?? null,
+    description: serializeStockTracking(
+      serializeReturnableConfig(
+        options?.existingDescription,
+        values.isReturnable
+          ? {
+              enabled: true,
+              packageName: values.returnablePackageName?.trim() || "Envase Retornable",
+              packagePrice: values.returnablePackagePrice ?? 0,
+            }
+          : null
+      ),
+      values.trackStock ?? true
+    ),
     price: roundMoney(values.precioFinal),
     cost_price: roundMoney(values.precioCosto),
     stock_current: values.stock,
@@ -175,6 +155,14 @@ const normalizeBarcode = (value: string | null): string | null => {
   return cleaned || null;
 };
 
+const normalizeProductIdentity = (value: string): string =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
 const parseNumericCell = (value: unknown): { value: number | null; invalid: boolean; raw: string } => {
   if (typeof value === "number" && Number.isFinite(value)) {
     return { value, invalid: false, raw: String(value) };
@@ -183,10 +171,17 @@ const parseNumericCell = (value: unknown): { value: number | null; invalid: bool
   const raw = toTrimmedString(value);
   if (!raw) return { value: null, invalid: false, raw: "" };
 
-  const compact = raw.replace(/\s+/g, "");
-  const normalized = compact.includes(",")
-    ? compact.replace(/\./g, "").replace(",", ".")
-    : compact;
+  const compact = raw.replace(/\s+/g, "").replace(/[^0-9,.-]/g, "");
+  const lastComma = compact.lastIndexOf(",");
+  const lastDot = compact.lastIndexOf(".");
+  const normalized =
+    lastComma >= 0 && lastDot >= 0
+      ? lastComma > lastDot
+        ? compact.replace(/\./g, "").replace(",", ".")
+        : compact.replace(/,/g, "")
+      : lastComma >= 0
+        ? compact.replace(",", ".")
+        : compact;
   const parsed = Number(normalized);
   if (!Number.isFinite(parsed)) return { value: null, invalid: true, raw };
   return { value: parsed, invalid: false, raw };
@@ -247,7 +242,7 @@ const rowSchema = z
     cost_price: z.number().min(0, "Costo >= 0"),
     profit_percent: z.number().min(0, "Ganancia >= 0"),
     vat_percent: z.number().min(0, "IVA >= 0"),
-    stock_current: z.number().min(0, "Stock >= 0"),
+    stock_current: z.number(),
     is_favorite: z.boolean().nullable(),
     is_active: z.boolean(),
   });
@@ -363,23 +358,41 @@ const parseImportRow = (row: XlsxRow, rowNumber: number): ProductImportRowParseR
     return { ok: false, errors };
   }
 
-  const costPrice = costRaw.value ?? 0;
+  const rawCostPrice = costRaw.value;
   const stockCurrent = stockRaw.value ?? 0;
   const vatPercent = vatRaw.value ?? DEFAULT_IVA_PERCENT;
   const profitPercent = profitRaw.value ?? null;
   const priceFinal = priceFinalRaw.value;
   const priceWithoutVat = priceWithoutVatRaw.value;
 
-  const forwardFromCost = computePricingForward({
-    precioCosto: costPrice,
-    porcentajeGanancia: profitPercent ?? 0,
-    porcentajeIva: vatPercent,
-  });
+  // Si no se informó costo (o se dejó en 0) pero se informó precio final (o precio sin IVA) y porcentaje de ganancia,
+  // deducimos automáticamente el costo hacia atrás tal como en el formulario de productos.
+  let resolvedCostPrice = rawCostPrice ?? 0;
+  let resolvedPriceWithoutVat: number;
+  let resolvedPriceFinal: number;
 
-  const resolvedPriceWithoutVat = roundMoney(
-    priceWithoutVat ?? (priceFinal != null ? priceFinal / (1 + vatPercent / 100) : forwardFromCost.precioSinIva)
-  );
-  const resolvedPriceFinal = roundMoney(priceFinal ?? resolvedPriceWithoutVat * (1 + vatPercent / 100));
+  if ((rawCostPrice == null || rawCostPrice === 0) && (priceFinal != null || priceWithoutVat != null) && profitPercent != null) {
+    const baseFinal = priceFinal ?? (priceWithoutVat != null ? priceWithoutVat * (1 + vatPercent / 100) : 0);
+    const reverse = computePricingReverse({
+      precioFinal: baseFinal,
+      porcentajeGanancia: profitPercent,
+      porcentajeIva: vatPercent,
+    });
+    resolvedCostPrice = reverse.precioCosto;
+    resolvedPriceWithoutVat = priceWithoutVat != null ? roundMoney(priceWithoutVat) : reverse.precioSinIva;
+    resolvedPriceFinal = priceFinal != null ? roundMoney(priceFinal) : reverse.precioFinal;
+  } else {
+    const forwardFromCost = computePricingForward({
+      precioCosto: resolvedCostPrice,
+      porcentajeGanancia: profitPercent ?? 0,
+      porcentajeIva: vatPercent,
+    });
+
+    resolvedPriceWithoutVat = roundMoney(
+      priceWithoutVat ?? (priceFinal != null ? priceFinal / (1 + vatPercent / 100) : forwardFromCost.precioSinIva)
+    );
+    resolvedPriceFinal = roundMoney(priceFinal ?? resolvedPriceWithoutVat * (1 + vatPercent / 100));
+  }
 
   const parsedBoolean = parseBoolean(getRowValueByAlias(row, [...importFieldAliases.is_active]));
   const parsedFavorite = parseBoolean(getRowValueByAlias(row, [...importFieldAliases.is_favorite]));
@@ -393,9 +406,9 @@ const parseImportRow = (row: XlsxRow, rowNumber: number): ProductImportRowParseR
     sale_mode: parseSaleMode(getRowValueByAlias(row, [...importFieldAliases.sale_mode])),
     price_final: resolvedPriceFinal,
     price_without_vat: resolvedPriceWithoutVat,
-    cost_price: costPrice,
+    cost_price: resolvedCostPrice,
     profit_percent: roundPercent(
-      profitPercent ?? (costPrice > 0 ? ((resolvedPriceWithoutVat - costPrice) / costPrice) * 100 : 0)
+      profitPercent ?? (resolvedCostPrice > 0 ? ((resolvedPriceWithoutVat - resolvedCostPrice) / resolvedCostPrice) * 100 : 0)
     ),
     vat_percent: roundPercent(vatPercent),
     stock_current: stockCurrent,
@@ -425,84 +438,31 @@ const parseImportRow = (row: XlsxRow, rowNumber: number): ProductImportRowParseR
 };
 
 export const useProductsCrud = (tenantId: string | null, userId: string | null) => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [allBarcodes, setAllBarcodes] = useState<ProductBarcode[]>([]);
-  const [primaryBarcodes, setPrimaryBarcodes] = useState<Record<string, string>>({});
-  const [priceLists, setPriceLists] = useState<PriceList[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const products = useProductsStore((state) => state.products);
+  const allBarcodes = useProductsStore((state) => state.allBarcodes);
+  const primaryBarcodes = useProductsStore((state) => state.primaryBarcodes);
+  const priceLists = useProductsStore((state) => state.priceLists);
+  const isLoading = useProductsStore((state) => state.isLoading);
+  const loadCatalog = useProductsStore((state) => state.loadCatalog);
+  const upsertProductInState = useProductsStore((state) => state.upsertProduct);
+  const removeProductFromState = useProductsStore((state) => state.removeProduct);
+  const patchPrimaryBarcodeState = useProductsStore((state) => state.patchPrimaryBarcode);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<CrudFeedback | null>(null);
 
   const clearFeedback = () => setFeedback(null);
 
-  const sortByName = useCallback((rows: Product[]) => {
-    return [...rows].sort((a, b) => a.name.localeCompare(b.name));
-  }, []);
-
-  const upsertProductInState = useCallback((product: Product) => {
-    const safeProduct = { ...product };
-
-    setProducts((current) => {
-      const withoutCurrent = current.filter((item) => item.id !== safeProduct.id);
-      return sortByName([...withoutCurrent, safeProduct]);
-    });
-  }, [sortByName]);
-
-  const removeProductFromState = useCallback((productId: string) => {
-    setProducts((current) => current.filter((item) => item.id !== productId));
-    setPrimaryBarcodes((current) => {
-      const next = { ...current };
-      delete next[productId];
-      return next;
-    });
-    setAllBarcodes((current) => current.filter((row) => row.product_id !== productId));
-  }, []);
-
-  const patchPrimaryBarcodeState = useCallback((productId: string, barcodeValue: string) => {
-    const normalized = normalizeBarcode(barcodeValue) ?? "";
-
-    setPrimaryBarcodes((current) => {
-      const next = { ...current };
-      if (!normalized) {
-        delete next[productId];
-      } else {
-        next[productId] = normalized;
-      }
-      return next;
-    });
-  }, []);
-
-  const loadProducts = useCallback(async () => {
-    if (!tenantId) {
-      setProducts([]);
-      setAllBarcodes([]);
-      setPrimaryBarcodes({});
-      setPriceLists([]);
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const [list, barcodeMap, barcodes, lists] = await Promise.all([
-        productsService.getAllByTenant(tenantId),
-        productsService.getPrimaryBarcodesMapByTenant(tenantId),
-        productsService.getBarcodesByTenant(tenantId),
-        priceListsService.getAllByTenant(tenantId),
-      ]);
-      setProducts(sortByName(list.map((row) => ({ ...row }))));
-      setAllBarcodes(barcodes.map((row) => ({ ...row })));
-      setPrimaryBarcodes({ ...barcodeMap });
-      setPriceLists(lists.sort((a, b) => a.name.localeCompare(b.name)));
-    } catch {
-      setFeedback({ type: "error", message: "No se pudieron cargar los productos" });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [sortByName, tenantId]);
+  const loadProducts = useCallback(async (force = false) => {
+    if (!tenantId) return;
+    await loadCatalog(tenantId, force);
+  }, [loadCatalog, tenantId]);
 
   useEffect(() => {
-    void loadProducts();
-  }, [loadProducts]);
+    if (tenantId) {
+      void loadCatalog(tenantId, false);
+    }
+  }, [loadCatalog, tenantId]);
 
   const createProduct = async (
     values: ProductWriteValues,
@@ -548,7 +508,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       await productsService.setPrimaryBarcode(tenantId, created.id, values.codigoBarras ?? "");
       upsertProductInState(created);
       patchPrimaryBarcodeState(created.id, values.codigoBarras ?? "");
-      await auditService.createSafe(tenantId, {
+      void auditService.createSafe(tenantId, {
         user_id: userId,
         module: "productos",
         action: "create",
@@ -568,13 +528,14 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           is_active: created.is_active,
         },
       });
-      setFeedback({
-        type: imageUploadWarning ? "error" : "success",
-        message: imageUploadWarning
-          ? `Producto creado sin imagen. ${imageUploadWarning}`
-          : "Producto creado",
-      });
-      await loadProducts();
+      if (imageUploadWarning) {
+        setFeedback({
+          type: "error",
+          message: `Producto creado sin imagen. ${imageUploadWarning}`,
+        });
+      } else {
+        setFeedback(null);
+      }
     } catch (error) {
       const message = error instanceof Error && error.message ? error.message : "Error al crear producto";
       setFeedback({ type: "error", message });
@@ -656,7 +617,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       patchPrimaryBarcodeState(productId, values.codigoBarras ?? "");
       const previousBarcode = normalizeBarcode(primaryBarcodes[productId] ?? null) ?? null;
       const nextBarcode = normalizeBarcode(values.codigoBarras ?? null) ?? null;
-      await auditService.createSafe(tenantId, {
+      void auditService.createSafe(tenantId, {
         user_id: userId,
         module: "productos",
         action: "update",
@@ -666,8 +627,11 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
         metadata: {
           previous_name: existing.name,
           next_name: values.nombre,
-          previous_code: existing.code,
-          next_code: values.codigoProducto || existing.code,
+          previous_code: existing.code ?? null,
+          next_code:
+            typeof values.codigoProducto === "string"
+              ? values.codigoProducto.trim() || null
+              : existing.code ?? null,
           previous_barcode: previousBarcode,
           next_barcode: nextBarcode,
           previous_category: existing.category,
@@ -692,13 +656,83 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           next_is_favorite: options?.isFavorite ?? existing.is_favorite,
         },
       });
-      setFeedback({ type: "success", message: "Producto actualizado" });
-      await loadProducts();
+      setFeedback(null);
     } catch (error) {
       const message = error instanceof Error && error.message ? error.message : "Error al actualizar producto";
       setFeedback({ type: "error", message });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const updateProductPricing = async (
+    productId: string,
+    pricing: {
+      costPrice: number;
+      profitPercent: number;
+      vatPercent: number;
+      priceWithoutVat: number;
+      finalPrice: number;
+      addedStock?: number;
+    }
+  ): Promise<Product | null> => {
+    if (!tenantId) return null;
+    const existing = products.find((product) => product.id === productId);
+    if (!existing) return null;
+
+    try {
+      const hasAddedStock =
+        pricing.addedStock != null && !isNaN(pricing.addedStock) && pricing.addedStock !== 0;
+      const nextStock = hasAddedStock
+        ? Math.max(0, (existing.stock_current ?? 0) + pricing.addedStock!)
+        : existing.stock_current;
+
+      const payload: Partial<Product> = {
+        cost_price: roundMoney(pricing.costPrice),
+        profit_percent: roundPercent(pricing.profitPercent),
+        vat_percent: roundPercent(pricing.vatPercent),
+        price_without_vat: roundMoney(pricing.priceWithoutVat),
+        price: roundMoney(pricing.finalPrice),
+        ...(hasAddedStock ? { stock_current: nextStock } : {}),
+      };
+
+      const updated = await productsService.update(tenantId, productId, payload);
+      const optimistic: Product = {
+        ...existing,
+        ...payload,
+        updated_at: new Date().toISOString(),
+      };
+      const finalProduct = updated ?? optimistic;
+      upsertProductInState(finalProduct);
+
+      void auditService.createSafe(tenantId, {
+        user_id: userId,
+        module: "productos",
+        action: "update_pricing_quick",
+        entity_type: "product",
+        entity_id: productId,
+        description: `Consulta rápida: precio ${
+          hasAddedStock ? `y stock (+${pricing.addedStock})` : ""
+        } actualizado para ${existing.name} ($${pricing.finalPrice})`,
+        metadata: {
+          previous_price: existing.price,
+          next_price: pricing.finalPrice,
+          previous_cost_price: existing.cost_price,
+          next_cost_price: pricing.costPrice,
+          profit_percent: pricing.profitPercent,
+          vat_percent: pricing.vatPercent,
+          previous_stock: existing.stock_current,
+          added_stock: pricing.addedStock ?? 0,
+          next_stock: nextStock,
+        },
+      });
+
+      return finalProduct;
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message ? error.message : "Error al actualizar precio";
+      setFeedback({ type: "error", message });
+      throw error;
     }
   };
 
@@ -710,26 +744,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       await productsService.delete(tenantId, productId);
       removeProductFromState(productId);
       setFeedback({ type: "success", message: "Producto eliminado" });
-      await loadProducts();
-    } catch (error) {
-      if (isProductDeleteConflictError(error)) {
-        const updated = await productsService.update(tenantId, productId, {
-          is_active: false,
-          is_favorite: false,
-        });
-
-        if (updated) {
-          upsertProductInState(updated);
-        }
-
-        setFeedback({
-          type: "success",
-          message: "Producto con movimientos previos: se desactivo en lugar de eliminarse",
-        });
-        await loadProducts();
-        return;
-      }
-
+    } catch {
       setFeedback({ type: "error", message: "Error al eliminar producto" });
     } finally {
       setIsSubmitting(false);
@@ -745,7 +760,6 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
     setIsSubmitting(true);
 
     let deleted = 0;
-    let deactivated = 0;
     let failed = 0;
 
     try {
@@ -759,20 +773,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           }
 
           failed += 1;
-        } catch (error) {
-          if (isProductDeleteConflictError(error)) {
-            const updated = await productsService.update(tenantId, productId, {
-              is_active: false,
-              is_favorite: false,
-            });
-
-            if (updated) {
-              deactivated += 1;
-              upsertProductInState(updated);
-              continue;
-            }
-          }
-
+        } catch {
           failed += 1;
         }
       }
@@ -780,17 +781,54 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       if (failed > 0) {
         setFeedback({
           type: "error",
-          message: `Eliminacion masiva parcial. Eliminados: ${deleted} | Desactivados: ${deactivated} | Errores: ${failed}`,
+          message: `Eliminación masiva parcial. Eliminados: ${deleted} | Errores: ${failed}`,
         });
       } else {
         setFeedback({
           type: "success",
-          message: `Proceso finalizado. Eliminados: ${deleted} | Desactivados: ${deactivated}`,
+          message: `Proceso finalizado. Eliminados: ${deleted}`,
         });
       }
 
       await loadProducts();
       return { deleted, failed };
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const toggleProductStockTracking = async (productId: string) => {
+    if (!tenantId) return;
+
+    const product = products.find((item) => item.id === productId);
+    if (!product) return;
+    const currentTracking = isStockTrackingEnabled(product.description);
+    const nextTracking = !currentTracking;
+    const nextDescription = serializeStockTracking(product.description, nextTracking);
+
+    setIsSubmitting(true);
+    try {
+      const updated = await productsService.update(tenantId, productId, { description: nextDescription });
+      upsertProductInState(updated ?? { ...product, description: nextDescription });
+      await auditService.createSafe(tenantId, {
+        user_id: userId,
+        module: "productos",
+        action: "update",
+        entity_type: "product",
+        entity_id: productId,
+        description: `Seguimiento de stock ${nextTracking ? "activado" : "desactivado"} para: ${product.name}`,
+        metadata: {
+          previous_track_stock: currentTracking,
+          next_track_stock: nextTracking,
+        },
+      });
+      setFeedback({
+        type: "success",
+        message: nextTracking ? "Seguimiento de stock activado" : "Seguimiento de stock desactivado",
+      });
+      await loadProducts();
+    } catch {
+      setFeedback({ type: "error", message: "Error al actualizar seguimiento de stock" });
     } finally {
       setIsSubmitting(false);
     }
@@ -882,11 +920,24 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       "lista de precio": "BASE (solo lectura - no editar)",
     };
 
-    return downloadXlsx("plantilla-productos", "Plantilla Productos", [templateRow]);
+    const ok = await downloadXlsx("plantilla-productos", "Plantilla Productos", [templateRow]);
+    if (ok) {
+      setFeedback({
+        type: "success",
+        message: "Plantilla XLSX descargada con éxito.",
+      });
+    }
+    return ok;
   };
 
   const downloadImportErrors = async (errors: ProductImportErrorRow[]): Promise<boolean> => {
-    if (!errors.length) return false;
+    if (!errors.length) {
+      setFeedback({
+        type: "error",
+        message: "No hay errores de importación para descargar.",
+      });
+      return false;
+    }
 
     return downloadXlsx(
       `errores-importacion-productos-${new Date().toISOString().slice(0, 10)}`,
@@ -929,10 +980,12 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       errorRows.push(...duplicateErrors);
     }
 
+    const invalidRowNumbers = new Set(errorRows.map((error) => error.rowNumber));
+
     return {
       fileName: file.name,
       totalRows: rawRows.length,
-      validRows,
+      validRows: validRows.filter((row) => !invalidRowNumbers.has(row.rowNumber)),
       errorRows,
     };
   };
@@ -969,13 +1022,24 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
 
     const barcodeToProductId = new Map<string, string>();
     for (const barcodeRow of allBarcodes) {
+      if (!barcodeRow.is_primary) continue;
       const normalizedBarcode = normalizeBarcode(barcodeRow.barcode);
       if (!normalizedBarcode) continue;
       barcodeToProductId.set(normalizedBarcode, barcodeRow.product_id);
     }
 
+    const productIdsByName = new Map<string, string[]>();
+    for (const product of products) {
+      const normalizedName = normalizeProductIdentity(product.name);
+      if (!normalizedName) continue;
+      productIdsByName.set(normalizedName, [
+        ...(productIdsByName.get(normalizedName) ?? []),
+        product.id,
+      ]);
+    }
+
     try {
-      if (preview.errorRows.length > 0) {
+      if (preview.errorRows.length > 0 && preview.validRows.length === 0) {
         const result = {
           created: 0,
           updated: 0,
@@ -1008,7 +1072,10 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           continue;
         }
 
-        const matchedProductId = codeMatch ?? barcodeMatch;
+        const normalizedName = normalizeProductIdentity(row.name);
+        const nameMatches = productIdsByName.get(normalizedName) ?? [];
+        const nameMatch = nameMatches.length === 1 ? nameMatches[0] : null;
+        const matchedProductId = codeMatch ?? barcodeMatch ?? (mode === "upsert" ? nameMatch : null);
         if (mode === "upsert" && matchedProductId) {
           const existing = products.find((product) => product.id === matchedProductId);
           if (!existing) {
@@ -1054,7 +1121,10 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           continue;
         }
 
-        const matchedProductId = codeMatch ?? barcodeMatch;
+        const normalizedName = normalizeProductIdentity(row.name);
+        const nameMatches = productIdsByName.get(normalizedName) ?? [];
+        const nameMatch = nameMatches.length === 1 ? nameMatches[0] : null;
+        const matchedProductId = codeMatch ?? barcodeMatch ?? (mode === "upsert" ? nameMatch : null);
 
         if (mode === "create_only" && matchedProductId) {
           skipped += 1;
@@ -1098,17 +1168,18 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
               barcodeToProductId.set(normalizedBarcode, matchedProductId);
             }
 
-            const nextCode = (row.code || existing.code).trim().toUpperCase();
+            const nextCode = (row.code || existing.code || "").trim().toUpperCase();
             if (nextCode) {
               codeToProductId.set(nextCode, matchedProductId);
             }
+            productIdsByName.set(normalizedName, [matchedProductId]);
 
             updated += 1;
             continue;
           }
 
           const createdProduct = await productsService.create(tenantId, {
-            code: row.code || buildProductCode(row.name),
+            code: row.code?.trim() || null,
             name: row.name,
             brand: null,
             supplier: null,
@@ -1137,6 +1208,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           if (createdProduct.code) {
             codeToProductId.set(createdProduct.code.trim().toUpperCase(), createdProduct.id);
           }
+          productIdsByName.set(normalizedName, [createdProduct.id]);
 
           created += 1;
         } catch (error) {
@@ -1146,6 +1218,8 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           });
         }
       }
+
+      const allImportErrors = [...preview.errorRows, ...importErrors];
 
       await auditService.createSafe(tenantId, {
         user_id: userId,
@@ -1161,16 +1235,16 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           created,
           updated,
           skipped,
-          errors: importErrors.length,
+          errors: allImportErrors.length,
         },
       });
 
       await loadProducts();
 
-      if (importErrors.length > 0) {
+      if (allImportErrors.length > 0) {
         setFeedback({
           type: "error",
-          message: `Importacion parcial. Creados: ${created} | Actualizados: ${updated} | Saltados: ${skipped} | Errores: ${importErrors.length}`,
+          message: `Importacion parcial. Creados: ${created} | Actualizados: ${updated} | Saltados: ${skipped} | Errores: ${allImportErrors.length}`,
         });
       } else {
         setFeedback({
@@ -1183,8 +1257,8 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
         created,
         updated,
         skipped,
-        errors: importErrors.length,
-        errorRows: importErrors,
+        errors: allImportErrors.length,
+        errorRows: allImportErrors,
       };
     } finally {
       setIsSubmitting(false);
@@ -1202,7 +1276,13 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
       ? products.filter((product) => options.productIds?.includes(product.id))
       : products;
 
-    if (!targetProducts.length) return false;
+    if (!targetProducts.length) {
+      setFeedback({
+        type: "error",
+        message: "No hay productos para exportar con los filtros seleccionados.",
+      });
+      return false;
+    }
 
     setIsSubmitting(true);
     try {
@@ -1252,7 +1332,26 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
           ? await downloadXlsx(fileName, "Productos", rows)
           : downloadCsv(fileName, rows);
 
+      if (ok) {
+        setFeedback({
+          type: "success",
+          message: `Se exportaron ${rows.length} producto${rows.length === 1 ? "" : "s"} en formato ${options.format.toUpperCase()} con éxito.`,
+        });
+      } else {
+        setFeedback({
+          type: "error",
+          message: "No se pudo generar la exportación del archivo.",
+        });
+      }
+
       return ok;
+    } catch (error) {
+      console.error("Error al exportar productos:", error);
+      setFeedback({
+        type: "error",
+        message: error instanceof Error ? error.message : "Error inesperado al exportar productos.",
+      });
+      return false;
     } finally {
       setIsSubmitting(false);
     }
@@ -1263,6 +1362,7 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
   return {
     products: sortedProducts,
     primaryBarcodes,
+    allBarcodes,
     priceLists,
     isLoading,
     isSubmitting,
@@ -1271,10 +1371,12 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
     reload: loadProducts,
     createProduct,
     updateProduct,
+    updateProductPricing,
     deleteProduct,
     deleteProductsBulk,
     toggleProductActive,
     toggleProductFavorite,
+    toggleProductStockTracking,
     downloadImportTemplate,
     downloadImportErrors,
     parseImportFile,

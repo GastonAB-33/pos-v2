@@ -4,6 +4,7 @@ import {
   type CreateEntityInput,
   type UpdateEntityInput,
 } from "@/services/base/tenant-crud.service";
+import { productsService } from "@/services/products.service";
 import type { Sale, SaleItem, SalePayment } from "@/types/entities";
 
 const salesCrud = new TenantCrudService<Sale>(dbTables.sales);
@@ -21,14 +22,81 @@ export const salesService = {
   create: (tenantId: string, input: CreateSaleInput) => salesCrud.create(tenantId, input),
   update: (tenantId: string, id: string, input: UpdateSaleInput) => salesCrud.update(tenantId, id, input),
   delete: (tenantId: string, id: string) => salesCrud.delete(tenantId, id),
-  createItem: (tenantId: string, input: CreateSaleItemInput) => {
+  createItem: async (tenantId: string, input: CreateSaleItemInput) => {
+    let resolvedProductId = input.product_id;
+
+    if (
+      resolvedProductId.startsWith("manual-") ||
+      resolvedProductId.startsWith("temp-") ||
+      resolvedProductId.startsWith("debt-") ||
+      resolvedProductId.startsWith("returnable-pkg-") ||
+      resolvedProductId.startsWith("package-refund-")
+    ) {
+      const specialCode = resolvedProductId.startsWith("debt-")
+        ? "SISTEMA_COBRO_CTA_CTE"
+        : resolvedProductId.startsWith("package-refund-")
+        ? "SISTEMA_DEVOLUCION_ENVASE"
+        : resolvedProductId.startsWith("returnable-pkg-")
+        ? "SISTEMA_COBRO_ENVASE"
+        : "SISTEMA_VENTA_MANUAL";
+      const specialName = resolvedProductId.startsWith("debt-")
+        ? "Cobro Cuenta Corriente"
+        : resolvedProductId.startsWith("package-refund-")
+        ? "Devolución de Envase Retornable"
+        : resolvedProductId.startsWith("returnable-pkg-")
+        ? "Cobro de Envase Retornable"
+        : "Venta Manual / Producto Temporal";
+
+      const specialProduct = await productsService.ensureSpecialProduct(
+        tenantId,
+        specialCode,
+        specialName
+      );
+      resolvedProductId = specialProduct.id;
+    }
+
     // Compatibilidad con esquemas legacy que todavia exigen columnas `price` y `subtotal`.
     const payload = {
       ...input,
+      product_id: resolvedProductId,
       price: input.unit_price,
       subtotal: input.line_total,
+      metadata: {
+        ...(input.metadata ?? {}),
+        original_product_id: input.product_id,
+      },
     };
-    return saleItemsCrud.create(tenantId, payload);
+
+    try {
+      return await saleItemsCrud.create(tenantId, payload);
+    } catch (error) {
+      const errorMsg = String(
+        error && typeof error === "object"
+          ? (error as { message?: string; details?: string }).message ?? ""
+          : ""
+      ).toLowerCase();
+      const errorCode = String(
+        error && typeof error === "object" ? (error as { code?: string }).code ?? "" : ""
+      );
+
+      if (
+        errorCode === "23503" ||
+        errorMsg.includes("foreign key") ||
+        errorMsg.includes("violates foreign key")
+      ) {
+        console.warn(
+          `[SalesService] product_id "${resolvedProductId}" no existe en "products". Utilizando SISTEMA_VENTA_MANUAL para no frenar la venta.`
+        );
+        const fallbackProduct = await productsService.ensureSpecialProduct(
+          tenantId,
+          "SISTEMA_VENTA_MANUAL",
+          "Venta Manual / Producto Temporal"
+        );
+        payload.product_id = fallbackProduct.id;
+        return await saleItemsCrud.create(tenantId, payload);
+      }
+      throw error;
+    }
   },
   createPayment: (tenantId: string, input: CreateSalePaymentInput) =>
     salePaymentsCrud.create(tenantId, input),
@@ -36,14 +104,10 @@ export const salesService = {
   getAllItemsByTenant: (tenantId: string) => saleItemsCrud.getAllByTenant(tenantId),
   getAllPaymentsByTenant: (tenantId: string) => salePaymentsCrud.getAllByTenant(tenantId),
 
-  getItemsBySaleId: async (tenantId: string, saleId: string) => {
-    const allItems = await saleItemsCrud.getAllByTenant(tenantId);
-    return allItems.filter((item) => item.sale_id === saleId);
-  },
+  getItemsBySaleId: (tenantId: string, saleId: string) =>
+    saleItemsCrud.query(tenantId, { eq: { sale_id: saleId } }),
 
   // Relacion preparada para medios de pago y futuras integraciones (Mercado Pago/ARCA).
-  getPaymentsBySaleId: async (tenantId: string, saleId: string) => {
-    const allPayments = await salePaymentsCrud.getAllByTenant(tenantId);
-    return allPayments.filter((payment) => payment.sale_id === saleId);
-  },
+  getPaymentsBySaleId: (tenantId: string, saleId: string) =>
+    salePaymentsCrud.query(tenantId, { eq: { sale_id: saleId } }),
 };

@@ -2,8 +2,11 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { storageKeys } from "@/utils/local-storage";
 
-export type UiTheme = "light" | "dark";
+export type UiTheme = "light" | "midnight" | "dark";
+export type SidebarTheme = "auto" | "dark" | "light";
 export type UiDensity = "standard" | "compact";
+export type UiFontSize = "compact" | "normal" | "large" | "extra-large";
+export type PosWindowMode = "same_tab" | "new_window" | "smart_pos";
 export type UiToastType = "success" | "error" | "info";
 
 export interface UiToast {
@@ -16,18 +19,28 @@ export interface UiToast {
 interface UiStore {
   sidebarOpen: boolean;
   theme: UiTheme;
+  sidebarTheme: SidebarTheme;
   density: UiDensity;
+  fontSize: UiFontSize;
+  posWindowMode: PosWindowMode;
   accentColor: string;
+  posCashChangeEnabled: boolean;
   toasts: UiToast[];
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
   setTheme: (theme: UiTheme) => void;
+  setSidebarTheme: (sidebarTheme: SidebarTheme) => void;
+  cycleTheme: () => void;
   setDensity: (density: UiDensity) => void;
+  setFontSize: (fontSize: UiFontSize) => void;
+  setPosWindowMode: (mode: PosWindowMode) => void;
+  cycleFontSize: () => void;
   setAccentColor: (color: string) => void;
   toggleTheme: () => void;
   pushToast: (toast: Omit<UiToast, "id">) => string;
   removeToast: (id: string) => void;
   clearToasts: () => void;
+  setPosCashChangeEnabled: (enabled: boolean) => void;
 }
 
 const getInitialTheme = (): UiTheme => {
@@ -39,7 +52,7 @@ const getInitialTheme = (): UiTheme => {
       const parsed = JSON.parse(raw) as { state?: { theme?: UiTheme } };
       const persistedTheme = parsed?.state?.theme;
 
-      if (persistedTheme === "light" || persistedTheme === "dark") {
+      if (persistedTheme === "light" || persistedTheme === "midnight" || persistedTheme === "dark") {
         return persistedTheme;
       }
     }
@@ -48,36 +61,81 @@ const getInitialTheme = (): UiTheme => {
   }
 
   if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
-    return "dark";
+    return "midnight";
   }
 
   return "light";
 };
+
+const getInitialSidebarTheme = (): SidebarTheme => {
+  if (typeof window === "undefined") return "auto";
+
+  try {
+    const raw = localStorage.getItem(storageKeys.ui);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { state?: { sidebarTheme?: SidebarTheme } };
+      const persisted = parsed?.state?.sidebarTheme;
+
+      if (persisted === "auto" || persisted === "dark" || persisted === "light") {
+        return persisted;
+      }
+    }
+  } catch {
+    // Fallback
+  }
+
+  return "auto";
+};
+
+const themeCycleOrder: UiTheme[] = ["light", "midnight", "dark"];
+const fontSizeCycleOrder: UiFontSize[] = ["compact", "normal", "large", "extra-large"];
 
 export const useUiStore = create<UiStore>()(
   persist(
     (set) => ({
       sidebarOpen: true,
       theme: getInitialTheme(),
+      sidebarTheme: getInitialSidebarTheme(),
       density: "standard",
-      accentColor: "#6054e8",
+      fontSize: "normal",
+      posWindowMode: "same_tab",
+      posCashChangeEnabled: true,
+      accentColor: "#0056b3",
       toasts: [],
 
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
 
       setTheme: (theme) => set({ theme }),
+      setSidebarTheme: (sidebarTheme) => set({ sidebarTheme }),
+      cycleTheme: () =>
+        set((state) => {
+          const currentIndex = themeCycleOrder.indexOf(state.theme);
+          const nextIndex = (currentIndex + 1) % themeCycleOrder.length;
+          return { theme: themeCycleOrder[nextIndex] };
+        }),
       setDensity: (density) => set({ density }),
+      setFontSize: (fontSize) => set({ fontSize }),
+      setPosWindowMode: (posWindowMode) => set({ posWindowMode }),
+      setPosCashChangeEnabled: (posCashChangeEnabled) => set({ posCashChangeEnabled }),
+      cycleFontSize: () =>
+        set((state) => {
+          const currentIndex = fontSizeCycleOrder.indexOf(state.fontSize);
+          const nextIndex = (currentIndex + 1) % fontSizeCycleOrder.length;
+          return { fontSize: fontSizeCycleOrder[nextIndex] };
+        }),
       setAccentColor: (color) =>
         set({
           accentColor: /^#[0-9a-f]{6}$/i.test(color.trim())
             ? color.trim()
-            : "#6054e8",
+            : "#0056b3",
         }),
       toggleTheme: () =>
-        set((state) => ({
-          theme: state.theme === "dark" ? "light" : "dark",
-        })),
+        set((state) => {
+          const currentIndex = themeCycleOrder.indexOf(state.theme);
+          const nextIndex = (currentIndex + 1) % themeCycleOrder.length;
+          return { theme: themeCycleOrder[nextIndex] };
+        }),
 
       pushToast: (toast) => {
         const id = crypto.randomUUID();
@@ -99,7 +157,11 @@ export const useUiStore = create<UiStore>()(
       partialize: (state) => ({
         sidebarOpen: state.sidebarOpen,
         theme: state.theme,
+        sidebarTheme: state.sidebarTheme,
         density: state.density,
+        fontSize: state.fontSize,
+        posWindowMode: state.posWindowMode,
+        posCashChangeEnabled: state.posCashChangeEnabled,
         accentColor: state.accentColor,
       }),
     }

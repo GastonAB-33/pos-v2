@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { permissionProfilesService } from "@/services/permission-profiles.service";
 import { authService } from "@/services/auth.service";
@@ -487,13 +487,15 @@ export const useMockLogin = (expectedTenantSlug?: string) => {
 
       return await loginFromSelectors();
     } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : dataProvider === "mock"
-            ? "No se pudo iniciar sesion mock"
-            : "No se pudo iniciar sesion"
-      );
+      let message = dataProvider === "mock" ? "No se pudo iniciar sesion mock" : "No se pudo iniciar sesion";
+      if (error instanceof Error) {
+        message = error.message;
+        const lower = message.toLowerCase();
+        if (lower.includes("failed to fetch") || lower.includes("fetch failed") || lower.includes("networkerror")) {
+          message = "Error de conexión: No se pudo comunicar con el servidor en la nube. Verificá la conexión a internet de este equipo y reintentá.";
+        }
+      }
+      setError(message);
       return false;
     } finally {
       setIsSubmitting(false);

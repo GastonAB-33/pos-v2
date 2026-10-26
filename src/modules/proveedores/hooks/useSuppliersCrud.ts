@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { suppliersService } from "@/services/suppliers.service";
 import type { Supplier } from "@/types/entities";
 import type { SupplierFormValues } from "@/modules/proveedores/schemas/supplier-form.schema";
+import { toSupplierServiceInput } from "@/modules/proveedores/utils/supplier-input";
 
 type FeedbackType = "success" | "error";
 
@@ -9,34 +10,6 @@ interface CrudFeedback {
   type: FeedbackType;
   message: string;
 }
-
-const buildSupplierCode = (name: string): string => {
-  const normalized = name
-    .toUpperCase()
-    .replace(/[^A-Z0-9\s]/g, "")
-    .trim()
-    .split(/\s+/)
-    .slice(0, 3)
-    .map((part) => part.slice(0, 3))
-    .join("");
-
-  return `${normalized || "SUP"}-${Date.now().toString().slice(-6)}`;
-};
-
-const normalizeEmpty = (value?: string) => (value?.trim() ? value.trim() : null);
-
-const toServiceInput = (
-  values: SupplierFormValues,
-  options?: { existingCode?: string; isActive?: boolean }
-) => ({
-  code: options?.existingCode ?? buildSupplierCode(values.name),
-  name: values.name,
-  phone: normalizeEmpty(values.phone),
-  email: normalizeEmpty(values.email),
-  address: normalizeEmpty(values.address),
-  observations: normalizeEmpty(values.observations),
-  is_active: options?.isActive ?? true,
-});
 
 export const useSuppliersCrud = (tenantId: string | null) => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -73,7 +46,7 @@ export const useSuppliersCrud = (tenantId: string | null) => {
 
     setIsSubmitting(true);
     try {
-      await suppliersService.create(tenantId, toServiceInput(values));
+      await suppliersService.create(tenantId, toSupplierServiceInput(values));
       setFeedback({ type: "success", message: "Proveedor creado" });
       await loadSuppliers();
     } catch {
@@ -94,7 +67,7 @@ export const useSuppliersCrud = (tenantId: string | null) => {
       await suppliersService.update(
         tenantId,
         supplierId,
-        toServiceInput(values, {
+        toSupplierServiceInput(values, {
           existingCode: existing.code,
           isActive: existing.is_active,
         })

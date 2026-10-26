@@ -26,3 +26,8 @@ export { cashService } from "@/services/cash.service";
 export { offlineService } from "@/services/offline.service";
 export { mercadoPagoPaymentsService } from "@/services/mercadopago/mercadopago-payments.service";
 export { parseScaleBarcode } from "@/services/barcode/scale-barcode.service";
+export { employeesService } from "@/services/employees.service";
+export { employeeAttendanceService } from "@/services/employee-attendance.service";
+export { employeeCurrentAccountsService } from "@/services/employee-current-accounts.service";
+export { employeeSalaryPaymentsService } from "@/services/employee-salary-payments.service";
+

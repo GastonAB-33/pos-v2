@@ -5,6 +5,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import type { CurrentAccountMovement } from "@/types/entities";
 import type {
   CurrentAccountSaleDetail,
@@ -157,7 +158,7 @@ export const CurrentAccountMovementsTable = ({
 
   if (!movements.length) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">
+      <div className="ui-empty-state">
         Este cliente todavia no tiene movimientos.
       </div>
     );
@@ -165,7 +166,7 @@ export const CurrentAccountMovementsTable = ({
 
   return (
     <>
-      <div className="max-h-[520px] overflow-auto rounded-lg border border-slate-200">
+      <div className="current-account-movements ui-table-wrap max-h-[520px] overflow-auto">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="sticky top-0 z-10 bg-slate-50">
             {table.getHeaderGroups().map((headerGroup) => (
@@ -205,13 +206,7 @@ export const CurrentAccountMovementsTable = ({
                   {ticketSaleDetail.receipt_number ? ` | ${ticketSaleDetail.receipt_number}` : ""}
                 </p>
               </div>
-              <button
-                type="button"
-                className="ui-btn-ghost px-2 py-1 text-xs"
-                onClick={() => setTicketSaleDetail(null)}
-              >
-                Cerrar
-              </button>
+              <ModalCloseButton label="Cerrar ticket" onClick={() => setTicketSaleDetail(null)} />
             </div>
 
             <div className="mt-3 max-h-[60vh] overflow-auto rounded-lg border border-slate-200">

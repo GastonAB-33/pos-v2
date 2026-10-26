@@ -1,5 +1,7 @@
-﻿import { useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { IconButton } from "@/components/ui/IconButton";
+import { RefreshCw } from "lucide-react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -8,7 +10,7 @@ import { StockMovementsTable } from "@/modules/stock/components/StockMovementsTa
 import { StockTrackingTable } from "@/modules/stock/components/StockTrackingTable";
 import { StockSummaryCards } from "@/modules/stock/components/StockSummaryCards";
 import { useStockModule } from "@/modules/stock/hooks/useStockModule";
-import { movementTypeLabel } from "@/modules/stock/utils/stock-labels";
+import { movementTypeLabel, type StockStatusFilter } from "@/modules/stock/utils/stock-labels";
 import { downloadXlsx } from "@/utils/xlsx";
 import type { StockMovement } from "@/types/entities";
 
@@ -64,10 +66,12 @@ const formatCsvDateStamp = (): string => new Date().toISOString().slice(0, 10);
 export const StockPage = () => {
   const { tenantId } = useTenant();
   const user = useAuthStore((state) => state.user);
-  const { canRead, canWrite } = usePermissions();
+  const { canRead, canWrite, can } = usePermissions();
   const canReadStock = canRead("stock");
   const canWriteStock = canWrite("stock");
+  const canAdjustStock = can("stock", "allow_manual_adjustments");
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StockStatusFilter>("all");
 
   const {
     products,
@@ -121,7 +125,7 @@ export const StockPage = () => {
     return (
       <PagePlaceholder
         title="Stock"
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -137,18 +141,20 @@ export const StockPage = () => {
 
   return (
     <PagePlaceholder title="Stock">
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="stock-operational-page space-y-3">
+        <div className="workspace-toolbar workspace-toolbar--inline flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <StockSummaryCards
               activeProducts={summary.activeProducts}
               lowStock={summary.lowStock}
-              noStock={summary.noStock}
               overMax={summary.overMax}
+              unassigned={summary.unassigned}
+              activeFilter={statusFilter}
+              onSelectFilter={setStatusFilter}
             />
           </div>
           <div className="flex items-center gap-2">
-            {canWriteStock && stockSettings.allow_manual_adjustments ? (
+            {canAdjustStock ? (
               <button
                 type="button"
                 onClick={() => {
@@ -161,17 +167,16 @@ export const StockPage = () => {
                 Ajustar stock
               </button>
             ) : null}
-            <button
-              type="button"
+            <IconButton
+              icon={RefreshCw}
+              label="Recargar stock"
               onClick={() => {
                 clearFeedback();
                 void reload();
               }}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              disabled={isLoading || isSubmitting}
-            >
-              Recargar
-            </button>
+              loading={isLoading}
+              disabled={isSubmitting}
+            />
           </div>
         </div>
 
@@ -181,11 +186,14 @@ export const StockPage = () => {
           products={products}
           categories={categoryOptions}
           disabled={isSubmitting || !canWriteStock}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          globalLowThreshold={stockSettings.global_low_stock_threshold}
           onUpdateOne={updateStockThreshold}
           onUpdateBulk={updateStockThresholdBulk}
         />
 
-        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-panel">
+        <section className="workspace-history space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold text-slate-900">Historial</h2>

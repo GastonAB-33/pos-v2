@@ -1,5 +1,6 @@
-﻿import type { ProductFormValues } from "@/modules/productos/schemas/product-form.schema";
+import type { ProductFormValues } from "@/modules/productos/schemas/product-form.schema";
 import type { Product as ProductEntity } from "@/types/entities";
+import type { ProductSearchScope } from "@/utils/search";
 
 export interface Product {
   id: string;
@@ -24,9 +25,26 @@ export interface Product {
 
 export interface ProductFiltersState {
   search: string;
+  searchScope?: ProductSearchScope;
   category: string;
   subcategory: string;
   supplier: string;
+  saleMode?: "all" | "unit" | "weight" | "";
+}
+
+export type ProductSortField =
+  | "nombre"
+  | "categoria"
+  | "subcategoria"
+  | "precioFinal"
+  | "stock"
+  | "trackStock";
+
+export type ProductSortDirection = "asc" | "desc";
+
+export interface ProductSortState {
+  field: ProductSortField;
+  direction: ProductSortDirection;
 }
 
 export interface ProductAuditEntry {
@@ -38,7 +56,8 @@ export interface ProductAuditEntry {
 }
 
 export interface ProductFormModalValues extends ProductFormValues {
-  favorito: boolean;
+  favorito?: boolean;
+  trackStock: boolean;
   estadoActivo: boolean;
   imagenFile?: File | null;
   imagenEliminada?: boolean;
@@ -63,4 +82,5 @@ export interface ProductViewModel {
   stock: number;
   favorito: boolean;
   activo: boolean;
+  trackStock: boolean;
 }

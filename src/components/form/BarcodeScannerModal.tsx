@@ -1,4 +1,6 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 
 interface BarcodeScannerModalProps {
   open: boolean;
@@ -33,6 +35,7 @@ export const BarcodeScannerModal = ({
   onDetected,
   onClose,
 }: BarcodeScannerModalProps) => {
+  useBodyScrollLock(open);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<number | null>(null);
@@ -44,6 +47,19 @@ export const BarcodeScannerModal = ({
   const detectorCtor = useMemo(() => getBarcodeDetectorCtor(), []);
   const detectorSupported = Boolean(detectorCtor);
 
+  const onDetectedRef = useRef(onDetected);
+  useEffect(() => {
+    onDetectedRef.current = onDetected;
+  }, [onDetected]);
+
+  useEffect(() => {
+    if (open && typeof document !== "undefined") {
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+    }
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -51,7 +67,7 @@ export const BarcodeScannerModal = ({
 
     const clearTimer = () => {
       if (timerRef.current != null) {
-        window.clearInterval(timerRef.current);
+        window.clearTimeout(timerRef.current);
         timerRef.current = null;
       }
     };
@@ -82,6 +98,8 @@ export const BarcodeScannerModal = ({
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "environment" },
+            width: { ideal: 1280, max: 1920 },
+            height: { ideal: 720, max: 1080 },
           },
           audio: false,
         });
@@ -106,24 +124,38 @@ export const BarcodeScannerModal = ({
 
         const detector = new detectorCtor();
 
-        timerRef.current = window.setInterval(async () => {
+        // Escaneo secuencial sin solapamiento de frames (previene parpadeo, caídas de FPS y sobrecalentamiento)
+        const scanFrame = async () => {
           if (!active) return;
           if (!videoRef.current) return;
-          if (videoRef.current.readyState < 2) return;
+          if (videoRef.current.readyState < 2) {
+            timerRef.current = window.setTimeout(scanFrame, 200);
+            return;
+          }
 
           try {
             const results = await detector.detect(videoRef.current as unknown as ImageBitmapSource);
             const raw = results.find((result) => result.rawValue)?.rawValue;
             const normalized = raw ? normalizeBarcode(raw) : "";
 
-            if (!normalized) return;
-
-            stopAll();
-            onDetected(normalized);
+            if (normalized) {
+              stopAll();
+              if (document.activeElement instanceof HTMLElement) {
+                document.activeElement.blur();
+              }
+              onDetectedRef.current(normalized);
+              return;
+            }
           } catch {
-            // Ignorar errores transitorios de detección por frame.
+            // Ignorar errores transitorios de detección por frame
           }
-        }, 320);
+
+          if (active) {
+            timerRef.current = window.setTimeout(scanFrame, 250);
+          }
+        };
+
+        timerRef.current = window.setTimeout(scanFrame, 200);
       } catch {
         setError("No se pudo acceder a la cámara. Verificá permisos.");
       } finally {
@@ -137,7 +169,7 @@ export const BarcodeScannerModal = ({
       active = false;
       stopAll();
     };
-  }, [detectorCtor, onDetected, open]);
+  }, [detectorCtor, open]);
 
   if (!open) return null;
 
@@ -149,9 +181,7 @@ export const BarcodeScannerModal = ({
             <h3 className="text-base font-semibold text-slate-900">{title}</h3>
             <p className="text-xs text-slate-500">{description}</p>
           </div>
-          <button type="button" className="ui-btn-ghost" onClick={onClose}>
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar escáner" onClick={onClose} />
         </div>
 
         <div className="space-y-3">
@@ -173,6 +203,13 @@ export const BarcodeScannerModal = ({
             </label>
             <div className="flex items-center gap-2">
               <input
+                type="text"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-lpignore="true"
+                data-form-type="other"
                 className="ui-input"
                 value={manualBarcode}
                 onChange={(event) => setManualBarcode(event.target.value)}

@@ -1,6 +1,7 @@
-﻿export const storageKeys = {
+export const storageKeys = {
   auth: "pos-v2-auth",
   ui: "pos-v2-ui",
+  productsCatalog: "pos-v2-products-catalog",
   pendingSales: "pos-v2-pending-sales",
   pendingCashMovements: "pos-v2-pending-cash-movements",
   offlineSyncMeta: "pos-v2-offline-sync-meta",

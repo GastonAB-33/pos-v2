@@ -28,6 +28,15 @@ export const dbTables = {
   stock_movements: "stock_movements",
   cash_sessions: "cash_sessions",
   cash_movements: "cash_movements",
+  general_cash_movements: "general_cash_movements",
+  supplier_current_account_movements: "supplier_current_account_movements",
+  bank_account_movements: "bank_account_movements",
+
+  // Empleados, Asistencia, Cuenta Corriente y Pagos de Sueldo
+  employees: "employees",
+  employee_attendance: "employee_attendance",
+  employee_current_account_movements: "employee_current_account_movements",
+  employee_salary_payments: "employee_salary_payments",
 
   // Preparado para evolucion futura de ventas/pagos.
   sale_payments: "sale_payments",
@@ -63,6 +72,13 @@ export const tenantScopedTables = [
   dbTables.stock_movements,
   dbTables.cash_sessions,
   dbTables.cash_movements,
+  dbTables.general_cash_movements,
+  dbTables.supplier_current_account_movements,
+  dbTables.bank_account_movements,
+  dbTables.employees,
+  dbTables.employee_attendance,
+  dbTables.employee_current_account_movements,
+  dbTables.employee_salary_payments,
   dbTables.sale_payments,
 ] as const;
 
@@ -75,7 +91,7 @@ export const tableDefinitions: Record<DbTableName, readonly string[]> = {
   products: ["id", "tenant_id", "code", "name", "image_url", "brand", "supplier", "description", "price", "cost_price", "stock_current", "stock_min", "stock_max", "category", "subcategory", "sale_mode", "currency_code", "price_without_vat", "vat_percent", "profit_percent", "is_favorite", "is_active", "created_at", "updated_at"],
   product_barcodes: ["id", "tenant_id", "product_id", "barcode", "is_primary", "created_at", "updated_at"],
   customers: ["id", "tenant_id", "code", "full_name", "document_type", "document_number", "fiscal_business_name", "fiscal_address", "fiscal_condition", "price_list_id", "email", "phone", "address", "observations", "current_balance", "current_account_enabled", "current_account_limit", "current_account_pricing_mode", "current_account_surcharge_percent", "current_account_surcharge_amount", "current_account_pricing_updated_at", "is_active", "created_at", "updated_at"],
-  suppliers: ["id", "tenant_id", "code", "name", "phone", "email", "address", "observations", "is_active", "created_at", "updated_at"],
+  suppliers: ["id", "tenant_id", "code", "name", "phone", "email", "address", "observations", "current_balance", "is_active", "created_at", "updated_at"],
   payment_methods: ["id", "tenant_id", "name", "code", "type", "is_active", "affects_cash", "surcharge_percent", "discount_percent", "notes", "created_at", "updated_at"],
   bank_accounts: ["id", "tenant_id", "bank_name", "account_type", "holder_name", "cbu", "alias", "currency_code", "notes", "is_active", "created_at", "updated_at"],
   origin_banks: ["id", "tenant_id", "code", "name", "is_active", "created_at", "updated_at"],
@@ -85,8 +101,8 @@ export const tableDefinitions: Record<DbTableName, readonly string[]> = {
   promotions: ["id", "tenant_id", "name", "code", "description", "type", "scope", "product_id", "min_quantity", "discount_percent", "discount_amount", "combo_price", "starts_at", "ends_at", "is_active", "created_at", "updated_at"],
   promotion_items: ["id", "tenant_id", "promotion_id", "product_id", "quantity", "created_at", "updated_at"],
   promotion_barcodes: ["id", "tenant_id", "promotion_id", "barcode", "is_primary", "created_at", "updated_at"],
-  purchases: ["id", "tenant_id", "supplier_id", "purchase_number", "status", "subtotal", "total", "notes", "created_by", "created_at", "updated_at"],
-  purchase_items: ["id", "tenant_id", "purchase_id", "product_id", "product_name_snapshot", "quantity", "unit_cost", "line_total", "created_at", "updated_at"],
+  purchases: ["id", "tenant_id", "supplier_id", "purchase_number", "document_type", "document_number", "issue_date", "payment_method", "status", "subtotal", "vat_total", "total", "returned_total", "notes", "created_by", "created_at", "updated_at"],
+  purchase_items: ["id", "tenant_id", "purchase_id", "product_id", "product_name_snapshot", "quantity", "unit_cost", "vat_percent", "vat_amount", "bonified_quantity", "returned_quantity", "line_total", "created_at", "updated_at"],
   current_account_movements: ["id", "tenant_id", "customer_id", "sale_id", "type", "amount", "balance_after", "notes", "created_by", "created_at", "updated_at"],
   sales: ["id", "tenant_id", "sale_number", "customer_id", "cash_session_id", "status", "subtotal", "discount_total", "tax_total", "total", "currency_code", "notes", "current_account_id", "arca_document_id", "mercado_pago_preference_id", "created_at", "updated_at"],
   sale_items: ["id", "tenant_id", "sale_id", "product_id", "product_name_snapshot", "quantity", "unit_price", "discount_total", "tax_total", "line_total", "metadata", "created_at", "updated_at"],
@@ -98,5 +114,12 @@ export const tableDefinitions: Record<DbTableName, readonly string[]> = {
   stock_movements: ["id", "tenant_id", "product_id", "movement_type", "quantity", "reference_type", "reference_id", "notes", "created_by", "created_at", "updated_at"],
   cash_sessions: ["id", "tenant_id", "branch_id", "opened_by_user_id", "closed_by_user_id", "status", "opened_at", "closed_at", "opening_amount", "closing_amount", "expected_closing_amount", "closing_difference", "notes", "created_at", "updated_at"],
   cash_movements: ["id", "tenant_id", "cash_session_id", "movement_type", "amount", "currency_code", "reference_type", "reference_id", "notes", "created_by", "created_at", "updated_at"],
+  general_cash_movements: ["id", "tenant_id", "type", "amount", "origin_type", "concept", "balance_after", "reference_id", "notes", "created_by", "created_at", "updated_at"],
+  supplier_current_account_movements: ["id", "tenant_id", "supplier_id", "purchase_id", "type", "amount", "balance_after", "payment_method_code", "notes", "created_by", "created_at", "updated_at"],
+  bank_account_movements: ["id", "tenant_id", "bank_account_id", "type", "origin_type", "concept", "amount", "balance_after", "reference_id", "voucher_number", "notes", "created_by", "created_at", "updated_at"],
+  employees: ["id", "tenant_id", "code", "full_name", "document_type", "document_number", "phone", "email", "address", "position", "base_salary", "hourly_rate", "hire_date", "current_balance", "current_account_enabled", "current_account_limit", "discount_percent", "observations", "is_active", "created_at", "updated_at"],
+  employee_attendance: ["id", "tenant_id", "employee_id", "date", "check_in", "check_out", "total_hours", "status", "notes", "created_by", "created_at", "updated_at"],
+  employee_current_account_movements: ["id", "tenant_id", "employee_id", "sale_id", "type", "amount", "balance_after", "category", "notes", "created_by", "created_at", "updated_at"],
+  employee_salary_payments: ["id", "tenant_id", "employee_id", "period", "gross_amount", "deductions_amount", "current_account_discount_applied", "bonuses_amount", "net_amount_paid", "payment_method_code", "payment_date", "notes", "created_by", "payment_type", "advances_discount_applied", "created_at", "updated_at"],
   sale_payments: ["id", "tenant_id", "sale_id", "payment_method_code", "provider", "provider_code", "amount", "currency_code", "status", "provider_status", "provider_reference", "provider_metadata", "external_reference", "metadata", "created_at", "updated_at"],
 };

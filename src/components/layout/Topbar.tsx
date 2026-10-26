@@ -1,42 +1,28 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Banknote, Bell, CircleEllipsis, LifeBuoy, Menu, Moon, MoonStar, Newspaper, RefreshCw, Search, Sun, UserRound } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/useToast";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { env } from "@/config/env";
 import { routePaths } from "@/config/routes";
 import { useAuthStore } from "@/features/auth/store/auth.store";
+import { publicChangelogEntries } from "@/features/changelog/public-changelog";
 import { useOffline } from "@/features/offline/hooks/useOffline";
 import { usePwa } from "@/features/pwa/hooks/usePwa";
-import { supportCenterStorage, type SupportTicket } from "@/features/support/support-center.storage";
-import { isSupportOperator } from "@/features/support/support-operator";
+import { SupportReportModal } from "@/features/support/components/SupportReportModal";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
+import { QuickPriceGlobalModal } from "@/modules/productos/components/QuickPriceGlobalModal";
 import { authService } from "@/services/auth.service";
 import { productsService } from "@/services/products.service";
 import { usersService } from "@/services/users.service";
 import { useUiStore } from "@/store/ui.store";
 import type { Product, UserRecord } from "@/types/entities";
 import { storageKeys } from "@/utils/local-storage";
+import { cn } from "@/utils/cn";
+import { isStockTrackingEnabled } from "@/utils/stock-tracking";
 
-type TopbarPanel = "support" | "tasks" | "chat" | "notifications" | "user" | null;
-type SupportType = "sugerencia" | "falla";
+type TopbarPanel = "support" | "tasks" | "chat" | "notifications" | "user" | "more" | "changelog" | null;
 type TaskStatus = "pendiente" | "completada";
-
-interface SupportOutboxItem {
-  id: string;
-  ticketId: string;
-  tenantId: string;
-  tenantName: string;
-  createdAt: string;
-  type: SupportType;
-  subject: string;
-  message: string;
-  status: "sent" | "queued";
-  user: {
-    id: string;
-    fullName: string;
-    email: string | null;
-    username: string | null;
-  };
-}
 
 interface TaskItem {
   id: string;
@@ -77,7 +63,8 @@ const routeLabels: Array<{ path: string; label: string }> = [
   { path: routePaths.promociones, label: "Promociones" },
   { path: routePaths.compras, label: "Compras a proveedores" },
   { path: routePaths.caja, label: "Caja" },
-  { path: routePaths.cuentasCorrientes, label: "Cuentas corrientes" },
+  { path: routePaths.cuentasCorrientes, label: "Cta. cte. clientes" },
+  { path: routePaths.cuentasCorrientesProveedores, label: "Cta. cte. proveedores" },
   { path: routePaths.comprobantes, label: "Comprobantes" },
   { path: routePaths.mediosPago, label: "Medios de pago" },
   { path: routePaths.facturacion, label: "Facturacion" },
@@ -86,7 +73,7 @@ const routeLabels: Array<{ path: string; label: string }> = [
   { path: routePaths.usuarios, label: "Usuarios" },
   { path: routePaths.configuracion, label: "Configuracion" },
   { path: routePaths.configuracionAgenda, label: "Config. Agenda" },
-  { path: routePaths.configuracionCatalogo, label: "Config. Catalogo" },
+  { path: routePaths.configuracionCatalogo, label: "Config. Inventario" },
   { path: routePaths.configuracionAnalisis, label: "Config. Analisis" },
   { path: routePaths.configuracionSistema, label: "Config. Sistema" },
   { path: routePaths.altaComercio, label: "Alta de comercio" },
@@ -175,21 +162,24 @@ export const Topbar = () => {
   } = useOffline();
   const { canInstall, isInstalling, isInstalled, installApp, isInstallSupported } = usePwa();
   const theme = useUiStore((state) => state.theme);
-  const toggleTheme = useUiStore((state) => state.toggleTheme);
+  const posCashChangeEnabled = useUiStore((state) => state.posCashChangeEnabled);
+  const setPosCashChangeEnabled = useUiStore((state) => state.setPosCashChangeEnabled);
+  const setTheme = useUiStore((state) => state.setTheme);
+  const cycleTheme = useUiStore((state) => state.cycleTheme);
+  const sidebarTheme = useUiStore((state) => state.sidebarTheme);
+  const setSidebarTheme = useUiStore((state) => state.setSidebarTheme);
+  const toggleSidebar = useUiStore((state) => state.toggleSidebar);
 
   const [now, setNow] = useState(() => new Date());
   const [activePanel, setActivePanel] = useState<TopbarPanel>(null);
+  const [isSupportReportModalOpen, setIsSupportReportModalOpen] = useState(false);
+  useBodyScrollLock(Boolean(activePanel));
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [presenceMap, setPresenceMap] = useState<PresenceMap>({});
-  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
-
-  const [supportType, setSupportType] = useState<SupportType>("sugerencia");
-  const [supportSubject, setSupportSubject] = useState("");
-  const [supportMessage, setSupportMessage] = useState("");
-  const [isSendingSupport, setIsSendingSupport] = useState(false);
+  const [isQuickPriceModalOpen, setIsQuickPriceModalOpen] = useState(false);
 
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
@@ -227,27 +217,14 @@ export const Topbar = () => {
         ? "ui-badge ui-badge--success"
         : "ui-badge ui-badge--danger";
 
-  const tenantName = tenant?.tradeName ?? tenantId ?? "Sin tenant";
+  const tenantName = tenant?.tradeName ?? "Sin comercio";
   const currentUserId = user?.id ?? "";
-  const isSupportProfile = isSupportOperator(user);
   const currentUserLabel = getDisplayName({
     fullName: user?.fullName,
     username: user?.username,
     email: user?.email,
     fallback: "Invitado",
   });
-  const supportWhatsappUrl = useMemo(() => {
-    if (!env.supportWhatsappPhone) return "";
-
-    const message = [
-      "Hola, necesito soporte para el sistema POS.",
-      `Comercio: ${tenantName}`,
-      `Usuario: ${currentUserLabel}`,
-      `Modulo actual: ${currentTitle}`,
-    ].join("\n");
-
-    return `https://wa.me/${env.supportWhatsappPhone}?text=${encodeURIComponent(message)}`;
-  }, [currentTitle, currentUserLabel, tenantName]);
 
   const usersForAssignments = useMemo(() => {
     const deduped = new Map<string, UserRecord>();
@@ -292,22 +269,7 @@ export const Topbar = () => {
     ).length;
   }, [chatMessages, currentUserId]);
 
-  const openSupportTickets = useMemo(
-    () =>
-      supportTickets.filter(
-        (ticket) => ticket.requesterUserId === currentUserId && ticket.status !== "cerrada"
-      ),
-    [currentUserId, supportTickets]
-  );
-  const supportInboxCount = useMemo(
-    () => supportTickets.filter((ticket) => ticket.status !== "cerrada").length,
-    [supportTickets]
-  );
-  const unreadSupportCount = useMemo(
-    () => (tenantId && currentUserId ? supportCenterStorage.getUnreadCountForUser(tenantId, currentUserId) : 0),
-    [activePanel, currentUserId, supportTickets, tenantId]
-  );
-  const notificationCount = lowStockProducts.length + openSupportTickets.length;
+  const notificationCount = lowStockProducts.length;
 
   const chatRecipient = useMemo(
     () => usersForAssignments.find((item) => item.id === chatRecipientId) ?? null,
@@ -331,7 +293,6 @@ export const Topbar = () => {
       setTasks([]);
       setChatMessages([]);
       setPresenceMap({});
-      setSupportTickets([]);
       return;
     }
 
@@ -343,7 +304,6 @@ export const Topbar = () => {
     setTasks(taskRows.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     setChatMessages(messageRows);
     setPresenceMap(readPresenceMap());
-    setSupportTickets(supportCenterStorage.getByTenant(tenantId));
   }, [tenantId]);
 
   useEffect(() => {
@@ -395,7 +355,7 @@ export const Topbar = () => {
         const products = await productsService.getAllByTenant(tenantId);
         if (!active) return;
         const lowStock = products
-          .filter((product) => product.is_active)
+          .filter((product) => product.is_active && isStockTrackingEnabled(product.description))
           .filter((product) => {
             if (typeof product.stock_min === "number") {
               return product.stock_current <= product.stock_min;
@@ -430,9 +390,7 @@ export const Topbar = () => {
       if (
         event.key === storageKeys.topbarTasks ||
         event.key === storageKeys.topbarChatMessages ||
-        event.key === storageKeys.topbarPresence ||
-        event.key === storageKeys.supportTickets ||
-        event.key === storageKeys.supportSeenByUser
+        event.key === storageKeys.topbarPresence
       ) {
         refreshTenantStreams();
       }
@@ -493,118 +451,6 @@ export const Topbar = () => {
 
   const togglePanel = (panel: TopbarPanel) => {
     setActivePanel((prev) => (prev === panel ? null : panel));
-
-    if (panel === "notifications" && tenantId && currentUserId) {
-      supportCenterStorage.markSeenForUser(tenantId, currentUserId);
-    }
-  };
-
-  const submitSupport = async () => {
-    if (!user || !tenantId) {
-      toast.error("Debes iniciar sesion para enviar soporte");
-      return;
-    }
-
-    const subject = supportSubject.trim();
-    const message = supportMessage.trim();
-
-    if (!subject || !message) {
-      toast.error("Completa asunto y detalle para enviar soporte");
-      return;
-    }
-
-    const ticket = supportCenterStorage.createTicket({
-      tenantId,
-      type: supportType,
-      subject,
-      body: message,
-      requesterUserId: user.id,
-      requesterLabel: user.fullName,
-      requesterEmail: user.email,
-    });
-
-    const baseRecord: SupportOutboxItem = {
-      id: crypto.randomUUID(),
-      ticketId: ticket.id,
-      tenantId,
-      tenantName,
-      createdAt: new Date().toISOString(),
-      type: supportType,
-      subject,
-      message,
-      status: "queued",
-      user: {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        username: user.username,
-      },
-    };
-
-    setIsSendingSupport(true);
-
-    const payload = {
-      category: supportType,
-      subject,
-      message,
-      tenant: {
-        id: tenantId,
-        name: tenantName,
-      },
-      ticket: {
-        id: ticket.id,
-      },
-      context: {
-        createdAt: baseRecord.createdAt,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        locale: "es-AR",
-      },
-      requester: {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        username: user.username,
-        responseEmail: user.email,
-      },
-    };
-
-    let status: "sent" | "queued" = "queued";
-
-    try {
-      const supportUrl = env.apiUrl ? `${env.apiUrl.replace(/\/$/, "")}/support/requests` : "";
-      if (!supportUrl) {
-        throw new Error("missing-api-url");
-      }
-
-      const response = await fetch(supportUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error(`support-http-${response.status}`);
-      }
-
-      status = "sent";
-      toast.success("Soporte enviado correctamente");
-    } catch {
-      toast.info("Solicitud guardada en cola local. Se enviara al conectar backend de soporte.");
-    } finally {
-      const outbox = readStorageArray<SupportOutboxItem>(storageKeys.topbarSupportOutbox);
-      outbox.unshift({
-        ...baseRecord,
-        status,
-      });
-      writeStorageArray(storageKeys.topbarSupportOutbox, outbox.slice(0, 200));
-      setSupportSubject("");
-      setSupportMessage("");
-      setIsSendingSupport(false);
-      setActivePanel(null);
-      refreshTenantStreams();
-    }
   };
 
   const createTask = () => {
@@ -731,119 +577,217 @@ export const Topbar = () => {
 
   return (
     <header className="app-topbar relative">
-      <div>
-        <p className="text-[15px] font-semibold text-slate-900 capitalize">{formattedDate}</p>
-        <p className="text-xs text-slate-500">{currentTitle} · Tenant: {tenantName}</p>
-        {lastSyncMessage ? (
-          <p className={`text-[11px] ${lastSyncError ? "text-red-600" : "text-slate-500"}`}>{lastSyncMessage}</p>
-        ) : null}
-      </div>
-
-      <div className="flex items-center gap-2 md:gap-3">
-        {supportWhatsappUrl ? (
-          <a
-            className="ui-btn-primary text-xs"
-            href={supportWhatsappUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            WhatsApp soporte
-          </a>
-        ) : null}
-
-        <button type="button" className="ui-btn-ghost text-xs" onClick={() => togglePanel("support")}>
-          Soporte
+      <div className="flex min-w-0 items-center gap-3">
+        <button
+          type="button"
+          className="app-menu-button ui-btn-ghost"
+          aria-label="Abrir menu"
+          onClick={toggleSidebar}
+        >
+          <Menu aria-hidden="true" size={19} />
         </button>
 
-        <button type="button" className="ui-btn-ghost text-xs" onClick={() => togglePanel("tasks")}>
-          Tareas {pendingTasksCount > 0 ? `(${pendingTasksCount})` : ""}
-        </button>
-
-        <button type="button" className="ui-btn-ghost text-xs" onClick={() => togglePanel("chat")}>
-          Chat {unreadChatCount > 0 ? `(${unreadChatCount})` : ""}
-        </button>
-
-        <button type="button" className="ui-btn-ghost text-xs" onClick={() => togglePanel("notifications")}>
-          Notificaciones {notificationCount > 0 ? `(${notificationCount})` : ""}
-        </button>
-
-        <button type="button" className="ui-btn-ghost text-right" onClick={() => togglePanel("user")}>
-          <p className="text-sm font-medium text-slate-900">Testing user</p>
-          <p className="text-xs text-slate-500">{user?.email ?? "sin-sesion@local"}</p>
-        </button>
-      </div>
-
-      {activePanel === "support" ? (
-        <div className="ui-card absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[460px] space-y-3">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Soporte</p>
-            <p className="text-xs text-slate-500">
-              Envia sugerencias o reportes de fallas con contexto automatico de tenant, usuario y horario.
-            </p>
-          </div>
-
-          {supportWhatsappUrl ? (
-            <a
-              className="ui-btn-primary justify-center text-xs"
-              href={supportWhatsappUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Contactar por WhatsApp
-            </a>
+        <div className="min-w-0">
+          <p className="truncate text-[15px] font-semibold text-slate-900 capitalize">{formattedDate}</p>
+          <p className="truncate text-xs text-slate-500">{currentTitle} · {tenantName}</p>
+          {lastSyncMessage ? (
+            <p className={`truncate text-[11px] ${lastSyncError ? "text-red-600" : "text-slate-500"}`}>{lastSyncMessage}</p>
           ) : null}
+        </div>
+      </div>
+      <div className="app-topbar-actions flex items-center gap-1 md:gap-2">
+        <button
+          type="button"
+          className="ui-btn-ghost gap-1.5 px-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
+          onClick={() => {
+            setActivePanel(null);
+            setIsSupportReportModalOpen(true);
+          }}
+          title="Soporte y reporte de problemas"
+        >
+          <LifeBuoy aria-hidden="true" size={16} />
+          <span className="hidden sm:inline">Soporte</span>
+        </button>
 
-          <label className="block text-xs text-slate-500" htmlFor="support-type">
-            Tipo
-          </label>
-          <select
-            id="support-type"
-            className="ui-input"
-            value={supportType}
-            onChange={(event) => setSupportType(event.target.value as SupportType)}
-          >
-            <option value="sugerencia">Sugerencia</option>
-            <option value="falla">Reporte de falla</option>
-          </select>
+        <button
+          type="button"
+          className="ui-btn-ghost gap-1.5 px-2 text-xs font-semibold text-slate-700 hover:text-brand-600 dark:text-slate-200 dark:hover:text-brand-400"
+          title="Consulta rápida de precios y stock (escanear o buscar)"
+          onClick={(e) => {
+            e.stopPropagation();
+            setActivePanel(null);
+            setIsQuickPriceModalOpen(true);
+          }}
+        >
+          <Search aria-hidden="true" size={15} className="text-brand-600 dark:text-brand-400" />
+          <span className="hidden sm:inline">Consulta</span>
+          <span className="sm:hidden font-bold text-[11px]">Consultar</span>
+        </button>
 
-          <label className="block text-xs text-slate-500" htmlFor="support-subject">
-            Asunto
-          </label>
-          <input
-            id="support-subject"
-            className="ui-input"
-            value={supportSubject}
-            onChange={(event) => setSupportSubject(event.target.value)}
-            placeholder="Resumen corto"
-          />
+        <button
+          type="button"
+          className="ui-btn-ghost gap-1.5 px-2 text-xs font-semibold"
+          title={`Tema: ${theme === "midnight" ? "Azul Oscuro (Intermedio)" : theme === "dark" ? "Oscuro" : "Claro"}. Clic para cambiar.`}
+          onClick={(e) => {
+            e.stopPropagation();
+            cycleTheme();
+          }}
+        >
+          {theme === "midnight" ? (
+            <MoonStar aria-hidden="true" size={15} className="text-indigo-400" />
+          ) : theme === "dark" ? (
+            <Moon aria-hidden="true" size={15} className="text-amber-300" />
+          ) : (
+            <Sun aria-hidden="true" size={15} className="text-amber-500" />
+          )}
+          <span className="hidden sm:inline">
+            {theme === "midnight" ? "Azul" : theme === "dark" ? "Oscuro" : "Claro"}
+          </span>
+        </button>
 
-          <label className="block text-xs text-slate-500" htmlFor="support-message">
-            Detalle
-          </label>
-          <textarea
-            id="support-message"
-            className="ui-input min-h-28"
-            value={supportMessage}
-            onChange={(event) => setSupportMessage(event.target.value)}
-            placeholder="Describe la sugerencia o la falla"
-          />
+        <button
+          type="button"
+          className="ui-btn-ghost relative gap-1 px-2 text-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePanel("notifications");
+          }}
+          title="Alertas"
+        >
+          <Bell aria-hidden="true" size={15} />
+          <span className="hidden sm:inline">Alertas</span>
+          {notificationCount > 0 ? (
+            <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700 dark:bg-red-950 dark:text-red-300">
+              {notificationCount}
+            </span>
+          ) : null}
+        </button>
 
-          <div className="flex justify-end gap-2">
-            <button type="button" className="ui-btn-ghost" onClick={() => setActivePanel(null)}>
-              Cerrar
-            </button>
-            <button type="button" className="ui-btn-primary" onClick={() => void submitSupport()} disabled={isSendingSupport}>
-              {isSendingSupport ? "Enviando..." : "Enviar"}
-            </button>
-          </div>
+        <button
+          type="button"
+          className="ui-btn-ghost relative gap-1 px-2 text-xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePanel("more");
+          }}
+          title="Más herramientas"
+        >
+          <CircleEllipsis aria-hidden="true" size={16} />
+          <span className="hidden sm:inline">Mas</span>
+          {pendingTasksCount + unreadChatCount > 0 ? (
+            <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+              {pendingTasksCount + unreadChatCount}
+            </span>
+          ) : null}
+        </button>
+        <button
+          type="button"
+          className="ui-btn-ghost app-topbar-user gap-2 px-2 text-right"
+          aria-label={`Opciones de ${currentUserLabel}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePanel("user");
+          }}
+          title={currentUserLabel}
+        >
+          <UserRound aria-hidden="true" size={16} />
+          <span className="hidden min-w-0 md:block">
+            <span className="block truncate text-sm font-medium text-slate-900">{currentUserLabel}</span>
+            <span className="block truncate text-xs text-slate-500">{user?.email ?? "sin-sesion@local"}</span>
+          </span>
+        </button>
+      </div>
+
+      {activePanel ? (
+        <div
+          className="fixed inset-0 z-40 bg-black/25 backdrop-blur-[0.5px]"
+          onClick={() => setActivePanel(null)}
+          aria-hidden="true"
+        />
+      ) : null}
+
+      {activePanel === "more" ? (
+        <div
+          className="ui-card app-topbar-popover fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[280px] space-y-2 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="ui-section-label">Herramientas</p>
+          <button type="button" className="ui-popover-action" onClick={() => togglePanel("tasks")}>
+            <span>Tareas del equipo</span>
+            {pendingTasksCount > 0 ? <span className="ui-badge ui-badge--warn">{pendingTasksCount}</span> : null}
+          </button>
+          <button type="button" className="ui-popover-action" onClick={() => togglePanel("chat")}>
+            <span>Chat interno</span>
+            {unreadChatCount > 0 ? <span className="ui-badge ui-badge--info">{unreadChatCount}</span> : null}
+          </button>
+          <button type="button" className="ui-popover-action" onClick={() => togglePanel("changelog")}>
+            <span className="inline-flex items-center gap-2">
+              <Newspaper aria-hidden="true" size={15} />
+              Novedades del sistema
+            </span>
+          </button>
         </div>
       ) : null}
 
+      {activePanel === "changelog" ? (
+        <div
+          className="ui-card app-topbar-popover fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[460px] space-y-3 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="ui-section-label">Actualizaciones</p>
+              <h2 className="mt-1 text-base font-semibold text-slate-900">Novedades del sistema</h2>
+            </div>
+            <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => setActivePanel(null)}>
+              Cerrar
+            </button>
+          </div>
+
+          {publicChangelogEntries.length ? (
+            <div className="max-h-[420px] space-y-3 overflow-auto pr-1">
+              {publicChangelogEntries.map((entry) => (
+                <article key={entry.version} className="rounded-lg border border-slate-200 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-semibold text-slate-900">{entry.title}</h3>
+                    <span className="ui-badge ui-badge--info">v{entry.version}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Realizada el {new Date(entry.developedAt).toLocaleDateString("es-AR")}
+                    {entry.publishedAt
+                      ? ` | Publicada el ${new Date(entry.publishedAt).toLocaleDateString("es-AR")}`
+                      : ""}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-700">{entry.summary}</p>
+                  <ul className="mt-2 space-y-1 text-sm text-slate-600">
+                    {entry.changes.map((change) => (
+                      <li key={change}>• {change}</li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="ui-empty-state">Todavia no hay actualizaciones publicadas.</div>
+          )}
+        </div>
+      ) : null}
+
+
+
       {activePanel === "tasks" ? (
-        <div className="ui-card absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[560px] space-y-3">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Tareas del equipo</p>
-            <p className="text-xs text-slate-500">Crea tareas y delegalas entre usuarios del tenant.</p>
+        <div
+          className="ui-card fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[560px] space-y-3 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Tareas del equipo</p>
+              <p className="text-xs text-slate-500">Crea tareas y delégalas entre usuarios del comercio.</p>
+            </div>
+            <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => setActivePanel(null)}>
+              Cerrar
+            </button>
           </div>
 
           <div className="grid gap-2 md:grid-cols-2">
@@ -909,10 +853,18 @@ export const Topbar = () => {
       ) : null}
 
       {activePanel === "chat" ? (
-        <div className="ui-card absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[620px] space-y-3">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Chat interno</p>
-            <p className="text-xs text-slate-500">Comunicate con usuarios del sistema y revisa lectura/conexion.</p>
+        <div
+          className="ui-card fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[620px] space-y-3 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Chat interno</p>
+              <p className="text-xs text-slate-500">Comunicate con usuarios del sistema y revisa lectura/conexion.</p>
+            </div>
+            <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => setActivePanel(null)}>
+              Cerrar
+            </button>
           </div>
 
           <select
@@ -987,117 +939,79 @@ export const Topbar = () => {
       ) : null}
 
       {activePanel === "notifications" ? (
-        <div className="ui-card absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[460px] space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-slate-900">Notificaciones</p>
-            <span className="ui-badge ui-badge--info">Total: {notificationCount}</span>
+        <div
+          className="ui-card fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[420px] space-y-3 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-2.5">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100">Alertas de Stock</p>
+              <span className="ui-badge ui-badge--warn font-mono font-bold">{lowStockProducts.length}</span>
+            </div>
+            <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => setActivePanel(null)}>
+              Cerrar
+            </button>
           </div>
 
-          <section className="space-y-2 rounded-lg border border-slate-200 p-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-900">Alertas de stock</p>
-              <span className="ui-badge ui-badge--warn">{lowStockProducts.length}</span>
-            </div>
-
+          <section className="space-y-2.5">
             {lowStockProducts.length === 0 ? (
-              <p className="text-xs text-slate-500">Sin alertas de stock por el momento.</p>
+              <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 p-4 text-center">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Sin alertas de stock. Todos los productos tienen stock suficiente.
+                </p>
+              </div>
             ) : (
-              <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
+              <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
                 {lowStockProducts.map((product) => (
-                  <div key={product.id} className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs">
-                    <p className="font-semibold text-slate-900">{product.name}</p>
-                    <p className="text-slate-700">
-                      Stock: {product.stock_current}
-                      {typeof product.stock_min === "number" ? ` · Minimo: ${product.stock_min}` : ""}
-                    </p>
+                  <div
+                    key={product.id}
+                    className="rounded-xl border border-amber-300 dark:border-amber-600/70 bg-amber-50 dark:bg-amber-950/40 p-2.5 text-xs transition"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-bold text-slate-900 dark:text-slate-100 truncate">{product.name}</p>
+                      <span className="font-mono font-black text-rose-600 dark:text-rose-400 shrink-0">
+                        Stock: {product.stock_current}
+                      </span>
+                    </div>
+                    {typeof product.stock_min === "number" ? (
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
+                        Mínimo sugerido: {product.stock_min}
+                      </p>
+                    ) : null}
                   </div>
                 ))}
               </div>
             )}
 
-            <div className="flex justify-end">
+            <div className="flex justify-end pt-1">
               <button
                 type="button"
-                className="ui-btn-ghost text-xs"
+                className="ui-btn-primary text-xs"
                 onClick={() => {
                   navigate(routePaths.stock);
                   setActivePanel(null);
                 }}
               >
-                Ver modulo Stock
+                Ver módulo Stock
               </button>
             </div>
           </section>
-
-          <section className="space-y-2 rounded-lg border border-slate-200 p-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-900">Consultas abiertas</p>
-              <span className="ui-badge ui-badge--info">{openSupportTickets.length}</span>
-            </div>
-            {unreadSupportCount > 0 ? (
-              <p className="text-xs text-emerald-700">Tienes {unreadSupportCount} respuesta(s) sin leer en soporte.</p>
-            ) : null}
-
-            {openSupportTickets.length === 0 ? (
-              <p className="text-xs text-slate-500">No tienes consultas abiertas actualmente.</p>
-            ) : (
-              <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
-                {openSupportTickets.map((ticket) => (
-                  <div key={ticket.id} className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
-                    <p className="font-semibold text-slate-900">{ticket.subject}</p>
-                    <p className="text-slate-500">
-                      {ticket.type === "falla" ? "Reporte de falla" : "Sugerencia"} · Estado: {ticket.status}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="flex justify-end">
-              <button
-                type="button"
-                className="ui-btn-primary text-xs"
-                onClick={() => {
-                  navigate(routePaths.misConsultas);
-                  setActivePanel(null);
-                }}
-              >
-                Ir a Mis consultas
-              </button>
-            </div>
-          </section>
-
-          {isSupportProfile ? (
-            <section className="space-y-2 rounded-lg border border-slate-200 p-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-slate-900">Bandeja de soporte</p>
-                <span className="ui-badge ui-badge--warn">{supportInboxCount}</span>
-              </div>
-              <p className="text-xs text-slate-500">
-                Vista global para responder consultas de usuarios desde el sistema.
-              </p>
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  className="ui-btn-primary text-xs"
-                  onClick={() => {
-                    navigate(routePaths.centroSoporte);
-                    setActivePanel(null);
-                  }}
-                >
-                  Ir a Centro soporte
-                </button>
-              </div>
-            </section>
-          ) : null}
         </div>
       ) : null}
 
       {activePanel === "user" ? (
-        <div className="ui-card absolute right-6 top-[calc(100%+8px)] z-40 w-full max-w-[360px] space-y-3">
-          <div>
-            <p className="text-sm font-semibold text-slate-900">{user?.fullName ?? "Invitado"}</p>
-            <p className="text-xs text-slate-500">{user?.email ?? "sin-sesion@local"}</p>
+        <div
+          className="ui-card fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[360px] space-y-3 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">{user?.fullName ?? "Invitado"}</p>
+              <p className="text-xs text-slate-500">{user?.email ?? "sin-sesion@local"}</p>
+            </div>
+            <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => setActivePanel(null)}>
+              Cerrar
+            </button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -1116,6 +1030,7 @@ export const Topbar = () => {
               className="ui-btn-ghost text-xs"
               disabled={!isOnline || isSyncing || totalPendingCount === 0}
             >
+              <RefreshCw aria-hidden="true" className={isSyncing ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
               {lastSyncError ? "Reintentar sync" : "Sincronizar"}
             </button>
 
@@ -1140,10 +1055,123 @@ export const Topbar = () => {
               </div>
             )}
 
-            <button type="button" onClick={toggleTheme} className="ui-btn-ghost text-xs">
-              {theme === "dark" ? "Modo claro" : "Modo oscuro"}
-            </button>
+          </div>
 
+          <div className="space-y-1.5 border-t border-slate-200/80 pt-2.5 dark:border-slate-800">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Tema del sistema
+            </p>
+            <div className="grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setTheme("light")}
+                className={cn(
+                  "flex items-center justify-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition",
+                  theme === "light"
+                    ? "bg-white text-slate-900 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                )}
+              >
+                <Sun size={13} className="text-amber-500" />
+                Claro
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme("midnight")}
+                className={cn(
+                  "flex items-center justify-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition",
+                  theme === "midnight"
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                )}
+              >
+                <MoonStar size={13} className="text-indigo-400" />
+                Azul
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme("dark")}
+                className={cn(
+                  "flex items-center justify-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition",
+                  theme === "dark"
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                )}
+              >
+                <Moon size={13} className="text-amber-300" />
+                Oscuro
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5 border-t border-slate-200/80 pt-2 dark:border-slate-800">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Menú lateral
+            </p>
+            <div className="grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setSidebarTheme("auto")}
+                className={cn(
+                  "rounded-md px-2 py-1 text-xs font-medium transition text-center",
+                  sidebarTheme === "auto"
+                    ? "bg-white text-slate-900 shadow-xs dark:bg-slate-900 dark:text-white"
+                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                )}
+                title="Sigue el modo claro/oscuro del sistema automáticamente"
+              >
+                Auto
+              </button>
+              <button
+                type="button"
+                onClick={() => setSidebarTheme("dark")}
+                className={cn(
+                  "rounded-md px-2 py-1 text-xs font-medium transition text-center",
+                  sidebarTheme === "dark"
+                    ? "bg-white text-slate-900 shadow-xs dark:bg-slate-900 dark:text-white"
+                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                )}
+                title="Menú lateral siempre oscuro"
+              >
+                Oscuro
+              </button>
+              <button
+                type="button"
+                onClick={() => setSidebarTheme("light")}
+                className={cn(
+                  "rounded-md px-2 py-1 text-xs font-medium transition text-center",
+                  sidebarTheme === "light"
+                    ? "bg-white text-slate-900 shadow-xs dark:bg-slate-900 dark:text-white"
+                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                )}
+                title="Menú lateral siempre claro"
+              >
+                Claro
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5 border-t border-slate-200/80 pt-2 dark:border-slate-800">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Punto de Venta
+            </p>
+            <label className="flex items-center justify-between gap-2 rounded-lg p-1.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+              <div className="flex items-center gap-2 min-w-0">
+                <Banknote size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">
+                  Calcular vuelto en efectivo
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={posCashChangeEnabled}
+                onChange={(e) => setPosCashChangeEnabled(e.target.checked)}
+                className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer shrink-0"
+              />
+            </label>
+          </div>
+
+          <div className="border-t border-slate-200/80 pt-2 dark:border-slate-800">
             <button
               type="button"
               onClick={() => {
@@ -1151,12 +1179,25 @@ export const Topbar = () => {
                 clearSession();
                 navigate(routePaths.login, { replace: true });
               }}
-              className="ui-btn-ghost text-xs"
+              className="ui-btn-ghost w-full justify-center text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700 dark:text-rose-400 dark:hover:bg-rose-950/40"
             >
-              Salir
+              Cerrar sesión
             </button>
           </div>
         </div>
+      ) : null}
+
+      <SupportReportModal
+        isOpen={isSupportReportModalOpen}
+        onClose={() => setIsSupportReportModalOpen(false)}
+        adminWhatsAppNumber={env.supportWhatsappPhone}
+      />
+
+      {isQuickPriceModalOpen ? (
+        <QuickPriceGlobalModal
+          open={isQuickPriceModalOpen}
+          onClose={() => setIsQuickPriceModalOpen(false)}
+        />
       ) : null}
     </header>
   );

@@ -1,10 +1,15 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { VoiceDictationButton } from "@/components/form/VoiceDictationButton";
-import type { Customer, PriceList } from "@/types/entities";
+import { useTenant } from "@/features/tenant/hooks/useTenant";
 import {
-  customerFormSchema,
+  getEditableDocumentNumber,
+  useEntityRequirements,
+} from "@/modules/configuracion/hooks/useEntityRequirements";
+import type { Customer, CustomerRequiredFieldsSettings, PriceList } from "@/types/entities";
+import {
+  buildCustomerFormSchema,
   type CustomerFormValues,
 } from "@/modules/clientes/schemas/customer-form.schema";
 
@@ -15,6 +20,7 @@ interface CustomerFormProps {
   disabled?: boolean;
   onCancel: () => void;
   onSubmit: (values: CustomerFormValues) => Promise<void>;
+  requirements?: CustomerRequiredFieldsSettings;
 }
 
 const defaultValues: CustomerFormValues = {
@@ -33,7 +39,21 @@ const defaultValues: CustomerFormValues = {
   currentAccountLimit: "",
 };
 
-export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, onSubmit }: CustomerFormProps) => {
+export const CustomerForm = ({
+  mode,
+  customer,
+  priceLists,
+  disabled,
+  onCancel,
+  onSubmit,
+  requirements,
+}: CustomerFormProps) => {
+  const { tenantId } = useTenant();
+  const { customerRequirements } = useEntityRequirements(tenantId);
+  const activeReq = requirements ?? customerRequirements;
+
+  const schema = useMemo(() => buildCustomerFormSchema(activeReq), [activeReq]);
+
   const {
     register,
     handleSubmit,
@@ -42,7 +62,7 @@ export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, o
     setValue,
     formState: { errors },
   } = useForm<CustomerFormValues>({
-    resolver: zodResolver(customerFormSchema),
+    resolver: zodResolver(schema),
     defaultValues,
   });
 
@@ -55,7 +75,7 @@ export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, o
     reset({
       fullName: customer.full_name,
       documentType: customer.document_type,
-      documentNumber: customer.document_number,
+      documentNumber: getEditableDocumentNumber(customer.document_number),
       fiscalBusinessName: customer.fiscal_business_name ?? "",
       fiscalAddress: customer.fiscal_address ?? "",
       fiscalCondition: customer.fiscal_condition ?? "",
@@ -76,23 +96,28 @@ export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, o
   const currentAccountEnabled = watch("currentAccountEnabled");
 
   return (
-    <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
+    <form autoComplete="off" className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">Nombre</label>
+        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Nombre</label>
         <input
           {...register("fullName")}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
           disabled={disabled}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          data-lpignore="true"
         />
-        {errors.fullName ? <p className="mt-1 text-xs text-red-600">{errors.fullName.message}</p> : null}
+        {errors.fullName ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.fullName.message}</p> : null}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Tipo doc</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Tipo doc</label>
           <select
             {...register("documentType")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"
             disabled={disabled}
           >
             <option value="dni">DNI</option>
@@ -101,44 +126,66 @@ export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, o
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Documento</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Documento{" "}
+            {activeReq.document_number ? (
+              <span className="text-red-500">*</span>
+            ) : (
+              <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
+            )}
+          </label>
           <input
             {...register("documentNumber")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
             disabled={disabled}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
           />
           {errors.documentNumber ? (
-            <p className="mt-1 text-xs text-red-600">{errors.documentNumber.message}</p>
+            <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.documentNumber.message}</p>
           ) : null}
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Razon social (fiscal)</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Razon social (fiscal)</label>
           <input
             {...register("fiscalBusinessName")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
             disabled={disabled}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Condicion fiscal</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Condicion fiscal</label>
           <input
             {...register("fiscalCondition")}
             placeholder="Consumidor final, Responsable inscripto..."
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
             disabled={disabled}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
           />
         </div>
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">Lista de precios</label>
+        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Lista de precios</label>
         <select
           {...register("priceListId")}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"
           disabled={disabled}
         >
           <option value="">Precio base</option>
@@ -153,46 +200,89 @@ export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, o
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Telefono</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Telefono{" "}
+            {activeReq.phone ? (
+              <span className="text-red-500">*</span>
+            ) : (
+              <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
+            )}
+          </label>
           <input
             {...register("phone")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
             disabled={disabled}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
           />
+          {errors.phone ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.phone.message}</p> : null}
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Email{" "}
+            {activeReq.email ? (
+              <span className="text-red-500">*</span>
+            ) : (
+              <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
+            )}
+          </label>
           <input
             type="email"
             {...register("email")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
             disabled={disabled}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
           />
-          {errors.email ? <p className="mt-1 text-xs text-red-600">{errors.email.message}</p> : null}
+          {errors.email ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.email.message}</p> : null}
         </div>
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">Direccion</label>
+        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+          Direccion{" "}
+          {activeReq.address ? (
+            <span className="text-red-500">*</span>
+          ) : (
+            <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
+          )}
+        </label>
         <input
           {...register("address")}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
           disabled={disabled}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          data-lpignore="true"
         />
+        {errors.address ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.address.message}</p> : null}
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">Domicilio fiscal</label>
+        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Domicilio fiscal</label>
         <input
           {...register("fiscalAddress")}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
           disabled={disabled}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          data-lpignore="true"
         />
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/40">
+        <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
           <input
             type="checkbox"
             {...register("currentAccountEnabled")}
@@ -202,22 +292,25 @@ export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, o
           Habilitar cuenta corriente
         </label>
         <div className="mt-3">
-          <label className="mb-1 block text-sm font-medium text-slate-700">Limite autorizado</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Limite autorizado</label>
           <input
             type="number"
             step="0.01"
             min="0"
             {...register("currentAccountLimit")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
             disabled={disabled || !currentAccountEnabled}
             placeholder="Sin limite si se deja vacio"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
           />
         </div>
       </div>
 
       <div>
         <div className="mb-1 flex items-center justify-between gap-2">
-          <label className="block text-sm font-medium text-slate-700">Observaciones</label>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Observaciones</label>
           <VoiceDictationButton
             value={observationsValue ?? ""}
             onValueChange={(nextValue) =>
@@ -230,17 +323,19 @@ export const CustomerForm = ({ mode, customer, priceLists, disabled, onCancel, o
         </div>
         <textarea
           {...register("observations")}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
           rows={3}
           disabled={disabled}
+          autoComplete="off"
+          spellCheck={false}
         />
       </div>
 
-      <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4">
+      <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           disabled={disabled}
         >
           Cancelar

@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Camera, X } from "lucide-react";
+import { PaginationControls } from "@/components/ui/PaginationControls";
+import { usePagination } from "@/hooks/usePagination";
 import type { Product } from "@/types/entities";
 import { downloadXlsx } from "@/utils/xlsx";
+import {
+  matchesProductSearch,
+  PRODUCT_SEARCH_SCOPE_OPTIONS,
+  getSearchPlaceholder,
+  type ProductSearchScope,
+} from "@/utils/search";
+import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
+import { useProductsStore } from "@/features/products/store/products.store";
 import {
   getStockStatusFromValues,
   stockStatusLabel,
@@ -14,6 +25,9 @@ interface StockTrackingTableProps {
   products: Product[];
   categories: string[];
   disabled?: boolean;
+  statusFilter?: StockStatusFilter;
+  onStatusFilterChange?: (filter: StockStatusFilter) => void;
+  globalLowThreshold?: number;
   onUpdateOne: (productId: string, values: { stockMin: number | null; stockMax: number | null }) => Promise<void>;
   onUpdateBulk: (productIds: string[], values: { stockMin?: number | null; stockMax?: number | null }) => Promise<void>;
 }
@@ -35,14 +49,14 @@ const normalizeQty = (value: number): string => {
   return Number(value.toFixed(3)).toString();
 };
 
-const unitLabel = (product: Product): string => (product.sale_mode === "weight" ? "kg" : "u.");
+const unitLabel = (product: Product): string => (product.sale_mode === "weight" ? "g" : "u.");
 
 const buildReportDateStamp = (): string => new Date().toISOString().slice(0, 10);
 
 const getStatusBadgeClassName = (status: StockStatus): string => {
   if (status === "low") return "ui-badge ui-badge--warn";
   if (status === "over") return "ui-badge ui-badge--info";
-  if (status === "unassigned") return "ui-badge ui-badge--danger";
+  if (status === "unassigned") return "ui-badge ui-badge--neutral";
   return "ui-badge ui-badge--success";
 };
 
@@ -54,9 +68,13 @@ const resolveThresholds = (product: Product, draft: StockDraft | undefined) => {
     };
   }
 
+  const isWeight = product.sale_mode === "weight";
+  const rawMin = toNullableNumber(draft.stockMin);
+  const rawMax = toNullableNumber(draft.stockMax);
+
   return {
-    stockMin: toNullableNumber(draft.stockMin),
-    stockMax: toNullableNumber(draft.stockMax),
+    stockMin: isWeight && rawMin != null ? rawMin / 1000 : rawMin,
+    stockMax: isWeight && rawMax != null ? rawMax / 1000 : rawMax,
   };
 };
 
@@ -70,12 +88,27 @@ export const StockTrackingTable = ({
   products,
   categories,
   disabled,
+  statusFilter: controlledStatusFilter,
+  onStatusFilterChange,
   onUpdateOne,
   onUpdateBulk,
 }: StockTrackingTableProps) => {
+  const allBarcodes = useProductsStore((state) => state.allBarcodes);
   const [search, setSearch] = useState("");
+  const [searchScope, setSearchScope] = useState<ProductSearchScope>("all");
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StockStatusFilter>("all");
+  const [internalStatusFilter, setInternalStatusFilter] = useState<StockStatusFilter>("all");
+  const statusFilter = controlledStatusFilter ?? internalStatusFilter;
+
+  const handleStatusFilterChange = (filter: StockStatusFilter) => {
+    if (onStatusFilterChange) {
+      onStatusFilterChange(filter);
+    } else {
+      setInternalStatusFilter(filter);
+    }
+  };
+
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Record<string, StockDraft>>({});
   const [bulkScope, setBulkScope] = useState<BulkScope>("selected");
@@ -84,6 +117,39 @@ export const StockTrackingTable = ({
   const [reportMessage, setReportMessage] = useState<string | null>(null);
   const [isReportMenuOpen, setIsReportMenuOpen] = useState(false);
   const reportMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const barcodesByProductId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const item of allBarcodes) {
+      const list = map.get(item.product_id) ?? [];
+      list.push(item.barcode.trim().toLowerCase());
+      map.set(item.product_id, list);
+    }
+    return map;
+  }, [allBarcodes]);
+
+  const handleBarcodeDetected = (scannedBarcode: string) => {
+    setIsCameraOpen(false);
+    const normalized = scannedBarcode.trim().toLowerCase();
+    const barcodeMatch = allBarcodes.find(
+      (b) => b.barcode.trim().toLowerCase() === normalized
+    );
+    let matchedProduct = barcodeMatch
+      ? products.find((p) => p.id === barcodeMatch.product_id)
+      : null;
+    if (!matchedProduct) {
+      matchedProduct =
+        products.find((p) => p.code?.trim().toLowerCase() === normalized) ?? null;
+    }
+
+    if (matchedProduct) {
+      setSearch(matchedProduct.name);
+      setReportMessage(`Producto encontrado: ${matchedProduct.name}`);
+    } else {
+      setSearch(scannedBarcode);
+      setReportMessage(`Código escaneado: ${scannedBarcode}`);
+    }
+  };
 
   useEffect(() => {
     if (!isReportMenuOpen) return;
@@ -99,49 +165,97 @@ export const StockTrackingTable = ({
   }, [isReportMenuOpen]);
 
   const rows = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
+    const rawSearch = search.trim();
 
     return products.filter((product) => {
       if (!product.is_active) return false;
-      if (categoryFilter && product.category !== categoryFilter) return false;
+
+      const productBarcodes = barcodesByProductId.get(product.id) ?? [];
+      const matches =
+        !rawSearch ||
+        matchesProductSearch(
+          {
+            name: product.name,
+            code: product.code,
+            barcodes: productBarcodes,
+            category: product.category,
+            subcategory: product.subcategory,
+          },
+          rawSearch,
+          searchScope
+        );
+
+      if (!matches) return false;
+
+      const isCodeOrBarcodeSearch = searchScope === "code" || searchScope === "barcode";
+      if (!isCodeOrBarcodeSearch) {
+        if (categoryFilter && product.category !== categoryFilter) return false;
+      }
 
       const { stockMin, stockMax } = resolveThresholds(product, drafts[product.id]);
       const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
       if (statusFilter !== "all" && status !== statusFilter) return false;
 
-      if (!normalizedSearch) return true;
-
-      const searchTarget = `${product.name} ${product.code} ${product.category} ${product.subcategory ?? ""}`.toLowerCase();
-      return searchTarget.includes(normalizedSearch);
+      return true;
     });
-  }, [products, search, categoryFilter, statusFilter, drafts]);
+  }, [products, search, searchScope, categoryFilter, statusFilter, drafts, barcodesByProductId]);
 
   const reportCandidates = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
+    const rawSearch = search.trim();
 
     return products.filter((product) => {
       if (!product.is_active) return false;
-      if (categoryFilter && product.category !== categoryFilter) return false;
 
-      if (!normalizedSearch) return true;
+      const productBarcodes = barcodesByProductId.get(product.id) ?? [];
+      const matches =
+        !rawSearch ||
+        matchesProductSearch(
+          {
+            name: product.name,
+            code: product.code,
+            barcodes: productBarcodes,
+            category: product.category,
+            subcategory: product.subcategory,
+          },
+          rawSearch,
+          searchScope
+        );
 
-      const searchTarget = `${product.name} ${product.code} ${product.category} ${product.subcategory ?? ""}`.toLowerCase();
-      return searchTarget.includes(normalizedSearch);
+      if (!matches) return false;
+
+      const isCodeOrBarcodeSearch = searchScope === "code" || searchScope === "barcode";
+      if (!isCodeOrBarcodeSearch) {
+        if (categoryFilter && product.category !== categoryFilter) return false;
+      }
+
+      return true;
     });
-  }, [products, search, categoryFilter]);
+  }, [products, search, searchScope, categoryFilter, barcodesByProductId]);
 
   const selectedVisibleIds = useMemo(
     () => selectedIds.filter((id) => rows.some((row) => row.id === id)),
     [rows, selectedIds]
   );
 
-  const allVisibleSelected = rows.length > 0 && selectedVisibleIds.length === rows.length;
+  const paginatedRows = usePagination(
+    rows,
+    10,
+    `${search}|${searchScope}|${categoryFilter}|${statusFilter}|${rows.length}`
+  );
+  const selectedPageIds = useMemo(
+    () => selectedIds.filter((id) => paginatedRows.pageItems.some((row) => row.id === id)),
+    [paginatedRows.pageItems, selectedIds]
+  );
+  const allVisibleSelected =
+    paginatedRows.pageItems.length > 0 && selectedPageIds.length === paginatedRows.pageItems.length;
 
   const updateDraft = (product: Product, patch: Partial<StockDraft>) => {
+    const isWeight = product.sale_mode === "weight";
+    const factor = isWeight ? 1000 : 1;
     setDrafts((current) => {
       const currentDraft = current[product.id] ?? {
-        stockMin: product.stock_min != null ? normalizeQty(product.stock_min) : "",
-        stockMax: product.stock_max != null ? normalizeQty(product.stock_max) : "",
+        stockMin: product.stock_min != null ? normalizeQty(product.stock_min * factor) : "",
+        stockMax: product.stock_max != null ? normalizeQty(product.stock_max * factor) : "",
       };
 
       return {
@@ -152,18 +266,23 @@ export const StockTrackingTable = ({
   };
 
   const getDraft = (product: Product): StockDraft => {
+    const isWeight = product.sale_mode === "weight";
+    const factor = isWeight ? 1000 : 1;
     return (
       drafts[product.id] ?? {
-        stockMin: product.stock_min != null ? normalizeQty(product.stock_min) : "",
-        stockMax: product.stock_max != null ? normalizeQty(product.stock_max) : "",
+        stockMin: product.stock_min != null ? normalizeQty(product.stock_min * factor) : "",
+        stockMax: product.stock_max != null ? normalizeQty(product.stock_max * factor) : "",
       }
     );
   };
 
   const persistRowIfChanged = async (product: Product) => {
     const draft = getDraft(product);
-    const nextMin = toNullableNumber(draft.stockMin);
-    const nextMax = toNullableNumber(draft.stockMax);
+    const isWeight = product.sale_mode === "weight";
+    const rawMin = toNullableNumber(draft.stockMin);
+    const rawMax = toNullableNumber(draft.stockMax);
+    const nextMin = isWeight && rawMin != null ? Number((rawMin / 1000).toFixed(4)) : rawMin;
+    const nextMax = isWeight && rawMax != null ? Number((rawMax / 1000).toFixed(4)) : rawMax;
 
     const currentMin = product.stock_min;
     const currentMax = product.stock_max;
@@ -190,13 +309,15 @@ export const StockTrackingTable = ({
 
   const toggleSelectAllVisible = (checked: boolean) => {
     if (!checked) {
-      setSelectedIds((current) => current.filter((id) => !rows.some((row) => row.id === id)));
+      setSelectedIds((current) =>
+        current.filter((id) => !paginatedRows.pageItems.some((row) => row.id === id))
+      );
       return;
     }
 
     setSelectedIds((current) => {
       const next = new Set(current);
-      rows.forEach((row) => next.add(row.id));
+      paginatedRows.pageItems.forEach((row) => next.add(row.id));
       return [...next];
     });
   };
@@ -210,10 +331,23 @@ export const StockTrackingTable = ({
         ? selectedVisibleIds
         : rows.filter((row) => (categoryFilter ? row.category === categoryFilter : true)).map((row) => row.id);
 
-    await onUpdateBulk(targetIds, {
-      stockMin: parsedMin,
-      stockMax: parsedMax,
-    });
+    const targetProducts = products.filter((p) => targetIds.includes(p.id));
+    const unitTargetIds = targetProducts.filter((p) => p.sale_mode !== "weight").map((p) => p.id);
+    const weightTargetIds = targetProducts.filter((p) => p.sale_mode === "weight").map((p) => p.id);
+
+    if (unitTargetIds.length > 0) {
+      await onUpdateBulk(unitTargetIds, {
+        stockMin: parsedMin,
+        stockMax: parsedMax,
+      });
+    }
+
+    if (weightTargetIds.length > 0) {
+      await onUpdateBulk(weightTargetIds, {
+        stockMin: parsedMin !== undefined ? (parsedMin != null ? Number((parsedMin / 1000).toFixed(4)) : null) : undefined,
+        stockMax: parsedMax !== undefined ? (parsedMax != null ? Number((parsedMax / 1000).toFixed(4)) : null) : undefined,
+      });
+    }
 
     setDrafts((current) => {
       const next = { ...current };
@@ -234,15 +368,18 @@ export const StockTrackingTable = ({
       .map((product) => {
         const { stockMin, stockMax } = resolveThresholds(product, drafts[product.id]);
         const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
+        const isWeight = product.sale_mode === "weight";
+        const factor = isWeight ? 1000 : 1;
 
         return {
           producto: product.name,
           codigo: product.code,
           categoria: product.category,
           subcategoria: product.subcategory ?? "",
-          stock_actual: Number(product.stock_current.toFixed(3)),
-          stock_min: stockMin ?? "",
-          stock_max: stockMax ?? "",
+          stock_actual: Number((product.stock_current * factor).toFixed(1)),
+          unidad: isWeight ? "g" : "u.",
+          stock_min: stockMin != null ? Number((stockMin * factor).toFixed(1)) : "",
+          stock_max: stockMax != null ? Number((stockMax * factor).toFixed(1)) : "",
           estado: status,
         };
       })
@@ -296,7 +433,7 @@ export const StockTrackingTable = ({
 
             {isReportMenuOpen ? (
               <div className="absolute right-0 top-full z-10 mt-1 min-w-[220px] rounded-lg border border-slate-200 bg-white p-1 shadow-panel">
-                {(["low", "normal", "over", "unassigned"] as StockStatus[]).map((status) => (
+                {(["low", "no_stock", "normal", "over", "unassigned"] as StockStatus[]).map((status) => (
                   <button
                     key={status}
                     type="button"
@@ -318,12 +455,50 @@ export const StockTrackingTable = ({
       {reportMessage ? <div className="ui-info-state">{reportMessage}</div> : null}
 
       <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_180px]">
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          className="ui-input"
-          placeholder="Buscar por nombre o codigo"
-        />
+        <div className="flex gap-2">
+          <div className="flex flex-1 min-w-[260px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden px-2 py-1">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="flex-1 min-w-0 border-0 bg-transparent px-2 py-1 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100"
+              placeholder={getSearchPlaceholder(searchScope)}
+              aria-label="Buscar en stock"
+            />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                title="Limpiar búsqueda"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
+            <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700" />
+            <select
+              value={searchScope}
+              onChange={(e) => setSearchScope(e.target.value as ProductSearchScope)}
+              className="bg-transparent text-xs font-medium text-slate-600 focus:outline-none dark:text-slate-300 cursor-pointer py-1 px-1 shrink-0 max-w-[85px] sm:max-w-none truncate"
+              aria-label="Tipo de búsqueda"
+            >
+              {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsCameraOpen(true)}
+            disabled={disabled}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-50"
+            title="Escanear código de barras con la cámara"
+          >
+            <Camera className="h-4 w-4" />
+            <span className="hidden sm:inline">Cámara</span>
+          </button>
+        </div>
         <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="ui-input">
           <option value="">Todas las categorias</option>
           {categories.map((category) => (
@@ -334,7 +509,7 @@ export const StockTrackingTable = ({
         </select>
         <select
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as StockStatusFilter)}
+          onChange={(event) => handleStatusFilterChange(event.target.value as StockStatusFilter)}
           className="ui-input"
         >
           {Object.entries(stockStatusLabel).map(([value, label]) => (
@@ -422,7 +597,7 @@ export const StockTrackingTable = ({
               </tr>
             </thead>
             <tbody>
-              {rows.map((product) => {
+              {paginatedRows.pageItems.map((product) => {
                 const draft = getDraft(product);
                 const { stockMin, stockMax } = resolveThresholds(product, draft);
                 const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
@@ -443,7 +618,7 @@ export const StockTrackingTable = ({
                     </td>
                     <td className="px-3 py-2 text-slate-700">{product.category}</td>
                     <td className="px-3 py-2 text-slate-700">
-                      {product.stock_current.toLocaleString("es-AR")} {unitLabel(product)}
+                      {(product.sale_mode === "weight" ? product.stock_current * 1000 : product.stock_current).toLocaleString("es-AR")} {unitLabel(product)}
                     </td>
                     <td className="px-3 py-2">
                       <input
@@ -483,6 +658,23 @@ export const StockTrackingTable = ({
           </table>
         </div>
       )}
+
+      <PaginationControls
+        currentPage={paginatedRows.currentPage}
+        pageCount={paginatedRows.pageCount}
+        startItem={paginatedRows.startItem}
+        endItem={paginatedRows.endItem}
+        totalItems={paginatedRows.totalItems}
+        onPageChange={paginatedRows.setCurrentPage}
+      />
+
+      <BarcodeScannerModal
+        open={isCameraOpen}
+        title="Buscar producto en stock"
+        description="Apuntá la cámara al código de barras del producto para filtrarlo."
+        onClose={() => setIsCameraOpen(false)}
+        onDetected={handleBarcodeDetected}
+      />
     </section>
   );
 };

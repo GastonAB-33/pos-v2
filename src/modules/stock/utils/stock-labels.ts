@@ -1,4 +1,5 @@
 import type { Product, StockMovementType } from "@/types/entities";
+import { isStockTrackingEnabled } from "@/utils/stock-tracking";
 
 export type StockStatus = "low" | "normal" | "over" | "unassigned";
 export type StockStatusFilter = "all" | StockStatus;
@@ -32,11 +33,19 @@ export const getStockStatusFromValues = (
 ): StockStatus => {
   const normalizedMax = normalizeMax(max);
 
+  // Si no tiene ni mínimo ni máximo asignado, siempre es "Sin asignar"
   if (min == null && normalizedMax == null) return "unassigned";
+
+  // Si tiene mínimo y el stock actual es menor o igual, es "Stock bajo"
   if (min != null && stockCurrent <= min) return "low";
+
+  // Si tiene máximo y el stock actual es mayor, es "Sobrestock"
   if (normalizedMax != null && stockCurrent > normalizedMax) return "over";
+
   return "normal";
 };
 
 export const getStockStatus = (product: Product): StockStatus =>
-  getStockStatusFromValues(product.stock_current, product.stock_min, product.stock_max);
+  !isStockTrackingEnabled(product.description)
+    ? "unassigned"
+    : getStockStatusFromValues(product.stock_current, product.stock_min, product.stock_max);

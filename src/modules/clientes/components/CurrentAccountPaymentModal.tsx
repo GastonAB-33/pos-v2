@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { PaymentMethodSelector } from "@/components/payments/PaymentMethodSelector";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import {
   getPaymentMethodPosConfig,
   normalizePaymentMethodCode,
@@ -15,6 +17,7 @@ import type {
   CurrentAccountSummary,
   RegisterCurrentAccountPaymentValues,
 } from "@/modules/clientes/hooks/useCurrentAccount";
+import { handleNumericInputFocus } from "@/utils/input-helpers";
 
 interface CurrentAccountPaymentModalProps {
   open: boolean;
@@ -124,6 +127,7 @@ export const CurrentAccountPaymentModal = ({
   onClose,
   onSubmit,
 }: CurrentAccountPaymentModalProps) => {
+  useBodyScrollLock(open);
   const [selectedMethodId, setSelectedMethodId] = useState("");
   const [amountInput, setAmountInput] = useState("");
   const [notes, setNotes] = useState("");
@@ -465,14 +469,7 @@ export const CurrentAccountPaymentModal = ({
               Selecciona medio de pago y completa los datos contables requeridos.
             </p>
           </div>
-          <button
-            type="button"
-            className="ui-btn-ghost px-2 py-1 text-xs"
-            onClick={onClose}
-            disabled={busy}
-          >
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar pago" onClick={onClose} disabled={busy} />
         </div>
 
         <div className="mt-4 space-y-4">
@@ -505,6 +502,12 @@ export const CurrentAccountPaymentModal = ({
                   setAmountInput(event.target.value);
                   setErrorMessage(null);
                 }}
+                onFocus={(e) =>
+                  handleNumericInputFocus(e, {
+                    isNew: amountInput === "0" || amountInput === "0.00" || amountInput === "0,00",
+                    onClear: () => setAmountInput(""),
+                  })
+                }
                 className="ui-input"
                 disabled={busy}
               />
@@ -594,6 +597,12 @@ export const CurrentAccountPaymentModal = ({
                       if (nextPreview > 0) setAmountInput(nextPreview.toFixed(2));
                       setErrorMessage(null);
                     }}
+                    onFocus={(e) =>
+                      handleNumericInputFocus(e, {
+                        isNew: surchargePercent === "" || surchargePercent === "0",
+                        onClear: () => setSurchargePercent(""),
+                      })
+                    }
                     placeholder="Porcentaje de recargo final"
                     disabled={busy}
                   />
@@ -616,6 +625,12 @@ export const CurrentAccountPaymentModal = ({
                       if (nextPreview > 0) setAmountInput(nextPreview.toFixed(2));
                       setErrorMessage(null);
                     }}
+                    onFocus={(e) =>
+                      handleNumericInputFocus(e, {
+                        isNew: surchargeAmount === "" || surchargeAmount === "0",
+                        onClear: () => setSurchargeAmount(""),
+                      })
+                    }
                     placeholder="Monto fijo de recargo final"
                     disabled={busy}
                   />
@@ -794,7 +809,7 @@ export const CurrentAccountPaymentModal = ({
                     <option value="">Cuenta bancaria destino</option>
                     {destinationBankAccounts.map((account) => (
                       <option key={account.id} value={account.id}>
-                        {account.bank_name} | {account.alias || account.holder_name}
+                        {account.bank_name} — {account.holder_name}{account.alias ? ` (${account.alias})` : ""}
                       </option>
                     ))}
                   </select>

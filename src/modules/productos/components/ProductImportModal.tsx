@@ -1,4 +1,6 @@
-﻿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import type {
   ProductImportErrorRow,
   ProductImportMode,
@@ -45,6 +47,7 @@ export const ProductImportModal = ({
   onParseFile,
   onConfirmImport,
 }: ProductImportModalProps) => {
+  useBodyScrollLock(true);
   const [preview, setPreview] = useState<ProductImportPreview | null>(null);
   const [mode, setMode] = useState<ProductImportMode>("create_only");
   const [importResult, setImportResult] = useState<ProductImportResult | null>(null);
@@ -53,13 +56,24 @@ export const ProductImportModal = ({
   const [activeTab, setActiveTab] = useState<PreviewTab>("valid");
 
   const busy = loading || isParsing;
-  const hasBlockingErrors = (preview?.errorRows.length ?? 0) > 0;
-  const hasImportableRows = (preview?.validRows.length ?? 0) > 0 && !hasBlockingErrors;
+  const combinedErrorRows = useMemo(() => {
+    const previewErrors = preview?.errorRows ?? [];
+    const executionErrors = importResult?.errorRows ?? [];
+    if (!executionErrors.length) return previewErrors;
+    // Evitar duplicar errores si ya venían del preview
+    const seen = new Set(previewErrors.map((e) => `${e.rowNumber}-${e.message}`));
+    const uniqueExecErrors = executionErrors.filter(
+      (e) => !seen.has(`${e.rowNumber}-${e.message}`)
+    );
+    return [...previewErrors, ...uniqueExecErrors];
+  }, [preview, importResult]);
+
+  const hasImportErrors = combinedErrorRows.length > 0;
+  const hasImportableRows = (preview?.validRows.length ?? 0) > 0;
 
   const topErrors = useMemo(() => {
-    if (!preview) return [];
-    return preview.errorRows.slice(0, 200);
-  }, [preview]);
+    return combinedErrorRows.slice(0, 200);
+  }, [combinedErrorRows]);
 
   const topValidRows = useMemo(() => {
     if (!preview) return [];
@@ -74,9 +88,7 @@ export const ProductImportModal = ({
             <h3 className="text-base font-semibold text-slate-900">Importación masiva de productos (XLSX)</h3>
             <p className="text-xs text-slate-500">Nombre y categoría son obligatorios. Respeta el formato predefinido por columna.</p>
           </div>
-          <button type="button" className="ui-btn-ghost" onClick={onClose} disabled={busy}>
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar importación" onClick={onClose} disabled={busy} />
         </div>
 
         <div className="mt-4 space-y-4">
@@ -84,6 +96,7 @@ export const ProductImportModal = ({
             <p className="font-semibold text-slate-800">Formato esperado</p>
             <p className="mt-1">Obligatorios: <strong>nombre</strong> y <strong>categoría</strong>.</p>
             <p>Numéricos (si se informan): stock, precio costo, % ganancia, % IVA, precio final.</p>
+            <p className="text-emerald-700 font-medium">💡 Si informás precio final y % ganancia dejando el costo vacío o en 0, el sistema calcula automáticamente el costo.</p>
             <p>La columna <strong>lista de precio</strong> es solo informativa y no se toma para importar.</p>
           </div>
 
@@ -144,7 +157,7 @@ export const ProductImportModal = ({
               disabled={busy || !canWrite}
             >
               <option value="create_only">Modo: crear solo nuevos</option>
-              <option value="upsert">Modo: crear y actualizar por código / código de barras</option>
+              <option value="upsert">Modo: crear y actualizar por código, barras o nombre único</option>
             </select>
 
             <button
@@ -158,6 +171,9 @@ export const ProductImportModal = ({
                 void onConfirmImport(preview, mode)
                   .then((result) => {
                     setImportResult(result);
+                    if (result.errors > 0) {
+                      setActiveTab("invalid");
+                    }
                   })
                   .catch((reason) => {
                     const message =
@@ -171,13 +187,13 @@ export const ProductImportModal = ({
               {loading ? "Importando..." : "Confirmar importación"}
             </button>
 
-            {preview?.errorRows.length ? (
+            {combinedErrorRows.length ? (
               <button
                 type="button"
                 className="ui-btn-ghost"
                 disabled={busy}
                 onClick={() => {
-                  void onDownloadErrors(preview.errorRows);
+                  void onDownloadErrors(combinedErrorRows);
                 }}
               >
                 Descargar errores XLSX
@@ -185,9 +201,9 @@ export const ProductImportModal = ({
             ) : null}
           </div>
 
-          {hasBlockingErrors ? (
+          {hasImportErrors ? (
             <div className="ui-error-state">
-              Corregí las filas con error antes de confirmar la importación. No se crearán productos hasta que el archivo esté limpio.
+              Las filas con error se omitirán. Podés importar las filas válidas y descargar el detalle para corregir el resto.
             </div>
           ) : null}
 
@@ -210,7 +226,9 @@ export const ProductImportModal = ({
               </div>
               <div className="ui-summary-card">
                 <p className="ui-summary-label">Filas con error</p>
-                <p className="ui-kpi text-red-700">{preview.errorRows.length}</p>
+                <p className={`ui-kpi ${combinedErrorRows.length > 0 ? "text-red-700 font-bold" : "text-slate-600"}`}>
+                  {combinedErrorRows.length}
+                </p>
               </div>
             </div>
           ) : (
@@ -232,7 +250,7 @@ export const ProductImportModal = ({
                   className={activeTab === "invalid" ? "ui-btn-primary px-2 py-1 text-xs" : "ui-btn-ghost px-2 py-1 text-xs"}
                   onClick={() => setActiveTab("invalid")}
                 >
-                  Productos con errores ({preview.errorRows.length})
+                  Productos con errores ({combinedErrorRows.length})
                 </button>
               </div>
 
@@ -247,6 +265,7 @@ export const ProductImportModal = ({
                           <th className="px-2 py-2 text-left">Categoría</th>
                           <th className="px-2 py-2 text-left">Subcategoría</th>
                           <th className="px-2 py-2 text-left">Tipo</th>
+                          <th className="px-2 py-2 text-left">Costo</th>
                           <th className="px-2 py-2 text-left">Precio final</th>
                           <th className="px-2 py-2 text-left">Stock</th>
                         </tr>
@@ -259,6 +278,9 @@ export const ProductImportModal = ({
                             <td className="px-2 py-2 text-slate-700">{row.category}</td>
                             <td className="px-2 py-2 text-slate-700">{row.subcategory ?? "-"}</td>
                             <td className="px-2 py-2 text-slate-700">{row.sale_mode === "weight" ? "Pesable" : "Unidad"}</td>
+                            <td className="px-2 py-2 text-slate-700 font-medium">
+                              ${row.cost_price.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
                             <td className="px-2 py-2 text-slate-700">
                               {row.price_final.toLocaleString("es-AR")}
                               {row.sale_mode === "weight" ? " / kg" : ""}
@@ -303,8 +325,8 @@ export const ProductImportModal = ({
             <div
               className={
                 importResult.errors > 0
-                  ? "rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
-                  : "rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700"
+                  ? "rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-200"
+                  : "rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-200"
               }
             >
               Resultado: creados {importResult.created} | actualizados {importResult.updated} | saltados {importResult.skipped} | errores {importResult.errors}

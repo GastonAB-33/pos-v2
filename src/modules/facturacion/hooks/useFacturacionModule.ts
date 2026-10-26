@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditService } from "@/services/audit.service";
 import { arcaInvoicesService } from "@/services/arca/arca-invoices.service";
+import { arcaService, ARCA_DOCUMENT_TYPE_CODES } from "@/services/arca.service";
+import { creditNotesService } from "@/services/credit-notes.service";
 import { customersService } from "@/services/customers.service";
 import { invoicesService } from "@/services/invoices.service";
 import { salesService } from "@/services/sales.service";
@@ -50,6 +52,7 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [arcaProcessingInvoiceId, setArcaProcessingInvoiceId] = useState<string | null>(null);
+  const [isCancellingWithCreditNote, setIsCancellingWithCreditNote] = useState(false);
   const [feedback, setFeedback] = useState<FacturacionFeedback | null>(null);
 
   const clearFeedback = () => setFeedback(null);
@@ -77,7 +80,32 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
       setInvoices(invoiceRows.sort((a, b) => b.issue_date.localeCompare(a.issue_date)));
       setSales(saleRows.sort((a, b) => b.created_at.localeCompare(a.created_at)));
       setCustomers(customerRows.sort((a, b) => a.full_name.localeCompare(b.full_name)));
-      setArcaSettings(tenantSettings.facturacion.arca);
+      const rawArca = tenantSettings.facturacion?.arca ?? defaultArcaSettings;
+      const cleanCuit = (
+        rawArca.cuit_emisor ||
+        tenantSettings.facturacion?.issuer_cuit ||
+        ""
+      ).replace(/\D/g, "");
+
+      const localCrt =
+        typeof window !== "undefined" && cleanCuit
+          ? localStorage.getItem(`arca_saved_crt_${cleanCuit}`)
+          : null;
+      const localKey =
+        typeof window !== "undefined" && cleanCuit
+          ? localStorage.getItem(`arca_saved_key_${cleanCuit}`)
+          : null;
+
+      const resolvedArca: ArcaSettings = {
+        ...defaultArcaSettings,
+        ...rawArca,
+        cuit_emisor: cleanCuit || rawArca.cuit_emisor || "",
+        punto_venta: rawArca.punto_venta > 0 ? rawArca.punto_venta : 1,
+        certificate_crt: rawArca.certificate_crt || localCrt,
+        certificate_key: rawArca.certificate_key || localKey,
+      };
+
+      setArcaSettings(resolvedArca);
     } catch {
       setFeedback({ type: "error", message: "No se pudo cargar facturacion" });
     } finally {
@@ -285,41 +313,46 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
         },
       });
 
-      const sendResult = await arcaInvoicesService.sendInvoice(pending, {
-        forcedStatus: options?.forcedStatus,
-        settings: arcaSettings,
-      });
-      const statusResult = await arcaInvoicesService.checkInvoiceStatus(
-        sendResult.reference ?? `ARCA-MOCK-${Date.now()}`,
+      const currentSeq =
+        parseInt(pending.document_number.split("-").pop() || "1", 10) || 1;
+
+      const arcaResult = await arcaService.authorizeInvoice(
+        arcaSettings,
         {
-          forcedStatus:
-            options?.forcedStatus ??
-            (sendResult.status === "accepted" || sendResult.status === "rejected"
-              ? sendResult.status
-              : undefined),
-          settings: arcaSettings,
           tenantId,
-        }
+          documentType: pending.document_type,
+          puntoVenta: arcaSettings.punto_venta,
+          cuitEmisor: arcaSettings.cuit_emisor || "",
+          receiverDocType: pending.customer_snapshot?.document_type ?? "dni",
+          receiverDocNumber: pending.customer_snapshot?.document_number ?? "0",
+          subtotal: pending.subtotal,
+          taxTotal: pending.tax_total,
+          total: pending.total,
+          items: pending.items_snapshot.map((it) => ({
+            name: it.product_name,
+            quantity: it.quantity,
+            unitPrice: it.unit_price,
+            subtotal: it.subtotal,
+          })),
+        },
+        currentSeq
       );
 
       const finalStatus: ArcaInvoiceStatus =
-        statusResult.status === "accepted" || statusResult.status === "rejected"
-          ? statusResult.status
-          : sendResult.status === "accepted" || sendResult.status === "rejected"
-            ? sendResult.status
-            : "pending";
+        options?.forcedStatus ?? (arcaResult.success ? "accepted" : "rejected");
 
-      const finalMessage =
-        finalStatus === "accepted"
-          ? "Factura aprobada por ARCA"
-          : finalStatus === "rejected"
-            ? "Factura rechazada por ARCA"
-            : "Factura enviada a ARCA. Estado pendiente";
+      const finalMessage = arcaResult.success
+        ? "Factura aprobada por ARCA"
+        : arcaResult.errorMessage ?? "Factura rechazada por ARCA";
 
       const updated = await invoicesService.updateArcaStatus(tenantId, pending.id, {
         arca_status: finalStatus,
-        arca_reference: sendResult.reference,
+        arca_reference: arcaResult.cae ?? null,
         arca_message: finalMessage,
+        cae: arcaResult.cae ?? null,
+        cae_due_date: arcaResult.caeDueDate ?? null,
+        qr_data_url: arcaResult.qrUrl ?? null,
+        document_number: arcaResult.formattedDocumentNumber ?? pending.document_number,
       });
       upsertInvoiceInState(updated);
 
@@ -333,9 +366,9 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
         metadata: {
           previous_arca_status: "pending",
           next_arca_status: updated.arca_status,
-          arca_reference: updated.arca_reference,
-          arca_response: sendResult.rawResponse,
-          arca_status_check: statusResult.rawResponse,
+          cae: arcaResult.cae,
+          cae_due_date: arcaResult.caeDueDate,
+          qr_url: arcaResult.qrUrl,
           mode: arcaOperationalStatus.mode,
         },
       });
@@ -370,6 +403,139 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
       return null;
     } finally {
       setArcaProcessingInvoiceId(null);
+    }
+  };
+
+  const cancelInvoiceWithCreditNote = async (invoiceId: string): Promise<boolean> => {
+    if (!tenantId) return false;
+    const invoice = invoices.find((inv) => inv.id === invoiceId);
+    if (!invoice) {
+      setFeedback({ type: "error", message: "Comprobante no encontrado." });
+      return false;
+    }
+
+    if (invoice.arca_status !== "accepted") {
+      setFeedback({
+        type: "error",
+        message: "Solo se pueden anular con Nota de Crédito facturas aprobadas por ARCA.",
+      });
+      return false;
+    }
+
+    if (invoice.status === "cancelled") {
+      setFeedback({ type: "error", message: "La factura ya se encuentra anulada." });
+      return false;
+    }
+
+    setIsCancellingWithCreditNote(true);
+    setFeedback(null);
+
+    try {
+      const parts = invoice.document_number.split("-");
+      const puntoVenta = parts.length >= 3 ? parseInt(parts[1], 10) : arcaSettings.punto_venta;
+      const originalVoucherNumber = parts.length >= 3 ? parseInt(parts[2], 10) : 1;
+      const originalTipoCode = ARCA_DOCUMENT_TYPE_CODES[invoice.document_type] || 11;
+
+      const existingCreditNotes = await creditNotesService.getAllByTenant(tenantId);
+      const nextSeq = existingCreditNotes.length + 1;
+
+      const arcaResult = await arcaService.authorizeCreditNote(
+        arcaSettings,
+        {
+          tenantId,
+          documentType: invoice.document_type,
+          puntoVenta,
+          cuitEmisor: arcaSettings.cuit_emisor || "",
+          receiverDocType: invoice.customer_snapshot?.document_type ?? "dni",
+          receiverDocNumber: invoice.customer_snapshot?.document_number ?? "0",
+          subtotal: invoice.subtotal,
+          taxTotal: invoice.tax_total,
+          total: invoice.total,
+          associatedVoucher: {
+            tipo: originalTipoCode,
+            puntoVenta,
+            numero: originalVoucherNumber,
+            cuit: arcaSettings.cuit_emisor || undefined,
+          },
+        },
+        nextSeq
+      );
+
+      if (!arcaResult.success) {
+        setFeedback({
+          type: "error",
+          message: arcaResult.errorMessage || "ARCA no autorizó la Nota de Crédito.",
+        });
+        return false;
+      }
+
+      const ncDocumentNumber =
+        arcaResult.formattedDocumentNumber ||
+        `NC-${invoice.document_type}-${String(puntoVenta).padStart(4, "0")}-${String(
+          arcaResult.voucherNumber || nextSeq
+        ).padStart(8, "0")}`;
+
+      await creditNotesService.create(tenantId, {
+        invoice_id: invoice.id,
+        sale_id: invoice.sale_id,
+        customer_id: invoice.customer_id,
+        document_number: ncDocumentNumber,
+        issue_date: new Date().toISOString(),
+        reason: "cancellation",
+        subtotal: invoice.subtotal,
+        tax_total: invoice.tax_total,
+        total: invoice.total,
+        status: "issued",
+        arca_status: "accepted",
+        arca_reference: arcaResult.cae || null,
+        cae: arcaResult.cae || null,
+        cae_due_date: arcaResult.caeDueDate || null,
+        qr_data_url: arcaResult.qrUrl || null,
+        notes: `Nota de Crédito oficial que anula ${invoice.document_type} ${invoice.document_number} (CAE Original: ${invoice.cae || "N/A"})`,
+      });
+
+      const updatedInvoice = await invoicesService.update(tenantId, invoice.id, {
+        status: "cancelled",
+        notes: `${invoice.notes ? invoice.notes + " | " : ""}Anulada mediante Nota de Crédito ${ncDocumentNumber} (CAE NC: ${arcaResult.cae})`,
+      });
+
+      if (updatedInvoice) {
+        upsertInvoiceInState(updatedInvoice);
+      }
+
+      await auditService.createSafe(tenantId, {
+        user_id: userId,
+        module: "facturacion",
+        action: "credit_note_issued",
+        entity_type: "invoice",
+        entity_id: invoice.id,
+        description: `Nota de Crédito ${ncDocumentNumber} emitida para anular ${invoice.document_number}`,
+        metadata: {
+          invoice_id: invoice.id,
+          nc_document_number: ncDocumentNumber,
+          cae: arcaResult.cae,
+          cae_due_date: arcaResult.caeDueDate,
+          total: invoice.total,
+        },
+      });
+
+      setFeedback({
+        type: "success",
+        message: `Nota de Crédito oficial emitida con éxito (${ncDocumentNumber} - CAE: ${arcaResult.cae}). La factura quedó formalmente anulada en ARCA.`,
+      });
+
+      return true;
+    } catch (err) {
+      setFeedback({
+        type: "error",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Error al emitir la Nota de Crédito en ARCA.",
+      });
+      return false;
+    } finally {
+      setIsCancellingWithCreditNote(false);
     }
   };
 
@@ -418,6 +584,7 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
     isLoading,
     isSubmitting,
     arcaProcessingInvoiceId,
+    isCancellingWithCreditNote,
     feedback,
     clearFeedback,
     summary,
@@ -427,5 +594,6 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
     createBudget,
     generateFromSale,
     sendInvoiceToArca,
+    cancelInvoiceWithCreditNote,
   };
 };

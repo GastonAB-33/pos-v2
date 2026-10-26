@@ -6,6 +6,7 @@ import {
   type AdjustmentMovementValues,
   type PaymentMovementValues,
 } from "@/modules/clientes/schemas/current-account-movement.schema";
+import { handleNumericInputFocus, handleNumericInputBlur, parseNumericField } from "@/utils/input-helpers";
 
 interface CurrentAccountMovementFormProps {
   mode: "payment" | "adjustment";
@@ -25,6 +26,7 @@ export const CurrentAccountMovementForm = ({
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<PaymentMovementValues | AdjustmentMovementValues>({
     resolver: zodResolver(schema),
@@ -50,7 +52,21 @@ export const CurrentAccountMovementForm = ({
         <input
           type="number"
           step="0.01"
-          {...register("amount")}
+          placeholder="0.00"
+          {...register("amount", {
+            setValueAs: (val) => parseNumericField(val, !isPayment),
+          })}
+          onFocus={(e) =>
+            handleNumericInputFocus(e, {
+              isNew: true,
+              onClear: () => setValue("amount", "" as any),
+            })
+          }
+          onBlur={(e) => {
+            handleNumericInputBlur(e, "0", () => {
+              setValue("amount", 0);
+            });
+          }}
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           disabled={disabled}
         />

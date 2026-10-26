@@ -1,9 +1,36 @@
-﻿import type { ProductFiltersState } from "@/modules/productos/types/product.types";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  Camera,
+  Ellipsis,
+  FileSpreadsheet,
+  FileText,
+  FilterX,
+  Package,
+  Plus,
+  RefreshCw,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+  Tag,
+  Upload,
+  X,
+} from "lucide-react";
+import { routePaths } from "@/config/routes";
+import { usePermissions } from "@/features/auth/hooks/usePermissions";
+import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
+import { IconButton } from "@/components/ui/IconButton";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
+import type { ProductFiltersState } from "@/modules/productos/types/product.types";
+import { PRODUCT_SEARCH_SCOPE_OPTIONS, getSearchPlaceholder, type ProductSearchScope } from "@/utils/search";
 
 interface ProductFiltersProps {
   canWrite: boolean;
   loading: boolean;
+  isRefreshing?: boolean;
   selectedCount: number;
+  filteredCount: number;
   filters: ProductFiltersState;
   categories: string[];
   subcategories: string[];
@@ -13,14 +40,20 @@ interface ProductFiltersProps {
   onReload: () => void;
   onOpenCreate: () => void;
   onOpenImport: () => void;
+  onExportPdf?: () => void;
   onExportXlsx: () => void;
   onDeleteSelected: () => void;
+  onSelectAllFiltered: () => void;
+  onClearSelection: () => void;
+  onOpenReturnablePackages?: () => void;
 }
 
 export const ProductFilters = ({
   canWrite,
   loading,
+  isRefreshing = false,
   selectedCount,
+  filteredCount,
   filters,
   categories,
   subcategories,
@@ -30,144 +63,498 @@ export const ProductFilters = ({
   onReload,
   onOpenCreate,
   onOpenImport,
+  onExportPdf,
   onExportXlsx,
   onDeleteSelected,
+  onSelectAllFiltered,
+  onClearSelection,
+  onOpenReturnablePackages,
 }: ProductFiltersProps) => {
+  const { canRead } = usePermissions();
+  const canReadListasPrecios = canRead("listas_precios");
+  const canReadPromociones = canRead("promociones");
+
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [filtersModalOpen, setFiltersModalOpen] = useState(false);
+  useBodyScrollLock(filtersModalOpen);
+
+  const activeAdvancedFiltersCount =
+    (filters.category ? 1 : 0) +
+    (filters.subcategory ? 1 : 0) +
+    (filters.supplier ? 1 : 0) +
+    (filters.saleMode && filters.saleMode !== "all" ? 1 : 0);
+
   return (
-    <div className="space-y-4">
-      <header className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+    <div className="workspace-toolbar space-y-3">
+      <header className="workspace-toolbar__header">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Gestión de Productos</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Administra el catálogo del sistema y los niveles de inventario.
-          </p>
+          <p className="ui-section-label">Inventario</p>
+          <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Productos</h1>
+          <p className="mt-1 text-sm text-slate-600">Busca, edita e incorpora productos al inventario.</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="workspace-toolbar__actions">
           <button
             type="button"
-            className="ui-btn-ghost"
             onClick={onReload}
-            disabled={loading}
+            disabled={loading || isRefreshing}
+            className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
+            title="Actualizar productos y catálogo desde el servidor"
+            aria-label="Actualizar catálogo de productos"
           >
-            Recargar
+            <RefreshCw
+              size={14}
+              className={isRefreshing || loading ? "animate-spin text-brand-600" : "text-slate-500"}
+            />
+            <span className="hidden sm:inline">
+              {isRefreshing ? "Actualizando..." : "Actualizar"}
+            </span>
           </button>
-          <button
-            type="button"
-            className="ui-btn-ghost"
-            onClick={onOpenImport}
-            disabled={!canWrite || loading}
-          >
-            Importar XLSX
-          </button>
-          <button
-            type="button"
-            className="ui-btn-ghost"
-            onClick={onExportXlsx}
-            disabled={loading}
-          >
-            Exportar XLSX
-          </button>
+
+          {canReadListasPrecios && (
+            <Link
+              to={routePaths.listasPrecios}
+              className="ui-btn-ghost text-xs inline-flex items-center gap-1.5 border border-slate-300 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              title="Ir al módulo de Listas de Precios"
+            >
+              <Tag size={14} className="text-blue-600 dark:text-blue-400" />
+              <span>Listas de precios</span>
+            </Link>
+          )}
+
+          {canReadPromociones && (
+            <Link
+              to={routePaths.promociones}
+              className="ui-btn-ghost text-xs inline-flex items-center gap-1.5 border border-slate-300 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+              title="Ir al módulo de Promociones"
+            >
+              <Sparkles size={14} className="text-amber-600 dark:text-amber-400" />
+              <span>Promociones</span>
+            </Link>
+          )}
+
+          <div className="relative z-30">
+            <IconButton
+              icon={Ellipsis}
+              label="Más acciones"
+              onClick={() => setActionsOpen((open) => !open)}
+            />
+            {actionsOpen ? (
+              <>
+                <div
+                  className="fixed inset-0 z-40 bg-transparent"
+                  onClick={() => setActionsOpen(false)}
+                  aria-hidden="true"
+                />
+                <div
+                  className="workspace-action-menu left-0 right-auto z-50 shadow-2xl"
+                  style={{ zIndex: 50 }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {onOpenReturnablePackages && (
+                    <button
+                      type="button"
+                      className="ui-popover-action"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActionsOpen(false);
+                        onOpenReturnablePackages();
+                      }}
+                    >
+                      <Package aria-hidden="true" className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                      Envases Retornables
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="ui-popover-action"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActionsOpen(false);
+                      onOpenImport();
+                    }}
+                    disabled={!canWrite}
+                  >
+                    <Upload aria-hidden="true" className="h-4 w-4" />
+                    Importar XLSX
+                  </button>
+                  {onExportPdf && (
+                    <button
+                      type="button"
+                      className="ui-popover-action"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActionsOpen(false);
+                        onExportPdf();
+                      }}
+                    >
+                      <FileText aria-hidden="true" className="h-4 w-4 text-red-500" />
+                      Descargar Lista PDF
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="ui-popover-action"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActionsOpen(false);
+                      onExportXlsx();
+                    }}
+                  >
+                    <FileSpreadsheet aria-hidden="true" className="h-4 w-4 text-emerald-600" />
+                    Descargar Lista XLSX
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
           <button
             type="button"
             className="ui-btn-primary"
             onClick={onOpenCreate}
             disabled={!canWrite || loading}
           >
-            Nuevo Producto
+            <Plus aria-hidden="true" className="h-4 w-4" />
+            Nuevo producto
           </button>
         </div>
       </header>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-3">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <div className="xl:col-span-2">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
-              Buscar
-            </label>
+      <div className="workspace-filter-strip space-y-2">
+        {/* Barra principal de búsqueda y filtros adaptable a móviles */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          {/* Campo de búsqueda completo y cómodo para pantallas táctiles */}
+          <div className="flex flex-1 min-w-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-sm focus-within:ring-2 focus-within:ring-blue-500 dark:border-slate-800 dark:bg-slate-900">
+            <Search className="h-4 w-4 text-slate-400 shrink-0" aria-hidden="true" />
             <input
-              className="ui-input"
+              className="flex-1 min-w-0 border-0 bg-transparent px-1 py-1 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100"
               value={filters.search}
               onChange={(event) => onFiltersChange({ search: event.target.value })}
-              placeholder="Nombre, código o código de barras"
+              placeholder={getSearchPlaceholder(filters.searchScope)}
+              aria-label="Buscar productos"
             />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
-              Categoría
-            </label>
-            <input
-              list="filtro-categorias-productos"
-              className="ui-input"
-              value={filters.category}
-              onChange={(event) => onFiltersChange({ category: event.target.value })}
-              placeholder="Todas"
-            />
-            <datalist id="filtro-categorias-productos">
-              {categories.map((category) => (
-                <option key={category} value={category} />
-              ))}
-            </datalist>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
-              Subcategoría
-            </label>
-            <input
-              list="filtro-subcategorias-productos"
-              className="ui-input"
-              value={filters.subcategory}
-              onChange={(event) => onFiltersChange({ subcategory: event.target.value })}
-              placeholder="Todas"
-            />
-            <datalist id="filtro-subcategorias-productos">
-              {subcategories.map((subcategory) => (
-                <option key={subcategory} value={subcategory} />
-              ))}
-            </datalist>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
-              Proveedor
-            </label>
-            <select
-              className="ui-input"
-              value={filters.supplier}
-              onChange={(event) => onFiltersChange({ supplier: event.target.value })}
-            >
-              <option value="">Todos</option>
-              {suppliers.map((supplier) => (
-                <option key={supplier} value={supplier}>
-                  {supplier}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <button type="button" className="ui-btn-ghost" onClick={onClearFilters}>
-              Limpiar filtros
-            </button>
-            {selectedCount > 0 ? (
+            {filters.search ? (
               <button
                 type="button"
-                className="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700"
-                onClick={onDeleteSelected}
-                disabled={!canWrite || loading}
+                onClick={() => onFiltersChange({ search: "" })}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0"
+                aria-label="Limpiar búsqueda"
               >
-                Eliminar seleccionados ({selectedCount})
+                <X size={15} />
               </button>
             ) : null}
+            <div className="h-5 w-[1px] bg-slate-200 dark:bg-slate-700 shrink-0" />
+            <IconButton
+              icon={Camera}
+              label="Escanear código de barras con cámara"
+              onClick={() => setScannerOpen(true)}
+              disabled={loading}
+            />
           </div>
 
-          <p className="text-xs text-slate-500">Vista optimizada para escritorio y tablet.</p>
+          {/* Fila de controles: ámbito de búsqueda, modalidad y filtros avanzados */}
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0">
+            <div className="flex-1 sm:flex-initial">
+              <select
+                value={filters.searchScope ?? "all"}
+                onChange={(event) =>
+                  onFiltersChange({ searchScope: event.target.value as ProductSearchScope })
+                }
+                className="ui-input w-full sm:w-auto text-xs sm:text-sm font-medium py-2 px-3 rounded-xl cursor-pointer"
+                aria-label="Tipo de búsqueda"
+              >
+                {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex-1 sm:flex-initial">
+              <select
+                value={filters.saleMode ?? "all"}
+                onChange={(event) =>
+                  onFiltersChange({
+                    saleMode: (event.target.value || "all") as "all" | "unit" | "weight",
+                  })
+                }
+                className={`ui-input w-full sm:w-auto text-xs sm:text-sm font-medium py-2 px-3 rounded-xl cursor-pointer ${
+                  filters.saleMode && filters.saleMode !== "all"
+                    ? "border-blue-500 bg-blue-50/50 text-blue-700 font-bold dark:bg-blue-950/40 dark:text-blue-300"
+                    : ""
+                }`}
+                aria-label="Filtrar por modalidad de venta"
+              >
+                <option value="all">Modalidad: Todas</option>
+                <option value="unit">Por Unidad</option>
+                <option value="weight">Pesables (Por Peso)</option>
+              </select>
+            </div>
+
+            <button
+              type="button"
+              className={`ui-btn-ghost flex-1 sm:flex-initial justify-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-medium rounded-xl border border-slate-200 dark:border-slate-800 ${
+                activeAdvancedFiltersCount > 0
+                  ? "border-blue-500 bg-blue-50 text-blue-700 font-semibold dark:bg-blue-950 dark:text-blue-300"
+                  : ""
+              }`}
+              onClick={() => setFiltersModalOpen(true)}
+            >
+              <SlidersHorizontal aria-hidden="true" size={16} />
+              <span>Filtros</span>
+              {activeAdvancedFiltersCount > 0 ? (
+                <span className="rounded-full bg-blue-600 px-1.5 py-0.2 text-[11px] font-bold text-white">
+                  {activeAdvancedFiltersCount}
+                </span>
+              ) : null}
+            </button>
+
+            {(filters.search || activeAdvancedFiltersCount > 0) ? (
+              <IconButton
+                icon={FilterX}
+                label="Limpiar todos los filtros"
+                onClick={onClearFilters}
+              />
+            ) : null}
+          </div>
         </div>
+
+        {/* Chips de filtros activos */}
+        {activeAdvancedFiltersCount > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            {filters.category ? (
+              <span className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200">
+                <span>Categoría: <strong>{filters.category}</strong></span>
+                <button
+                  type="button"
+                  className="text-blue-600 hover:text-blue-900"
+                  onClick={() => onFiltersChange({ category: "" })}
+                  aria-label="Quitar filtro de categoría"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ) : null}
+
+            {filters.subcategory ? (
+              <span className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200">
+                <span>Subcategoría: <strong>{filters.subcategory}</strong></span>
+                <button
+                  type="button"
+                  className="text-blue-600 hover:text-blue-900"
+                  onClick={() => onFiltersChange({ subcategory: "" })}
+                  aria-label="Quitar filtro de subcategoría"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ) : null}
+
+            {filters.supplier ? (
+              <span className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200">
+                <span>Proveedor: <strong>{filters.supplier}</strong></span>
+                <button
+                  type="button"
+                  className="text-blue-600 hover:text-blue-900"
+                  onClick={() => onFiltersChange({ supplier: "" })}
+                  aria-label="Quitar filtro de proveedor"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ) : null}
+
+            {filters.saleMode && filters.saleMode !== "all" ? (
+              <span className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200">
+                <span>Modalidad: <strong>{filters.saleMode === "weight" ? "Pesables (Por Peso)" : "Por Unidad"}</strong></span>
+                <button
+                  type="button"
+                  className="text-blue-600 hover:text-blue-900"
+                  onClick={() => onFiltersChange({ saleMode: "all" })}
+                  aria-label="Quitar filtro de modalidad"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* Acciones de selección múltiple */}
+        {selectedCount > 0 ? (
+          <div className="workspace-filter-strip__footer flex flex-wrap items-center gap-2 border-t border-slate-200 pt-2 dark:border-slate-800">
+            {selectedCount < filteredCount ? (
+              <button
+                type="button"
+                className="ui-btn-ghost px-3 py-1.5 text-xs"
+                onClick={onSelectAllFiltered}
+                disabled={loading}
+              >
+                Seleccionar los {filteredCount} resultados
+              </button>
+            ) : (
+              <span className="ui-badge ui-badge--info">Todos los {filteredCount} seleccionados</span>
+            )}
+            <button
+              type="button"
+              className="ui-btn-ghost px-3 py-1.5 text-xs"
+              onClick={onClearSelection}
+              disabled={loading}
+            >
+              Quitar seleccion
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+              onClick={onDeleteSelected}
+              disabled={!canWrite || loading}
+            >
+              Eliminar seleccionados ({selectedCount})
+            </button>
+          </div>
+        ) : null}
       </div>
+
+      {/* Modal Emergente de Filtros Avanzados */}
+      {filtersModalOpen ? (
+        <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-4 backdrop-blur-[0.5px]">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal size={18} className="text-blue-600" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  Filtros de productos
+                </h3>
+              </div>
+              <ModalCloseButton
+                label="Cerrar filtros"
+                onClick={() => setFiltersModalOpen(false)}
+              />
+            </div>
+
+            <div className="space-y-4 py-4">
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  Categoría
+                </label>
+                <select
+                  className="ui-input w-full text-base sm:text-sm cursor-pointer"
+                  value={filters.category}
+                  onChange={(event) => onFiltersChange({ category: event.target.value })}
+                  aria-label="Filtrar por categoría"
+                >
+                  <option value="">Todas las categorías</option>
+                  {categories.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                  {filters.category && !categories.includes(filters.category) && (
+                    <option value={filters.category}>{filters.category}</option>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  Subcategoría
+                </label>
+                <select
+                  className="ui-input w-full text-base sm:text-sm cursor-pointer"
+                  value={filters.subcategory}
+                  onChange={(event) => onFiltersChange({ subcategory: event.target.value })}
+                  aria-label="Filtrar por subcategoría"
+                >
+                  <option value="">Todas las subcategorías</option>
+                  {subcategories.map((subcategory) => (
+                    <option key={subcategory} value={subcategory}>
+                      {subcategory}
+                    </option>
+                  ))}
+                  {filters.subcategory && !subcategories.includes(filters.subcategory) && (
+                    <option value={filters.subcategory}>{filters.subcategory}</option>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  Proveedor
+                </label>
+                <select
+                  className="ui-input w-full text-base sm:text-sm cursor-pointer"
+                  value={filters.supplier}
+                  onChange={(event) => onFiltersChange({ supplier: event.target.value })}
+                  aria-label="Filtrar por proveedor"
+                >
+                  <option value="">Todos los proveedores</option>
+                  {suppliers.map((supplier) => (
+                    <option key={supplier} value={supplier}>
+                      {supplier}
+                    </option>
+                  ))}
+                  {filters.supplier && !suppliers.includes(filters.supplier) && (
+                    <option value={filters.supplier}>{filters.supplier}</option>
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  Modalidad de venta
+                </label>
+                <select
+                  className="ui-input w-full text-base sm:text-sm cursor-pointer"
+                  value={filters.saleMode ?? "all"}
+                  onChange={(event) =>
+                    onFiltersChange({
+                      saleMode: (event.target.value || "all") as "all" | "unit" | "weight",
+                    })
+                  }
+                  aria-label="Filtrar por modalidad"
+                >
+                  <option value="all">Todas las modalidades</option>
+                  <option value="unit">Por Unidad</option>
+                  <option value="weight">Pesables (Por Peso)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-200 pt-3 dark:border-slate-800">
+              <button
+                type="button"
+                className="ui-btn-ghost text-xs text-slate-600 dark:text-slate-400"
+                onClick={() => {
+                  onFiltersChange({ category: "", subcategory: "", supplier: "", saleMode: "all" });
+                }}
+                disabled={activeAdvancedFiltersCount === 0}
+              >
+                Limpiar filtros
+              </button>
+              <button
+                type="button"
+                className="ui-btn-primary px-4 py-2 text-sm"
+                onClick={() => setFiltersModalOpen(false)}
+              >
+                Aplicar y cerrar
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <BarcodeScannerModal
+        open={scannerOpen}
+        title="Buscar por código de barras"
+        description="Apuntá la cámara al código de barras para buscar el producto automáticamente."
+        onClose={() => setScannerOpen(false)}
+        onDetected={(barcode) => {
+          onFiltersChange({ search: barcode });
+          setScannerOpen(false);
+        }}
+      />
     </div>
   );
 };

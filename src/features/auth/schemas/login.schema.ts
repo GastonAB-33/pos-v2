@@ -1,7 +1,10 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 
 export const loginSchema = z.object({
-  email: z.string().email("Email invalido"),
+  email: z
+    .string()
+    .email("Email invalido")
+    .transform((val) => val.trim().toLowerCase()),
   password: z.string().min(8, "La contrasena debe tener al menos 8 caracteres"),
 });
 

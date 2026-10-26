@@ -76,7 +76,10 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Perfil de permisos invalido para el tenant" }, 400);
     }
 
-    step = "create-auth-user";
+    step = "create-or-link-auth-user";
+    let authUserId: string | null = null;
+    let isReassigned = false;
+
     const { data: authData, error: authError } = await serviceClient.auth.admin.createUser({
       email,
       password,
@@ -88,8 +91,87 @@ Deno.serve(async (req) => {
       },
     });
 
-    if (authError) throw authError;
-    if (!authData.user) {
+    if (authError) {
+      const isAlreadyRegistered =
+        authError.message?.toLowerCase().includes("already been registered") ||
+        authError.message?.toLowerCase().includes("already registered") ||
+        (authError as { code?: string }).code === "email_exists";
+
+      if (!isAlreadyRegistered) {
+        throw authError;
+      }
+
+      // Verificar si ya existe en public.users para este tenant
+      const { data: existingInTenant, error: existingError } = await serviceClient
+        .from("users")
+        .select("id, tenant_id, auth_user_id")
+        .eq("tenant_id", tenantId)
+        .eq("email", email)
+        .maybeSingle();
+
+      if (existingError) throw existingError;
+      if (existingInTenant) {
+        return jsonResponse(
+          { error: "Ya existe un usuario con este correo electrónico en este comercio." },
+          400
+        );
+      }
+
+      // Obtener el ID del usuario existente en Supabase Auth
+      const { data: listData, error: listError } = await serviceClient.auth.admin.listUsers();
+      if (listError) throw authError;
+
+      const matchedAuthUser = listData?.users?.find(
+        (u: { email?: string }) => u.email?.toLowerCase() === email.toLowerCase()
+      );
+
+      if (!matchedAuthUser) throw authError;
+
+      authUserId = matchedAuthUser.id;
+      isReassigned = true;
+
+      // Actualizar contrasena y metadata para el nuevo tenant
+      await serviceClient.auth.admin.updateUserById(authUserId, {
+        password,
+        user_metadata: {
+          full_name: fullName,
+          tenant_id: tenantId,
+          username,
+        },
+      });
+
+      // Si ya existia una fila previa en public.users (por ejemplo de pruebas o de otro tenant), se reasigna
+      const { data: existingAnywhere } = await serviceClient
+        .from("users")
+        .select("id")
+        .eq("auth_user_id", authUserId)
+        .maybeSingle();
+
+      if (existingAnywhere) {
+        const { data: updatedUser, error: updateError } = await serviceClient
+          .from("users")
+          .update({
+            tenant_id: tenantId,
+            email,
+            username,
+            full_name: fullName,
+            role_code: "staff",
+            permission_profile_id: permissionProfileId,
+            is_active: true,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingAnywhere.id)
+          .select("*")
+          .single();
+
+        if (updateError) throw updateError;
+        return jsonResponse({ user: updatedUser });
+      }
+    } else {
+      authUserId = authData.user?.id ?? null;
+    }
+
+    if (!authUserId) {
       return jsonResponse({ error: "Supabase Auth no devolvio usuario" }, 500);
     }
 
@@ -99,7 +181,7 @@ Deno.serve(async (req) => {
       .insert({
         id: crypto.randomUUID(),
         tenant_id: tenantId,
-        auth_user_id: authData.user.id,
+        auth_user_id: authUserId,
         email,
         username,
         full_name: fullName,
@@ -111,7 +193,9 @@ Deno.serve(async (req) => {
       .single();
 
     if (userError) {
-      await serviceClient.auth.admin.deleteUser(authData.user.id);
+      if (!isReassigned) {
+        await serviceClient.auth.admin.deleteUser(authUserId);
+      }
       throw userError;
     }
 

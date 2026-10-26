@@ -1,3 +1,6 @@
+import { RefreshCw } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
+
 interface PaymentMethodsToolbarProps {
   loading: boolean;
   search: string;
@@ -12,15 +15,13 @@ export const PaymentMethodsToolbar = ({
   onReload,
 }: PaymentMethodsToolbarProps) => {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="workspace-toolbar workspace-toolbar--inline">
       <div className="grid gap-1">
-        <h2 className="text-lg font-semibold text-slate-900">Medios de pago</h2>
-        <p className="text-sm text-slate-500">
-          Catalogo fijo del sistema. Solo se puede configurar comportamiento y estado.
-        </p>
+        <p className="ui-section-label">Cobros</p>
+        <h2 className="mt-1 text-lg font-semibold text-slate-900">Medios de pago</h2>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="workspace-toolbar__actions">
         <input
           type="search"
           value={search}
@@ -28,9 +29,7 @@ export const PaymentMethodsToolbar = ({
           placeholder="Buscar por nombre, codigo o tipo"
           className="ui-input w-72"
         />
-        <button type="button" onClick={onReload} className="ui-btn-ghost" disabled={loading}>
-          Recargar
-        </button>
+        <IconButton icon={RefreshCw} label="Recargar medios de pago" onClick={onReload} loading={loading} />
       </div>
     </div>
   );

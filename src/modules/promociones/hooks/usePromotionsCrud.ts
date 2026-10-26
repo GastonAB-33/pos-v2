@@ -24,38 +24,53 @@ const toIsoOrNull = (value?: string) => {
   return parsed.toISOString();
 };
 
-const toServiceInput = (values: PromotionFormValues, options?: { isActive?: boolean }) => ({
-  name: values.name.trim(),
-  code: normalizeCode(values.code),
-  description: normalizeText(values.description),
-  type: values.type,
-  scope: values.scope,
-  product_id: values.scope === "product" ? normalizeText(values.productId) : null,
-  min_quantity: values.scope === "bundle" ? 1 : normalizeOptionalNumber(values.minQuantity),
-  discount_percent:
-    values.type === "percentage_discount" ? normalizeOptionalNumber(values.discountPercent) : null,
-  discount_amount:
-    values.type === "fixed_discount" ? normalizeOptionalNumber(values.discountAmount) : null,
-  combo_price: values.type === "combo_price" ? normalizeOptionalNumber(values.comboPrice) : null,
-  starts_at: toIsoOrNull(values.startsAt),
-  ends_at: toIsoOrNull(values.endsAt),
-  is_active: options?.isActive ?? true,
-});
+const toServiceInput = (values: PromotionFormValues, options?: { isActive?: boolean }) => {
+  const items = values.bundleItems ?? [];
+  const firstItem = items[0];
+  const isSingleUnitProduct = items.length === 1 && Number(firstItem?.quantity) === 1;
+  const autoScope: "product" | "bundle" = isSingleUnitProduct ? "product" : "bundle";
+  const scope = values.scope || autoScope;
+  const productId = items.length === 1 ? firstItem.productId : (values.productId || null);
 
-const toServiceDetails = (values: PromotionFormValues) => ({
-  barcode: normalizeText(values.barcode) ?? buildPromotionBarcode(values.code),
-  items:
-    values.scope === "bundle"
-      ? (values.bundleItems ?? []).map((item) => ({
-          product_id: item.productId,
-          quantity: Number(item.quantity),
-        }))
-      : [],
-});
+  return {
+    name: values.name.trim(),
+    code: normalizeCode(values.code),
+    description: normalizeText(values.description),
+    type: values.type,
+    scope,
+    product_id: productId,
+    min_quantity: items.length === 1 ? (Number(firstItem.quantity) > 0 ? Number(firstItem.quantity) : 1) : (normalizeOptionalNumber(values.minQuantity) ?? 1),
+    discount_percent:
+      values.type === "percentage_discount" ? normalizeOptionalNumber(values.discountPercent) : null,
+    discount_amount:
+      values.type === "fixed_discount" ? normalizeOptionalNumber(values.discountAmount) : null,
+    combo_price: normalizeOptionalNumber(values.comboPrice),
+    starts_at: toIsoOrNull(values.startsAt),
+    ends_at: toIsoOrNull(values.endsAt),
+    is_active: options?.isActive ?? true,
+  };
+};
+
+const toServiceDetails = (values: PromotionFormValues) => {
+  const items = values.bundleItems && values.bundleItems.length > 0
+    ? values.bundleItems.map((item) => ({
+        product_id: item.productId,
+        quantity: Number(item.quantity) > 0 ? Number(item.quantity) : 1,
+      }))
+    : values.productId
+    ? [{ product_id: values.productId, quantity: Number(values.minQuantity) > 0 ? Number(values.minQuantity) : 1 }]
+    : [];
+
+  return {
+    barcode: normalizeText(values.barcode) ?? buildPromotionBarcode(values.code),
+    items,
+  };
+};
 
 export const usePromotionsCrud = (tenantId: string | null, userId: string | null) => {
   const [promotions, setPromotions] = useState<PromotionWithDetails[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [primaryBarcodes, setPrimaryBarcodes] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -72,13 +87,15 @@ export const usePromotionsCrud = (tenantId: string | null, userId: string | null
 
     setIsLoading(true);
     try {
-      const [allPromotions, allProducts] = await Promise.all([
+      const [allPromotions, allProducts, allBarcodes] = await Promise.all([
         promotionsService.getAllByTenantWithDetails(tenantId),
         productsService.getAllByTenant(tenantId),
+        productsService.getPrimaryBarcodesMapByTenant(tenantId),
       ]);
 
       setPromotions(allPromotions);
       setProducts(allProducts.filter((product) => product.is_active));
+      setPrimaryBarcodes(allBarcodes);
     } catch {
       setFeedback({ type: "error", message: "No se pudieron cargar las promociones" });
     } finally {
@@ -243,6 +260,7 @@ export const usePromotionsCrud = (tenantId: string | null, userId: string | null
   return {
     promotions: filteredPromotions,
     products,
+    primaryBarcodes,
     search,
     setSearch,
     isLoading,

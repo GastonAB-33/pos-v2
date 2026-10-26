@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { useProductImageAnalysis } from "@/modules/productos/hooks/useProductImageAnalysis";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import type { ProductFormValues } from "@/modules/productos/schemas/product-form.schema";
 
 interface ProductPhotoAssistPanelProps {
@@ -71,9 +72,7 @@ export const ProductPhotoAssistPanel = ({
             La IA sugiere datos. Podes editarlos antes de guardar.
           </p>
         </div>
-        <button type="button" onClick={onClose} className="ui-btn-ghost" disabled={disabled || isAnalyzing}>
-          Cerrar
-        </button>
+        <ModalCloseButton label="Cerrar asistente de foto" onClick={onClose} disabled={disabled || isAnalyzing} />
       </div>
 
       <input

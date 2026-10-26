@@ -41,17 +41,27 @@ const buildFiscalCustomerSnapshot = (
   saleCustomerId: string | null,
   customer: Customer | null
 ): FiscalCustomerSnapshot | null => {
-  if (!customer && !saleCustomerId) return null;
+  if (!customer && !saleCustomerId) {
+    return {
+      customer_id: null,
+      full_name: "Consumidor Final",
+      business_name: "Consumidor Final",
+      document_type: "dni",
+      document_number: "0",
+      address: null,
+      fiscal_condition: "Consumidor final",
+    };
+  }
 
   if (!customer) {
     return {
       customer_id: saleCustomerId,
-      full_name: "Cliente sin datos",
-      business_name: null,
+      full_name: "Consumidor Final",
+      business_name: "Consumidor Final",
       document_type: "dni",
       document_number: "0",
       address: null,
-      fiscal_condition: null,
+      fiscal_condition: "Consumidor final",
     };
   }
 
@@ -81,12 +91,16 @@ const generateNextDocumentNumber = async (
   tenantId: string,
   documentType: InvoiceDocumentType
 ): Promise<string> => {
-  const allInvoices = await invoicesCrud.getAllByTenant(tenantId);
-  const sameType = allInvoices.filter((invoice) => invoice.document_type === documentType);
-  const maxSequence = sameType.reduce((max, invoice) => {
-    const current = extractSequenceFromDocumentNumber(invoice.document_number);
-    return current > max ? current : max;
-  }, 0);
+  const latestInvoices = await invoicesCrud.query(tenantId, {
+    eq: { document_type: documentType },
+    order: { column: "document_number", ascending: false },
+    limit: 1,
+  });
+
+  const maxSequence =
+    latestInvoices.length > 0
+      ? extractSequenceFromDocumentNumber(latestInvoices[0].document_number)
+      : 0;
 
   const nextSequence = maxSequence + 1;
   return `${documentPrefixByType[documentType]}-${String(nextSequence).padStart(8, "0")}`;
@@ -104,10 +118,10 @@ const validateInvoiceGenerationFromSale = (
     return { valid: false, message: "Solo se puede facturar una venta completada" };
   }
 
-  if (!sale.customer_id && documentType !== "PRESUPUESTO") {
+  if (!sale.customer_id && documentType === "A") {
     return {
       valid: false,
-      message: "Sin cliente solo se puede generar PRESUPUESTO",
+      message: "Para emitir Factura A se requiere un cliente con CUIT registrado.",
     };
   }
 
@@ -127,13 +141,25 @@ export const invoicesService = {
       arca_status: ArcaInvoiceStatus;
       arca_reference?: string | null;
       arca_message?: string | null;
+      cae?: string | null;
+      cae_due_date?: string | null;
+      qr_data_url?: string | null;
+      document_number?: string | null;
     }
   ): Promise<Invoice> => {
-    const updated = await invoicesCrud.update(tenantId, id, {
+    const patchData: Partial<Invoice> = {
       arca_status: input.arca_status,
       arca_reference: input.arca_reference ?? null,
       arca_message: input.arca_message ?? null,
-    });
+    };
+    if (input.cae !== undefined) patchData.cae = input.cae;
+    if (input.cae_due_date !== undefined) patchData.cae_due_date = input.cae_due_date;
+    if (input.qr_data_url !== undefined) patchData.qr_data_url = input.qr_data_url;
+    if (input.document_number !== undefined && input.document_number !== null) {
+      patchData.document_number = input.document_number;
+    }
+
+    const updated = await invoicesCrud.update(tenantId, id, patchData as UpdateInvoiceInput);
 
     if (!updated) {
       throw new Error("Factura no encontrada");
@@ -143,10 +169,8 @@ export const invoicesService = {
   },
   delete: (tenantId: string, id: string) => invoicesCrud.delete(tenantId, id),
 
-  getBySaleId: async (tenantId: string, saleId: string) => {
-    const all = await invoicesCrud.getAllByTenant(tenantId);
-    return all.filter((invoice) => invoice.sale_id === saleId);
-  },
+  getBySaleId: (tenantId: string, saleId: string) =>
+    invoicesCrud.query(tenantId, { eq: { sale_id: saleId } }),
 
   generateDocumentNumber: generateNextDocumentNumber,
 

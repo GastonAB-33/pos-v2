@@ -6,12 +6,19 @@ import { Toaster } from "@/components/ui/Toaster";
 import { OfflineProvider } from "@/features/offline/context/OfflineContext";
 import { PwaProvider } from "@/features/pwa/context/PwaContext";
 import { TenantProvider } from "@/features/tenant/context/TenantContext";
+import { useAuthSessionSync } from "@/features/auth/hooks/useAuthSessionSync";
+
+const AuthSessionListener = () => {
+  useAuthSessionSync();
+  return null;
+};
 
 export const AppProviders = ({ children }: PropsWithChildren) => {
   return (
     <ThemeProvider>
       <PwaProvider>
         <BrowserRouter>
+          <AuthSessionListener />
           <TenantProvider>
             <OfflineProvider>
               {children}

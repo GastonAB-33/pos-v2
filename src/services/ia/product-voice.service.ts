@@ -1,3 +1,5 @@
+import { replaceSpokenSpanishNumbers } from "@/features/voice/utils/voice-normalizer";
+
 export interface ProductVoiceSuggestions {
   name: string | null;
   description: string | null;
@@ -33,7 +35,7 @@ export interface ProductVoiceParserOptions {
 
 export interface ProductVoiceProvider {
   name: string;
-  transcribeAudio: (
+  transcribeAudio?: (
     audioBlob: Blob,
     options?: ProductVoiceTranscribeOptions
   ) => Promise<ProductVoiceTranscriptionResult>;
@@ -56,37 +58,58 @@ const matchText = (transcript: string, pattern: RegExp): string | null => {
   return normalizeText(match[1]);
 };
 
-const parseTranscriptToSuggestions = (rawTranscript: string): ProductVoiceSuggestions => {
-  const transcript = normalizeText(rawTranscript);
+/**
+ * Parser inteligente offline basado en reglas fonéticas y números en español.
+ */
+export const parseTranscriptToSuggestions = (rawTranscript: string): ProductVoiceSuggestions => {
+  // Primero convertimos números hablados a números arábigos:
+  // "precio mil quinientos costo novecientos" -> "precio 1500 costo 900"
+  const transcriptWithNumbers = replaceSpokenSpanishNumbers(rawTranscript);
+  const transcript = normalizeText(transcriptWithNumbers);
   const lower = transcript.toLowerCase();
 
   const barcodeMatch = lower.match(/\b\d{8,14}\b/);
   const priceText =
-    matchText(lower, /(?:precio|vale|venta)\s*(?:de)?\s*\$?\s*([\d.,]+)/i) ??
-    matchText(lower, /(?:precio)\s*final\s*(?:de)?\s*\$?\s*([\d.,]+)/i);
-  const costText = matchText(lower, /(?:costo|coste)\s*(?:de)?\s*\$?\s*([\d.,]+)/i);
-  const stockText =
-    matchText(lower, /(?:stock(?:\s*inicial)?|cantidad)\s*(?:de)?\s*([\d.,]+)/i) ??
-    matchText(lower, /(?:arranca|inicia)\s*(?:con)?\s*([\d.,]+)\s*(?:unidades|u)?/i);
+    matchText(lower, /(?:precio|vale|venta|precio final)\s*(?:de)?\s*\$?\s*([\d.,]+)/i) ??
+    matchText(lower, /(?:a|por)\s*\$?\s*([\d.,]+)\s*(?:pesos)?/i);
 
-  const name =
-    matchText(lower, /(?:nombre|producto)\s*(?:es)?\s*[:\-]?\s*([^.,;]+)/i) ??
+  const costText =
+    matchText(lower, /(?:costo|coste|costo de compra)\s*(?:de)?\s*\$?\s*([\d.,]+)/i);
+
+  const stockText =
+    matchText(lower, /(?:stock(?:\s*inicial)?|cantidad|unidades)\s*(?:de)?\s*([\d.,]+)/i) ??
+    matchText(lower, /(?:arranca|inicia|hay|tenemos)\s*(?:con)?\s*([\d.,]+)\s*(?:unidades|u|paquetes|cajas)?/i);
+
+  let name =
+    matchText(lower, /(?:nombre|producto|articulo|artículo)\s*(?:es)?\s*[:\-]?\s*([^.,;]+)/i) ??
     matchText(lower, /^([^.,;]{3,80})/i);
 
   const description = matchText(
     lower,
-    /(?:descripcion|detalle)\s*(?:es)?\s*[:\-]?\s*([^.;]+)/i
+    /(?:descripcion|descripción|detalle)\s*(?:es)?\s*[:\-]?\s*([^.;]+)/i
   );
-  const category = matchText(lower, /(?:categoria|rubro)\s*(?:es)?\s*[:\-]?\s*([^.,;]+)/i);
+  const category = matchText(
+    lower,
+    /(?:categoria|categoría|rubro)\s*(?:es)?\s*[:\-]?\s*([^.,;]+)/i
+  );
   const subcategory = matchText(
     lower,
-    /(?:subcategoria|subrubro)\s*(?:es)?\s*[:\-]?\s*([^.,;]+)/i
+    /(?:subcategoria|subcategoría|subrubro)\s*(?:es)?\s*[:\-]?\s*([^.,;]+)/i
   );
   const brand = matchText(lower, /(?:marca)\s*(?:es)?\s*[:\-]?\s*([^.,;]+)/i);
 
   let saleMode: "unit" | "weight" = "unit";
-  if (/\b(peso|granel|kilo|kilogramo|kg)\b/i.test(lower)) {
+  if (/\b(peso|pesable|granel|kilo|kilos|kilogramo|kilogramos|kg|gramos|gr)\b/i.test(lower)) {
     saleMode = "weight";
+  }
+
+  // Si el nombre capturado incluye frases clave de otros campos, limpiarlo
+  if (name) {
+    name = name
+      .replace(/\b(precio|costo|stock|marca|categoria|codigo|código)\b.*$/i, "")
+      .trim();
+    // Capitalizar nombre de producto
+    name = name.charAt(0).toUpperCase() + name.slice(1);
   }
 
   return {
@@ -103,48 +126,88 @@ const parseTranscriptToSuggestions = (rawTranscript: string): ProductVoiceSugges
   };
 };
 
-const mockProvider: ProductVoiceProvider = {
-  name: "mock-voice-v1",
-  transcribeAudio: async (audioBlob, options) => {
-    if (options?.signal?.aborted) {
-      throw new DOMException("Operacion cancelada", "AbortError");
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    const transcript =
-      audioBlob.size > 0
-        ? "producto nombre arroz largo fino marca molinos categoria almacen subcategoria secos precio 2400 costo 1900 stock inicial 10"
-        : "";
-
-    return {
-      provider: "mock-voice-v1-transcriber",
-      transcript,
-    };
-  },
+/**
+ * Proveedor offline rápido (0ms latencia, sin costos)
+ */
+const smartOfflineProvider: ProductVoiceProvider = {
+  name: "ia-pos-voice-v2",
   parseTranscript: async (transcript) => parseTranscriptToSuggestions(transcript),
 };
 
-export const productVoiceService = {
-  async transcribeAudio(
-    audioBlob: Blob,
-    options: ProductVoiceTranscribeOptions = {},
-    provider: ProductVoiceProvider = mockProvider
-  ): Promise<ProductVoiceTranscriptionResult> {
-    return provider.transcribeAudio(audioBlob, options);
-  },
+/**
+ * Proveedor con Gemini AI si la API Key está disponible en el entorno
+ */
+const geminiAiProvider: ProductVoiceProvider = {
+  name: "gemini-flash-voice-v2",
+  parseTranscript: async (transcript) => {
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey || apiKey === "your-gemini-api-key") {
+      return parseTranscriptToSuggestions(transcript);
+    }
 
+    try {
+      const prompt = `Actúa como asistente de punto de venta (POS) para un comercio en Argentina.
+Analiza la siguiente transcripción de voz dictada por un comerciante y extrae la información del producto en formato JSON:
+"${transcript}"
+
+Responde EXCLUSIVAMENTE un objeto JSON válido con estas claves:
+{
+  "name": string o null (nombre del producto limpio y capitalizado),
+  "description": string o null,
+  "category": string o null,
+  "subcategory": string o null,
+  "brand": string o null,
+  "sale_mode": "unit" o "weight",
+  "barcode": string o null,
+  "price": number o null,
+  "cost": number o null,
+  "stock_initial": number o null
+}`;
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" },
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        return parseTranscriptToSuggestions(transcript);
+      }
+
+      const json = await response.json();
+      const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText) return parseTranscriptToSuggestions(transcript);
+
+      const parsed = JSON.parse(rawText) as ProductVoiceSuggestions;
+      return parsed;
+    } catch {
+      return parseTranscriptToSuggestions(transcript);
+    }
+  },
+};
+
+export const productVoiceService = {
   async analyzeTranscript(
     transcript: string,
     options: ProductVoiceParserOptions = {}
   ): Promise<ProductVoiceAnalyzeResult> {
-    const provider = options.provider ?? mockProvider;
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const hasValidGeminiKey = Boolean(apiKey && apiKey !== "your-gemini-api-key");
+
+    const defaultProvider = hasValidGeminiKey ? geminiAiProvider : smartOfflineProvider;
+    const provider = options.provider ?? defaultProvider;
     const suggestions = await provider.parseTranscript(transcript);
 
     const warnings: string[] = [];
     if (!suggestions.name) warnings.push("No se pudo inferir el nombre del producto.");
-    if (!suggestions.category) warnings.push("No se pudo inferir la categoria.");
-    if (suggestions.price == null) warnings.push("No se detecto un precio.");
+    if (!suggestions.category) warnings.push("No se detectó la categoría.");
+    if (suggestions.price == null) warnings.push("No se detectó un precio de venta.");
 
     return {
       provider: provider.name,

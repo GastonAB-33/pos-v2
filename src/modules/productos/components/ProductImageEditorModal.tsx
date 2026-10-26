@@ -1,4 +1,6 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 
 interface ProductImageEditorModalProps {
   open: boolean;
@@ -94,6 +96,7 @@ export const ProductImageEditorModal = ({
   onClose,
   onConfirm,
 }: ProductImageEditorModalProps) => {
+  useBodyScrollLock(open);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [zoom, setZoom] = useState(1.2);
   const [offsetX, setOffsetX] = useState(0);
@@ -149,9 +152,7 @@ export const ProductImageEditorModal = ({
             <h3 className="text-base font-semibold text-slate-900">Editar fotografía del producto</h3>
             <p className="text-xs text-slate-500">Recorta y optimiza la imagen antes de guardar.</p>
           </div>
-          <button type="button" className="ui-btn-ghost" onClick={onClose} disabled={isExporting}>
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar editor de imagen" onClick={onClose} disabled={isExporting} />
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[360px_1fr]">

@@ -1,11 +1,26 @@
-import { useMemo, useState } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import {
+  BarChart3,
+  ChevronDown,
+  ClipboardList,
+  ExternalLink,
+  Package,
+  ShoppingCart,
+  Tags,
+  WalletCards,
+  type LucideIcon,
+} from "lucide-react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { routePaths } from "@/config/routes";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { isSupportOperator } from "@/features/support/support-operator";
+import { useDeviceProfile } from "@/hooks/useDeviceProfile";
+import { usePosNavigation } from "@/hooks/usePosNavigation";
+import { useUiStore } from "@/store/ui.store";
 import type { AppModule } from "@/types/modules";
 import { cn } from "@/utils/cn";
+import { JirehLogo } from "@/components/brand/JirehLogo";
 
 interface SidebarItem {
   label: string;
@@ -16,6 +31,7 @@ interface SidebarItem {
 interface SidebarGroup {
   id: string;
   label: string;
+  icon: LucideIcon;
   collapsible: boolean;
   defaultExpanded: boolean;
   items: SidebarItem[];
@@ -31,24 +47,25 @@ const sidebarGroups: SidebarGroup[] = [
   {
     id: "agenda",
     label: "Agenda",
+    icon: ClipboardList,
     collapsible: true,
     defaultExpanded: true,
     items: [
       { label: "Clientes", to: routePaths.clientes, module: "clientes" },
       { label: "Proveedores", to: routePaths.proveedores, module: "proveedores" },
+      { label: "Empleados", to: routePaths.empleados, module: "empleados" },
       { label: "Configuracion", to: routePaths.configuracionAgenda, module: "configuracion_agenda" },
     ],
   },
   {
     id: "catalogo",
-    label: "Catalogo",
+    label: "Inventario",
+    icon: Package,
     collapsible: true,
     defaultExpanded: true,
     items: [
       { label: "Productos", to: routePaths.productos, module: "productos" },
       { label: "Stock", to: routePaths.stock, module: "stock" },
-      { label: "Listas de precios", to: routePaths.listasPrecios, module: "listas_precios" },
-      { label: "Promociones", to: routePaths.promociones, module: "promociones" },
       { label: "Compras a proveedores", to: routePaths.compras, module: "compras" },
       { label: "Configuracion", to: routePaths.configuracionCatalogo, module: "configuracion_catalogo" },
     ],
@@ -56,13 +73,15 @@ const sidebarGroups: SidebarGroup[] = [
   {
     id: "contable",
     label: "Contable",
+    icon: WalletCards,
     collapsible: true,
     defaultExpanded: true,
     items: [
-      { label: "Caja", to: routePaths.caja, module: "caja" },
-      { label: "Cuentas corrientes", to: routePaths.cuentasCorrientes, module: "cuentas_corrientes" },
-      { label: "Comprobantes", to: routePaths.comprobantes, module: "comprobantes" },
-      { label: "Medios de pago", to: routePaths.mediosPago, module: "medios_pago" },
+      { label: "Caja diaria", to: routePaths.caja, module: "caja" },
+      { label: "Caja general", to: routePaths.cajaGeneral, module: "caja_general" },
+      { label: "Cta. cte. clientes", to: routePaths.cuentasCorrientes, module: "cuentas_corrientes" },
+      { label: "Cta. cte. proveedores", to: routePaths.cuentasCorrientesProveedores, module: "cuentas_corrientes_proveedores" },
+      { label: "Bancos", to: routePaths.bancos, module: "bancos" },
       { label: "Facturacion", to: routePaths.facturacion, module: "facturacion" },
       { label: "Configuracion", to: routePaths.configuracionContable, module: "configuracion_contable" },
     ],
@@ -70,6 +89,7 @@ const sidebarGroups: SidebarGroup[] = [
   {
     id: "analisis",
     label: "Analisis",
+    icon: BarChart3,
     collapsible: true,
     defaultExpanded: true,
     items: [
@@ -82,10 +102,12 @@ const sidebarGroups: SidebarGroup[] = [
   {
     id: "sistema",
     label: "Sistema",
+    icon: Tags,
     collapsible: true,
     defaultExpanded: true,
     items: [
       { label: "Usuarios", to: routePaths.usuarios, module: "usuarios" },
+      { label: "Medios de pago", to: routePaths.mediosPago, module: "medios_pago" },
       { label: "Alta de comercio", to: routePaths.altaComercio, module: "configuracion_sistema" },
       { label: "Centro soporte", to: routePaths.centroSoporte, module: "configuracion_sistema" },
       { label: "Mis consultas", to: routePaths.misConsultas, module: "configuracion_sistema" },
@@ -100,49 +122,53 @@ export const Sidebar = () => {
   const user = useAuthStore((state) => state.user);
   const { canRead } = usePermissions();
   const supportOperator = isSupportOperator(user);
+  const { isDesktop } = useDeviceProfile();
+  const setSidebarOpen = useUiStore((state) => state.setSidebarOpen);
+  const theme = useUiStore((state) => state.theme);
+  const sidebarTheme = useUiStore((state) => state.sidebarTheme);
 
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(sidebarGroups.map((group) => [group.id, false]))
-  );
+  const isSidebarDark =
+    sidebarTheme === "dark" ||
+    (sidebarTheme === "auto" && (theme === "dark" || theme === "midnight"));
 
-  const openPosInNewTab = () => {
-    if (typeof window === "undefined") return;
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(() => {
+    const activeGroup = sidebarGroups.find((group) =>
+      group.items.some(
+        (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
+      )
+    );
+    const defaultGroup = activeGroup ?? sidebarGroups.find((group) => group.defaultExpanded);
+    return defaultGroup?.id ?? null;
+  });
 
-    const posUrl = new URL(quickAccessItem.to, window.location.origin);
-    posUrl.searchParams.set("from", "panel-web");
-    posUrl.searchParams.set("view", "browser");
-    const opened = window.open("", "_blank");
-    if (!opened) {
-      window.alert(
-        "No se pudo abrir una nueva pestana web para POS. Habilita popups para este sitio e intenta de nuevo."
-      );
-      return;
-    }
+  useEffect(() => {
+    const activeGroup = sidebarGroups.find((group) =>
+      group.items.some(
+        (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
+      )
+    );
+    if (!activeGroup) return;
 
-    opened.opener = null;
-    const safeTitle = `${quickAccessItem.label} Web`;
-    const safeUrl = posUrl.toString();
-    opened.document.open();
-    opened.document.write(`<!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>${safeTitle}</title>
-    <style>
-      html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #f1f5f9; }
-      iframe { width: 100%; height: 100%; border: 0; display: block; background: #fff; }
-    </style>
-  </head>
-  <body>
-    <iframe src="${safeUrl}" title="${safeTitle}" referrerpolicy="no-referrer"></iframe>
-  </body>
-</html>`);
-    opened.document.close();
+    setExpandedGroupId(activeGroup.id);
+  }, [location.pathname]);
+
+  const { openPos, getPosUrl, posWindowMode } = usePosNavigation();
+
+  const handleOpenPos = () => {
+    openPos();
+    closeDrawerAfterNavigation();
   };
 
   const isItemActive = (to: string) =>
-    location.pathname === to || location.pathname.startsWith(`${to}/`);
+    location.pathname === to ||
+    location.pathname.startsWith(`${to}/`) ||
+    (to === routePaths.configuracionSistema && location.pathname === routePaths.configuracion);
+
+  const closeDrawerAfterNavigation = () => {
+    if (!isDesktop) {
+      setSidebarOpen(false);
+    }
+  };
 
   const visibleGroups = useMemo(
     () =>
@@ -163,68 +189,141 @@ export const Sidebar = () => {
 
   const canReadPos = canRead(quickAccessItem.module);
 
+  const effectiveSidebarDataTheme =
+    sidebarTheme === "auto"
+      ? theme === "midnight"
+        ? "midnight"
+        : theme === "dark"
+        ? "dark"
+        : "light"
+      : sidebarTheme;
+
   return (
-    <aside className="app-sidebar">
+    <aside className="app-sidebar" data-sidebar-theme={effectiveSidebarDataTheme}>
       <button
         type="button"
-        className="w-full border-b border-slate-200 px-5 py-4 text-left transition hover:bg-slate-50"
+        className={cn(
+          "app-sidebar-brand w-full border-b px-4 py-3.5 text-left transition",
+          isSidebarDark
+            ? "border-slate-800/80 hover:bg-white/5"
+            : "border-slate-200 hover:bg-slate-50"
+        )}
+        data-sidebar-theme={effectiveSidebarDataTheme}
         onClick={() => {
+          closeDrawerAfterNavigation();
           navigate(routePaths.menuPrincipal);
         }}
       >
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">POS V2</p>
-        <p className="mt-1 text-lg font-semibold text-slate-900">Panel Operativo</p>
+        <JirehLogo size="sm" showTagline={true} variant={isSidebarDark ? "light" : "default"} />
       </button>
 
-      <nav className="space-y-5 p-3">
+      <nav className="app-sidebar-nav space-y-5 p-3">
         {canReadPos ? (
           <section className="space-y-2">
-            <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            <p
+              className={cn(
+                "px-2 text-[11px] font-semibold uppercase tracking-[0.14em]",
+                isSidebarDark ? "text-slate-400" : "text-slate-500"
+              )}
+            >
               Acceso rapido
             </p>
-            <button
-              type="button"
-              onClick={openPosInNewTab}
+            <Link
+              to={getPosUrl()}
+              onClick={(e) => {
+                // Si el usuario hace clic izquierdo normal (sin Ctrl/Cmd/Shift/Alt)
+                if (e.button === 0 && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) {
+                  e.preventDefault();
+                  handleOpenPos();
+                }
+              }}
               className={cn(
-                "flex items-center justify-between rounded-xl border px-3 py-2 text-sm font-semibold transition",
-                isItemActive(quickAccessItem.to)
+                "app-sidebar-pos flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm font-semibold transition",
+                isSidebarDark
+                  ? isItemActive(quickAccessItem.to)
+                    ? "border-brand-500/60 bg-brand-500/25 text-white shadow-xs"
+                    : "border-brand-500/30 bg-brand-500/15 text-slate-200 hover:bg-brand-500/25 hover:text-white"
+                  : isItemActive(quickAccessItem.to)
                   ? "border-brand-500/40 bg-brand-500/15 text-slate-900"
                   : "border-brand-500/30 bg-brand-500/10 text-slate-700 hover:bg-brand-500/20 hover:text-slate-900"
               )}
+              title={
+                posWindowMode === "new_window"
+                  ? "Abrir Punto de venta (configurado en nueva ventana)"
+                  : "Abrir Punto de venta"
+              }
             >
-              <span>{quickAccessItem.label}</span>
-              <span className="ui-badge ui-badge--info text-[10px]">LIVE</span>
-            </button>
+              <span className="flex items-center gap-2">
+                <ShoppingCart aria-hidden="true" size={16} /> Punto de venta
+              </span>
+              {posWindowMode === "new_window" ? (
+                <ExternalLink aria-hidden="true" size={14} className="opacity-60" />
+              ) : null}
+            </Link>
           </section>
         ) : null}
 
         {visibleGroups.map((group) => {
-          const isExpanded = expandedGroups[group.id] ?? true;
+          const isExpanded = expandedGroupId === group.id;
+          const isGroupActive = group.items.some((item) => isItemActive(item.to));
+          const GroupIcon = group.icon;
 
           return (
             <section key={group.id} className="space-y-1">
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-2 py-1 text-left"
+                className={cn(
+                  "app-sidebar-group-btn flex w-full items-center gap-2 rounded-lg px-2.5 py-1 text-left transition-all duration-150",
+                  isSidebarDark
+                    ? isGroupActive
+                      ? "app-sidebar-group-btn--active border border-slate-700/80 bg-slate-800/80 text-white shadow-xs"
+                      : "border border-transparent text-slate-400 hover:bg-white/5 hover:text-slate-200"
+                    : isGroupActive
+                    ? "app-sidebar-group-btn--active border border-slate-200/90 bg-slate-100/75 text-slate-900 shadow-xs"
+                    : "border border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                )}
                 onClick={() => {
                   if (!group.collapsible) return;
-                  setExpandedGroups((previous) => ({
-                    ...Object.fromEntries(sidebarGroups.map((entry) => [entry.id, false])),
-                    [group.id]: !previous[group.id],
-                  }));
+                  setExpandedGroupId((current) => (current === group.id ? null : group.id));
                 }}
               >
-                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  {group.label}
-                </span>
+                <GroupIcon
+                  aria-hidden="true"
+                  size={14}
+                  className={cn(
+                    "app-sidebar-group-icon shrink-0 transition-colors",
+                    isGroupActive
+                      ? isSidebarDark ? "text-brand-400" : "text-brand-600"
+                      : isSidebarDark ? "text-slate-400" : "text-slate-400"
+                  )}
+                />
                 <span
                   className={cn(
-                    "ml-auto text-xs text-slate-500 transition-transform",
-                    isExpanded ? "rotate-180" : "rotate-0"
+                    "app-sidebar-group-label text-[11px] uppercase tracking-[0.1em] transition-colors",
+                    isGroupActive
+                      ? isSidebarDark ? "font-bold text-white" : "font-bold text-slate-900"
+                      : isSidebarDark ? "font-semibold text-slate-400" : "font-semibold text-slate-500"
                   )}
                 >
-                  v
+                  {group.label}
                 </span>
+                {isGroupActive ? (
+                  <span
+                    className="app-sidebar-group-dot h-1.5 w-1.5 rounded-full bg-brand-500 shrink-0"
+                    title="Módulo actual"
+                  />
+                ) : null}
+                <ChevronDown
+                  aria-hidden="true"
+                  size={15}
+                  className={cn(
+                    "app-sidebar-group-chevron ml-auto shrink-0 text-xs transition-transform",
+                    isGroupActive
+                      ? isSidebarDark ? "text-slate-200" : "text-slate-700"
+                      : isSidebarDark ? "text-slate-500" : "text-slate-400",
+                    isExpanded ? "rotate-180" : "rotate-0"
+                  )}
+                />
               </button>
 
               <div
@@ -240,12 +339,17 @@ export const Sidebar = () => {
                     <NavLink
                       key={item.to}
                       to={item.to}
+                      onClick={closeDrawerAfterNavigation}
                       className={() =>
                         cn(
                           "block rounded-r-lg border-l-2 px-3 py-2 text-sm transition",
-                          isItemActive(item.to)
-                            ? "border-brand-500 bg-brand-500/15 text-slate-900"
-                            : "border-transparent text-slate-600 hover:border-brand-500 hover:bg-slate-50"
+                          isSidebarDark
+                            ? isItemActive(item.to)
+                              ? "border-brand-500 bg-brand-500/20 font-medium text-white"
+                              : "border-transparent text-slate-300 hover:border-brand-500/60 hover:bg-white/5 hover:text-white"
+                            : isItemActive(item.to)
+                            ? "border-brand-500 bg-brand-500/15 font-medium text-slate-900"
+                            : "border-transparent text-slate-600 hover:border-brand-500 hover:bg-slate-50 hover:text-slate-900"
                         )
                       }
                     >

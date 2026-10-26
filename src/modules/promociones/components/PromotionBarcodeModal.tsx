@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 import JsBarcode from "jsbarcode";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { buildPromotionBarcode, type PromotionWithDetails } from "@/services/promotions.service";
 
 interface PromotionBarcodeModalProps {
@@ -18,6 +20,7 @@ const downloadSvg = (svgMarkup: string, fileName: string) => {
 };
 
 export const PromotionBarcodeModal = ({ promotion, onClose }: PromotionBarcodeModalProps) => {
+  useBodyScrollLock(Boolean(promotion));
   const svgRef = useRef<SVGSVGElement | null>(null);
   const barcode = promotion?.barcodes?.[0]?.barcode ?? (promotion ? buildPromotionBarcode(promotion.code) : "");
 
@@ -43,19 +46,17 @@ export const PromotionBarcodeModal = ({ promotion, onClose }: PromotionBarcodeMo
   if (!promotion) return null;
 
   return (
-    <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-4">
-      <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-white p-4 shadow-panel md:p-5">
-        <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+    <section className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+      <div className="w-full max-w-2xl rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-2xl md:p-5">
+        <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
           <div>
-            <h3 className="text-base font-semibold text-slate-900">Codigo de barras</h3>
-            <p className="font-mono text-xs text-slate-500">{promotion.name} - {promotion.code}</p>
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Código de barras</h3>
+            <p className="font-mono text-xs text-slate-500 dark:text-slate-400">{promotion.name} - {promotion.code}</p>
           </div>
-          <button type="button" className="ui-btn-ghost" onClick={onClose}>
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar código de barras" onClick={onClose} />
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white p-4">
           <div className="mx-auto flex w-full max-w-xl justify-center overflow-x-auto">
             <svg ref={svgRef} role="img" aria-label={`Codigo de barras ${barcode}`} />
           </div>

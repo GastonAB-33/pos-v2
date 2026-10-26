@@ -12,6 +12,7 @@ const purchaseItemsCrud = new TenantCrudService<PurchaseItem>(dbTables.purchase_
 export type CreatePurchaseInput = CreateEntityInput<Purchase>;
 export type UpdatePurchaseInput = UpdateEntityInput<Purchase>;
 export type CreatePurchaseItemInput = CreateEntityInput<PurchaseItem>;
+export type UpdatePurchaseItemInput = UpdateEntityInput<PurchaseItem>;
 
 export const purchasesService = {
   getAllByTenant: (tenantId: string) => purchasesCrud.getAllByTenant(tenantId),
@@ -23,6 +24,8 @@ export const purchasesService = {
 
   createItem: (tenantId: string, input: CreatePurchaseItemInput) =>
     purchaseItemsCrud.create(tenantId, input),
+  updateItem: (tenantId: string, id: string, input: UpdatePurchaseItemInput) =>
+    purchaseItemsCrud.update(tenantId, id, input),
 
   getAllItemsByTenant: (tenantId: string) => purchaseItemsCrud.getAllByTenant(tenantId),
 
@@ -31,3 +34,4 @@ export const purchasesService = {
     return allItems.filter((item) => item.purchase_id === purchaseId);
   },
 };
+

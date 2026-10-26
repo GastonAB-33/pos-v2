@@ -1,19 +1,65 @@
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
-import { EmptyState, LoadingState } from "@/components/ui/UiStates";
+import { LoadingState } from "@/components/ui/UiStates";
+import { IconButton } from "@/components/ui/IconButton";
 import { useToast } from "@/components/ui/useToast";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { CustomerCurrentAccountPanel } from "@/modules/clientes/components/CustomerCurrentAccountPanel";
 import { useCurrentAccountsPage } from "@/modules/cuentas-corrientes/hooks/useCurrentAccountsPage";
-import { useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { PosCustomerModal, type PosCustomerModalValues } from "@/modules/pos/components/PosCustomerModal";
+import { customersService } from "@/services/customers.service";
+import { auditService } from "@/services/audit.service";
+import { posCustomerProfilesService } from "@/services/pos-customer-profiles.service";
+import { formatCustomerDocument } from "@/modules/configuracion/hooks/useEntityRequirements";
+import {
+  Users,
+  CheckCircle2,
+  AlertCircle,
+  RefreshCw,
+  Search,
+  ArrowRight,
+  UserCheck,
+  UserPlus,
+  Package,
+} from "lucide-react";
 
 const currency = new Intl.NumberFormat("es-AR", {
   style: "currency",
   currency: "ARS",
   maximumFractionDigits: 2,
 });
+
+const defaultPosModalValues: PosCustomerModalValues = {
+  firstName: "",
+  lastName: "",
+  documentType: "dni",
+  documentNumber: "",
+  phone: "",
+  email: "",
+  address: "",
+  fiscalBusinessName: "",
+  fiscalAddress: "",
+  fiscalCondition: "",
+  fiscalCuit: "",
+  currentAccountEnabled: true,
+  currentAccountLimit: "",
+};
+
+const buildCustomerCode = (name: string): string => {
+  const normalized = name
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, "")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 3)
+    .map((part) => part.slice(0, 3))
+    .join("");
+
+  return `${normalized || "CLI"}-${Date.now().toString().slice(-6)}`;
+};
 
 export const CuentasCorrientesPage = () => {
   const [searchParams] = useSearchParams();
@@ -23,16 +69,30 @@ export const CuentasCorrientesPage = () => {
   const toast = useToast();
   const canReadCurrentAccounts = canRead("cuentas_corrientes");
   const canWriteCurrentAccounts = canWrite("cuentas_corrientes");
+  const canWriteClientes = canWrite("clientes");
+  const canCreateCustomer = canWriteClientes || canWriteCurrentAccounts;
+
+  const [isCreateCustomerModalOpen, setIsCreateCustomerModalOpen] = useState(false);
+  const [isSubmittingCustomer, setIsSubmittingCustomer] = useState(false);
 
   const initialCustomerId = searchParams.get("customerId") ?? searchParams.get("clienteId");
 
   const {
+    customers,
     filteredCustomers,
+    customerPackagesMap,
     selectedCustomer,
-    selectedCustomerId,
     setSelectedCustomerId,
     search,
     setSearch,
+    filterMode,
+    setFilterMode,
+    totalDebt,
+    customersWithDebtCount,
+    customersWithPackagesCount,
+    totalPackagesOwedCount,
+    customersWithBothCount,
+    customersUpToDateCount,
     isLoading,
     feedback,
     clearFeedback,
@@ -45,11 +105,75 @@ export const CuentasCorrientesPage = () => {
     clearFeedback();
   }, [clearFeedback, feedback, toast]);
 
+  const handleCreateCustomerSubmit = async (values: PosCustomerModalValues) => {
+    if (!tenantId) return;
+    setIsSubmittingCustomer(true);
+    try {
+      const normalizeNamePart = (part: string) => part.trim();
+      const firstName = normalizeNamePart(values.firstName);
+      const lastName = normalizeNamePart(values.lastName);
+      const fullName = `${firstName} ${lastName}`.replace(/\s+/g, " ").trim();
+      const fiscalCuit = (values.fiscalCuit ?? "").trim();
+      const parsedLimit = Number(values.currentAccountLimit ?? "");
+      const currentAccountLimit =
+        (values.currentAccountLimit ?? "").trim() &&
+        Number.isFinite(parsedLimit) &&
+        parsedLimit >= 0
+          ? Number(parsedLimit.toFixed(2))
+          : null;
+
+      const created = await customersService.create(tenantId, {
+        code: buildCustomerCode(fullName),
+        full_name: fullName,
+        document_type: fiscalCuit ? "cuit" : values.documentType,
+        document_number: fiscalCuit || (values.documentNumber ?? "").trim(),
+        fiscal_business_name: values.fiscalBusinessName?.trim() || null,
+        fiscal_address: values.fiscalAddress?.trim() || null,
+        fiscal_condition: values.fiscalCondition?.trim() || null,
+        price_list_id: null,
+        phone: values.phone?.trim() || null,
+        email: values.email?.trim() || null,
+        address: values.address?.trim() || null,
+        observations: null,
+        current_account_enabled: values.currentAccountEnabled,
+        current_account_limit: currentAccountLimit,
+        current_balance: 0,
+        is_active: true,
+      });
+
+      if (created) {
+        await auditService.createSafe(tenantId, {
+          user_id: user?.id ?? null,
+          module: "clientes",
+          action: "create",
+          entity_type: "customer",
+          entity_id: created.id,
+          description: `Cliente creado desde Cuentas Corrientes: ${created.full_name}`,
+          metadata: { full_name: created.full_name },
+        });
+
+        posCustomerProfilesService.saveProfile(tenantId, created.id, {
+          enabled: values.currentAccountEnabled,
+          limit: currentAccountLimit,
+        });
+
+        toast.success(`Cliente "${created.full_name}" creado con éxito`);
+        setIsCreateCustomerModalOpen(false);
+        await reload();
+        setSelectedCustomerId(created.id);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo crear el cliente");
+    } finally {
+      setIsSubmittingCustomer(false);
+    }
+  };
+
   if (!tenantId) {
     return (
       <PagePlaceholder
-        title="Cuentas Corrientes"
-        description="No hay tenant activo para operar el modulo"
+        title="Cuentas Corrientes Clientes"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -57,96 +181,341 @@ export const CuentasCorrientesPage = () => {
   if (!canReadCurrentAccounts) {
     return (
       <PagePlaceholder
-        title="Cuentas Corrientes"
-        description="No tenes permisos de lectura para este modulo"
+        title="Cuentas Corrientes Clientes"
+        description="No tenés permisos de lectura para este módulo"
       />
     );
   }
 
   return (
     <PagePlaceholder
-      title="Cuentas Corrientes"
-      description="Vista operativa basica de saldos y movimientos por cliente"
+      title="Cuentas Corrientes Clientes"
+      description="Control de saldos, deudas y cobranzas de clientes"
     >
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar cliente por nombre, documento, email o telefono"
-            className="min-w-72 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              clearFeedback();
+      <div className="cuentas-corrientes-clientes-workspace space-y-4">
+        {/* 4 Paneles KPI Superiores: Deuda $, Clientes deudores, Envases prestados y Clientes al día */}
+        {!selectedCustomer && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <article className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 shadow-sm dark:border-rose-900/60 dark:bg-rose-950/20">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-rose-800 dark:text-rose-300">
+                  Deuda Total ($)
+                </span>
+                <Users className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+              </div>
+              <p className="mt-2 text-2xl font-bold tracking-tight text-rose-900 dark:text-rose-100">
+                {currency.format(totalDebt)}
+              </p>
+              <p className="mt-1 text-xs text-rose-700 dark:text-rose-400">
+                Saldo acumulado a cobrar
+              </p>
+            </article>
+
+            <article className="rounded-xl border border-rose-200 bg-rose-50/40 p-4 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/10">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-rose-800 dark:text-rose-300">
+                  Con Deuda $
+                </span>
+                <AlertCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+              </div>
+              <p className="mt-2 text-2xl font-bold tracking-tight text-rose-900 dark:text-rose-100">
+                {customersWithDebtCount}
+              </p>
+              <p className="mt-1 text-xs text-rose-700 dark:text-rose-400">
+                De {customers.length} clientes activos
+              </p>
+            </article>
+
+            <article className="rounded-xl border border-amber-300 bg-amber-50/80 p-4 shadow-sm dark:border-amber-700/60 dark:bg-amber-950/30">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-amber-900 dark:text-amber-200">
+                  Envases en la Calle
+                </span>
+                <Package className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <p className="mt-2 text-2xl font-bold tracking-tight text-amber-950 dark:text-amber-100">
+                {totalPackagesOwedCount} {totalPackagesOwedCount === 1 ? "unidad" : "unidades"}
+              </p>
+              <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
+                {customersWithPackagesCount} {customersWithPackagesCount === 1 ? "cliente debe envases" : "clientes deben envases"}
+              </p>
+            </article>
+
+            <article className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/20">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                  Clientes al Día
+                </span>
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-900 dark:text-emerald-100">
+                {customersUpToDateCount}
+              </p>
+              <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+                Sin deuda $ ni envases
+              </p>
+            </article>
+          </div>
+        )}
+
+        {/* Flujo: Si hay un cliente seleccionado, se muestra el detalle con sus movimientos y acciones */}
+        {selectedCustomer ? (
+          <CustomerCurrentAccountPanel
+            tenantId={tenantId}
+            userId={user?.id ?? null}
+            customer={selectedCustomer}
+            canWrite={canWriteCurrentAccounts}
+            onClose={() => setSelectedCustomerId(null)}
+            onBalanceUpdated={() => {
               void reload();
             }}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            disabled={isLoading}
-          >
-            Recargar
-          </button>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
-          <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
-            <header className="flex items-center justify-between">
-              <h2 className="text-base font-semibold text-slate-900">Clientes</h2>
-              <span className="text-xs text-slate-500">{filteredCustomers.length} resultados</span>
-            </header>
-
-            {isLoading ? (
-              <LoadingState message="Cargando clientes..." />
-            ) : filteredCustomers.length ? (
-              <div className="max-h-[560px] space-y-2 overflow-y-auto pr-1">
-                {filteredCustomers.map((customer) => {
-                  const active = customer.id === selectedCustomerId;
-
-                  return (
-                    <button
-                      key={customer.id}
-                      type="button"
-                      onClick={() => setSelectedCustomerId(customer.id)}
-                      className={[
-                        "w-full rounded-lg border px-3 py-2 text-left transition",
-                        active
-                          ? "border-brand-200 bg-brand-50"
-                          : "border-slate-200 bg-white hover:bg-slate-50",
-                      ].join(" ")}
-                    >
-                      <p className="text-sm font-medium text-slate-900">{customer.full_name}</p>
-                      <p className="text-xs text-slate-500">
-                        {customer.document_type.toUpperCase()} {customer.document_number}
-                      </p>
-                      <p className="mt-1 text-xs font-semibold text-slate-700">
-                        Saldo: {currency.format(customer.current_balance)}
-                      </p>
-                    </button>
-                  );
-                })}
+          />
+        ) : (
+          /* Si no hay cliente seleccionado, se muestra la lista completa de clientes a ancho completo */
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden dark:bg-slate-900 dark:border-slate-800">
+            {/* Toolbar con Buscador, Filtros y Recargar */}
+            <div className="p-4 border-b border-slate-200 bg-slate-50/60 flex flex-wrap items-center justify-between gap-3 dark:border-slate-800 dark:bg-slate-800/40">
+              <div className="relative flex-1 min-w-[240px] max-w-md">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar cliente por nombre, documento, email o teléfono..."
+                  className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"
+                />
               </div>
-            ) : (
-              <EmptyState message="No hay clientes para mostrar." />
-            )}
-          </section>
 
-          {selectedCustomer ? (
-            <CustomerCurrentAccountPanel
-              tenantId={tenantId}
-              userId={user?.id ?? null}
-              customer={selectedCustomer}
-              canWrite={canWriteCurrentAccounts}
-              onClose={() => setSelectedCustomerId(null)}
-              onBalanceUpdated={() => {
-                void reload();
-              }}
-            />
-          ) : (
-            <EmptyState message="Selecciona un cliente para ver su cuenta corriente." />
-          )}
-        </div>
+              <div className="flex items-center gap-2">
+                <div className="flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setFilterMode("all")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      filterMode === "all"
+                        ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                    }`}
+                  >
+                    Todos ({customers.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterMode("debt")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      filterMode === "debt"
+                        ? "bg-rose-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                    }`}
+                  >
+                    Con deuda $ ({customersWithDebtCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterMode("packages")}
+                    className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      filterMode === "packages"
+                        ? "bg-amber-600 text-white shadow-2xs"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                    }`}
+                  >
+                    <Package size={13} />
+                    <span>Con envases ({customersWithPackagesCount})</span>
+                  </button>
+                  {customersWithBothCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setFilterMode("both")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        filterMode === "both"
+                          ? "bg-purple-600 text-white shadow-2xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                      }`}
+                    >
+                      Deuda + Envases ({customersWithBothCount})
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setFilterMode("zero")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      filterMode === "zero"
+                        ? "bg-emerald-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                    }`}
+                  >
+                    Al día ({customersUpToDateCount})
+                  </button>
+                </div>
+
+                {canCreateCustomer && (
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateCustomerModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+                  >
+                    <UserPlus size={14} />
+                    <span>Nuevo cliente</span>
+                  </button>
+                )}
+
+                <IconButton
+                  icon={RefreshCw}
+                  label="Recargar clientes"
+                  onClick={() => {
+                    clearFeedback();
+                    void reload();
+                  }}
+                  loading={isLoading}
+                />
+              </div>
+            </div>
+
+            {/* Tabla Completa de Clientes */}
+            <div className="overflow-x-auto">
+              {isLoading ? (
+                <div className="p-12">
+                  <LoadingState message="Cargando cuentas de clientes..." />
+                </div>
+              ) : filteredCustomers.length === 0 ? (
+                <div className="p-12 text-center text-slate-400">
+                  <UserCheck className="h-10 w-10 text-slate-300 mx-auto mb-2 dark:text-slate-600" />
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                    No se encontraron clientes
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Prueba cambiando el término de búsqueda o el filtro seleccionado.
+                  </p>
+                  {canCreateCustomer && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCreateCustomerModalOpen(true)}
+                      className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+                    >
+                      <UserPlus size={14} />
+                      <span>Crear nuevo cliente</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-600 border-b border-slate-200 dark:bg-slate-800/60 dark:text-slate-400 dark:border-slate-800">
+                    <tr>
+                      <th className="py-3 px-4">Cliente</th>
+                      <th className="py-3 px-4">Contacto</th>
+                      <th className="py-3 px-4">Estado y Envases</th>
+                      <th className="py-3 px-4 text-right">Saldo Actual</th>
+                      <th className="py-3 px-4 text-center">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {filteredCustomers.map((cust) => {
+                      const balance = cust.current_balance ?? 0;
+                      const hasDebt = balance > 0;
+                      const pkgInfo = customerPackagesMap.get(cust.id);
+                      const packageCount = pkgInfo?.count ?? 0;
+                      const packageDebts = pkgInfo?.debts ?? {};
+
+                      return (
+                        <tr
+                          key={cust.id}
+                          onClick={() => setSelectedCustomerId(cust.id)}
+                          className="hover:bg-slate-50/80 transition-colors cursor-pointer dark:hover:bg-slate-800/50"
+                        >
+                          <td className="py-3 px-4">
+                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                              {cust.full_name}
+                            </p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              {formatCustomerDocument(cust.document_type, cust.document_number)}
+                            </p>
+                          </td>
+
+                          <td className="py-3 px-4 text-slate-600 dark:text-slate-400">
+                            <p>{cust.phone || "-"}</p>
+                            {cust.email ? (
+                              <p className="text-[11px] text-slate-400">{cust.email}</p>
+                            ) : null}
+                          </td>
+
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span
+                                className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                                  hasDebt
+                                    ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
+                                    : balance < 0
+                                    ? "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
+                                    : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                }`}
+                              >
+                                {hasDebt ? "Con deuda" : balance < 0 ? "A favor" : "Al día"}
+                              </span>
+
+                              {packageCount > 0 && (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-800/60"
+                                  title={`Adeuda envases: ${Object.entries(packageDebts)
+                                    .map(([k, v]) => `${v}x ${k}`)
+                                    .join(", ")}`}
+                                >
+                                  <Package className="h-3 w-3" />
+                                  <span>{packageCount} {packageCount === 1 ? "envase" : "envases"}</span>
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4 text-right whitespace-nowrap">
+                            <span
+                              className={`text-sm font-bold ${
+                                hasDebt
+                                  ? "text-rose-600 dark:text-rose-400"
+                                  : balance < 0
+                                  ? "text-blue-600 dark:text-blue-400"
+                                  : "text-emerald-600 dark:text-emerald-400"
+                              }`}
+                            >
+                              {currency.format(balance)}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-4 text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedCustomerId(cust.id);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                            >
+                              <span>Ingresar</span>
+                              <ArrowRight size={13} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isCreateCustomerModalOpen && (
+          <PosCustomerModal
+            mode="create"
+            initialValues={{
+              ...defaultPosModalValues,
+              currentAccountEnabled: true,
+            }}
+            currentBalance={0}
+            disabled={isSubmittingCustomer}
+            onCancel={() => setIsCreateCustomerModalOpen(false)}
+            onSubmit={handleCreateCustomerSubmit}
+          />
+        )}
       </div>
     </PagePlaceholder>
   );

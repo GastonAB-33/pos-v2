@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditService } from "@/services/audit.service";
+import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
 import { cashService } from "@/services/cash.service";
-import { currentAccountsService } from "@/services/current-accounts.service";
-import { customersService } from "@/services/customers.service";
-import { paymentMethodsService } from "@/services/payment-methods.service";
-import { salesService } from "@/services/sales.service";
-import { settingsService } from "@/services/settings.service";
-import { usersService } from "@/services/users.service";
+import { generalCashService } from "@/services/general-cash.service";
+import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
+import { useCashStore } from "@/modules/caja/store/cash.store";
+import { useAuthStore } from "@/features/auth/store/auth.store";
+import {
+  formatLocalDateKey,
+  getShiftLabel,
+  formatLocalTime,
+  type ShiftPeriod,
+} from "@/modules/caja/utils/cash-date.utils";
 import type {
   CashMovement,
   CashSession,
-  CashSettings,
-  CurrentAccountMovement,
-  Customer,
-  PaymentMethod,
-  Sale,
 } from "@/types/entities";
 import type {
   CashMovementValues,
@@ -31,6 +31,25 @@ interface CashFeedback {
 
 type CashMovementFilter = "all" | CashMovement["movement_type"];
 
+export interface CashDailyShiftSummary {
+  session: CashSession;
+  shiftLabel: string;
+  period: ShiftPeriod;
+  timeRange: string;
+  openedByUserId: string;
+  closedByUserId: string | null;
+  status: CashSession["status"];
+  openingAmount: number;
+  incomes: number;
+  expenses: number;
+  expectedBalance: number;
+  realClosingAmount: number | null;
+  differenceAmount: number | null;
+  movementsCount: number;
+  saleMovementsCount: number;
+  manualMovementsCount: number;
+}
+
 export interface CashDailyTrackingRow {
   date: string;
   sessionsCount: number;
@@ -43,19 +62,76 @@ export interface CashDailyTrackingRow {
   differenceAmount: number;
   saleMovementsCount: number;
   manualMovementsCount: number;
+  shifts: CashDailyShiftSummary[];
+  sessions: CashSession[];
 }
+
+export interface CashCloseSnapshot {
+  billCounts?: Record<number, number>;
+  coinsAmount?: number;
+  openingBillCounts?: Record<number, number>;
+  openingCoinsAmount?: number;
+  expectedAmount?: number;
+  expectedCashAmount?: number;
+  expectedFullAmount?: number;
+  realAmount?: number;
+  difference?: number;
+  reconciliationMode?: "cash_only" | "full";
+  userNotes?: string;
+}
+
+export const serializeCloseSnapshot = (
+  snapshot: CashCloseSnapshot,
+  userNotes?: string | null
+): string => {
+  const json = JSON.stringify(snapshot);
+  const cleanNotes = userNotes?.trim() || "";
+  return `<!--SNAPSHOT:${json}-->${cleanNotes}`;
+};
+
+export const parseCloseSnapshot = (
+  notes: string | null | undefined
+): { snapshot: CashCloseSnapshot | null; cleanNotes: string } => {
+  if (!notes) return { snapshot: null, cleanNotes: "" };
+  const match = notes.match(/<!--SNAPSHOT:(.*?)-->([\s\S]*)/);
+  if (match) {
+    try {
+      const snapshot = JSON.parse(match[1]) as CashCloseSnapshot;
+      return { snapshot, cleanNotes: match[2]?.trim() || "" };
+    } catch {
+      return { snapshot: null, cleanNotes: notes };
+    }
+  }
+  return { snapshot: null, cleanNotes: notes };
+};
 
 interface CashSessionComputedSummary {
   openingAmount: number;
   incomes: number;
   expenses: number;
+  cashIncomes: number;
+  cashExpenses: number;
   expectedBalance: number;
+  expectedCashBalance: number;
+  expectedFullBalance: number;
   saleMovementsCount: number;
   manualMovementsCount: number;
   salePaymentsTotal: number;
+  cashSalesTotal: number;
   manualIncomesTotal: number;
   positiveAdjustmentsTotal: number;
   negativeAdjustmentsTotal: number;
+}
+
+export interface CashCloseResult {
+  session: CashSession | null;
+  expectedAmount: number;
+  realAmount: number;
+  difference: number;
+  salePaymentsTotal: number;
+  cashSalesTotal: number;
+  totalIncomes: number;
+  userNotes?: string;
 }
 
 export interface CashBreakdownItem {
@@ -134,135 +210,72 @@ const incomeReferenceLabels: Record<string, string> = {
 
 const expenseReferenceLabels: Record<string, string> = {
   manual_expense: "Egreso manual",
+  transfer: "Transferencia bancaria",
+  cash: "Efectivo",
   purchase: "Pago a proveedores",
   purchase_payment: "Pago a proveedores",
   supplier_payment: "Pago a proveedores",
 };
 
-const defaultCashSettings: CashSettings = {
-  require_open_session_for_sale: false,
-  default_opening_amount: 0,
-  allow_manual_movements: true,
-  require_notes_on_manual_movements: false,
-};
-
 export const useCashModule = (tenantId: string | null, userId: string | null) => {
-  const [sessions, setSessions] = useState<CashSession[]>([]);
-  const [movements, setMovements] = useState<CashMovement[]>([]);
-  const [currentAccountMovements, setCurrentAccountMovements] = useState<CurrentAccountMovement[]>(
-    []
-  );
-  const [customersById, setCustomersById] = useState<Record<string, Customer>>({});
-  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
-  const [paymentMethodsByCode, setPaymentMethodsByCode] = useState<Record<string, string>>({});
-  const [salesById, setSalesById] = useState<Record<string, Sale>>({});
-  const [usersById, setUsersById] = useState<Record<string, string>>({});
-  const [cashSettings, setCashSettings] = useState<CashSettings>(defaultCashSettings);
+  const {
+    sessions,
+    movements,
+    currentAccountMovements,
+    customersById,
+    paymentMethods,
+    paymentMethodsByCode,
+    bankAccounts,
+    salePayments,
+    salesById,
+    invoicesBySaleId,
+    usersById,
+    cashSettings,
+    isLoading,
+    isBackgroundRefreshing,
+  } = useCashStore();
+
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [movementTypeFilter, setMovementTypeFilter] = useState<CashMovementFilter>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<CashFeedback | null>(null);
 
   const clearFeedback = () => setFeedback(null);
 
-  const loadCashData = useCallback(async () => {
-    if (!tenantId) {
-      setSessions([]);
-      setMovements([]);
-      setCurrentAccountMovements([]);
-      setCustomersById({});
-      setPaymentMethods([]);
-      setPaymentMethodsByCode({});
-      setSalesById({});
-      setUsersById({});
-      setCashSettings(defaultCashSettings);
-      setSelectedSessionId("");
-      return;
-    }
+  const loadCashData = useCallback(
+    async (force = false) => {
+      if (!tenantId) {
+        useCashStore.getState().clearCache();
+        setSelectedSessionId("");
+        return;
+      }
 
-    setIsLoading(true);
-    try {
-      const [
-        allSessions,
-        allMovements,
-        tenantSettings,
-        allUsers,
-        allPaymentMethods,
-        allCurrentAccountMovements,
-        allCustomers,
-        allSales,
-      ] = await Promise.all([
-        cashService.getAllByTenant(tenantId),
-        cashService.getAllMovementsByTenant(tenantId),
-        settingsService.getByTenant(tenantId),
-        usersService.getAllByTenant(tenantId),
-        paymentMethodsService.getAllByTenant(tenantId),
-        currentAccountsService.getAllByTenant(tenantId),
-        customersService.getAllByTenant(tenantId),
-        salesService.getAllByTenant(tenantId),
-      ]);
-
-      setSessions(allSessions.sort((a, b) => b.opened_at.localeCompare(a.opened_at)));
-      setMovements(allMovements.sort((a, b) => b.created_at.localeCompare(a.created_at)));
-      setCurrentAccountMovements(
-        allCurrentAccountMovements.sort((a, b) => b.created_at.localeCompare(a.created_at))
-      );
-      setCustomersById(
-        allCustomers.reduce<Record<string, Customer>>((acc, customer) => {
-          acc[customer.id] = customer;
-          return acc;
-        }, {})
-      );
-      setPaymentMethodsByCode(
-        allPaymentMethods.reduce<Record<string, string>>((acc, method) => {
-          const key = normalizeKey(method.code);
-          if (!key) return acc;
-          acc[key] = method.name;
-          return acc;
-        }, {})
-      );
-      setPaymentMethods(allPaymentMethods);
-      setSalesById(
-        allSales.reduce<Record<string, Sale>>((acc, sale) => {
-          acc[sale.id] = sale;
-          return acc;
-        }, {})
-      );
-      setUsersById(
-        allUsers.reduce<Record<string, string>>((acc, user) => {
-          const fullName = user.full_name?.trim() ?? "";
-          if (fullName) {
-            acc[user.id] = fullName;
-            return acc;
-          }
-
-          const fallback = user.email?.trim() || user.username?.trim() || user.id;
-          acc[user.id] = fallback;
-          return acc;
-        }, {})
-      );
-      setCashSettings(tenantSettings.caja ?? defaultCashSettings);
-    } catch {
-      setFeedback({ type: "error", message: "No se pudo cargar informacion de caja" });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [tenantId]);
+      try {
+        await useCashStore.getState().loadCashData(tenantId, force);
+      } catch {
+        setFeedback({ type: "error", message: "No se pudo cargar informacion de caja" });
+      }
+    },
+    [tenantId]
+  );
 
   useEffect(() => {
     void loadCashData();
   }, [loadCashData]);
 
   const currentSession = useMemo(() => {
-    if (!userId) return null;
-    return (
-      sessions.find(
-        (session) => session.status === "open" && session.opened_by_user_id === userId
-      ) ?? null
-    );
+    // 1. Si el usuario actual abrió una sesión abierta propia, usarla
+    const userSession = userId
+      ? sessions.find(
+          (session) => session.status === "open" && session.opened_by_user_id === userId
+        )
+      : null;
+    if (userSession) return userSession;
+
+    // 2. Si no, pero hay una sesión abierta en el comercio (ej. abierta por otro compañero como Patricia), continuar con esa caja abierta
+    return sessions.find((session) => session.status === "open") ?? null;
   }, [sessions, userId]);
 
   useEffect(() => {
@@ -297,8 +310,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       if (movementTypeFilter !== "all" && movement.movement_type !== movementTypeFilter) {
         return false;
       }
-      if (dateFrom && movement.created_at.slice(0, 10) < dateFrom) return false;
-      if (dateTo && movement.created_at.slice(0, 10) > dateTo) return false;
+      if (dateFrom && formatLocalDateKey(movement.created_at) < dateFrom) return false;
+      if (dateTo && formatLocalDateKey(movement.created_at) > dateTo) return false;
       return true;
     });
   }, [movements, selectedSession, movementTypeFilter, dateFrom, dateTo]);
@@ -315,6 +328,9 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       const sessionMovements = movementsBySessionId.get(session.id) ?? [];
       let incomes = 0;
       let expenses = 0;
+      let cashIncomes = 0;
+      let cashExpenses = 0;
+      let cashSalesTotal = 0;
       let saleMovementsCount = 0;
       let manualMovementsCount = 0;
       let salePaymentsTotal = 0;
@@ -324,21 +340,51 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
       for (const movement of sessionMovements) {
         const amount = Math.abs(movement.amount);
+        const refType = normalizeKey(movement.reference_type);
 
         if (movement.movement_type === "expense") {
           expenses += amount;
+          // Egresos del cajón son en efectivo a menos que sean explícitamente electrónicos
+          if (
+            refType !== "transfer" &&
+            refType !== "card_debit" &&
+            refType !== "card_credit" &&
+            refType !== "cheque"
+          ) {
+            cashExpenses += amount;
+          }
         } else if (movement.movement_type === "income") {
           incomes += amount;
           manualIncomesTotal += amount;
+          // Ingreso manual al cajón
+          if (
+            refType === "cash" ||
+            refType === "efectivo" ||
+            refType === "manual_income" ||
+            !refType
+          ) {
+            cashIncomes += amount;
+          }
         } else if (movement.movement_type === "sale_payment") {
           incomes += amount;
           salePaymentsTotal += amount;
+          // Cobro por venta: SOLO SI ES EFECTIVO ingresa al cajón de caja física
+          if (refType === "cash" || refType === "efectivo") {
+            cashIncomes += amount;
+            cashSalesTotal += amount;
+          }
         } else if (movement.movement_type === "adjustment" && movement.amount < 0) {
           expenses += amount;
           negativeAdjustmentsTotal += amount;
+          if (refType !== "transfer" && refType !== "cheque") {
+            cashExpenses += amount;
+          }
         } else if (movement.movement_type === "adjustment" && movement.amount > 0) {
           incomes += amount;
           positiveAdjustmentsTotal += amount;
+          if (refType !== "transfer" && refType !== "cheque") {
+            cashIncomes += amount;
+          }
         } else {
           incomes += amount;
         }
@@ -358,22 +404,38 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
       const normalizedIncomes = roundAmount(incomes);
       const normalizedExpenses = roundAmount(expenses);
+      const normalizedCashIncomes = roundAmount(cashIncomes);
+      const normalizedCashExpenses = roundAmount(cashExpenses);
+
+      const expectedCashBalance = roundAmount(
+        session.opening_amount + normalizedCashIncomes - normalizedCashExpenses
+      );
+      const expectedFullBalance = roundAmount(
+        session.opening_amount + normalizedIncomes - normalizedExpenses
+      );
+      const isFull = cashSettings.cash_reconciliation_mode === "full";
+      const expectedBalance = isFull ? expectedFullBalance : expectedCashBalance;
 
       acc.set(session.id, {
         openingAmount: session.opening_amount,
         incomes: normalizedIncomes,
         expenses: normalizedExpenses,
-        expectedBalance: roundAmount(session.opening_amount + normalizedIncomes - normalizedExpenses),
+        cashIncomes: normalizedCashIncomes,
+        cashExpenses: normalizedCashExpenses,
+        expectedBalance,
+        expectedCashBalance,
+        expectedFullBalance,
         saleMovementsCount,
         manualMovementsCount,
         salePaymentsTotal: roundAmount(salePaymentsTotal),
+        cashSalesTotal: roundAmount(cashSalesTotal),
         manualIncomesTotal: roundAmount(manualIncomesTotal),
         positiveAdjustmentsTotal: roundAmount(positiveAdjustmentsTotal),
         negativeAdjustmentsTotal: roundAmount(negativeAdjustmentsTotal),
       });
       return acc;
     }, new Map());
-  }, [movements, sessions]);
+  }, [movements, sessions, cashSettings]);
 
   const summary = useMemo(() => {
     if (!selectedSession) {
@@ -382,6 +444,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         incomes: 0,
         expenses: 0,
         expectedBalance: 0,
+        expectedCashBalance: 0,
+        expectedFullBalance: 0,
       };
     }
 
@@ -392,6 +456,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         incomes: 0,
         expenses: 0,
         expectedBalance: selectedSession.opening_amount,
+        expectedCashBalance: selectedSession.opening_amount,
+        expectedFullBalance: selectedSession.opening_amount,
       };
     }
 
@@ -400,6 +466,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       incomes: selectedSummary.incomes,
       expenses: selectedSummary.expenses,
       expectedBalance: selectedSummary.expectedBalance,
+      expectedCashBalance: selectedSummary.expectedCashBalance,
+      expectedFullBalance: selectedSummary.expectedFullBalance,
     };
   }, [selectedSession, sessionSummariesById]);
 
@@ -410,6 +478,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         incomes: 0,
         expenses: 0,
         expectedBalance: 0,
+        expectedCashBalance: 0,
+        expectedFullBalance: 0,
       };
     }
 
@@ -420,6 +490,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         incomes: 0,
         expenses: 0,
         expectedBalance: currentSession.opening_amount,
+        expectedCashBalance: currentSession.opening_amount,
+        expectedFullBalance: currentSession.opening_amount,
       };
     }
 
@@ -428,6 +500,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       incomes: currentSummary.incomes,
       expenses: currentSummary.expenses,
       expectedBalance: currentSummary.expectedBalance,
+      expectedCashBalance: currentSummary.expectedCashBalance,
+      expectedFullBalance: currentSummary.expectedFullBalance,
     };
   }, [currentSession, sessionSummariesById]);
 
@@ -435,6 +509,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     if (!currentSession) {
       return {
         salePaymentsTotal: 0,
+        cashSalesTotal: 0,
         manualIncomesTotal: 0,
         positiveAdjustmentsTotal: 0,
         totalIncomes: 0,
@@ -446,6 +521,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     if (!sessionSummary) {
       return {
         salePaymentsTotal: 0,
+        cashSalesTotal: 0,
         manualIncomesTotal: 0,
         positiveAdjustmentsTotal: 0,
         totalIncomes: 0,
@@ -455,6 +531,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
     return {
       salePaymentsTotal: sessionSummary.salePaymentsTotal,
+      cashSalesTotal: sessionSummary.cashSalesTotal,
       manualIncomesTotal: sessionSummary.manualIncomesTotal,
       positiveAdjustmentsTotal: sessionSummary.positiveAdjustmentsTotal,
       totalIncomes: roundAmount(
@@ -467,10 +544,16 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
   }, [currentSession, sessionSummariesById]);
 
   const dailyTracking = useMemo(() => {
-    const rowsByDate = new Map<string, CashDailyTrackingRow>();
+    const rowsByDate = new Map<
+      string,
+      {
+        row: CashDailyTrackingRow;
+        daySessions: CashSession[];
+      }
+    >();
 
     for (const session of sessions) {
-      const date = session.opened_at.slice(0, 10);
+      const date = formatLocalDateKey(session.opened_at);
       const sessionSummary = sessionSummariesById.get(session.id);
       const openingAmount = sessionSummary?.openingAmount ?? session.opening_amount;
       const incomes = sessionSummary?.incomes ?? 0;
@@ -478,20 +561,27 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       const expectedClosingAmount =
         sessionSummary?.expectedBalance ?? roundAmount(session.opening_amount + incomes - expenses);
 
-      const current = rowsByDate.get(date) ?? {
-        date,
-        sessionsCount: 0,
-        openSessionsCount: 0,
-        openingAmount: 0,
-        incomes: 0,
-        expenses: 0,
-        expectedClosingAmount: 0,
-        realClosingAmount: 0,
-        differenceAmount: 0,
-        saleMovementsCount: 0,
-        manualMovementsCount: 0,
+      const entry = rowsByDate.get(date) ?? {
+        row: {
+          date,
+          sessionsCount: 0,
+          openSessionsCount: 0,
+          openingAmount: 0,
+          incomes: 0,
+          expenses: 0,
+          expectedClosingAmount: 0,
+          realClosingAmount: 0,
+          differenceAmount: 0,
+          saleMovementsCount: 0,
+          manualMovementsCount: 0,
+          shifts: [],
+          sessions: [],
+        },
+        daySessions: [],
       };
 
+      entry.daySessions.push(session);
+      const current = entry.row;
       current.sessionsCount += 1;
       current.openSessionsCount += session.status === "open" ? 1 : 0;
       current.openingAmount = roundAmount(current.openingAmount + openingAmount);
@@ -509,16 +599,67 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       current.saleMovementsCount += sessionSummary?.saleMovementsCount ?? 0;
       current.manualMovementsCount += sessionSummary?.manualMovementsCount ?? 0;
 
-      rowsByDate.set(date, current);
+      rowsByDate.set(date, entry);
     }
 
-    return [...rowsByDate.values()].sort((a, b) => b.date.localeCompare(a.date));
+    const result: CashDailyTrackingRow[] = [];
+    for (const { row, daySessions } of rowsByDate.values()) {
+      // Ordenar cronológicamente ascendente: primero la mañana, luego la tarde
+      const sortedDaySessions = [...daySessions].sort((a, b) =>
+        a.opened_at.localeCompare(b.opened_at)
+      );
+      row.sessions = sortedDaySessions;
+
+      row.shifts = sortedDaySessions.map((session, idx) => {
+        const sessionSummary = sessionSummariesById.get(session.id);
+        const shiftInfo = getShiftLabel(session.opened_at, idx);
+        const openTime = formatLocalTime(session.opened_at);
+        const closeTime = session.closed_at
+          ? formatLocalTime(session.closed_at)
+          : session.status === "open"
+          ? "En curso"
+          : "--:--";
+        const timeRange = `${openTime} - ${closeTime}`;
+
+        const openingAmount = sessionSummary?.openingAmount ?? session.opening_amount;
+        const incomes = sessionSummary?.incomes ?? 0;
+        const expenses = sessionSummary?.expenses ?? 0;
+        const expectedBalance =
+          sessionSummary?.expectedBalance ??
+          roundAmount(session.opening_amount + incomes - expenses);
+
+        return {
+          session,
+          shiftLabel: sortedDaySessions.length > 1 ? shiftInfo.label : "Turno único",
+          period: shiftInfo.period,
+          timeRange,
+          openedByUserId: session.opened_by_user_id,
+          closedByUserId: session.closed_by_user_id,
+          status: session.status,
+          openingAmount,
+          incomes,
+          expenses,
+          expectedBalance,
+          realClosingAmount: session.closing_amount,
+          differenceAmount: session.closing_difference,
+          movementsCount:
+            (sessionSummary?.saleMovementsCount ?? 0) +
+            (sessionSummary?.manualMovementsCount ?? 0),
+          saleMovementsCount: sessionSummary?.saleMovementsCount ?? 0,
+          manualMovementsCount: sessionSummary?.manualMovementsCount ?? 0,
+        };
+      });
+
+      result.push(row);
+    }
+
+    return result.sort((a, b) => b.date.localeCompare(a.date));
   }, [sessionSummariesById, sessions]);
 
   const sessionDateById = useMemo(
     () =>
       sessions.reduce<Record<string, string>>((acc, session) => {
-        acc[session.id] = session.opened_at.slice(0, 10);
+        acc[session.id] = formatLocalDateKey(session.opened_at);
         return acc;
       }, {}),
     [sessions]
@@ -531,6 +672,30 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         return acc;
       }, {}),
     [salesById]
+  );
+
+  const saleBankAccountsById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const p of salePayments) {
+      const meta = p.metadata as { payment_details?: { destination_account_id?: string } } | null;
+      const destAccId = meta?.payment_details?.destination_account_id;
+      if (destAccId && p.sale_id) {
+        map[p.sale_id] = destAccId;
+        const code = normalizeKey(p.payment_method_code);
+        if (code) {
+          map[`${p.sale_id}_${code}`] = destAccId;
+        }
+      }
+    }
+    return map;
+  }, [salePayments]);
+
+  const getSessionMovements = useCallback(
+    (sessionId: string | null): CashMovement[] => {
+      if (!sessionId) return [];
+      return movements.filter((m) => m.cash_session_id === sessionId);
+    },
+    [movements]
   );
 
   const getDailyMovements = useCallback(
@@ -560,6 +725,19 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       let incomesTotal = 0;
       let expensesTotal = 0;
 
+      // Mapa de cuenta bancaria destino por venta para cobros con transferencia
+      const destinationAccountBySaleAndMethod = new Map<string, string>();
+      for (const p of salePayments) {
+        const meta = p.metadata as { payment_details?: { destination_account_id?: string } } | null;
+        const destAccId = meta?.payment_details?.destination_account_id;
+        if (destAccId) {
+          destinationAccountBySaleAndMethod.set(
+            `${p.sale_id}_${normalizeKey(p.payment_method_code)}`,
+            destAccId
+          );
+        }
+      }
+
       const addBreakdown = (
         target: Map<string, CashBreakdownItem>,
         code: string,
@@ -587,11 +765,30 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
         if (movement.movement_type === "sale_payment") {
           const methodCode = referenceKey || "sale_payment";
-          const label =
+          const normMethod = normalizeKey(methodCode);
+
+          let targetCode = methodCode;
+          let targetLabel =
             paymentMethodsByCode[methodCode] ??
             defaultPaymentMethodLabels[methodCode] ??
             toTitleCaseFromCode(methodCode);
-          addBreakdown(incomesByCode, methodCode, label, amount);
+
+          // Si es transferencia y tiene cuenta bancaria asignada
+          if (normMethod === "transfer" && movement.reference_id) {
+            const destAccountId = destinationAccountBySaleAndMethod.get(
+              `${movement.reference_id}_transfer`
+            );
+            const bankAcc = destAccountId
+              ? bankAccounts.find((b) => b.id === destAccountId)
+              : null;
+            if (bankAcc) {
+              targetCode = `bank_acc_${bankAcc.id}`;
+              const holderPart = bankAcc.holder_name ? ` (${bankAcc.holder_name})` : "";
+              targetLabel = `Transferencia ${bankAcc.bank_name}${holderPart}`;
+            }
+          }
+
+          addBreakdown(incomesByCode, targetCode, targetLabel, amount);
           incomesTotal = roundAmount(incomesTotal + amount);
           continue;
         }
@@ -624,26 +821,170 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         }
       }
 
-      const configuredPaymentMethodItems = Object.entries(paymentMethodsByCode)
-        .map<CashBreakdownItem>(([code, label]) => {
-          const existing = incomesByCode.get(code);
-          if (existing) {
-            incomesByCode.delete(code);
-            return existing;
-          }
+      // Cuentas de banco activas y habilitadas para POS (idéntico al modal del POS)
+      const posBankAccounts = bankAccounts.filter(
+        (b) => b.is_active && b.is_pos_available !== false
+      );
 
-          return {
-            code,
-            label,
-            amount: 0,
-            movementsCount: 0,
-          };
-        })
-        .sort((a, b) => a.label.localeCompare(b.label));
+      const dynamicBaseItems: CashBreakdownItem[] = [];
+      const configuredCodes = Object.keys(paymentMethodsByCode);
+
+      // 1. Efectivo
+      if (configuredCodes.some((c) => normalizeKey(c) === "cash")) {
+        const existing = incomesByCode.get("cash");
+        if (existing) incomesByCode.delete("cash");
+        dynamicBaseItems.push({
+          code: "cash",
+          label: paymentMethodsByCode["cash"] || "Efectivo",
+          amount: existing?.amount ?? 0,
+          movementsCount: existing?.movementsCount ?? 0,
+        });
+      }
+
+      // 2. Transferencias Bancarias (Desglose por bancos habilitados en POS)
+      const hasTransferMethod = configuredCodes.some((c) => normalizeKey(c) === "transfer");
+      if (hasTransferMethod) {
+        if (posBankAccounts.length > 0) {
+          for (const acc of posBankAccounts) {
+            const code = `bank_acc_${acc.id}`;
+            const holderPart = acc.holder_name ? ` (${acc.holder_name})` : "";
+            const label = `Transferencia ${acc.bank_name}${holderPart}`;
+            const existing = incomesByCode.get(code);
+            if (existing) incomesByCode.delete(code);
+            dynamicBaseItems.push({
+              code,
+              label,
+              amount: existing?.amount ?? 0,
+              movementsCount: existing?.movementsCount ?? 0,
+            });
+          }
+        } else {
+          const existing = incomesByCode.get("transfer");
+          if (existing) incomesByCode.delete("transfer");
+          dynamicBaseItems.push({
+            code: "transfer",
+            label: paymentMethodsByCode["transfer"] || "Transferencia bancaria",
+            amount: existing?.amount ?? 0,
+            movementsCount: existing?.movementsCount ?? 0,
+          });
+        }
+      }
+
+      // 3. Tarjeta de débito
+      if (configuredCodes.some((c) => normalizeKey(c) === "card_debit")) {
+        const existing = incomesByCode.get("card_debit");
+        if (existing) incomesByCode.delete("card_debit");
+        dynamicBaseItems.push({
+          code: "card_debit",
+          label: paymentMethodsByCode["card_debit"] || "Tarjeta de debito",
+          amount: existing?.amount ?? 0,
+          movementsCount: existing?.movementsCount ?? 0,
+        });
+      }
+
+      // 4. Tarjeta de crédito
+      if (configuredCodes.some((c) => normalizeKey(c) === "card_credit")) {
+        const existing = incomesByCode.get("card_credit");
+        if (existing) incomesByCode.delete("card_credit");
+        dynamicBaseItems.push({
+          code: "card_credit",
+          label: paymentMethodsByCode["card_credit"] || "Tarjeta de credito",
+          amount: existing?.amount ?? 0,
+          movementsCount: existing?.movementsCount ?? 0,
+        });
+      }
+
+      // 5. Mercado Pago
+      if (configuredCodes.some((c) => normalizeKey(c) === "mercado_pago")) {
+        const existing = incomesByCode.get("mercado_pago");
+        if (existing) incomesByCode.delete("mercado_pago");
+        dynamicBaseItems.push({
+          code: "mercado_pago",
+          label: paymentMethodsByCode["mercado_pago"] || "Mercado Pago",
+          amount: existing?.amount ?? 0,
+          movementsCount: existing?.movementsCount ?? 0,
+        });
+      }
+
+      // 6. Cuenta Corriente
+      if (configuredCodes.some((c) => normalizeKey(c) === "current_account")) {
+        const existing = incomesByCode.get("current_account");
+        if (existing) incomesByCode.delete("current_account");
+        dynamicBaseItems.push({
+          code: "current_account",
+          label: paymentMethodsByCode["current_account"] || "Cuenta corriente",
+          amount: existing?.amount ?? 0,
+          movementsCount: existing?.movementsCount ?? 0,
+        });
+      }
+
+      // 7. Otros métodos configurados (que no sean cheque)
+      for (const [code, label] of Object.entries(paymentMethodsByCode)) {
+        const norm = normalizeKey(code);
+        if (
+          norm === "cash" ||
+          norm === "transfer" ||
+          norm === "card_debit" ||
+          norm === "card_credit" ||
+          norm === "mercado_pago" ||
+          norm === "current_account" ||
+          norm === "cheque"
+        ) {
+          continue;
+        }
+        const existing = incomesByCode.get(code);
+        if (existing) incomesByCode.delete(code);
+        dynamicBaseItems.push({
+          code,
+          label,
+          amount: existing?.amount ?? 0,
+          movementsCount: existing?.movementsCount ?? 0,
+        });
+      }
+
+      // 8. Cheque (al final de los métodos de pago)
+      if (configuredCodes.some((c) => normalizeKey(c) === "cheque")) {
+        const existing = incomesByCode.get("cheque");
+        if (existing) incomesByCode.delete("cheque");
+        dynamicBaseItems.push({
+          code: "cheque",
+          label: paymentMethodsByCode["cheque"] || "Cheque",
+          amount: existing?.amount ?? 0,
+          movementsCount: existing?.movementsCount ?? 0,
+        });
+      }
+
+      // Ingresos extras / ajustes no clasificados
       const extraIncomeItems = [...incomesByCode.values()].sort((a, b) => b.amount - a.amount);
-      const incomesItems = [...configuredPaymentMethodItems, ...extraIncomeItems];
+
+      const getIncomeItemPriority = (code: string): number => {
+        const norm = normalizeKey(code);
+        if (norm === "cash") return 1;
+        if (norm.startsWith("bank_acc_") || norm === "transfer") return 2;
+        if (norm === "card_debit") return 3;
+        if (norm === "card_credit") return 4;
+        if (norm === "mercado_pago") return 5;
+        if (norm === "current_account") return 6;
+        if (norm === "cheque") return 999; // Cheque SIEMPRE al final
+        return 50; // Ajustes u otros ingresos
+      };
+
+      const incomesItems = [...dynamicBaseItems, ...extraIncomeItems].sort((a, b) => {
+        const pA = getIncomeItemPriority(a.code);
+        const pB = getIncomeItemPriority(b.code);
+        if (pA !== pB) return pA - pB;
+        return a.label.localeCompare(b.label);
+      });
+
       const expensesItems = [...expensesByCode.values()].sort((a, b) => b.amount - a.amount);
-      const expectedBalance = roundAmount(session.opening_amount + incomesTotal - expensesTotal);
+      const computedSummary = sessionSummariesById.get(session.id);
+      const cashIncomes =
+        computedSummary?.cashIncomes ??
+        (incomesItems.find((i) => normalizeKey(i.code) === "cash")?.amount ?? 0);
+      const cashExpenses = computedSummary?.cashExpenses ?? expensesTotal;
+      const expectedCashBalance =
+        computedSummary?.expectedBalance ??
+        roundAmount(session.opening_amount + cashIncomes - cashExpenses);
 
       return {
         sessionId: session.id,
@@ -657,13 +998,21 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         },
         totalCash: {
           openingAmount: roundAmount(session.opening_amount),
-          incomes: incomesTotal,
-          expenses: expensesTotal,
-          expectedBalance,
+          incomes: cashIncomes,
+          expenses: cashExpenses,
+          expectedBalance: expectedCashBalance,
         },
       };
     },
-    [movements, paymentMethodsByCode, sessions]
+    [
+      bankAccounts,
+      movements,
+      paymentMethodsByCode,
+      salePayments,
+      sessions,
+      sessionSummariesById,
+      cashSettings,
+    ]
   );
 
   const getCurrentAccountDailySummary = useCallback(
@@ -682,7 +1031,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       >();
 
       for (const movement of currentAccountMovements) {
-        if (movement.created_at.slice(0, 10) !== date) continue;
+        if (formatLocalDateKey(movement.created_at) !== date) continue;
         const current = byCustomer.get(movement.customer_id) ?? {
           dailyDebitsAmount: 0,
           dailyPaymentsAmount: 0,
@@ -761,11 +1110,20 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
     setIsSubmitting(true);
     try {
-      const alreadyOpen = await cashService.getOpenSessionByUser(tenantId, userId);
+      const alreadyOpen = await cashService.getOpenSession(tenantId);
       if (alreadyOpen) {
-        setFeedback({ type: "error", message: "Ya tenes una caja abierta" });
+        setFeedback({ type: "error", message: "Ya existe una caja diaria abierta en este comercio" });
         return;
       }
+
+      const openSnapshot: CashCloseSnapshot = {
+        openingBillCounts: values.billCounts,
+        openingCoinsAmount: values.coinsAmount,
+        userNotes: values.notes?.trim() || "",
+      };
+      const serializedNotes = values.billCounts
+        ? serializeCloseSnapshot(openSnapshot, values.notes?.trim() || null)
+        : values.notes?.trim() || null;
 
       const createdSession = await cashService.create(tenantId, {
         branch_id: null,
@@ -778,7 +1136,9 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         closing_amount: null,
         expected_closing_amount: null,
         closing_difference: null,
-        notes: values.notes?.trim() || null,
+        notes: serializedNotes,
+        opening_bill_counts: (values.billCounts as Record<string, number>) ?? null,
+        opening_coins_amount: values.coinsAmount ?? null,
       });
       await auditService.createSafe(tenantId, {
         user_id: userId,
@@ -790,37 +1150,81 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         metadata: {
           opening_amount: values.openingAmount,
           notes: values.notes?.trim() || null,
+          bill_counts: values.billCounts,
+          coins_amount: values.coinsAmount,
         },
       });
 
-      setFeedback({ type: "success", message: "Caja abierta" });
-      await loadCashData();
+      if (values.openingAmount > 0) {
+        try {
+          await generalCashService.createMovement(tenantId, {
+            type: "expense",
+            amount: values.openingAmount,
+            origin_type: "daily_cash_open",
+            concept: `Fondo inicial para apertura de Caja diaria - Sesión #${createdSession.id.slice(-6)}`,
+            reference_id: createdSession.id,
+            created_by: userId,
+          });
+        } catch (genCashErr) {
+          console.error("Error al registrar egreso en Caja General al abrir caja:", genCashErr);
+        }
+      }
+      setFeedback({ type: "success", message: "Caja diaria abierta" });
+      await loadCashData(true);
       setSelectedSessionId(createdSession.id);
     } catch {
-      setFeedback({ type: "error", message: "No se pudo abrir la caja" });
+      setFeedback({ type: "error", message: "No se pudo abrir la caja diaria" });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const closeCash = async (values: CloseCashValues) => {
+  const closeCash = async (values: CloseCashValues): Promise<CashCloseResult | null> => {
     if (!tenantId || !userId || !currentSession) {
-      setFeedback({ type: "error", message: "No hay una caja abierta para cerrar" });
-      return;
+      setFeedback({ type: "error", message: "No hay una caja diaria abierta para cerrar" });
+      return null;
     }
 
     setIsSubmitting(true);
     try {
-      const difference = roundAmount(values.realAmount - currentSessionSummary.expectedBalance);
+      const reconciliationMode = cashSettings.cash_reconciliation_mode ?? "cash_only";
+      const expectedAmount = currentSessionSummary.expectedBalance;
+      const difference = roundAmount(values.realAmount - expectedAmount);
+
+      const existingSnapshot = parseCloseSnapshot(currentSession.notes).snapshot;
+
+      const snapshot: CashCloseSnapshot = {
+        billCounts: values.billCounts,
+        coinsAmount: values.coinsAmount,
+        openingBillCounts:
+          existingSnapshot?.openingBillCounts ??
+          (currentSession.opening_bill_counts as Record<number, number> | undefined),
+        openingCoinsAmount:
+          existingSnapshot?.openingCoinsAmount ?? currentSession.opening_coins_amount ?? undefined,
+        expectedAmount,
+        expectedCashAmount: currentSessionSummary.expectedCashBalance,
+        expectedFullAmount: currentSessionSummary.expectedFullBalance,
+        realAmount: values.realAmount,
+        difference,
+        reconciliationMode,
+        userNotes: values.notes?.trim() || "",
+      };
+
+      const serializedNotes = serializeCloseSnapshot(
+        snapshot,
+        values.notes?.trim() || currentSession.notes
+      );
 
       const closedSession = await cashService.update(tenantId, currentSession.id, {
         status: "closed",
         closed_by_user_id: userId,
         closed_at: new Date().toISOString(),
         closing_amount: values.realAmount,
-        expected_closing_amount: currentSessionSummary.expectedBalance,
+        expected_closing_amount: expectedAmount,
         closing_difference: difference,
-        notes: values.notes?.trim() || currentSession.notes,
+        notes: serializedNotes,
+        closing_bill_counts: (values.billCounts as Record<string, number>) ?? null,
+        closing_coins_amount: values.coinsAmount ?? null,
       });
       await auditService.createSafe(tenantId, {
         user_id: userId,
@@ -830,18 +1234,78 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         entity_id: closedSession?.id ?? currentSession.id,
         description: "Cierre de caja",
         metadata: {
-          expected_amount: currentSessionSummary.expectedBalance,
+          expected_amount: expectedAmount,
           real_amount: values.realAmount,
           difference,
+          reconciliation_mode: reconciliationMode,
+          bill_counts: values.billCounts,
         },
       });
 
-      setFeedback({ type: "success", message: "Caja cerrada" });
-      await loadCashData();
+      if (values.realAmount > 0) {
+        try {
+          await generalCashService.createMovement(tenantId, {
+            type: "income",
+            amount: values.realAmount,
+            origin_type: "daily_cash_close",
+            concept: `Ingreso por cierre de Caja diaria - Sesión #${currentSession.id.slice(-6)}`,
+            reference_id: currentSession.id,
+            created_by: userId,
+          });
+        } catch (genCashErr) {
+          console.error("Error al registrar ingreso en Caja General al cerrar caja:", genCashErr);
+        }
+      }
+      setFeedback({ type: "success", message: "Caja diaria cerrada" });
+      await loadCashData(true);
+      return {
+        session: closedSession,
+        expectedAmount: currentSessionSummary.expectedBalance,
+        realAmount: values.realAmount,
+        difference,
+        salePaymentsTotal: currentSessionIncomeSummary.salePaymentsTotal,
+        cashSalesTotal: currentSessionIncomeSummary.cashSalesTotal,
+        totalIncomes: currentSessionIncomeSummary.totalIncomes,
+        userNotes: values.notes?.trim() || "",
+      };
     } catch {
-      setFeedback({ type: "error", message: "No se pudo cerrar la caja" });
+      setFeedback({ type: "error", message: "No se pudo cerrar la caja diaria" });
+      return null;
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const updateSessionNotes = async (
+    sessionId: string,
+    notes: string
+  ): Promise<boolean> => {
+    if (!tenantId) return false;
+    try {
+      const existingSession =
+        sessions.find((s) => s.id === sessionId) ||
+        (await cashService.getById(tenantId, sessionId));
+      const parsed = parseCloseSnapshot(existingSession?.notes);
+      let serializedNotes: string;
+      if (parsed.snapshot) {
+        const updatedSnapshot: CashCloseSnapshot = {
+          ...parsed.snapshot,
+          userNotes: notes.trim(),
+        };
+        serializedNotes = serializeCloseSnapshot(updatedSnapshot, notes.trim());
+      } else {
+        serializedNotes = notes.trim();
+      }
+
+      await cashService.update(tenantId, sessionId, {
+        notes: serializedNotes,
+      });
+
+      await loadCashData(true);
+      return true;
+    } catch (err) {
+      console.error("Error al actualizar observaciones de caja:", err);
+      return false;
     }
   };
 
@@ -855,8 +1319,9 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       return false;
     }
 
-    if (!cashSettings.allow_manual_movements) {
-      setFeedback({ type: "error", message: "Los movimientos manuales estan desactivados" });
+    const canManualMovement = useAuthStore.getState().hasPermission("caja", "allow_manual_movements");
+    if (!canManualMovement) {
+      setFeedback({ type: "error", message: "No tienes permiso para registrar movimientos manuales de caja" });
       return false;
     }
 
@@ -867,41 +1332,97 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
     setIsSubmitting(true);
     try {
-      const paymentMethod = paymentMethods.find((method) => method.id === values.paymentMethodId);
-      if (!paymentMethod) {
-        setFeedback({ type: "error", message: "Selecciona un medio de pago para el ingreso" });
+      const isTransfer = values.paymentType === "transfer" || Boolean(values.bankAccountId);
+      const selectedBank = isTransfer && values.bankAccountId
+        ? bankAccounts.find((b) => b.id === values.bankAccountId)
+        : null;
+
+      if (isTransfer && !selectedBank && bankAccounts.length > 0) {
+        setFeedback({ type: "error", message: "Seleccioná la cuenta bancaria de destino" });
         return false;
       }
-      const paymentMethodCode = normalizeKey(paymentMethod.code) || "manual_income";
+
+      let paymentMethod = values.paymentMethodId
+        ? paymentMethods.find((method) => method.id === values.paymentMethodId)
+        : null;
+
+      if (!paymentMethod) {
+        if (isTransfer) {
+          paymentMethod = paymentMethods.find((m) => normalizePaymentMethodCode(m.code) === "transfer") || null;
+        } else {
+          paymentMethod = paymentMethods.find((m) => normalizePaymentMethodCode(m.code) === "cash") || null;
+        }
+      }
+
+      const paymentMethodCode = isTransfer
+        ? "transfer"
+        : (paymentMethod ? normalizeKey(paymentMethod.code) : "cash") || "manual_income";
+
+      let noteText = values.notes?.trim() || "";
+      if (isTransfer && selectedBank) {
+        const bankDetails = `${selectedBank.bank_name}${selectedBank.alias ? ` (${selectedBank.alias})` : ""}${
+          values.voucherNumber?.trim() ? ` - Comp: ${values.voucherNumber.trim()}` : ""
+        }`;
+        if (!noteText) {
+          noteText = `Ingreso por transferencia: ${bankDetails}`;
+        }
+      } else if (!noteText && paymentMethod) {
+        noteText = `Ingreso manual - ${paymentMethod.name}`;
+      }
+
       const movement = await cashService.createMovement(tenantId, {
         cash_session_id: currentSession.id,
         movement_type: "income",
         amount: values.amount,
         currency_code: "ARS",
         reference_type: paymentMethodCode,
-        reference_id: paymentMethod.id,
-        notes: values.notes?.trim() || `Ingreso manual - ${paymentMethod.name}`,
+        reference_id: isTransfer ? (selectedBank?.id || null) : (paymentMethod?.id || null),
+        notes: noteText || null,
         created_by: userId,
       });
+
+      // Si es ingreso por transferencia bancaria, registrar el movimiento de entrada en la cuenta de banco propia
+      if (isTransfer && selectedBank) {
+        try {
+          await bankAccountMovementsService.createMovement(tenantId, {
+            bank_account_id: selectedBank.id,
+            type: "income",
+            origin_type: "manual_income",
+            concept: values.notes?.trim() || `Ingreso manual a cuenta (${selectedBank.bank_name})`,
+            amount: values.amount,
+            reference_id: movement.id,
+            voucher_number: values.voucherNumber?.trim() || null,
+            notes: `Ingreso de caja turno #${currentSession.id.slice(-6)}`,
+            created_by: userId,
+          });
+        } catch (bErr) {
+          console.error("Error al registrar ingreso en cuenta bancaria:", bErr);
+        }
+      }
+
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "caja",
         action: "income",
         entity_type: "cash_movement",
         entity_id: movement.id,
-        description: "Ingreso manual de caja",
+        description: isTransfer
+          ? `Ingreso manual por transferencia (${selectedBank?.bank_name || "Banco"})`
+          : `Ingreso manual de caja (${paymentMethod?.name || "Efectivo"})`,
         metadata: {
           cash_session_id: currentSession.id,
           amount: values.amount,
-          payment_method_id: paymentMethod.id,
+          payment_method_id: paymentMethod?.id || null,
           payment_method_code: paymentMethodCode,
-          payment_method_name: paymentMethod.name,
+          payment_method_name: paymentMethod?.name || (isTransfer ? "Transferencia bancaria" : "Efectivo"),
+          bank_account_id: selectedBank?.id || null,
+          voucher_number: values.voucherNumber?.trim() || null,
           notes: values.notes?.trim() || null,
         },
       });
 
       setFeedback({ type: "success", message: "Ingreso registrado" });
-      await loadCashData();
+      await loadCashData(true);
       return true;
     } catch {
       setFeedback({ type: "error", message: "No se pudo registrar el ingreso" });
@@ -921,8 +1442,9 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       return false;
     }
 
-    if (!cashSettings.allow_manual_movements) {
-      setFeedback({ type: "error", message: "Los movimientos manuales estan desactivados" });
+    const canManualMovement = useAuthStore.getState().hasPermission("caja", "allow_manual_movements");
+    if (!canManualMovement) {
+      setFeedback({ type: "error", message: "No tienes permiso para registrar movimientos manuales de caja" });
       return false;
     }
 
@@ -933,32 +1455,86 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
 
     setIsSubmitting(true);
     try {
+      const isTransfer = values.paymentType === "transfer";
+      const selectedBank = isTransfer && values.bankAccountId
+        ? bankAccounts.find((b) => b.id === values.bankAccountId)
+        : null;
+
+      if (isTransfer && !selectedBank) {
+        setFeedback({ type: "error", message: "Seleccioná la cuenta bancaria de débito" });
+        return false;
+      }
+
+      const referenceType = isTransfer ? "transfer" : "cash";
+      const referenceId = isTransfer ? selectedBank!.id : null;
+
+      let noteText = values.notes?.trim() || "";
+      if (isTransfer && selectedBank) {
+        const bankDetails = `${selectedBank.bank_name}${selectedBank.alias ? ` (${selectedBank.alias})` : ""}${
+          values.voucherNumber?.trim() ? ` - Comp: ${values.voucherNumber.trim()}` : ""
+        }`;
+        if (!noteText) {
+          noteText = `Egreso por transferencia: ${bankDetails}`;
+        }
+      }
+
       const movement = await cashService.createMovement(tenantId, {
         cash_session_id: currentSession.id,
         movement_type: "expense",
         amount: values.amount,
         currency_code: "ARS",
-        reference_type: "manual_expense",
-        reference_id: null,
-        notes: values.notes?.trim() || null,
+        reference_type: referenceType,
+        reference_id: referenceId,
+        notes: noteText || null,
         created_by: userId,
       });
+
+      // Si es egreso por transferencia bancaria, registrar el movimiento de salida en la cuenta de banco propia
+      if (isTransfer && selectedBank) {
+        try {
+          await bankAccountMovementsService.createMovement(tenantId, {
+            bank_account_id: selectedBank.id,
+            type: "expense",
+            origin_type: "manual_expense",
+            concept: values.notes?.trim() || `Egreso manual desde caja (${selectedBank.bank_name})`,
+            amount: values.amount,
+            reference_id: movement.id,
+            voucher_number: values.voucherNumber?.trim() || null,
+            notes: `Egreso de caja turno #${currentSession.id.slice(-6)}`,
+            created_by: userId,
+          });
+        } catch (bErr) {
+          console.error("Error al registrar egreso en cuenta bancaria:", bErr);
+        }
+      }
+
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "caja",
         action: "expense",
         entity_type: "cash_movement",
         entity_id: movement.id,
-        description: "Egreso manual de caja",
+        description: isTransfer
+          ? `Egreso manual por transferencia (${selectedBank?.bank_name})`
+          : "Egreso manual de caja (Efectivo)",
         metadata: {
           cash_session_id: currentSession.id,
           amount: values.amount,
+          payment_type: referenceType,
+          bank_account_id: referenceId,
+          bank_name: selectedBank?.bank_name ?? null,
+          voucher_number: values.voucherNumber?.trim() || null,
           notes: values.notes?.trim() || null,
         },
       });
 
-      setFeedback({ type: "success", message: "Egreso registrado" });
-      await loadCashData();
+      setFeedback({
+        type: "success",
+        message: isTransfer
+          ? `Egreso registrado y debitado de ${selectedBank?.bank_name}`
+          : "Egreso en efectivo registrado correctamente",
+      });
+      await loadCashData(true);
       return true;
     } catch {
       setFeedback({ type: "error", message: "No se pudo registrar el egreso" });
@@ -968,15 +1544,24 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     }
   };
 
+  const activeShiftMovements = useMemo(() => {
+    if (!currentSession) return [];
+    return movements.filter((m) => m.cash_session_id === currentSession.id);
+  }, [currentSession, movements]);
+
   return {
     currentSession,
     selectedSession,
     selectedSessionId,
     setSelectedSessionId,
     sessionHistory,
+    movements,
+    activeShiftMovements,
     currentSessionMovements: selectedSessionMovements,
     selectedSessionMovements,
     paymentMethods,
+    bankAccounts,
+    saleBankAccountsById,
     dailyTracking,
     usersById,
     cashSettings,
@@ -986,7 +1571,10 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     getSessionBreakdown,
     getCurrentAccountDailySummary,
     getDailyMovements,
+    getSessionMovements,
     saleNumbersById,
+    salesById,
+    invoicesBySaleId,
     movementTypeFilter,
     setMovementTypeFilter,
     dateFrom,
@@ -994,12 +1582,14 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     dateTo,
     setDateTo,
     isLoading,
+    isBackgroundRefreshing,
     isSubmitting,
     feedback,
     clearFeedback,
-    reload: loadCashData,
+    reload: (force = true) => loadCashData(force),
     openCash,
     closeCash,
+    updateSessionNotes,
     registerIncome,
     registerExpense,
   };

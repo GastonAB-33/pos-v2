@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { EmptyState, LoadingState } from "@/components/ui/UiStates";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { IconButton } from "@/components/ui/IconButton";
+import { Download, FilterX, RefreshCw } from "lucide-react";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { useAuditoriaModule } from "@/modules/auditoria/hooks/useAuditoriaModule";
@@ -52,7 +54,7 @@ export const AuditoriaPage = () => {
     return (
       <PagePlaceholder
         title="Auditoria"
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -141,30 +143,26 @@ export const AuditoriaPage = () => {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-slate-600">Resultados: {logs.length}</p>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="ui-btn-ghost"
+              <IconButton
+                icon={FilterX}
+                label="Limpiar filtros"
                 onClick={() => {
                   clearFeedback();
                   setDetailLog(null);
                   resetFilters();
                 }}
-              >
-                Limpiar filtros
-              </button>
+              />
 
-              <button
-                type="button"
-                className="ui-btn-ghost"
+              <IconButton
+                icon={RefreshCw}
+                label="Recargar auditoría"
                 onClick={() => {
                   clearFeedback();
                   setDetailLog(null);
                   void reload();
                 }}
-                disabled={isLoading}
-              >
-                Recargar
-              </button>
+                loading={isLoading}
+              />
 
               <button
                 type="button"
@@ -172,6 +170,7 @@ export const AuditoriaPage = () => {
                 onClick={exportCsv}
                 disabled={isLoading || !logs.length}
               >
+                <Download aria-hidden="true" className="h-4 w-4" />
                 Exportar CSV
               </button>
             </div>

@@ -1,4 +1,4 @@
-﻿import type { BarcodeScaleSettings } from "@/types/entities";
+import type { BarcodeScaleSettings } from "@/types/entities";
 
 export interface ParsedScaleBarcode {
   raw: string;
@@ -64,6 +64,9 @@ export const parseScaleBarcode = (
   if (settings.code_length > 0 && normalized.length !== settings.code_length) {
     return null;
   }
+  if (settings.code_length > 0 && normalized.length !== settings.code_length) {
+    return null;
+  }
 
   const prefix = digitsOnly(settings.scale_prefix);
   if (prefix && !normalized.startsWith(prefix)) {
@@ -71,7 +74,14 @@ export const parseScaleBarcode = (
   }
 
   const pluStart = Math.max(0, settings.plu_start - 1);
-  const weightStart = Math.max(0, settings.weight_start - 1);
+  const rawWeightStart =
+    (settings.scale_mode ?? "weight") === "weight" &&
+    normalized.length === 13 &&
+    settings.weight_start === 7 &&
+    (settings.weight_length ?? 5) === 5
+      ? 8
+      : (settings.weight_start ?? 8);
+  const weightStart = Math.max(0, rawWeightStart - 1);
   const amountStart = Math.max(0, settings.amount_start - 1);
 
   const productCode = safeSlice(normalized, pluStart, settings.plu_length);
@@ -84,7 +94,7 @@ export const parseScaleBarcode = (
   const weight =
     mode === "weight" ? parseWeight(weightRaw, settings.weight_decimals ?? 3) : null;
   const totalPrice =
-    mode === "total_price" || amountRaw !== weightRaw
+    mode === "total_price"
       ? parseTotalPrice(amountRaw, settings.amount_decimals ?? 2)
       : null;
 

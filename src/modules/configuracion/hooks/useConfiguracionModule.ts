@@ -101,25 +101,56 @@ export const useConfiguracionModule = (
 
     try {
       const [resolvedSettings, customerRows, paymentMethodRows] = await Promise.all([
-        settingsService.getByTenant(tenantId),
-        customersService.getAllByTenant(tenantId),
-        paymentMethodsService.getActiveByTenant(tenantId),
+        settingsService.getByTenant(tenantId).catch(() => null),
+        customersService.getAllByTenant(tenantId).catch(() => []),
+        paymentMethodsService.getActiveByTenant(tenantId).catch(() => []),
       ]);
 
-      setSettings(resolvedSettings);
-      setDraft(resolvedSettings);
+      let finalSettings = resolvedSettings;
+      if (!finalSettings) {
+        finalSettings = await settingsService.getByTenant(tenantId);
+      }
+
+      if (finalSettings?.facturacion?.arca) {
+        const cleanCuit = (
+          finalSettings.facturacion.arca.cuit_emisor ||
+          finalSettings.facturacion.issuer_cuit ||
+          ""
+        ).replace(/\D/g, "");
+
+        if (cleanCuit && typeof window !== "undefined") {
+          try {
+            const savedCrt = localStorage.getItem(`arca_saved_crt_${cleanCuit}`);
+            const savedKey = localStorage.getItem(`arca_saved_key_${cleanCuit}`);
+            const savedAlias = localStorage.getItem(`arca_saved_alias_${cleanCuit}`);
+            if (savedCrt && !finalSettings.facturacion.arca.certificate_crt) {
+              finalSettings.facturacion.arca.certificate_crt = savedCrt;
+            }
+            if (savedKey && !finalSettings.facturacion.arca.certificate_key) {
+              finalSettings.facturacion.arca.certificate_key = savedKey;
+            }
+            if (savedAlias && !finalSettings.facturacion.arca.certificado_alias) {
+              finalSettings.facturacion.arca.certificado_alias = savedAlias;
+            }
+          } catch {}
+        }
+      }
+
+      setSettings(finalSettings);
+      setDraft(finalSettings);
+
       setCustomers(
-        customerRows
+        (customerRows ?? [])
           .filter((customer) => customer.is_active)
           .sort((a, b) => a.full_name.localeCompare(b.full_name))
       );
       setPaymentMethods(
-        paymentMethodRows
+        (paymentMethodRows ?? [])
           .filter((method) => method.is_active)
           .sort((a, b) => a.name.localeCompare(b.name))
       );
     } catch {
-      setFeedback({ type: "error", message: "No se pudo cargar la configuracion" });
+      setFeedback({ type: "error", message: "No se pudo cargar la configuración" });
     } finally {
       setIsLoading(false);
     }
@@ -145,14 +176,27 @@ export const useConfiguracionModule = (
   );
 
   const saveSection = useCallback(
-    async (section: TenantSettingsSectionKey) => {
+    async (
+      section: TenantSettingsSectionKey,
+      customSectionData?: TenantSettings[TenantSettingsSectionKey]
+    ) => {
       if (!tenantId || !draft) return;
 
       setSavingSection((prev) => ({ ...prev, [section]: true }));
 
       try {
+        const sectionDraft = customSectionData ?? draft[section];
         const patch = {
-          [section]: draft[section],
+          [section]:
+            section === "pos"
+              ? {
+                  ...sectionDraft,
+                  default_customer_id: null,
+                  cart_behavior: "merge_same_product",
+                  barcode_scan_quantity: 1,
+                  allow_sale_without_customer: true,
+                }
+              : sectionDraft,
         } as TenantSettingsUpdateInput;
 
         const updated = await settingsService.updateByTenant(tenantId, patch);
@@ -160,12 +204,12 @@ export const useConfiguracionModule = (
         setDraft(updated);
         setFeedback({
           type: "success",
-          message: `Configuracion de ${sectionLabel[section]} guardada`,
+          message: `Configuración de ${sectionLabel[section]} guardada`,
         });
 
         await persistWithAudit(
           `update_${section}`,
-          `Configuracion actualizada: ${sectionLabel[section]}`,
+          `Configuración actualizada: ${sectionLabel[section]}`,
           {
             section,
             values: sanitizeSectionAuditValues(section, updated[section]),
@@ -195,12 +239,12 @@ export const useConfiguracionModule = (
         setDraft(updated);
         setFeedback({
           type: "success",
-          message: `Configuracion de ${sectionLabel[section]} restablecida`,
+          message: `Configuración de ${sectionLabel[section]} restablecida`,
         });
 
         await persistWithAudit(
           `reset_${section}`,
-          `Configuracion restablecida: ${sectionLabel[section]}`,
+          `Configuración restablecida: ${sectionLabel[section]}`,
           {
             section,
           }
@@ -235,9 +279,9 @@ export const useConfiguracionModule = (
 
       setSettings(updated);
       setDraft(updated);
-      setFeedback({ type: "success", message: "Configuracion general guardada" });
+      setFeedback({ type: "success", message: "Configuración general guardada" });
 
-      await persistWithAudit("update_all", "Configuracion general actualizada", {
+      await persistWithAudit("update_all", "Configuración general actualizada", {
         sections: [
           "negocio",
           "pos",
@@ -252,7 +296,7 @@ export const useConfiguracionModule = (
     } catch {
       setFeedback({
         type: "error",
-        message: "No se pudo guardar la configuracion general",
+        message: "No se pudo guardar la configuración general",
       });
     } finally {
       setIsSavingAll(false);

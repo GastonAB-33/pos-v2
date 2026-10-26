@@ -25,7 +25,7 @@ export const promotionFormSchema = z
     type: z.enum(promotionTypeOptions as [PromotionType, ...PromotionType[]]),
     scope: z.enum(promotionScopeOptions as [PromotionScope, ...PromotionScope[]]),
     productId: optionalText,
-    minQuantity: z.union([z.literal(""), z.coerce.number().min(1, "Minimo 1")]),
+    minQuantity: z.union([z.literal(""), z.coerce.number().min(0.001, "Minimo 0.001")]),
     discountPercent: optionalNumber,
     discountAmount: optionalNumber,
     comboPrice: optionalNumber,
@@ -41,19 +41,11 @@ export const promotionFormSchema = z
       .optional(),
   })
   .superRefine((value, context) => {
-    if (value.scope === "product" && !value.productId?.trim()) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["productId"],
-        message: "Selecciona un producto para promocion por producto",
-      });
-    }
-
-    if (value.scope === "bundle" && (!value.bundleItems || value.bundleItems.length < 2)) {
+    if ((!value.bundleItems || value.bundleItems.length === 0) && !value.productId?.trim()) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["bundleItems"],
-        message: "Selecciona al menos 2 productos para el combo",
+        message: "Selecciona al menos un producto para la promoción",
       });
     }
 
@@ -86,11 +78,11 @@ export const promotionFormSchema = z
         });
       }
 
-      if (value.scope !== "bundle" && (value.minQuantity === "" || value.minQuantity < 1)) {
+      if (value.scope !== "bundle" && (!value.bundleItems || value.bundleItems.length === 0) && (value.minQuantity === "" || value.minQuantity <= 0)) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["minQuantity"],
-          message: "La cantidad minima debe ser al menos 1",
+          message: "La cantidad minima debe ser mayor a 0",
         });
       }
     }

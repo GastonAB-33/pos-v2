@@ -3,17 +3,26 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { VoiceDictationButton } from "@/components/form/VoiceDictationButton";
+import {
+  convertSpokenBarcode,
+  convertSpokenProductCode,
+} from "@/features/voice/utils/voice-normalizer";
 import type { Product } from "@/types/entities";
 import {
   productFormSchema,
   type ProductFormValues,
 } from "@/modules/productos/schemas/product-form.schema";
 import {
-  computePricingBackward,
   computePricingForward,
+  computePricingReverse,
   DEFAULT_IVA_PERCENT,
   derivePricingFromStoredProduct,
 } from "@/modules/productos/utils/product-pricing";
+import { handleNumericInputFocus, handleNumericInputBlur, parseNumericField } from "@/utils/input-helpers";
+import { ReturnablePackagesModal } from "@/modules/productos/components/ReturnablePackagesModal";
+import { Package } from "lucide-react";
+import { parseReturnableConfig, useTenantReturnablePackages } from "@/utils/returnable-packages";
+import { useTenant } from "@/features/tenant/hooks/useTenant";
 
 interface ProductFormProps {
   mode: "create" | "edit";
@@ -25,7 +34,7 @@ interface ProductFormProps {
   onSubmit: (values: ProductFormValues) => Promise<void>;
 }
 
-type CalcMode = "forward" | "backward";
+type CalcMode = "forward" | "reverse";
 
 const defaultValues: ProductFormValues = {
   nombre: "",
@@ -40,6 +49,10 @@ const defaultValues: ProductFormValues = {
   precioSinIva: 0,
   porcentajeIva: DEFAULT_IVA_PERCENT,
   precioFinal: 0,
+  isReturnable: false,
+  returnablePackageName: "",
+  returnablePackagePrice: 0,
+  trackStock: true,
 };
 
 export const ProductForm = ({
@@ -65,6 +78,9 @@ export const ProductForm = ({
   });
 
   const [calcMode, setCalcMode] = useState<CalcMode>("forward");
+  const [isPackagesManagerOpen, setIsPackagesManagerOpen] = useState(false);
+  const [isCustomPackageMode, setIsCustomPackageMode] = useState(false);
+  const [customPackageInput, setCustomPackageInput] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
 
   useEffect(() => {
@@ -85,12 +101,16 @@ export const ProductForm = ({
       precioSinIva: product.price_without_vat,
     });
 
+    const returnableConfig = parseReturnableConfig(product.description);
+    const isWeight = product.sale_mode === "weight";
+    const initialStock = isWeight ? Number((product.stock_current * 1000).toFixed(3)) : product.stock_current;
+
     reset({
       nombre: product.name,
       saleMode: product.sale_mode,
       codigoBarras: primaryBarcode ?? "",
-      codigoProducto: product.code,
-      stock: product.stock_current,
+      codigoProducto: product.code ?? "",
+      stock: initialStock,
       categoria: product.category,
       subcategoria: product.subcategory ?? "",
       precioCosto: product.cost_price,
@@ -98,20 +118,28 @@ export const ProductForm = ({
       precioSinIva: derivedPricing.precioSinIva,
       porcentajeIva: derivedPricing.porcentajeIva,
       precioFinal: product.price,
+      isReturnable: returnableConfig?.enabled ?? false,
+      returnablePackageName: returnableConfig?.packageName ?? "",
+      returnablePackagePrice: returnableConfig?.packagePrice ?? 0,
     });
     setCalcMode("forward");
   }, [prefillValues, primaryBarcode, product, reset]);
 
   const nombre = watch("nombre");
   const saleMode = watch("saleMode");
+  const { tenantId } = useTenant();
+  const { packages: tenantPackages } = useTenantReturnablePackages(tenantId);
   const precioCosto = watch("precioCosto");
   const porcentajeGanancia = watch("porcentajeGanancia");
   const porcentajeIva = watch("porcentajeIva");
   const precioFinal = watch("precioFinal");
 
+  const codigoBarras = watch("codigoBarras");
+  const codigoProducto = watch("codigoProducto");
+
   useEffect(() => {
     const setIfChangedNumber = (
-      field: "precioSinIva" | "porcentajeGanancia" | "precioFinal",
+      field: "precioSinIva" | "porcentajeGanancia" | "precioFinal" | "precioCosto",
       nextValue: number
     ) => {
       const current = getValues(field);
@@ -122,15 +150,15 @@ export const ProductForm = ({
       });
     };
 
-    if (calcMode === "backward") {
-      const computed = computePricingBackward({
-        precioCosto,
+    if (calcMode === "reverse") {
+      const computed = computePricingReverse({
         precioFinal,
+        porcentajeGanancia,
         porcentajeIva,
       });
 
       setIfChangedNumber("precioSinIva", computed.precioSinIva);
-      setIfChangedNumber("porcentajeGanancia", computed.porcentajeGanancia);
+      setIfChangedNumber("precioCosto", computed.precioCosto);
       return;
     }
 
@@ -144,59 +172,107 @@ export const ProductForm = ({
     setIfChangedNumber("precioFinal", computed.precioFinal);
   }, [calcMode, getValues, porcentajeGanancia, porcentajeIva, precioCosto, precioFinal, setValue]);
 
+  const submitForm = (values: ProductFormValues) => {
+    const isWeight = values.saleMode === "weight";
+    const stockToSubmit = isWeight ? Number((values.stock / 1000).toFixed(4)) : values.stock;
+    onSubmit({
+      ...values,
+      stock: stockToSubmit,
+    });
+  };
+
   return (
-    <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
+    <form className="grid gap-4" onSubmit={handleSubmit(submitForm)}>
       <div>
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <label className="block text-sm font-medium text-slate-700">Nombre</label>
+        <label className="mb-1 block text-sm font-medium text-slate-700">Nombre del producto</label>
+        <div className="flex items-center gap-2">
+          <input
+            {...register("nombre")}
+            type="text"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            data-lpignore="true"
+            data-form-type="other"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            disabled={disabled}
+          />
           <VoiceDictationButton
-            value={nombre ?? ""}
+            value={nombre}
             onValueChange={(nextValue) =>
               setValue("nombre", nextValue, { shouldDirty: true, shouldValidate: true })
             }
-            insertMode="replace"
             disabled={disabled}
-            label="Dictar nombre de producto"
           />
         </div>
-        <input
-          {...register("nombre")}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          disabled={disabled}
-        />
         {errors.nombre ? <p className="mt-1 text-xs text-red-600">{errors.nombre.message}</p> : null}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <label className="block text-sm font-medium text-slate-700">Codigo de barras</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Código de barras</label>
+          <div className="flex items-center gap-2">
+            <input
+              {...register("codigoBarras")}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              disabled={disabled}
+            />
+            <VoiceDictationButton
+              value={codigoBarras ?? ""}
+              onValueChange={(nextValue) =>
+                setValue("codigoBarras", convertSpokenBarcode(nextValue), {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
+              insertMode="replace"
+              fieldType="barcode"
+              disabled={disabled}
+              label="Dictar código de barras"
+            />
             <button
               type="button"
-              className="ui-btn-ghost px-2 py-1 text-xs"
+              className="rounded-lg border border-slate-300 px-2 py-2 text-xs font-semibold text-slate-700"
               onClick={() => setScannerOpen(true)}
               disabled={disabled}
             >
-              Escanear camara
+              Cámara
             </button>
           </div>
-          <input
-            {...register("codigoBarras")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            disabled={disabled}
-          />
           {errors.codigoBarras ? (
             <p className="mt-1 text-xs text-red-600">{errors.codigoBarras.message}</p>
           ) : null}
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Codigo de producto</label>
-          <input
-            {...register("codigoProducto")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            disabled={disabled}
-          />
+          <label className="mb-1 block text-sm font-medium text-slate-700">Código de producto</label>
+          <div className="flex items-center gap-2">
+            <input
+              {...register("codigoProducto")}
+              type="text"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              data-lpignore="true"
+              data-form-type="other"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              disabled={disabled}
+            />
+            <VoiceDictationButton
+              value={codigoProducto ?? ""}
+              onValueChange={(nextValue) =>
+                setValue("codigoProducto", convertSpokenProductCode(nextValue), {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
+              insertMode="replace"
+              fieldType="code"
+              disabled={disabled}
+              label="Dictar código de producto"
+            />
+          </div>
           {errors.codigoProducto ? (
             <p className="mt-1 text-xs text-red-600">{errors.codigoProducto.message}</p>
           ) : null}
@@ -206,14 +282,27 @@ export const ProductForm = ({
       <div className="grid gap-4 md:grid-cols-3">
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">
-            {saleMode === "weight" ? "Stock en kg" : "Stock en unidades"}
+            {saleMode === "weight" ? "Stock en gramos (g)" : "Stock en unidades"}
           </label>
           <input
             type="number"
-            step="0.001"
+            step={saleMode === "weight" ? "1" : "0.001"}
+            placeholder="0"
             {...register("stock", {
+              setValueAs: parseNumericField,
               onChange: () => setCalcMode("forward"),
             })}
+            onFocus={(e) =>
+              handleNumericInputFocus(e, {
+                isNew: mode === "create",
+                onClear: () => setValue("stock", "" as any),
+              })
+            }
+            onBlur={(e) => {
+              handleNumericInputBlur(e, "0", () => {
+                setValue("stock", 0);
+              });
+            }}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
@@ -221,9 +310,17 @@ export const ProductForm = ({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Categoria</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Categoría <span className="text-red-500">*</span>
+          </label>
           <input
             {...register("categoria")}
+            placeholder="Seleccionar o escribir categoría..."
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
@@ -233,9 +330,15 @@ export const ProductForm = ({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Subcategoria</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">Subcategoría</label>
           <input
             {...register("subcategoria")}
+            placeholder="Seleccionar o escribir subcategoría..."
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
@@ -259,7 +362,7 @@ export const ProductForm = ({
             <input type="radio" value="weight" {...register("saleMode")} disabled={disabled} />
             <span>
               <span className="block font-semibold text-slate-900">Pesable</span>
-              <span className="text-xs text-slate-500">Precio por kg, stock en kg y venta por gramos.</span>
+              <span className="text-xs text-slate-500">Precio por kg, stock en gramos y venta por gramos.</span>
             </span>
           </label>
         </div>
@@ -273,9 +376,22 @@ export const ProductForm = ({
           <input
             type="number"
             step="0.01"
+            placeholder="0.00"
             {...register("precioCosto", {
+              setValueAs: parseNumericField,
               onChange: () => setCalcMode("forward"),
             })}
+            onFocus={(e) =>
+              handleNumericInputFocus(e, {
+                isNew: mode === "create",
+                onClear: () => setValue("precioCosto", "" as any),
+              })
+            }
+            onBlur={(e) => {
+              handleNumericInputBlur(e, "0", () => {
+                setValue("precioCosto", 0);
+              });
+            }}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
@@ -289,9 +405,21 @@ export const ProductForm = ({
           <input
             type="number"
             step="0.01"
+            placeholder="0.00"
             {...register("porcentajeGanancia", {
-              onChange: () => setCalcMode("forward"),
+              setValueAs: parseNumericField,
             })}
+            onFocus={(e) =>
+              handleNumericInputFocus(e, {
+                isNew: mode === "create",
+                onClear: () => setValue("porcentajeGanancia", "" as any),
+              })
+            }
+            onBlur={(e) => {
+              handleNumericInputBlur(e, "0", () => {
+                setValue("porcentajeGanancia", 0);
+              });
+            }}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
@@ -322,9 +450,15 @@ export const ProductForm = ({
           <input
             type="number"
             step="0.01"
+            placeholder="21"
             {...register("porcentajeIva", {
-              onChange: () => setCalcMode("forward"),
+              setValueAs: parseNumericField,
             })}
+            onFocus={(e) =>
+              handleNumericInputFocus(e, {
+                isNew: false,
+              })
+            }
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
@@ -340,9 +474,22 @@ export const ProductForm = ({
           <input
             type="number"
             step="0.01"
+            placeholder="0.00"
             {...register("precioFinal", {
-              onChange: () => setCalcMode("backward"),
+              setValueAs: parseNumericField,
+              onChange: () => setCalcMode("reverse"),
             })}
+            onFocus={(e) =>
+              handleNumericInputFocus(e, {
+                isNew: mode === "create",
+                onClear: () => setValue("precioFinal", "" as any),
+              })
+            }
+            onBlur={(e) => {
+              handleNumericInputBlur(e, "0", () => {
+                setValue("precioFinal", 0);
+              });
+            }}
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             disabled={disabled}
           />
@@ -356,6 +503,122 @@ export const ProductForm = ({
         Si modificas costo, ganancia o IVA se recalculan precio sin IVA y precio final. Si editas precio final manualmente,
         se recalcula la ganancia en forma inversa respetando el IVA.
       </p>
+
+      {/* Sección: Envase Retornable */}
+      <div className="rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/40 p-3.5 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <label className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                {...register("isReturnable")}
+                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                disabled={disabled}
+              />
+              <span>¿Requiere envase retornable?</span>
+            </label>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Para gaseosas, cervezas, bidones de agua o garrafas de gas con seña o canje.
+            </p>
+          </div>
+        </div>
+
+        {watch("isReturnable") && (
+          <div className="space-y-3 pt-2.5 border-t border-slate-200 dark:border-slate-700/60">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Tipo de envase configurado
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsPackagesManagerOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300 underline"
+                  >
+                    <Package className="h-3 w-3" />
+                    <span>Ver envases ({tenantPackages.length})</span>
+                  </button>
+                </div>
+
+                <select
+                  value={
+                    isCustomPackageMode
+                      ? "__custom__"
+                      : (watch("returnablePackageName") || "")
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === "__custom__") {
+                      setIsCustomPackageMode(true);
+                    } else if (val === "") {
+                      setIsCustomPackageMode(false);
+                      setValue("returnablePackageName", "");
+                    } else {
+                      setIsCustomPackageMode(false);
+                      setValue("returnablePackageName", val);
+                      const found = tenantPackages.find(
+                        (p) => p.name.toLowerCase() === val.toLowerCase()
+                      );
+                      if (found && typeof found.suggestedPrice === "number") {
+                        setValue("returnablePackagePrice", found.suggestedPrice);
+                      }
+                    }
+                  }}
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs text-slate-900 dark:text-slate-100"
+                  disabled={disabled}
+                >
+                  <option value="">-- Seleccionar tipo de envase --</option>
+                  {tenantPackages.map((pkg) => (
+                    <option key={pkg.name} value={pkg.name}>
+                      {pkg.name} {pkg.suggestedPrice ? `($${pkg.suggestedPrice.toLocaleString("es-AR")})` : ""}
+                    </option>
+                  ))}
+                  <option value="__custom__">+ Crear nuevo tipo de envase...</option>
+                </select>
+
+                {isCustomPackageMode && (
+                  <div className="mt-2 space-y-1">
+                    <input
+                      type="text"
+                      autoFocus
+                      value={customPackageInput}
+                      onChange={(e) => {
+                        setCustomPackageInput(e.target.value);
+                        setValue("returnablePackageName", e.target.value);
+                      }}
+                      placeholder="Nombre del nuevo envase (ej: ENVASE DE COCA)"
+                      className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
+                      disabled={disabled}
+                      required
+                    />
+                    <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                      💡 Se guardará como tipo de envase para futuros productos y Cuentas Corrientes.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Precio si no trae envase ($ seña / depósito)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  {...register("returnablePackagePrice", { setValueAs: parseNumericField })}
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs text-slate-900 dark:text-slate-100"
+                  disabled={disabled}
+                />
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  Monto a cobrar si el cliente no entrega el envase vacío.
+                </p>
+              </div>
+            </div></div>
+        )}
+      </div>
 
       <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4">
         <button
@@ -374,6 +637,12 @@ export const ProductForm = ({
           {mode === "create" ? "Crear producto" : "Guardar cambios"}
         </button>
       </div>
+
+      <ReturnablePackagesModal
+        isOpen={isPackagesManagerOpen}
+        onClose={() => setIsPackagesManagerOpen(false)}
+        canWrite={!disabled}
+      />
 
       <BarcodeScannerModal
         open={scannerOpen}

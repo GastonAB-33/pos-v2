@@ -4,6 +4,8 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { Eye, Pencil, Power, Trash2 } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
 import type { PriceList } from "@/types/entities";
 
 interface PriceListsTableProps {
@@ -67,33 +69,19 @@ export const PriceListsTable = ({
 
         return (
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className={isSelected ? "ui-btn-primary px-2 py-1 text-xs" : "ui-btn-ghost px-2 py-1 text-xs"}
+            <IconButton
+              size="sm"
+              icon={Eye}
+              label={isSelected ? "Detalle seleccionado" : "Ver detalle"}
+              tone={isSelected ? "primary" : "default"}
               onClick={() => onSelect(row)}
-            >
-              {isSelected ? "Seleccionada" : "Ver detalle"}
-            </button>
+            />
 
             {canWrite ? (
               <>
-                <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => onEdit(row)}>
-                  Editar
-                </button>
-                <button
-                  type="button"
-                  className="ui-btn-ghost px-2 py-1 text-xs"
-                  onClick={() => onToggleActive(row)}
-                >
-                  {row.is_active ? "Desactivar" : "Activar"}
-                </button>
-                <button
-                  type="button"
-                  className="ui-btn-ghost border-red-300 px-2 py-1 text-xs text-red-700"
-                  onClick={() => onDelete(row)}
-                >
-                  Eliminar
-                </button>
+                <IconButton size="sm" icon={Pencil} label="Editar lista" onClick={() => onEdit(row)} />
+                <IconButton size="sm" icon={Power} label={row.is_active ? "Desactivar lista" : "Activar lista"} onClick={() => onToggleActive(row)} />
+                <IconButton size="sm" icon={Trash2} label="Eliminar lista" tone="danger" onClick={() => onDelete(row)} />
               </>
             ) : null}
           </div>

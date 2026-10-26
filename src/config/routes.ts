@@ -1,4 +1,5 @@
-﻿export const routePaths = {
+export const routePaths = {
+  landing: "/landing",
   login: "/login",
   home: "/",
   menuPrincipal: "/menu-principal",
@@ -9,6 +10,9 @@
   cuentasCorrientes: "/cuentas-corrientes",
   stock: "/stock",
   caja: "/caja",
+  cajaGeneral: "/caja-general",
+  cuentasCorrientesProveedores: "/cuentas-corrientes-proveedores",
+  bancos: "/bancos",
   compras: "/compras",
   proveedores: "/proveedores",
   listasPrecios: "/listas-precios",
@@ -19,6 +23,7 @@
   reportes: "/reportes",
   auditoria: "/auditoria",
   configuracion: "/configuracion",
+  empleados: "/agenda/empleados",
   configuracionAgenda: "/agenda/configuracion",
   configuracionCatalogo: "/catalogo/configuracion",
   configuracionAnalisis: "/analisis/configuracion",
