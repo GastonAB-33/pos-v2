@@ -39,7 +39,7 @@ const toServiceInput = (values: PromotionFormValues, options?: { isActive?: bool
     type: values.type,
     scope,
     product_id: productId,
-    min_quantity: items.length === 1 ? Number(firstItem.quantity) : (normalizeOptionalNumber(values.minQuantity) ?? 1),
+    min_quantity: items.length === 1 ? (Number(firstItem.quantity) > 0 ? Number(firstItem.quantity) : 1) : (normalizeOptionalNumber(values.minQuantity) ?? 1),
     discount_percent:
       values.type === "percentage_discount" ? normalizeOptionalNumber(values.discountPercent) : null,
     discount_amount:
@@ -55,10 +55,10 @@ const toServiceDetails = (values: PromotionFormValues) => {
   const items = values.bundleItems && values.bundleItems.length > 0
     ? values.bundleItems.map((item) => ({
         product_id: item.productId,
-        quantity: Number(item.quantity) || 1,
+        quantity: Number(item.quantity) > 0 ? Number(item.quantity) : 1,
       }))
     : values.productId
-    ? [{ product_id: values.productId, quantity: Number(values.minQuantity) || 1 }]
+    ? [{ product_id: values.productId, quantity: Number(values.minQuantity) > 0 ? Number(values.minQuantity) : 1 }]
     : [];
 
   return {

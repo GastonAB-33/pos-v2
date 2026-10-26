@@ -267,9 +267,11 @@ export const PromotionForm = ({
     }
 
     const firstItem = watchedItems[0];
-    const firstQty = Number(firstItem?.quantity) || 1;
+    const firstQty = Number(firstItem?.quantity) > 0 ? Number(firstItem.quantity) : 1;
+    const firstProd = productById.get(firstItem?.productId);
+    const isWeight = firstProd?.sale_mode === "weight";
 
-    if (totalItems === 1 && firstQty === 1) {
+    if (totalItems === 1 && firstQty === 1 && !isWeight) {
       return {
         typeKey: "single_discount" as const,
         title: "Artículo individual en descuento",
@@ -281,14 +283,30 @@ export const PromotionForm = ({
       };
     }
 
-    if (totalItems === 1 && firstQty > 1) {
+    if (totalItems === 1 && isWeight && firstQty === 1) {
+      return {
+        typeKey: "single_discount" as const,
+        title: `Artículo pesable (1 kg de ${firstProd?.name ?? "artículo"})`,
+        badge: "⚖️ 1 kg en promo",
+        badgeColor: "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800",
+        icon: Tag,
+        description:
+          "Se aplica un precio promocional o porcentaje de descuento directo por kilogramo.",
+      };
+    }
+
+    if (totalItems === 1 && firstQty > 0 && firstQty !== 1) {
       return {
         typeKey: "pack_volume" as const,
-        title: `Pack por cantidad (${firstQty}x del mismo artículo)`,
-        badge: `📦 Pack ${firstQty}x1 / Volumen`,
+        title: isWeight
+          ? `Pack por peso (${firstQty} kg de ${firstProd?.name ?? "artículo"})`
+          : `Pack por cantidad (${firstQty}x del mismo artículo)`,
+        badge: isWeight ? `⚖️ Pack ${firstQty} kg` : `📦 Pack ${firstQty}x1 / Volumen`,
         badgeColor: "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800",
         icon: Package,
-        description: `Venta cerrada de ${firstQty} unidades del mismo artículo a un precio promocional especial.`,
+        description: isWeight
+          ? `Venta cerrada de ${firstQty} kg de ${firstProd?.name ?? "artículo"} a un precio promocional especial.`
+          : `Venta cerrada de ${firstQty} unidades del mismo artículo a un precio promocional especial.`,
       };
     }
 
@@ -300,18 +318,20 @@ export const PromotionForm = ({
       icon: Sparkles,
       description: "Venta conjunta de varios artículos combinados con un precio promocional único.",
     };
-  }, [watchedItems]);
+  }, [watchedItems, productById]);
 
   // Synchronize scope, type, and calculate live numbers
   useEffect(() => {
+    const firstItem = watchedItems[0];
+    const qty = Number(firstItem?.quantity) > 0 ? Number(firstItem.quantity) : 1;
     if (promoAnalysis.typeKey === "single_discount") {
       setValue("scope", "product");
-      setValue("productId", watchedItems[0]?.productId ?? "");
-      setValue("minQuantity", 1);
+      setValue("productId", firstItem?.productId ?? "");
+      setValue("minQuantity", qty);
     } else {
       setValue("scope", "bundle");
-      setValue("productId", watchedItems[0]?.productId ?? "");
-      setValue("minQuantity", 1);
+      setValue("productId", firstItem?.productId ?? "");
+      setValue("minQuantity", qty);
     }
   }, [promoAnalysis.typeKey, watchedItems, setValue]);
 
@@ -319,15 +339,23 @@ export const PromotionForm = ({
   const handleAddProductById = (productId: string, productName?: string) => {
     const prod = productById.get(productId);
     const name = productName || prod?.name || "Artículo";
+    const isWeight = prod?.sale_mode === "weight";
     const exists = watchedItems.some((item) => item.productId === productId);
     if (exists) {
       const idx = watchedItems.findIndex((item) => item.productId === productId);
       const currentQty = Number(watchedItems[idx].quantity) || 1;
-      update(idx, { productId, quantity: currentQty + 1 });
-      triggerFlash("success", `✓ "${name}" (+1 unidad agregada, total: ${currentQty + 1})`);
+      const nextQty = Number((currentQty + 1).toFixed(3));
+      update(idx, { productId, quantity: nextQty });
+      triggerFlash(
+        "success",
+        `✓ "${name}" (+1 ${isWeight ? "kg" : "unidad"} agregada, total: ${nextQty} ${isWeight ? "kg" : "u."})`
+      );
     } else {
       append({ productId, quantity: 1 });
-      triggerFlash("success", `✓ "${name}" agregado a la promoción`);
+      triggerFlash(
+        "success",
+        `✓ "${name}" (${isWeight ? "1 kg inicial, podés ajustar el peso" : "1 unidad"}) agregado a la promoción`
+      );
     }
   };
 
@@ -808,7 +836,7 @@ export const PromotionForm = ({
                   <th className="px-3 py-2.5">Artículo</th>
                   <th className="px-3 py-2.5">Stock Actual</th>
                   <th className="px-3 py-2.5 text-right">Precio Reg. Unit.</th>
-                  <th className="px-3 py-2.5 text-center w-28">Cantidad</th>
+                  <th className="px-3 py-2.5 text-center w-32">Cantidad / Peso</th>
                   <th className="px-3 py-2.5 text-right">Subtotal Reg.</th>
                   <th className="px-3 py-2.5 text-center w-16">Acción</th>
                 </tr>
@@ -817,6 +845,7 @@ export const PromotionForm = ({
                 {fields.map((field, index) => {
                   const currentItem = watchedItems[index];
                   const prod = productById.get(currentItem?.productId);
+                  const isWeight = prod?.sale_mode === "weight";
                   const qty = Number(currentItem?.quantity) || 1;
                   const unitPrice = prod?.price ?? 0;
                   const itemSubtotal = roundAmount(qty * unitPrice);
@@ -824,9 +853,16 @@ export const PromotionForm = ({
                   return (
                     <tr key={field.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
                       <td className="px-3 py-2.5">
-                        <span className="font-semibold text-slate-900 dark:text-slate-100 block">
-                          {prod?.name ?? "Artículo no encontrado"}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-900 dark:text-slate-100 block">
+                            {prod?.name ?? "Artículo no encontrado"}
+                          </span>
+                          {isWeight && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shrink-0">
+                              ⚖️ Pesable
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[11px] text-slate-500 dark:text-slate-400">
                           {prod?.category ?? "General"} {prod?.code ? `| Cód: ${prod.code}` : ""}
                         </span>
@@ -841,25 +877,32 @@ export const PromotionForm = ({
                               : "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
                           )}
                         >
-                          {prod?.stock_current ?? 0} u.
+                          {prod?.stock_current ?? 0} {isWeight ? "kg" : "u."}
                         </span>
                       </td>
 
                       <td className="px-3 py-2.5 text-right font-medium text-slate-700 dark:text-slate-200">
                         {currency.format(unitPrice)}
+                        {isWeight && <span className="text-[11px] text-slate-400 dark:text-slate-500 ml-1">/kg</span>}
                       </td>
 
                       <td className="px-3 py-2.5 text-center">
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
-                          {...register(`bundleItems.${index}.quantity`, {
-                            valueAsNumber: true,
-                          })}
-                          className="w-20 text-center rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-2 py-1 text-sm font-bold text-slate-900 dark:text-slate-100 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                          disabled={disabled}
-                        />
+                        <div className="inline-flex items-center justify-center gap-1.5">
+                          <input
+                            type="number"
+                            min="0.001"
+                            step={isWeight ? "0.001" : "1"}
+                            placeholder={isWeight ? "0.000" : "1"}
+                            {...register(`bundleItems.${index}.quantity`, {
+                              valueAsNumber: true,
+                            })}
+                            className="w-20 text-center rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-2 py-1 text-sm font-bold text-slate-900 dark:text-slate-100 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                            disabled={disabled}
+                          />
+                          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 select-none">
+                            {isWeight ? "kg" : "u."}
+                          </span>
+                        </div>
                       </td>
 
                       <td className="px-3 py-2.5 text-right font-bold text-slate-900 dark:text-slate-100">

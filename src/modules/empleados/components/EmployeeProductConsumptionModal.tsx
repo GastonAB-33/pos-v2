@@ -49,6 +49,7 @@ export const EmployeeProductConsumptionModal = ({
   const [search, setSearch] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>({});
   const [customNotes, setCustomNotes] = useState("");
   const [discountPercent, setDiscountPercent] = useState<number>(employee.discount_percent ?? 10);
   const [isLoading, setIsLoading] = useState(false);
@@ -285,6 +286,11 @@ export const EmployeeProductConsumptionModal = ({
 
   // Actualizar cantidades
   const updateQuantity = (productId: string, delta: number) => {
+    setQuantityDrafts((prev) => {
+      const copy = { ...prev };
+      delete copy[productId];
+      return copy;
+    });
     setCart((prev) => {
       return prev
         .map((item) => {
@@ -639,9 +645,16 @@ export const EmployeeProductConsumptionModal = ({
                       className="flex items-center justify-between p-2.5 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950/50 cursor-pointer transition border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800"
                     >
                       <div className="min-w-0 pr-3">
-                        <p className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
-                          {p.name}
-                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+                            {p.name}
+                          </p>
+                          {p.sale_mode === "weight" && (
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shrink-0">
+                              ⚖️ Pesable
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
                           {primaryBarcodes[p.id] || p.code || "Sin código"}
                           {p.brand ? ` • ${p.brand}` : ""}
@@ -651,6 +664,7 @@ export const EmployeeProductConsumptionModal = ({
                       <div className="flex items-center gap-3 shrink-0">
                         <span className="font-mono font-bold text-xs sm:text-sm text-slate-900 dark:text-white">
                           {currency.format(p.price)}
+                          {p.sale_mode === "weight" && <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal ml-0.5">/kg</span>}
                         </span>
                         <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs">
                           <Plus size={12} />
@@ -759,23 +773,81 @@ export const EmployeeProductConsumptionModal = ({
                             type="button"
                             onClick={() => updateQuantity(item.product.id, -1)}
                             className="h-6 w-6 flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white cursor-pointer"
-                            title="Disminuir cantidad"
+                            title={item.product.sale_mode === "weight" ? "Disminuir 100g" : "Disminuir cantidad"}
                           >
                             <Minus size={12} />
                           </button>
                           <input
                             type="number"
-                            step="any"
+                            step={item.product.sale_mode === "weight" ? "0.001" : "1"}
                             min="0.001"
-                            value={item.quantity}
-                            onChange={(e) => setItemExactQuantity(item.product.id, parseFloat(e.target.value))}
-                            className="w-12 text-center text-xs font-bold font-mono bg-transparent outline-none text-slate-900 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            placeholder={item.product.sale_mode === "weight" ? "0.000" : "1"}
+                            value={quantityDrafts[item.product.id] ?? String(item.quantity)}
+                            onFocus={() => {
+                              setQuantityDrafts((prev) => ({
+                                ...prev,
+                                [item.product.id]: String(item.quantity),
+                              }));
+                            }}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setQuantityDrafts((prev) => ({ ...prev, [item.product.id]: val }));
+                              const parsed = parseFloat(val.replace(",", "."));
+                              if (!isNaN(parsed) && parsed > 0) {
+                                setCart((prev) =>
+                                  prev.map((it) =>
+                                    it.product.id === item.product.id
+                                      ? { ...it, quantity: Number(parsed.toFixed(3)) }
+                                      : it
+                                  )
+                                );
+                              }
+                            }}
+                            onBlur={() => {
+                              const draft = quantityDrafts[item.product.id];
+                              if (draft !== undefined) {
+                                const parsed = parseFloat(draft.replace(",", "."));
+                                if (isNaN(parsed) || parsed <= 0) {
+                                  setCart((prev) =>
+                                    prev.map((it) =>
+                                      it.product.id === item.product.id
+                                        ? { ...it, quantity: 1 }
+                                        : it
+                                    )
+                                  );
+                                } else {
+                                  setCart((prev) =>
+                                    prev.map((it) =>
+                                      it.product.id === item.product.id
+                                        ? { ...it, quantity: Number(parsed.toFixed(3)) }
+                                        : it
+                                    )
+                                  );
+                                }
+                                setQuantityDrafts((prev) => {
+                                  const copy = { ...prev };
+                                  delete copy[item.product.id];
+                                  return copy;
+                                });
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.currentTarget.blur();
+                              }
+                            }}
+                            className={`text-center text-xs font-bold font-mono bg-transparent outline-none text-slate-900 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                              item.product.sale_mode === "weight" ? "w-16" : "w-10"
+                            }`}
                           />
+                          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mr-1 select-none">
+                            {item.product.sale_mode === "weight" ? "kg" : "u."}
+                          </span>
                           <button
                             type="button"
                             onClick={() => updateQuantity(item.product.id, 1)}
                             className="h-6 w-6 flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white cursor-pointer"
-                            title="Aumentar cantidad"
+                            title={item.product.sale_mode === "weight" ? "Aumentar 100g" : "Aumentar cantidad"}
                           >
                             <Plus size={12} />
                           </button>

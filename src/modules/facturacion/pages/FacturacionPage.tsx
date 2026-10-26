@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { RefreshCw, FileText, BookOpen } from "lucide-react";
+import { RefreshCw, FileText, BookOpen, Receipt } from "lucide-react";
 import { IconButton } from "@/components/ui/IconButton";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { useAuthStore } from "@/features/auth/store/auth.store";
@@ -11,6 +11,7 @@ import { GenerateFromSaleForm } from "@/modules/facturacion/components/GenerateF
 import { InvoiceDetailPanel } from "@/modules/facturacion/components/InvoiceDetailPanel";
 import { InvoicesTable } from "@/modules/facturacion/components/InvoicesTable";
 import { LibroIvaView } from "@/modules/facturacion/components/libro-iva/LibroIvaView";
+import { ReceiptsTabContent } from "@/modules/facturacion/components/ReceiptsTabContent";
 import { useFacturacionModule } from "@/modules/facturacion/hooks/useFacturacionModule";
 
 export const FacturacionPage = () => {
@@ -19,18 +20,23 @@ export const FacturacionPage = () => {
   const { canRead, canWrite } = usePermissions();
   const canReadFacturacion = canRead("facturacion");
   const canWriteFacturacion = canWrite("facturacion");
+  const canReadComprobantes = canRead("comprobantes");
 
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
-  const [mainTab, setMainTab] = useState<"comprobantes" | "libro-iva">(
-    tabParam === "libro-iva" ? "libro-iva" : "comprobantes"
-  );
+  const [mainTab, setMainTab] = useState<"comprobantes" | "tickets" | "libro-iva">(() => {
+    if (tabParam === "libro-iva") return "libro-iva";
+    if (tabParam === "tickets" || tabParam === "comprobantes-venta") return "tickets";
+    return "comprobantes";
+  });
 
-  const handleTabChange = (newTab: "comprobantes" | "libro-iva") => {
+  const handleTabChange = (newTab: "comprobantes" | "tickets" | "libro-iva") => {
     setMainTab(newTab);
     const nextParams = new URLSearchParams(searchParams);
     if (newTab === "libro-iva") {
       nextParams.set("tab", "libro-iva");
+    } else if (newTab === "tickets") {
+      nextParams.set("tab", "tickets");
     } else {
       nextParams.delete("tab");
     }
@@ -77,17 +83,17 @@ export const FacturacionPage = () => {
   if (!tenantId) {
     return (
       <PagePlaceholder
-        title="Facturacion"
+        title="Facturación & ARCA"
         description="No hay un comercio activo"
       />
     );
   }
 
-  if (!canReadFacturacion) {
+  if (!canReadFacturacion && !canReadComprobantes) {
     return (
       <PagePlaceholder
-        title="Facturacion"
-        description="No tenes permisos de lectura para este modulo"
+        title="Facturación & ARCA"
+        description="No tenés permisos de lectura para este módulo"
       />
     );
   }
@@ -99,7 +105,7 @@ export const FacturacionPage = () => {
     >
       <div className="space-y-4">
         {/* NAVEGACIÓN PRINCIPAL DE PESTAÑAS */}
-        <div className="inline-flex rounded-xl bg-slate-100 p-1 dark:border dark:border-slate-800 dark:bg-slate-800/80">
+        <div className="inline-flex flex-wrap rounded-xl bg-slate-100 p-1 dark:border dark:border-slate-800 dark:bg-slate-800/80">
           <button
             type="button"
             onClick={() => handleTabChange("comprobantes")}
@@ -114,6 +120,19 @@ export const FacturacionPage = () => {
             <span className="rounded-full bg-slate-200 px-1.5 py-0.2 text-[10px] font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-300">
               {summary.totalDocuments}
             </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleTabChange("tickets")}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition ${
+              mainTab === "tickets"
+                ? "bg-white text-slate-900 shadow-xs dark:bg-slate-900 dark:text-slate-100"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+            }`}
+          >
+            <Receipt className="h-4 w-4 text-emerald-500" />
+            <span>Tickets de Venta</span>
           </button>
 
           <button
@@ -136,6 +155,13 @@ export const FacturacionPage = () => {
         {/* CONTENIDO SEGÚN LA PESTAÑA ACTIVA */}
         {mainTab === "libro-iva" ? (
           <LibroIvaView tenantId={tenantId} />
+        ) : mainTab === "tickets" ? (
+          <ReceiptsTabContent
+            tenantId={tenantId}
+            userId={user?.id ?? null}
+            canWriteFacturacion={canWriteFacturacion}
+            onInvoiceGenerated={() => void reload()}
+          />
         ) : (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">

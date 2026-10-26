@@ -115,7 +115,8 @@ export const PromotionsTable = ({
                 {items
                   .map((it) => {
                     const name = productNameById.get(it.product_id) ?? "Artículo";
-                    return `${it.quantity}x ${name}`;
+                    const isDecimal = it.quantity % 1 !== 0;
+                    return `${it.quantity}${isDecimal ? " kg" : "x"} ${name}`;
                   })
                   .join(" + ")}
               </span>
@@ -126,9 +127,10 @@ export const PromotionsTable = ({
         if (promo.product_id) {
           const name = productNameById.get(promo.product_id) ?? "Artículo";
           const qty = promo.min_quantity ?? 1;
+          const isDecimal = qty % 1 !== 0;
           return (
             <span className="text-xs font-medium text-slate-800 dark:text-slate-200">
-              {qty}x {name}
+              {qty}{isDecimal ? " kg" : "x"} {name}
             </span>
           );
         }
