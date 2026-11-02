@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { IconButton } from "@/components/ui/IconButton";
+import { Plus, RefreshCw } from "lucide-react";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -27,7 +29,7 @@ export const UsuariosPage = () => {
     profiles,
     profilesById,
     usersByProfileId,
-    moduleRows,
+    moduleGroups,
     userSearch,
     setUserSearch,
     profileSearch,
@@ -117,11 +119,15 @@ export const UsuariosPage = () => {
   };
 
   const handleSubmitUserForm = async (values: UserFormValues) => {
+    let success = false;
+
     if (userFormMode === "create") {
-      await createUser(values);
+      success = await createUser(values);
     } else if (selectedUser) {
-      await updateUser(selectedUser.id, values);
+      success = await updateUser(selectedUser.id, values);
     }
+
+    if (!success) return;
 
     setUserFormOpen(false);
     setSelectedUser(undefined);
@@ -145,7 +151,7 @@ export const UsuariosPage = () => {
     return (
       <PagePlaceholder
         title="Usuarios"
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -160,20 +166,56 @@ export const UsuariosPage = () => {
   }
 
   return (
-    <PagePlaceholder
-      title="Usuarios"
-      description="Gestion de usuarios y perfiles de permisos por tenant"
-    >
+    <PagePlaceholder title="Usuarios" description="Usuarios, perfiles y permisos del comercio">
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <section className="ui-card space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-700">Gestion de accesos</p>
+              <h2 className="text-lg font-semibold text-slate-900">Administracion de usuarios</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <IconButton
+                icon={RefreshCw}
+                label="Recargar usuarios"
+                onClick={() => {
+                  clearFeedback();
+                  void reload();
+                }}
+                loading={isLoading}
+                disabled={isSubmitting}
+              />
+              {tab === "users" ? (
+                <button
+                  type="button"
+                  className="ui-btn-primary"
+                  onClick={openCreateUserForm}
+                  disabled={!canWriteUsersModule || isSubmitting || !allProfiles.length}
+                >
+                  <Plus aria-hidden="true" className="h-4 w-4" />
+                  Nuevo usuario
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="ui-btn-primary"
+                  onClick={openCreateProfileForm}
+                  disabled={!canWriteUsersModule || isSubmitting}
+                >
+                  <Plus aria-hidden="true" className="h-4 w-4" />
+                  Nuevo perfil
+                </button>
+              )}
+            </div>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               className={[
-                "rounded-lg border px-3 py-2 text-sm",
+                "rounded-full border px-4 py-2 text-sm font-medium transition",
                 tab === "users"
                   ? "border-brand-500 bg-brand-500/15 text-slate-900"
-                  : "border-slate-300 text-slate-600",
+                  : "border-slate-300 bg-white text-slate-600",
               ].join(" ")}
               onClick={() => setTab("users")}
             >
@@ -182,73 +224,29 @@ export const UsuariosPage = () => {
             <button
               type="button"
               className={[
-                "rounded-lg border px-3 py-2 text-sm",
+                "rounded-full border px-4 py-2 text-sm font-medium transition",
                 tab === "profiles"
                   ? "border-brand-500 bg-brand-500/15 text-slate-900"
-                  : "border-slate-300 text-slate-600",
+                  : "border-slate-300 bg-white text-slate-600",
               ].join(" ")}
               onClick={() => setTab("profiles")}
             >
               Perfiles de permisos
             </button>
           </div>
+        </section>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="ui-btn-ghost"
-              onClick={() => {
-                clearFeedback();
-                void reload();
-              }}
-              disabled={isLoading || isSubmitting}
-            >
-              Recargar
-            </button>
-            {tab === "users" ? (
-              <button
-                type="button"
-                className="ui-btn-primary"
-                onClick={openCreateUserForm}
-                disabled={!canWriteUsersModule || isSubmitting || !allProfiles.length}
-              >
-                Nuevo usuario
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="ui-btn-primary"
-                onClick={openCreateProfileForm}
-                disabled={!canWriteUsersModule || isSubmitting}
-              >
-                Nuevo perfil
-              </button>
-            )}
-          </div>
-        </div>
-
-        {feedback ? (
-          <div
-            className={[
-              "rounded-lg border px-3 py-2 text-sm",
-              feedback.type === "success"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-red-200 bg-red-50 text-red-700",
-            ].join(" ")}
-          >
-            {feedback.message}
-          </div>
-        ) : null}
+        {feedback ? <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>{feedback.message}</div> : null}
 
         {tab === "users" ? (
           <section className="space-y-3 ui-card">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base font-semibold text-slate-900">Usuarios del tenant</h2>
+              <h2 className="text-base font-semibold text-slate-900">Usuarios del comercio</h2>
               <input
                 type="search"
                 value={userSearch}
                 onChange={(event) => setUserSearch(event.target.value)}
-                placeholder="Buscar por nombre, email o username"
+                placeholder="Buscar por nombre completo, correo o nombre de perfil"
                 className="ui-input w-full max-w-md"
               />
             </div>
@@ -291,7 +289,7 @@ export const UsuariosPage = () => {
             ) : (
               <PermissionProfilesTable
                 rows={profilesTableRows}
-                moduleOrder={moduleRows.map((row) => row.module)}
+                moduleOrder={moduleGroups.flatMap((group) => group.modules.map((row) => row.module))}
                 canWrite={canWriteUsersModule}
                 onEdit={(row) => openEditProfileForm(row.profile)}
                 onDelete={(row) => {
@@ -309,7 +307,7 @@ export const UsuariosPage = () => {
           </section>
         )}
 
-        {userFormOpen ? (
+        {userFormOpen && userFormMode === "create" ? (
           <section className="space-y-3 ui-card">
             <h3 className="text-base font-semibold text-slate-900">
               {userFormMode === "create" ? "Crear usuario" : "Editar usuario"}
@@ -330,6 +328,50 @@ export const UsuariosPage = () => {
           </section>
         ) : null}
 
+        {userFormOpen && userFormMode === "edit" ? (
+          <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-4">
+            <button
+              type="button"
+              className="absolute inset-0"
+              aria-label="Cerrar modal de edicion de usuario"
+              onClick={() => {
+                setUserFormOpen(false);
+                setSelectedUser(undefined);
+              }}
+            />
+
+            <div className="relative z-10 max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-panel md:p-5">
+              <div className="mb-3 flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                <h3 className="text-base font-semibold text-slate-900">Editar usuario</h3>
+                <button
+                  type="button"
+                  className="ui-btn-ghost px-2.5 py-1.5 text-xs"
+                  onClick={() => {
+                    setUserFormOpen(false);
+                    setSelectedUser(undefined);
+                  }}
+                >
+                  Cerrar
+                </button>
+              </div>
+
+              <UserForm
+                mode={userFormMode}
+                user={selectedUser}
+                profiles={allProfiles.filter(
+                  (profile) => profile.is_active || profile.id === selectedUser?.permission_profile_id
+                )}
+                disabled={isSubmitting}
+                onCancel={() => {
+                  setUserFormOpen(false);
+                  setSelectedUser(undefined);
+                }}
+                onSubmit={handleSubmitUserForm}
+              />
+            </div>
+          </section>
+        ) : null}
+
         {profileFormOpen ? (
           <section className="space-y-3 ui-card">
             <h3 className="text-base font-semibold text-slate-900">
@@ -338,7 +380,7 @@ export const UsuariosPage = () => {
             <PermissionProfileForm
               mode={profileFormMode}
               profile={selectedProfile}
-              modules={moduleRows}
+              moduleGroups={moduleGroups}
               disabled={isSubmitting}
               onCancel={() => {
                 setProfileFormOpen(false);

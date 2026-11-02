@@ -1,8 +1,12 @@
+import { useState } from "react";
+import { Camera, Download, FileSpreadsheet, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
+import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
+import { IconButton } from "@/components/ui/IconButton";
+
 export interface ProductFilters {
   search: string;
   category: string;
   subcategory: string;
-  supplier: string;
   status: "all" | "active" | "inactive";
 }
 
@@ -14,7 +18,6 @@ interface ProductsToolbarProps {
   filters: ProductFilters;
   categories: string[];
   subcategories: string[];
-  suppliers: string[];
   exportPriceListId: string;
   exportPriceListOptions: Array<{ id: string; label: string }>;
   onFiltersChange: (patch: Partial<ProductFilters>) => void;
@@ -36,7 +39,6 @@ export const ProductsToolbar = ({
   filters,
   categories,
   subcategories,
-  suppliers,
   exportPriceListId,
   exportPriceListOptions,
   onFiltersChange,
@@ -49,23 +51,23 @@ export const ProductsToolbar = ({
   onExportPriceListChange,
   onDeleteSelected,
 }: ProductsToolbarProps) => {
+  const [scannerOpen, setScannerOpen] = useState(false);
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Catalogo de productos</h2>
-          <p className="text-sm text-slate-500">Gestion avanzada de productos y carga masiva</p>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Inventario de productos</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Gestión avanzada de productos y carga masiva</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
+          <IconButton
+            icon={RefreshCw}
+            label="Recargar productos"
             onClick={onReload}
-            className="ui-btn-ghost"
-            disabled={loading}
-          >
-            Recargar
-          </button>
+            loading={loading}
+          />
 
           <button
             type="button"
@@ -73,6 +75,7 @@ export const ProductsToolbar = ({
             className="ui-btn-ghost"
             disabled={loading || !canWrite}
           >
+            <FileSpreadsheet aria-hidden="true" className="h-4 w-4" />
             Plantilla XLSX
           </button>
 
@@ -82,6 +85,7 @@ export const ProductsToolbar = ({
             className="ui-btn-ghost"
             disabled={loading || !canWrite}
           >
+            <Upload aria-hidden="true" className="h-4 w-4" />
             Importar XLSX
           </button>
 
@@ -104,6 +108,7 @@ export const ProductsToolbar = ({
             className="ui-btn-ghost"
             disabled={loading || !hasRows}
           >
+            <Download aria-hidden="true" className="h-4 w-4" />
             Exportar XLSX
           </button>
 
@@ -113,6 +118,7 @@ export const ProductsToolbar = ({
             className="ui-btn-ghost"
             disabled={loading || !hasRows}
           >
+            <Download aria-hidden="true" className="h-4 w-4" />
             Exportar CSV
           </button>
 
@@ -123,6 +129,7 @@ export const ProductsToolbar = ({
               className="rounded-lg border border-red-300 px-3 py-2 text-sm text-red-700"
               disabled={loading || !canWrite}
             >
+              <Trash2 aria-hidden="true" className="h-4 w-4" />
               Eliminar seleccionados ({selectedCount})
             </button>
           ) : null}
@@ -133,18 +140,27 @@ export const ProductsToolbar = ({
             className="ui-btn-primary"
             disabled={!canWrite || loading}
           >
+            <Plus aria-hidden="true" className="h-4 w-4" />
             Nuevo producto
           </button>
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
-        <input
-          value={filters.search}
-          onChange={(event) => onFiltersChange({ search: event.target.value })}
-          placeholder="Buscar por nombre, codigo, marca, barcode"
-          className="ui-input lg:col-span-2"
-        />
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <div className="lg:col-span-2 flex items-center gap-2">
+          <input
+            value={filters.search}
+            onChange={(event) => onFiltersChange({ search: event.target.value })}
+            placeholder="Buscar por nombre, codigos o barcode"
+            className="ui-input flex-1"
+          />
+          <IconButton
+            icon={Camera}
+            label="Escanear código de barras con cámara"
+            onClick={() => setScannerOpen(true)}
+            disabled={loading}
+          />
+        </div>
 
         <select
           value={filters.category}
@@ -173,19 +189,6 @@ export const ProductsToolbar = ({
         </select>
 
         <select
-          value={filters.supplier}
-          onChange={(event) => onFiltersChange({ supplier: event.target.value })}
-          className="ui-input"
-        >
-          <option value="">Todos los proveedores</option>
-          {suppliers.map((supplier) => (
-            <option key={supplier} value={supplier}>
-              {supplier}
-            </option>
-          ))}
-        </select>
-
-        <select
           value={filters.status}
           onChange={(event) =>
             onFiltersChange({ status: event.target.value as ProductFilters["status"] })
@@ -197,6 +200,17 @@ export const ProductsToolbar = ({
           <option value="inactive">Inactivos</option>
         </select>
       </div>
+
+      <BarcodeScannerModal
+        open={scannerOpen}
+        title="Buscar por código de barras"
+        description="Apuntá la cámara al código de barras para buscar el producto automáticamente."
+        onClose={() => setScannerOpen(false)}
+        onDetected={(barcode) => {
+          onFiltersChange({ search: barcode });
+          setScannerOpen(false);
+        }}
+      />
     </div>
   );
 };

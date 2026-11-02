@@ -82,7 +82,15 @@ export const auditService = {
     try {
       await auditService.create(tenantId, input);
     } catch {
-      // No romper flujo principal por fallas de auditoria.
+      try {
+        // Fallback para entornos donde el user_id de sesion no existe en `users`.
+        await auditService.create(tenantId, {
+          ...input,
+          user_id: null,
+        });
+      } catch {
+        // No romper flujo principal por fallas de auditoria.
+      }
     }
   },
 

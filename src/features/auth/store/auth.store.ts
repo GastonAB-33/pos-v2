@@ -45,6 +45,7 @@ const createDevBypassTenant = (): Tenant => ({
   id: "tenant-demo-ar",
   legalName: "Tenant Demo Argentina SA",
   tradeName: "Tenant Demo AR",
+  slug: "demo",
   cuit: "30-00000000-0",
   isActive: true,
   createdAt: new Date(0).toISOString(),
@@ -154,6 +155,8 @@ export const useAuthStore = create<AuthStore>()(
         set(createInitialAuthState()),
 
       hasPermission: (module, level = "read") => {
+        const user = get().user;
+        if (user?.role === "admin" || user?.role === "owner") return true;
         const profile = get().permissionProfile;
         return hasModulePermission(profile, { module, level });
       },
@@ -171,8 +174,17 @@ export const useAuthStore = create<AuthStore>()(
           permissionProfile: state.permissionProfile,
         }) satisfies AuthState & { permissionProfile: PermissionProfile },
       onRehydrateStorage: () => (state) => {
-        if (!state || !isDevAuthBypassEnabled) return;
-        state.clearSession();
+        if (!state) return;
+        if (isDevAuthBypassEnabled) {
+          state.clearSession();
+          return;
+        }
+        if (state.permissionProfile) {
+          state.permissionProfile = normalizePermissionProfile(state.permissionProfile);
+        }
+        if (state.user?.permissions) {
+          state.user.permissions = normalizePermissionProfile(state.user.permissions);
+        }
       },
     }
   )

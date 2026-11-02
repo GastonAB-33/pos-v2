@@ -1,7 +1,12 @@
-﻿node_modules
+node_modules
 dist
 .env
 .env.*
 !.env.example
 .vscode
 .DS_Store
+*.tsbuildinfo
+.gemini/
+outputs/
+tmp/
+supabase/.temp/

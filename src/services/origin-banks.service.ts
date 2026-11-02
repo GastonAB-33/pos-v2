@@ -11,6 +11,21 @@ const crud = new TenantCrudService<OriginBank>(dbTables.origin_banks);
 export type CreateOriginBankInput = CreateEntityInput<OriginBank>;
 export type UpdateOriginBankInput = UpdateEntityInput<OriginBank>;
 
+interface ConflictLikeError {
+  code?: string;
+  status?: number;
+  message?: string;
+  details?: string;
+}
+
+const isUniqueConflictError = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") return false;
+  const conflict = error as ConflictLikeError;
+  if (conflict.code === "23505" || conflict.status === 409) return true;
+  const text = `${conflict.message ?? ""} ${conflict.details ?? ""}`.toLowerCase();
+  return text.includes("duplicate key") || text.includes("unique constraint");
+};
+
 const defaultOriginBanks = [
   "Banco Nación",
   "Banco Provincia",
@@ -54,13 +69,16 @@ export const originBanksService = {
       const code = toBankCode(name);
       if (existingCodes.has(code)) continue;
 
-      const next = await crud.create(tenantId, {
-        code,
-        name,
-        is_active: true,
-      });
-
-      created.push(next);
+      try {
+        const next = await crud.create(tenantId, {
+          code,
+          name,
+          is_active: true,
+        });
+        created.push(next);
+      } catch (error) {
+        if (!isUniqueConflictError(error)) throw error;
+      }
       existingCodes.add(code);
     }
 
@@ -97,4 +115,3 @@ export const originBanksService = {
     return crud.update(tenantId, id, { is_active: !row.is_active });
   },
 };
-

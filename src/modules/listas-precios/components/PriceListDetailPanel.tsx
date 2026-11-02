@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { PaginationControls } from "@/components/ui/PaginationControls";
+import { usePagination } from "@/hooks/usePagination";
 import type { PriceList, PriceListItem, Product } from "@/types/entities";
 
 interface PriceListDetailPanelProps {
@@ -44,6 +46,7 @@ export const PriceListDetailPanel = ({
   }, [products, search]);
 
   const isPercentageMode = priceList.price_mode === "percentage";
+  const paginatedProducts = usePagination(filteredProducts, 10, `${search}|${products.length}`);
 
   return (
     <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
@@ -72,7 +75,7 @@ export const PriceListDetailPanel = ({
         <div className="ui-empty-state">No hay productos para mostrar en esta lista.</div>
       ) : (
         <div className="max-h-[520px] space-y-2 overflow-auto pr-1">
-          {filteredProducts.map((product) => {
+          {paginatedProducts.pageItems.map((product) => {
             const fixedItem = itemByProductId.get(product.id);
             const fixedInput = fixedInputs[product.id] ?? (fixedItem ? String(fixedItem.fixed_price) : String(product.price));
             const percentageResolved = roundAmount(
@@ -145,6 +148,14 @@ export const PriceListDetailPanel = ({
           })}
         </div>
       )}
+      <PaginationControls
+        currentPage={paginatedProducts.currentPage}
+        pageCount={paginatedProducts.pageCount}
+        startItem={paginatedProducts.startItem}
+        endItem={paginatedProducts.endItem}
+        totalItems={paginatedProducts.totalItems}
+        onPageChange={paginatedProducts.setCurrentPage}
+      />
     </section>
   );
 };

@@ -1,10 +1,15 @@
+import { useMemo, useState } from "react";
 import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
+  getPaginationRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import type { Purchase, Supplier } from "@/types/entities";
+import { ArrowLeftRight, Camera, Tag, ChevronLeft, ChevronRight, Download, Eye, Gift, Maximize2, Search, X } from "lucide-react";
+import type { Product, Purchase, Supplier } from "@/types/entities";
+import { IconButton } from "@/components/ui/IconButton";
+import { parseInvoicePhotos } from "@/modules/compras/utils/invoice-photos";
 
 interface PurchaseHistoryRow {
   purchase: Purchase;
@@ -13,6 +18,13 @@ interface PurchaseHistoryRow {
 
 interface PurchasesHistoryTableProps {
   rows: PurchaseHistoryRow[];
+  canWrite: boolean;
+  disabled?: boolean;
+  onOpenReturnModal: (purchase: Purchase, supplier: Supplier | null) => void;
+  onOpenPricingModal?: (purchase: Purchase, supplier: Supplier | null) => void;
+  onEnterReviewPurchase?: (purchase: Purchase, supplier: Supplier | null) => void;
+  usersById?: Record<string, string>;
+  products?: Product[];
 }
 
 const columnHelper = createColumnHelper<PurchaseHistoryRow>();
@@ -23,94 +35,1030 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
-export const PurchasesHistoryTable = ({ rows }: PurchasesHistoryTableProps) => {
+const getPaymentMethodLabel = (method: string | null | undefined): string => {
+  switch (method) {
+    case "cash_daily":
+      return "Caja Diaria";
+    case "cash_general":
+      return "Caja General";
+    case "cash":
+      return "Efectivo Directo";
+    case "transfer":
+      return "Transferencia";
+    case "current_account":
+      return "Cta. Cte. Proveedor";
+    case "card_debit":
+      return "Débito";
+    case "card_credit":
+      return "Crédito";
+    default:
+      return method || "Efectivo";
+  }
+};
+
+const renderStatusBadge = (status: string) => {
+  if (status === "pending_pricing") {
+    return (
+      <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-700 animate-pulse">
+        Pendiente precios
+      </span>
+    );
+  }
+
+  if (status === "confirmed") {
+    return (
+      <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-800">
+        Confirmada
+      </span>
+    );
+  }
+
+  if (status === "partial_return") {
+    return (
+      <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+        Devolución parcial
+      </span>
+    );
+  }
+
+  if (status === "returned") {
+    return (
+      <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800 dark:bg-red-950/60 dark:text-red-300">
+        Devuelta total
+      </span>
+    );
+  }
+
+  if (status === "cancelled") {
+    return <span className="ui-badge ui-badge--danger">Cancelada</span>;
+  }
+
+  return <span className="ui-badge ui-badge--warn">{status}</span>;
+};
+
+export const PurchasesHistoryTable = ({
+  rows,
+  canWrite,
+  disabled,
+  onOpenReturnModal,
+  onOpenPricingModal,
+  onEnterReviewPurchase,
+  usersById = {},
+  products,
+}: PurchasesHistoryTableProps) => {
+  const [selectedPurchase, setSelectedPurchase] = useState<PurchaseHistoryRow | null>(null);
+  const [filterText, setFilterText] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [photoViewerState, setPhotoViewerState] = useState<{ photos: string[]; index: number } | null>(null);
+
+  const openPhotoViewer = (photos: string[], initialIndex: number = 0) => {
+    if (!photos.length) return;
+    setPhotoViewerState({
+      photos,
+      index: Math.max(0, Math.min(initialIndex, photos.length - 1)),
+    });
+  };
+
+  const productsById = useMemo(
+    () => new Map((products ?? []).map((p) => [p.id, p])),
+    [products]
+  );
+
+  const pendingPricingCount = useMemo(
+    () => rows.filter((r) => r.purchase.status === "pending_pricing").length,
+    [rows]
+  );
+
+  const filteredRows = useMemo(() => {
+    let result = rows;
+
+    if (statusFilter !== "all") {
+      result = result.filter((r) => r.purchase.status === statusFilter);
+    }
+
+    const q = filterText.trim().toLowerCase();
+    if (q) {
+      result = result.filter((r) => {
+        const p = r.purchase;
+        const s = r.supplier;
+        const num = (p.purchase_number || "").toLowerCase();
+        const doc = (p.document_number || "").toLowerCase();
+        const sup = (s?.name || "").toLowerCase();
+        const notes = (p.notes || "").toLowerCase();
+        return num.includes(q) || doc.includes(q) || sup.includes(q) || notes.includes(q);
+      });
+    }
+
+    return result;
+  }, [rows, statusFilter, filterText]);
+
   const columns = [
-    columnHelper.accessor((row) => row.purchase.created_at, {
+    columnHelper.accessor((row) => row.purchase.issue_date || row.purchase.created_at, {
       id: "date",
-      header: "Fecha",
-      cell: (info) => new Date(info.getValue()).toLocaleString("es-AR"),
+      header: "Fecha / Comprobante",
+      cell: (info) => {
+        const purchase = info.row.original.purchase;
+        const formattedDate = new Date(
+          purchase.issue_date ? `${purchase.issue_date}T00:00:00` : purchase.created_at
+        ).toLocaleDateString("es-AR");
+
+        const hasDoc = Boolean(purchase.document_number);
+        const docLabel = hasDoc
+          ? `${purchase.document_type || "Doc."} Nº ${purchase.document_number}`
+          : purchase.purchase_number;
+
+        return (
+          <div>
+            <span className="font-semibold text-slate-900 dark:text-slate-100">{docLabel}</span>
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              {formattedDate}
+              {hasDoc ? ` • Ref. ${purchase.purchase_number}` : ""}
+            </div>
+          </div>
+        );
+      },
     }),
-    columnHelper.accessor((row) => row.purchase.purchase_number, {
-      id: "number",
-      header: "Compra",
-      cell: (info) => info.getValue(),
-    }),
-    columnHelper.accessor((row) => row.supplier?.name ?? "Proveedor eliminado", {
+    columnHelper.accessor((row) => row.supplier?.name ?? "Sin proveedor", {
       id: "supplier",
       header: "Proveedor",
-      cell: (info) => info.getValue(),
+      cell: (info) => (
+        <span className="font-medium text-slate-800 dark:text-slate-200">{info.getValue()}</span>
+      ),
     }),
     columnHelper.accessor((row) => row.purchase.items?.length ?? 0, {
       id: "itemsCount",
-      header: "Items",
-      cell: (info) => info.getValue(),
+      header: "Ítems",
+      cell: (info) => {
+        const items = info.row.original.purchase.items ?? [];
+        const totalUnits = items.reduce(
+          (acc, i) => acc + i.quantity + (i.bonified_quantity || 0),
+          0
+        );
+        return (
+          <span className="text-xs text-slate-600 dark:text-slate-400">
+            {items.length} productos ({totalUnits} u.)
+          </span>
+        );
+      },
+    }),
+    columnHelper.accessor((row) => row.purchase.payment_method, {
+      id: "paymentMethod",
+      header: "Pago",
+      cell: (info) => (
+        <span className="text-xs text-slate-600 dark:text-slate-400">{getPaymentMethodLabel(info.getValue())}</span>
+      ),
     }),
     columnHelper.accessor((row) => row.purchase.status, {
       id: "status",
       header: "Estado",
-      cell: (info) => {
-        const status = info.getValue();
-
-        if (status === "confirmed") {
-          return <span className="ui-badge ui-badge--success">Confirmada</span>;
-        }
-
-        if (status === "cancelled") {
-          return <span className="ui-badge ui-badge--danger">Cancelada</span>;
-        }
-
-        return <span className="ui-badge ui-badge--warn">{status}</span>;
-      },
+      cell: (info) => renderStatusBadge(info.getValue()),
     }),
     columnHelper.accessor((row) => row.purchase.total, {
       id: "total",
       header: "Total",
-      cell: (info) => currency.format(info.getValue()),
+      cell: (info) => {
+        const purchase = info.row.original.purchase;
+        return (
+          <div>
+            <span className="font-bold text-slate-900 dark:text-slate-100">{currency.format(info.getValue())}</span>
+            {purchase.returned_total && purchase.returned_total > 0 ? (
+              <div className="text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                Devuelto: -{currency.format(purchase.returned_total)}
+              </div>
+            ) : null}
+          </div>
+        );
+      },
+    }),
+    columnHelper.display({
+      id: "actions",
+      header: "Acciones",
+      cell: (info) => {
+        const { purchase, supplier } = info.row.original;
+        const isReturnable = purchase.status === "confirmed" || purchase.status === "partial_return";
+
+        return (
+          <div className="flex items-center gap-1.5">
+            {(() => {
+              const photos = parseInvoicePhotos(purchase.invoice_photo_url);
+              if (!photos.length) return null;
+              return (
+                <button
+                  type="button"
+                  onClick={() => openPhotoViewer(photos, 0)}
+                  className="inline-flex items-center gap-1 rounded-md border border-brand-200 bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-300 dark:hover:bg-brand-900/60"
+                  title={`Ver fotografía de la factura física adjunta (${photos.length} ${photos.length === 1 ? "foto" : "fotos"})`}
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                  <span>Factura{photos.length > 1 ? ` (${photos.length})` : ""}</span>
+                </button>
+              );
+            })()}
+
+            <button
+              type="button"
+              onClick={() => setSelectedPurchase(info.row.original)}
+              className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              title="Ver detalle de la compra"
+            >
+              <Eye className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+              Detalle
+            </button>
+
+            {purchase.status === "pending_pricing" && canWrite && (onEnterReviewPurchase || onOpenPricingModal) ? (
+              <button
+                type="button"
+                onClick={() =>
+                  onEnterReviewPurchase
+                    ? onEnterReviewPurchase(purchase, supplier)
+                    : onOpenPricingModal?.(purchase, supplier)
+                }
+                disabled={disabled}
+                className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-700/80 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60 shadow-2xs cursor-pointer"
+                title="Entrar a la compra para revisar datos del empleado y fijar precios de venta"
+              >
+                <Tag className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                <span>Entrar a la compra</span>
+              </button>
+            ) : null}
+
+            {isReturnable && canWrite ? (
+              <button
+                type="button"
+                onClick={() => onOpenReturnModal(purchase, supplier)}
+                disabled={disabled}
+                className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/60"
+                title="Registrar devolución o nota de crédito"
+              >
+                <ArrowLeftRight className="h-3.5 w-3.5 text-amber-700 dark:text-amber-400" />
+                Devolver
+              </button>
+            ) : null}
+          </div>
+        );
+      },
     }),
   ];
 
   const table = useReactTable({
-    data: rows,
+    data: filteredRows,
     columns,
     getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    initialState: {
+      pagination: {
+        pageSize: 10,
+        pageIndex: 0,
+      },
+    },
   });
 
   if (!rows.length) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+      <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
         No hay compras registradas.
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200">
-      <table className="min-w-full divide-y divide-slate-200 text-sm">
-        <thead className="bg-slate-50">
-          {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id}>
-              {headerGroup.headers.map((header) => (
-                <th key={header.id} className="px-4 py-2 text-left font-medium text-slate-700">
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody className="divide-y divide-slate-200 bg-white">
-          {table.getRowModel().rows.map((row) => (
-            <tr key={row.id}>
-              {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} className="px-4 py-2 text-slate-700">
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-3">
+      {/* 1. Barra de Búsqueda y Filtros de Estado */}
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+          <input
+            type="text"
+            value={filterText}
+            onChange={(e) => setFilterText(e.target.value)}
+            placeholder="Buscar por proveedor, comprobante, nº compra..."
+            className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-8 text-xs text-slate-900 placeholder:text-slate-400 shadow-xs transition focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder:text-slate-500"
+          />
+          {filterText ? (
+            <button
+              type="button"
+              onClick={() => setFilterText("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              title="Borrar búsqueda"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 sm:pb-0">
+          <button
+            type="button"
+            onClick={() => setStatusFilter("pending_pricing")}
+            className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+              statusFilter === "pending_pricing"
+                ? "bg-amber-600 text-white dark:bg-amber-500 dark:text-slate-950 shadow-xs"
+                : "border border-amber-300/80 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/60"
+            }`}
+          >
+            Pendiente precios ${pendingPricingCount > 0 ? `(${pendingPricingCount})` : ""}
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("all")}
+            className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+              statusFilter === "all"
+                ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-xs"
+                : "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            }`}
+          >
+            Todas ({rows.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("confirmed")}
+            className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+              statusFilter === "confirmed"
+                ? "bg-emerald-600 text-white dark:bg-emerald-500 dark:text-slate-950 shadow-xs"
+                : "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            }`}
+          >
+            Confirmadas
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter("partial_return")}
+            className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition ${
+              statusFilter === "partial_return"
+                ? "bg-amber-600 text-white dark:bg-amber-500 dark:text-slate-950 shadow-xs"
+                : "border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            }`}
+          >
+            Devoluciones
+          </button>
+        </div>
+      </div>
+
+      {/* Si no hay resultados para el filtro actual */}
+      {!filteredRows.length ? (
+        <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
+          <p>No se encontraron compras con el filtro aplicado.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setFilterText("");
+              setStatusFilter("all");
+            }}
+            className="mt-2 text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400"
+          >
+            Limpiar filtros
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* 2. Vista Móvil: Tarjetas individuales (block md:hidden) */}
+          <div className="space-y-3 md:hidden">
+            {table.getRowModel().rows.map((r) => {
+              const row = r.original;
+              const { purchase, supplier } = row;
+              const isPending = purchase.status === "pending_pricing";
+              const isConfirmed = purchase.status === "confirmed";
+              const formattedDate = new Date(
+                purchase.issue_date ? `${purchase.issue_date}T00:00:00` : purchase.created_at
+              ).toLocaleDateString("es-AR");
+              const items = purchase.items ?? [];
+              const totalUnits = items.reduce(
+                (acc, i) => acc + i.quantity + (i.bonified_quantity || 0),
+                0
+              );
+              const isReturnable = purchase.status === "confirmed" || purchase.status === "partial_return";
+
+              return (
+                <article
+                  key={purchase.id}
+                  className={`rounded-xl p-3.5 shadow-xs transition ${
+                    isPending
+                      ? "border border-amber-300 bg-amber-50/40 dark:border-amber-700/80 dark:bg-amber-950/20 border-l-4 border-l-amber-500"
+                      : isConfirmed
+                      ? "border border-emerald-200 bg-emerald-50/20 dark:border-emerald-800/60 dark:bg-emerald-950/10 border-l-4 border-l-emerald-500"
+                      : "border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+                  }`}
+                >
+                  {/* Encabezado: Nº Compra + Fecha y Badge */}
+                  {(() => {
+                    const hasDoc = Boolean(purchase.document_number);
+                    const docLabel = hasDoc
+                      ? `${purchase.document_type || "Doc."} Nº ${purchase.document_number}`
+                      : purchase.purchase_number;
+                    return (
+                      <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5 dark:border-slate-800/80">
+                        <div>
+                          <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                            {docLabel}
+                          </span>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            {formattedDate}
+                            {hasDoc ? ` • Ref. ${purchase.purchase_number}` : ""}
+                          </div>
+                        </div>
+                        <div>{renderStatusBadge(purchase.status)}</div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Contenido: Proveedor, Pago e Ítems */}
+                  <div className="grid grid-cols-2 gap-2.5 py-3 text-xs border-b border-slate-100 dark:border-slate-800/80">
+                    <div>
+                      <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Proveedor</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 truncate block">
+                        {supplier?.name || "Sin proveedor"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Medio de pago</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300 block truncate">
+                        {getPaymentMethodLabel(purchase.payment_method)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Productos</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">
+                        {items.length} prod. ({totalUnits} u.)
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Total abonado</span>
+                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                        {currency.format(purchase.total)}
+                      </span>
+                      {purchase.returned_total && purchase.returned_total > 0 ? (
+                        <span className="block text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                          Devuelto: -{currency.format(purchase.returned_total)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Acciones para móvil con botones cómodos */}
+                  <div className="flex flex-wrap items-center gap-2 pt-2.5">
+                    {(() => {
+                      const photos = parseInvoicePhotos(purchase.invoice_photo_url);
+                      if (!photos.length) return null;
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => openPhotoViewer(photos, 0)}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 py-2 px-3 text-xs font-semibold text-brand-700 shadow-xs transition hover:bg-brand-100 dark:border-brand-800 dark:bg-brand-950/40 dark:text-brand-300"
+                          title={`Ver ${photos.length > 1 ? `${photos.length} fotos` : "foto"} de la factura física adjunta`}
+                        >
+                          <Camera className="h-4 w-4" />
+                          <span>Factura{photos.length > 1 ? ` (${photos.length})` : ""}</span>
+                        </button>
+                      );
+                    })()}
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPurchase(row)}
+                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white py-2 text-xs font-semibold text-slate-700 shadow-xs transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >
+                      <Eye className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                      Ver detalle
+                    </button>
+
+                    {purchase.status === "pending_pricing" && canWrite && (onEnterReviewPurchase || onOpenPricingModal) ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onEnterReviewPurchase
+                            ? onEnterReviewPurchase(purchase, supplier)
+                            : onOpenPricingModal?.(purchase, supplier)
+                        }
+                        disabled={disabled}
+                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-300 cursor-pointer"
+                      >
+                        <Tag className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                        <span>Entrar a la compra</span>
+                      </button>
+                    ) : null}
+
+                    {isReturnable && canWrite ? (
+                      <button
+                        type="button"
+                        onClick={() => onOpenReturnModal(purchase, supplier)}
+                        disabled={disabled}
+                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-50 dark:border-amber-700/60 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/60"
+                      >
+                        <ArrowLeftRight className="h-4 w-4 text-amber-700 dark:text-amber-400" />
+                        Devolver
+                      </button>
+                    ) : null}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          {/* 3. Vista Escritorio: Tabla completa (hidden md:block) */}
+          <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-800/80">
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => (
+                      <th key={header.id} className="px-4 py-2.5 text-left font-semibold text-slate-700 dark:text-slate-200">
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext())}
+                      </th>
+                    ))}
+                  </tr>
+                ))}
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                {table.getRowModel().rows.map((row) => {
+                  const isPending = row.original.purchase.status === "pending_pricing";
+                  const isConfirmed = row.original.purchase.status === "confirmed";
+                  const rowClass = isPending
+                    ? "bg-amber-50/60 hover:bg-amber-100/60 dark:bg-amber-950/20 dark:hover:bg-amber-950/35 border-l-4 border-l-amber-500 transition-colors"
+                    : isConfirmed
+                    ? "bg-emerald-50/30 hover:bg-emerald-50/60 dark:bg-emerald-950/15 dark:hover:bg-emerald-950/25 border-l-4 border-l-emerald-500 transition-colors"
+                    : "hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors";
+
+                  return (
+                    <tr key={row.id} className={rowClass}>
+                      {row.getVisibleCells().map((cell) => (
+                        <td key={cell.id} className="px-4 py-2.5 text-slate-700 dark:text-slate-300">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Barra de Paginación (10 ítems por página) */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-200 dark:border-slate-800 pt-3 text-xs text-slate-600 dark:text-slate-400">
+            <div>
+              Mostrando{" "}
+              <strong className="text-slate-900 dark:text-slate-100">
+                {filteredRows.length === 0 ? 0 : table.getState().pagination.pageIndex * 10 + 1}
+              </strong>{" "}
+              a{" "}
+              <strong className="text-slate-900 dark:text-slate-100">
+                {Math.min((table.getState().pagination.pageIndex + 1) * 10, filteredRows.length)}
+              </strong>{" "}
+              de{" "}
+              <strong className="text-slate-900 dark:text-slate-100">{filteredRows.length}</strong> compras
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => table.setPageIndex(0)}
+                disabled={!table.getCanPreviousPage()}
+                className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                title="Primera página"
+              >
+                «
+              </button>
+              <button
+                type="button"
+                onClick={() => table.previousPage()}
+                disabled={!table.getCanPreviousPage()}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" /> Anterior
+              </button>
+              <span className="px-2 font-medium">
+                Página {table.getPageCount() === 0 ? 1 : table.getState().pagination.pageIndex + 1} de {Math.max(1, table.getPageCount())}
+              </span>
+              <button
+                type="button"
+                onClick={() => table.nextPage()}
+                disabled={!table.getCanNextPage()}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              >
+                Siguiente <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+                disabled={!table.getCanNextPage()}
+                className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                title="Última página"
+              >
+                »
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Modal de Detalle de Compra */}
+      {selectedPurchase ? (
+        <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-2 sm:p-4 backdrop-blur-[1px]">
+          <div className="flex max-h-[92dvh] sm:max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-panel dark:border-slate-800 dark:bg-slate-900">
+            <header className="flex items-start justify-between gap-3 border-b border-slate-200 p-4 sm:px-5 sm:py-4 dark:border-slate-800">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wider text-brand-700 dark:text-brand-400">
+                  Detalle de Compra
+                </p>
+                <h2 className="mt-1 text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 truncate">
+                  {selectedPurchase.purchase.document_number
+                    ? `${selectedPurchase.purchase.document_type || "Factura"} Nº ${selectedPurchase.purchase.document_number}`
+                    : selectedPurchase.purchase.purchase_number}
+                </h2>
+                {selectedPurchase.purchase.document_number && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                    Ref. interna: {selectedPurchase.purchase.purchase_number}
+                  </p>
+                )}
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                  Proveedor: {selectedPurchase.supplier?.name || "Sin proveedor"}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                  Cargada por: <strong className="text-slate-700 dark:text-slate-300">{selectedPurchase.purchase.created_by ? usersById[selectedPurchase.purchase.created_by] || selectedPurchase.purchase.created_by : "Empleado"}</strong> el {new Date(selectedPurchase.purchase.created_at).toLocaleString("es-AR")}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {(() => {
+                  const photos = parseInvoicePhotos(selectedPurchase.purchase.invoice_photo_url);
+                  if (!photos.length) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => openPhotoViewer(photos, 0)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-2.5 py-1.5 text-xs font-bold text-brand-700 shadow-xs hover:bg-brand-100 active:scale-95 transition dark:border-brand-700 dark:bg-brand-950/60 dark:text-brand-300 dark:hover:bg-brand-900/60"
+                      title="Ver fotografía de la factura física adjunta"
+                    >
+                      <Camera className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+                      <span>Ver factura{photos.length > 1 ? ` (${photos.length})` : ""}</span>
+                    </button>
+                  );
+                })()}
+                <IconButton
+                  icon={X}
+                  label="Cerrar detalle"
+                  onClick={() => setSelectedPurchase(null)}
+                />
+              </div>
+            </header>
+
+            <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-3.5">
+              <div className="grid grid-cols-2 gap-2.5 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs sm:grid-cols-4 dark:border-slate-700/80 dark:bg-slate-800/50">
+                <div>
+                  <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Comprobante</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-100">
+                    {selectedPurchase.purchase.document_type || "Factura"}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Número</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-100">
+                    {selectedPurchase.purchase.document_number || "S/N"}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Medio de Pago</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-100">
+                    {getPaymentMethodLabel(selectedPurchase.purchase.payment_method)}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Fecha</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-100">
+                    {selectedPurchase.purchase.issue_date ||
+                      new Date(selectedPurchase.purchase.created_at).toLocaleDateString("es-AR")}
+                  </span>
+                </div>
+              </div>
+
+              {/* Botón y banner destacado de factura física cargada si existe */}
+              {(() => {
+                const photos = parseInvoicePhotos(selectedPurchase.purchase.invoice_photo_url);
+                if (!photos.length) return null;
+                return (
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50/70 p-2.5 sm:px-3.5 dark:border-brand-800/80 dark:bg-brand-950/40">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex items-center -space-x-3 shrink-0">
+                        {photos.slice(0, 3).map((photo, i) => (
+                          <div
+                            key={i}
+                            className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg border-2 border-white shadow-xs bg-white cursor-pointer hover:z-10 transition dark:border-slate-900 dark:bg-slate-900"
+                            onClick={() => openPhotoViewer(photos, i)}
+                            title={`Toca para ampliar foto #${i + 1}`}
+                          >
+                            <img
+                              src={photo}
+                              alt={`Página ${i + 1}`}
+                              className="h-full w-full object-cover"
+                            />
+                            <span className="absolute bottom-0 right-0 bg-black/60 px-1 text-[9px] font-bold text-white leading-none py-0.5 rounded-tl">
+                              #{i + 1}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-brand-950 dark:text-brand-200 truncate">
+                          Factura física adjunta ({photos.length} {photos.length === 1 ? "foto" : "páginas/fotos"})
+                        </p>
+                        <p className="text-[11px] text-brand-700 dark:text-brand-400">
+                          Comprobante cargado en la compra
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openPhotoViewer(photos, 0)}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-brand-700 active:scale-95 transition dark:bg-brand-500"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      <span>Ver {photos.length > 1 ? "todas" : "foto"}</span>
+                    </button>
+                  </div>
+                );
+              })()}
+
+              <div>
+                <h3 className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  Productos comprados ({selectedPurchase.purchase.items?.length ?? 0})
+                </h3>
+                <div className="space-y-2">
+                  {selectedPurchase.purchase.items?.map((item) => {
+                    const product = item.product ?? productsById.get(item.product_id);
+                    const salePrice = item.sale_price ?? product?.price;
+                    const isWeight = product?.sale_mode === "weight";
+                    const unitLabel = isWeight ? "g" : "u.";
+                    const displayQty = isWeight ? item.quantity * 1000 : item.quantity;
+                    const displayBonified = (item.bonified_quantity || 0) * (isWeight ? 1000 : 1);
+                    const displayReturned = (item.returned_quantity || 0) * (isWeight ? 1000 : 1);
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-700/80 dark:bg-slate-800/60"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">
+                            {item.product_name_snapshot}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            <span>Cant. pagada: {displayQty.toLocaleString("es-AR")} {unitLabel}</span>
+                            {item.bonified_quantity ? (
+                              <span className="inline-flex items-center gap-0.5 font-medium text-emerald-700 dark:text-emerald-400">
+                                <Gift className="h-3 w-3" /> +{displayBonified.toLocaleString("es-AR")} {unitLabel} bonificados
+                              </span>
+                            ) : null}
+                            {item.returned_quantity ? (
+                              <span className="font-medium text-amber-700 dark:text-amber-400">
+                                ({displayReturned.toLocaleString("es-AR")} {unitLabel} devueltos)
+                              </span>
+                            ) : null}
+                            <span>• Costo unit: {currency.format(item.unit_cost)}</span>
+                            {item.vat_percent ? <span>• IVA: {item.vat_percent}%</span> : null}
+                            {salePrice != null && salePrice > 0 ? (
+                              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                • Precio venta: {currency.format(salePrice)}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800">
+                          <span className="text-xs text-slate-500 dark:text-slate-400 sm:hidden block text-left">Subtotal ítem:</span>
+                          <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                            {currency.format(item.line_total)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {selectedPurchase.purchase.notes ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700/80 dark:bg-slate-800/50 dark:text-slate-300">
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">Observaciones / Historial:</span>
+                  <p className="mt-1 whitespace-pre-wrap">{selectedPurchase.purchase.notes}</p>
+                </div>
+              ) : null}
+
+              {/* Fotografías de la factura física adjunta */}
+              {(() => {
+                const photos = parseInvoicePhotos(selectedPurchase.purchase.invoice_photo_url);
+                if (!photos.length) return null;
+                return (
+                  <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-3 dark:border-brand-800/80 dark:bg-brand-950/30">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-brand-900 dark:text-brand-300">
+                        <Camera className="h-4 w-4 text-brand-600 dark:text-brand-400" />
+                        Fotografías de factura física ({photos.length} {photos.length === 1 ? "página" : "páginas"})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => openPhotoViewer(photos, 0)}
+                        className="inline-flex items-center gap-1 rounded-md bg-white border border-brand-300 px-2 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-50 shadow-xs dark:bg-slate-800 dark:border-brand-700 dark:text-brand-300"
+                      >
+                        <Maximize2 className="h-3 w-3" /> Ver todas ampliadas
+                      </button>
+                    </div>
+
+                    <div className={`grid gap-2 ${photos.length === 1 ? "grid-cols-1" : "grid-cols-2 sm:grid-cols-3"}`}>
+                      {photos.map((photo, i) => (
+                        <div
+                          key={i}
+                          className="relative h-32 sm:h-36 overflow-hidden rounded-lg border border-brand-200 bg-slate-100 cursor-pointer group dark:border-brand-800/60 dark:bg-slate-900"
+                          onClick={() => openPhotoViewer(photos, i)}
+                          title={`Toca para ampliar página #${i + 1}`}
+                        >
+                          <img
+                            src={photo}
+                            alt={`Factura página ${i + 1}`}
+                            className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                          />
+                          <span className="absolute top-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-white shadow-xs">
+                            Pág. {i + 1}
+                          </span>
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span className="rounded-lg bg-black/70 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-xs flex items-center gap-1">
+                              <Maximize2 className="h-3.5 w-3.5" /> Ampliar
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="space-y-1 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700/80 dark:bg-slate-800/50">
+                <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+                  <span>Subtotal neto:</span>
+                  <span className="text-slate-800 dark:text-slate-200">{currency.format(selectedPurchase.purchase.subtotal)}</span>
+                </div>
+                {selectedPurchase.purchase.vat_total ? (
+                  <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+                    <span>IVA total:</span>
+                    <span className="text-slate-800 dark:text-slate-200">{currency.format(selectedPurchase.purchase.vat_total)}</span>
+                  </div>
+                ) : null}
+                {(() => {
+                  const match = selectedPurchase.purchase.notes?.match(/IIBB(?:[^:]*):\s*\$?([0-9.,]+)/i);
+                  const iibbVal = match ? match[1] : null;
+                  if (!iibbVal) return null;
+                  return (
+                    <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+                      <span>Percepción IIBB:</span>
+                      <span className="text-slate-800 dark:text-slate-200">${iibbVal}</span>
+                    </div>
+                  );
+                })()}
+                {(() => {
+                  const match = selectedPurchase.purchase.notes?.match(/Imp\.?\s*Agregado:\s*\$?([0-9.,]+)/i);
+                  const extraVal = match ? match[1] : null;
+                  if (!extraVal) return null;
+                  return (
+                    <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
+                      <span>Impuesto agregado:</span>
+                      <span className="text-slate-800 dark:text-slate-200">${extraVal}</span>
+                    </div>
+                  );
+                })()}
+                <div className="flex justify-between text-base font-bold text-slate-900 border-t border-slate-200 dark:border-slate-700 dark:text-slate-100 pt-1">
+                  <span>Total Compra:</span>
+                  <span className="text-brand-700 dark:text-brand-400">{currency.format(selectedPurchase.purchase.total)}</span>
+                </div>
+                {selectedPurchase.purchase.returned_total ? (
+                  <div className="flex justify-between text-xs font-semibold text-amber-800 dark:text-amber-300">
+                    <span>Total Devoluciones / Crédito:</span>
+                    <span>-{currency.format(selectedPurchase.purchase.returned_total)}</span>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <footer className="border-t border-slate-200 p-3 sm:px-5 sm:py-3 text-right dark:border-slate-800">
+              <button
+                type="button"
+                className="ui-btn-primary w-full sm:w-auto"
+                onClick={() => setSelectedPurchase(null)}
+              >
+                Cerrar
+              </button>
+            </footer>
+          </div>
+        </section>
+      ) : null}
+
+      {/* Lightbox / Visor de foto(s) de factura a pantalla completa con navegación multipágina */}
+      {photoViewerState && photoViewerState.photos.length > 0 ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-2 sm:p-6 animate-fadeIn"
+          onClick={() => setPhotoViewerState(null)}
+        >
+          <div
+            className="relative flex max-h-[94vh] w-full max-w-4xl flex-col items-center justify-center overflow-hidden rounded-2xl bg-slate-900 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header del Lightbox */}
+            <div className="flex w-full items-center justify-between border-b border-slate-800 px-4 py-2.5 text-white">
+              <div className="flex items-center gap-2">
+                <Camera className="h-4 w-4 text-brand-400" />
+                <span className="text-xs sm:text-sm font-bold">
+                  Factura de compra
+                  {photoViewerState.photos.length > 1
+                    ? ` — Página ${photoViewerState.index + 1} de ${photoViewerState.photos.length}`
+                    : ""}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={photoViewerState.photos[photoViewerState.index]}
+                  download={`factura-compra-pag-${photoViewerState.index + 1}.jpg`}
+                  className="inline-flex items-center gap-1 rounded-lg bg-slate-800 px-2.5 py-1 text-xs font-semibold text-slate-200 hover:bg-slate-700"
+                  title="Descargar fotografía"
+                >
+                  <Download className="h-3.5 w-3.5" /> Descargar
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPhotoViewerState(null)}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+                  title="Cerrar visor"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Imagen Principal y Flechas de Navegación */}
+            <div className="relative flex max-h-[calc(90vh-7rem)] w-full items-center justify-center overflow-auto p-2 sm:p-4">
+              <img
+                src={photoViewerState.photos[photoViewerState.index]}
+                alt={`Página ${photoViewerState.index + 1}`}
+                className="max-h-[70vh] w-auto max-w-full rounded-lg object-contain shadow-md"
+              />
+
+              {photoViewerState.photos.length > 1 && photoViewerState.index > 0 ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPhotoViewerState((prev) =>
+                      prev ? { ...prev, index: prev.index - 1 } : null
+                    )
+                  }
+                  className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white hover:bg-black/90 transition shadow-lg"
+                  title="Página anterior"
+                >
+                  <ChevronLeft className="h-6 w-6" />
+                </button>
+              ) : null}
+
+              {photoViewerState.photos.length > 1 &&
+              photoViewerState.index < photoViewerState.photos.length - 1 ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPhotoViewerState((prev) =>
+                      prev ? { ...prev, index: prev.index + 1 } : null
+                    )
+                  }
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white hover:bg-black/90 transition shadow-lg"
+                  title="Página siguiente"
+                >
+                  <ChevronRight className="h-6 w-6" />
+                </button>
+              ) : null}
+            </div>
+
+            {/* Selector de miniaturas en la parte inferior si hay 2 o más fotos */}
+            {photoViewerState.photos.length > 1 ? (
+              <div className="flex w-full items-center justify-center gap-2 border-t border-slate-800/80 bg-slate-950/60 p-2 overflow-x-auto">
+                {photoViewerState.photos.map((p, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() =>
+                      setPhotoViewerState((prev) => (prev ? { ...prev, index: i } : null))
+                    }
+                    className={`relative h-12 w-12 shrink-0 overflow-hidden rounded-md border-2 transition ${
+                      i === photoViewerState.index
+                        ? "border-brand-500 ring-2 ring-brand-500/50 scale-105"
+                        : "border-slate-700 opacity-60 hover:opacity-100"
+                    }`}
+                  >
+                    <img src={p} alt={`Página ${i + 1}`} className="h-full w-full object-cover" />
+                    <span className="absolute bottom-0 right-0 bg-black/70 px-1 text-[9px] font-bold text-white leading-tight">
+                      #{i + 1}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
+

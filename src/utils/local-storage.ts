@@ -1,9 +1,16 @@
-﻿export const storageKeys = {
+export const storageKeys = {
   auth: "pos-v2-auth",
   ui: "pos-v2-ui",
+  productsCatalog: "pos-v2-products-catalog",
   pendingSales: "pos-v2-pending-sales",
   pendingCashMovements: "pos-v2-pending-cash-movements",
   offlineSyncMeta: "pos-v2-offline-sync-meta",
   mercadoPagoIntents: "pos-v2-mercadopago-intents",
   posCustomerProfiles: "pos-v2-pos-customer-profiles",
+  topbarSupportOutbox: "pos-v2-topbar-support-outbox",
+  supportTickets: "pos-v2-support-tickets",
+  supportSeenByUser: "pos-v2-support-seen-by-user",
+  topbarTasks: "pos-v2-topbar-tasks",
+  topbarChatMessages: "pos-v2-topbar-chat-messages",
+  topbarPresence: "pos-v2-topbar-presence",
 } as const;

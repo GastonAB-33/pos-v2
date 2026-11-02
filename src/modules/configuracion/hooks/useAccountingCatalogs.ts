@@ -19,6 +19,7 @@ interface UpsertBankAccountInput {
   currency_code: string;
   notes: string | null;
   is_active: boolean;
+  is_pos_available?: boolean;
 }
 
 interface UpsertOriginBankInput {
@@ -140,6 +141,7 @@ export const useAccountingCatalogs = (
         currency_code: input.currency_code.trim().toUpperCase() || "ARS",
         notes: input.notes?.trim() || null,
         is_active: input.is_active,
+        is_pos_available: input.is_pos_available ?? true,
       } satisfies UpsertBankAccountInput;
 
       if (!payload.bank_name || !payload.holder_name) {
@@ -212,6 +214,31 @@ export const useAccountingCatalogs = (
         setFeedback({
           type: "error",
           message: "No se pudo actualizar estado de cuenta bancaria.",
+        });
+      }
+    },
+    [load, logAudit, tenantId]
+  );
+
+  const toggleBankAccountPosAvailable = useCallback(
+    async (id: string) => {
+      if (!tenantId) return;
+      try {
+        const updated = await bankAccountsService.togglePosAvailable(tenantId, id);
+        if (!updated) return;
+
+        await logAudit(
+          "toggle_bank_account_pos",
+          "bank_account",
+          updated.id,
+          `Cuenta bancaria ${updated.is_pos_available !== false ? "habilitada" : "deshabilitada"} para POS: ${updated.bank_name}`,
+          { is_pos_available: updated.is_pos_available }
+        );
+        await load();
+      } catch {
+        setFeedback({
+          type: "error",
+          message: "No se pudo actualizar disponibilidad en POS.",
         });
       }
     },
@@ -400,6 +427,7 @@ export const useAccountingCatalogs = (
     reload: load,
     upsertBankAccount,
     toggleBankAccount,
+    toggleBankAccountPosAvailable,
     upsertOriginBank,
     toggleOriginBank,
     upsertInstallmentPlan,

@@ -1,6 +1,7 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { permissionProfilesService } from "@/services/permission-profiles.service";
+import { authService } from "@/services/auth.service";
 import { dataProvider } from "@/services/config/data-provider";
 import { tenantsService } from "@/services/tenants.service";
 import { usersService } from "@/services/users.service";
@@ -11,6 +12,7 @@ import {
   normalizePermissionProfile,
   type PermissionProfile,
 } from "@/types/permissions";
+import { normalizeTenantSlug } from "@/utils/tenant-slug";
 
 interface OptionItem {
   value: string;
@@ -30,6 +32,13 @@ const DEV_ADMIN_USERNAME = "admin";
 const DEV_ADMIN_PASSWORD = "admin123";
 const DEV_ADMIN_EMAIL = "admin@demo.local";
 const DEV_ADMIN_FULL_NAME = "Administrador Demo";
+
+const normalizeLoginText = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 
 const createFullPermissionProfile = (): PermissionProfile => {
   const profile = createDefaultPermissionProfile();
@@ -132,25 +141,15 @@ const resolveProfileOrError = (
   return { ok: true, profile };
 };
 
-const matchesTenantInput = (tenant: TenantRecord, rawTenant: string): boolean => {
-  const normalized = rawTenant.trim().toLowerCase();
-  if (!normalized) return false;
-
-  return (
-    tenant.id.trim().toLowerCase() === normalized ||
-    tenant.trade_name.trim().toLowerCase() === normalized ||
-    tenant.legal_name.trim().toLowerCase() === normalized ||
-    tenant.cuit.trim().toLowerCase() === normalized
-  );
-};
-
-export const useMockLogin = () => {
+export const useMockLogin = (expectedTenantSlug?: string) => {
   const setSession = useAuthStore((state) => state.setSession);
 
   const [tenantId, setTenantId] = useState("");
   const [userId, setUserId] = useState("");
   const [userSearch, setUserSearch] = useState("");
-  const [tenantInput, setTenantInput] = useState(DEV_TENANT_LOGIN);
+  const [tenantInput, setTenantInput] = useState(
+    dataProvider === "mock" ? DEV_TENANT_LOGIN : normalizeTenantSlug(expectedTenantSlug)
+  );
   const [usernameInput, setUsernameInput] = useState(DEV_ADMIN_USERNAME);
   const [passwordInput, setPasswordInput] = useState(DEV_ADMIN_PASSWORD);
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
@@ -208,6 +207,16 @@ export const useMockLogin = () => {
   );
 
   const loadTenants = useCallback(async () => {
+    if (dataProvider !== "mock") {
+      setTenants([]);
+      setUsers([]);
+      setProfilesById(new Map());
+      setTenantId("");
+      setUserId("");
+      setError(null);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -242,6 +251,13 @@ export const useMockLogin = () => {
 
   const loadUsersAndProfiles = useCallback(
     async (selectedTenantId: string) => {
+      if (dataProvider !== "mock") {
+        setUsers([]);
+        setProfilesById(new Map());
+        setUserId("");
+        return;
+      }
+
       if (!selectedTenantId) {
         setUsers([]);
         setProfilesById(new Map());
@@ -350,71 +366,39 @@ export const useMockLogin = () => {
   };
 
   const loginWithCredentials = async (): Promise<boolean> => {
-    const normalizedTenant = tenantInput.trim().toLowerCase();
+    const normalizedTenant = normalizeLoginText(tenantInput);
     const normalizedUsername = usernameInput.trim().toLowerCase();
     const password = passwordInput;
+    const normalizedExpectedSlug = normalizeTenantSlug(expectedTenantSlug);
 
     if (dataProvider !== "mock") {
-      if (!normalizedTenant || !normalizedUsername) {
-        setError("Completa tenant y usuario para iniciar sesion");
+      if (!normalizedTenant && !normalizedExpectedSlug) {
+        setError("Completa el comercio para iniciar sesion");
         return false;
       }
 
-      // El proyecto no usa Supabase Auth para este login; se valida contra tablas propias.
-      const allTenants = await tenantsService.getAll();
-      const targetTenant = allTenants.find((tenant) => matchesTenantInput(tenant, normalizedTenant)) ?? null;
-
-      if (!targetTenant) {
-        setError("Tenant no encontrado");
+      if (!normalizedUsername || !password.trim()) {
+        setError("Completa email y contrasena para iniciar sesion");
         return false;
       }
 
-      if (!targetTenant.is_active) {
-        setError("El tenant seleccionado esta inactivo");
+      if (!normalizedUsername.includes("@")) {
+        setError("En modo Supabase debes ingresar el email del usuario");
         return false;
       }
 
-      const [tenantUsers, tenantProfiles] = await Promise.all([
-        usersService.getAllByTenant(targetTenant.id),
-        permissionProfilesService.getAllByTenant(targetTenant.id),
-      ]);
-
-      const localProfilesById = new Map(tenantProfiles.map((profile) => [profile.id, profile]));
-      const targetUser =
-        tenantUsers.find(
-          (user) =>
-            user.username?.trim().toLowerCase() === normalizedUsername ||
-            user.email?.trim().toLowerCase() === normalizedUsername
-        ) ?? null;
-
-      if (!targetUser) {
-        setError("Usuario no encontrado en el tenant");
-        return false;
-      }
-
-      if (!targetUser.is_active) {
-        setError("El usuario esta inactivo");
-        return false;
-      }
-
-      const profileValidation = resolveProfileOrError(localProfilesById, targetUser);
-      if (!profileValidation.ok || !profileValidation.profile) {
-        setError(profileValidation.message ?? "Perfil de permisos invalido");
-        return false;
-      }
-
-      if (!password.trim()) {
-        setError("Completa la contrasena para iniciar sesion");
-        return false;
-      }
-
-      setTenantId(targetTenant.id);
-      setUserId(targetUser.id);
-      setUsers(tenantUsers.sort((a, b) => a.full_name.localeCompare(b.full_name)));
-      setProfilesById(localProfilesById);
-
-      applySession(targetTenant, targetUser, profileValidation.profile);
+      const session = await authService.signInWithPassword(
+        normalizedUsername,
+        password,
+        normalizedExpectedSlug || normalizedTenant
+      );
+      setSession(session);
       return true;
+    }
+
+    if (normalizedExpectedSlug && normalizedExpectedSlug !== DEV_TENANT_LOGIN) {
+      setError("El comercio indicado en el enlace no existe en el entorno de desarrollo");
+      return false;
     }
 
     if (
@@ -502,8 +486,16 @@ export const useMockLogin = () => {
       }
 
       return await loginFromSelectors();
-    } catch {
-      setError("No se pudo iniciar sesion mock");
+    } catch (error) {
+      let message = dataProvider === "mock" ? "No se pudo iniciar sesion mock" : "No se pudo iniciar sesion";
+      if (error instanceof Error) {
+        message = error.message;
+        const lower = message.toLowerCase();
+        if (lower.includes("failed to fetch") || lower.includes("fetch failed") || lower.includes("networkerror")) {
+          message = "Error de conexión: No se pudo comunicar con el servidor en la nube. Verificá la conexión a internet de este equipo y reintentá.";
+        }
+      }
+      setError(message);
       return false;
     } finally {
       setIsSubmitting(false);
@@ -548,7 +540,10 @@ export const useMockLogin = () => {
     login,
     loginAsDemoAdmin,
     demoCredentials,
-    canSubmit: Boolean(tenantId && userId) || Boolean(usernameInput.trim() && passwordInput.trim()),
+    canSubmit:
+      dataProvider === "mock"
+        ? Boolean(tenantId && userId) || Boolean(usernameInput.trim() && passwordInput.trim())
+        : Boolean(tenantInput.trim() && usernameInput.trim() && passwordInput.trim()),
     hasTenants: tenants.length > 0,
     hasUsers: users.length > 0,
   };

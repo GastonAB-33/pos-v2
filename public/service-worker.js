@@ -29,7 +29,15 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(APP_CACHE)
-      .then((cache) => cache.addAll(APP_SHELL_ASSETS))
+      .then((cache) =>
+        Promise.all(
+          APP_SHELL_ASSETS.map((asset) =>
+            cache.add(asset).catch(() => {
+              // Ignore assets that cannot be cached during install.
+            })
+          )
+        )
+      )
       .then(() => self.skipWaiting())
   );
 });
@@ -70,9 +78,13 @@ const networkFirstWithCacheFallback = async (request) => {
   try {
     const response = await fetch(request);
     if (response && response.ok) {
-      const cache = await caches.open(RUNTIME_CACHE);
-      cache.put(request, response.clone());
-      void trimCache(RUNTIME_CACHE);
+      try {
+        const cache = await caches.open(RUNTIME_CACHE);
+        cache.put(request, response.clone());
+        void trimCache(RUNTIME_CACHE);
+      } catch {
+        // Skip caching if already consumed
+      }
     }
     return response;
   } catch {
@@ -96,11 +108,15 @@ self.addEventListener("fetch", (event) => {
       fetch(request)
         .then((response) => {
           if (response && response.ok) {
-            const cloned = response.clone();
-            caches.open(RUNTIME_CACHE).then((cache) => {
-              cache.put(request, cloned);
-              void trimCache(RUNTIME_CACHE);
-            });
+            try {
+              const cloned = response.clone();
+              caches.open(RUNTIME_CACHE).then((cache) => {
+                cache.put(request, cloned);
+                void trimCache(RUNTIME_CACHE);
+              });
+            } catch {
+              // Skip caching if already consumed
+            }
           }
           return response;
         })
@@ -141,10 +157,14 @@ self.addEventListener("fetch", (event) => {
     fetch(request)
       .then((response) => {
         if (response && response.ok) {
-          caches.open(RUNTIME_CACHE).then((cache) => {
-            cache.put(request, response.clone());
-            void trimCache(RUNTIME_CACHE);
-          });
+          try {
+            caches.open(RUNTIME_CACHE).then((cache) => {
+              cache.put(request, response.clone());
+              void trimCache(RUNTIME_CACHE);
+            });
+          } catch {
+            // Skip caching if already consumed
+          }
         }
         return response;
       })

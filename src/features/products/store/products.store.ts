@@ -1,0 +1,227 @@
+import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
+import { priceListsService } from "@/services/price-lists.service";
+import { productsService } from "@/services/products.service";
+import type { PriceList, Product, ProductBarcode } from "@/types/entities";
+import { storageKeys } from "@/utils/local-storage";
+
+const normalizeBarcode = (value: string | null | undefined): string =>
+  (value ?? "").trim().replace(/\s+/g, "");
+
+const sortByName = (rows: Product[]): Product[] =>
+  [...rows].sort((a, b) => a.name.localeCompare(b.name));
+
+const safeLocalStorage = {
+  getItem: (name: string): string | null => {
+    try {
+      return localStorage.getItem(name);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (name: string, value: string): void => {
+    try {
+      localStorage.setItem(name, value);
+    } catch (err) {
+      console.warn("No se pudo persistir el catálogo en localStorage", err);
+    }
+  },
+  removeItem: (name: string): void => {
+    try {
+      localStorage.removeItem(name);
+    } catch {
+      // ignore
+    }
+  },
+};
+
+interface ProductsCatalogState {
+  products: Product[];
+  allBarcodes: ProductBarcode[];
+  primaryBarcodes: Record<string, string>;
+  priceLists: PriceList[];
+  loadedTenantId: string | null;
+  lastLoadedAt: number | null;
+  isLoading: boolean;
+  isBackgroundRefreshing: boolean;
+  error: string | null;
+
+  loadCatalog: (tenantId: string, force?: boolean) => Promise<void>;
+  upsertProduct: (product: Product) => void;
+  removeProduct: (productId: string) => void;
+  patchPrimaryBarcode: (productId: string, barcode: string) => void;
+  updateProductStock: (productId: string, newStock: number) => void;
+  clearCatalog: () => void;
+}
+
+export const useProductsStore = create<ProductsCatalogState>()(
+  persist(
+    (set, get) => ({
+      products: [],
+      allBarcodes: [],
+      primaryBarcodes: {},
+      priceLists: [],
+      loadedTenantId: null,
+      lastLoadedAt: null,
+      isLoading: false,
+      isBackgroundRefreshing: false,
+      error: null,
+
+      loadCatalog: async (tenantId: string, force = false) => {
+        if (!tenantId) {
+          get().clearCatalog();
+          return;
+        }
+
+        const state = get();
+        const isSameTenant = state.loadedTenantId === tenantId;
+        const hasData = state.products.length > 0;
+
+        // Si ya tenemos datos del mismo tenant y no se forzó recarga: mantener UI instantánea pero revalidar en segundo plano
+        if (isSameTenant && hasData && !force) {
+          set({ isBackgroundRefreshing: true });
+        } else {
+          set({ isLoading: true, error: null });
+        }
+
+    try {
+      const [list, barcodes, lists] = await Promise.all([
+        productsService.getAllByTenant(tenantId),
+        productsService.getBarcodesByTenant(tenantId),
+        priceListsService.getAllByTenant(tenantId),
+      ]);
+
+      const barcodeMap: Record<string, string> = {};
+      const activeBarcodes: ProductBarcode[] = [];
+
+      for (const barcode of barcodes) {
+        if (!barcode.barcode || !barcode.product_id) continue;
+        if (barcode.is_primary || !barcodeMap[barcode.product_id]) {
+          barcodeMap[barcode.product_id] = barcode.barcode;
+        }
+        activeBarcodes.push(barcode);
+      }
+
+      for (const product of list) {
+        if (!barcodeMap[product.id] && product.code) {
+          barcodeMap[product.id] = product.code;
+        }
+      }
+
+      set({
+        products: sortByName(list),
+        allBarcodes: activeBarcodes,
+        primaryBarcodes: barcodeMap,
+        priceLists: lists.sort((a, b) => a.name.localeCompare(b.name)),
+        loadedTenantId: tenantId,
+        lastLoadedAt: Date.now(),
+        isLoading: false,
+        isBackgroundRefreshing: false,
+        error: null,
+      });
+    } catch {
+      set({
+        isLoading: false,
+        isBackgroundRefreshing: false,
+        error: "No se pudieron cargar los productos",
+      });
+    }
+  },
+
+  upsertProduct: (product: Product) => {
+    set((state) => {
+      const safeProduct = { ...product };
+      const withoutCurrent = state.products.filter((item) => item.id !== safeProduct.id);
+      return {
+        products: sortByName([...withoutCurrent, safeProduct]),
+      };
+    });
+  },
+
+  removeProduct: (productId: string) => {
+    set((state) => {
+      const nextPrimary = { ...state.primaryBarcodes };
+      delete nextPrimary[productId];
+
+      return {
+        products: state.products.filter((item) => item.id !== productId),
+        primaryBarcodes: nextPrimary,
+        allBarcodes: state.allBarcodes.filter((row) => row.product_id !== productId),
+      };
+    });
+  },
+
+  patchPrimaryBarcode: (productId: string, barcodeValue: string) => {
+    const normalized = normalizeBarcode(barcodeValue);
+
+    set((state) => {
+      const nextPrimary = { ...state.primaryBarcodes };
+      if (!normalized) {
+        delete nextPrimary[productId];
+      } else {
+        nextPrimary[productId] = normalized;
+      }
+
+      // Cada producto tiene un único código de barra: eliminar cualquier código previo de este producto
+      const filtered = state.allBarcodes.filter((row) => row.product_id !== productId);
+
+      const nextAll = normalized
+        ? [
+            ...filtered,
+            {
+              id: `temp-${productId}`,
+              tenant_id: state.loadedTenantId ?? "",
+              product_id: productId,
+              barcode: normalized,
+              is_primary: true,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          ]
+        : filtered;
+
+      return {
+        primaryBarcodes: nextPrimary,
+        allBarcodes: nextAll,
+      };
+    });
+  },
+
+  updateProductStock: (productId: string, newStock: number) => {
+    set((state) => ({
+      products: state.products.map((item) =>
+        item.id === productId
+          ? { ...item, stock_current: newStock, stock: newStock }
+          : item
+      ),
+    }));
+  },
+
+      clearCatalog: () => {
+        set({
+          products: [],
+          allBarcodes: [],
+          primaryBarcodes: {},
+          priceLists: [],
+          loadedTenantId: null,
+          lastLoadedAt: null,
+          isLoading: false,
+          isBackgroundRefreshing: false,
+          error: null,
+        });
+      },
+    }),
+    {
+      name: storageKeys.productsCatalog,
+      storage: createJSONStorage(() => safeLocalStorage),
+      partialize: (state) => ({
+        products: state.products,
+        allBarcodes: state.allBarcodes,
+        primaryBarcodes: state.primaryBarcodes,
+        priceLists: state.priceLists,
+        loadedTenantId: state.loadedTenantId,
+        lastLoadedAt: state.lastLoadedAt,
+      }),
+    }
+  )
+);

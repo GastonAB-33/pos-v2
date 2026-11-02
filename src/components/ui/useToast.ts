@@ -11,15 +11,15 @@ export const useToast = () => {
   );
 
   const success = useCallback(
-    (message: string, durationMs?: number) => show("success", message, durationMs),
+    (message: string, durationMs = 6000) => show("success", message, durationMs),
     [show]
   );
   const error = useCallback(
-    (message: string, durationMs?: number) => show("error", message, durationMs),
+    (message: string, durationMs = 8000) => show("error", message, durationMs),
     [show]
   );
   const info = useCallback(
-    (message: string, durationMs?: number) => show("info", message, durationMs),
+    (message: string, durationMs = 6000) => show("info", message, durationMs),
     [show]
   );
 

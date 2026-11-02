@@ -1,0 +1,249 @@
+import React, { useEffect, useState } from "react";
+import { DollarSign, Percent } from "lucide-react";
+import { cn } from "@/utils/cn";
+import { handleNumericInputFocus } from "@/utils/input-helpers";
+
+export type RateAmountMode = "percent" | "amount";
+
+export interface DualRateAmountInputProps {
+  /** Nombre o concepto del impuesto, recargo o descuento (ej: "IIBB", "Descuento", "Recargo") */
+  label: string;
+  /** Modo actual: alícuota porcentual o monto fijo */
+  mode: RateAmountMode;
+  /** Callback al cambiar el modo */
+  onModeChange: (nextMode: RateAmountMode) => void;
+  /** Valor actual en porcentaje (ej: 3.5) */
+  percentValue: number;
+  /** Valor actual en monto monetario (ej: 150) */
+  amountValue: number;
+  /** Base imponible o subtotal sobre el que se calculan los porcentajes o montos */
+  baseTotal: number;
+  /** Callback al cambiar el valor porcentual */
+  onPercentChange: (percent: number) => void;
+  /** Callback al cambiar el valor monetario */
+  onAmountChange: (amount: number) => void;
+  /** Deshabilita la interacción */
+  disabled?: boolean;
+  /** Color de acento para el texto resaltado */
+  accentColor?: "amber" | "blue" | "emerald" | "purple" | "slate";
+  /** Identificador HTML para el input */
+  id?: string;
+  /** Clases adicionales para el contenedor */
+  className?: string;
+}
+
+const currency = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  maximumFractionDigits: 2,
+});
+
+const roundAmount = (val: number): number => Math.round(val * 100) / 100;
+
+export const DualRateAmountInput: React.FC<DualRateAmountInputProps> = ({
+  label,
+  mode,
+  onModeChange,
+  percentValue,
+  amountValue,
+  baseTotal,
+  onPercentChange,
+  onAmountChange,
+  disabled = false,
+  accentColor = "amber",
+  id,
+  className,
+}) => {
+  const [draft, setDraft] = useState<string | null>(null);
+
+  // Sincronizar el draft cuando cambian los valores externos
+  useEffect(() => {
+    setDraft(null);
+  }, [mode, percentValue, amountValue]);
+
+  // Cálculo del valor proyectado/equivalente
+  const calculatedAmount =
+    mode === "percent"
+      ? roundAmount(baseTotal * ((percentValue || 0) / 100))
+      : amountValue;
+
+  const equivalentPercent =
+    mode === "amount"
+      ? baseTotal > 0
+        ? roundAmount(((amountValue || 0) / baseTotal) * 100)
+        : 0
+      : percentValue;
+
+  // Valor a mostrar en el input
+  const displayValue =
+    draft ??
+    (mode === "percent"
+      ? percentValue === 0
+        ? "0"
+        : percentValue.toString()
+      : amountValue === 0
+      ? "0"
+      : amountValue.toString());
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    setDraft(raw);
+
+    const clean = raw.trim().replace(",", ".");
+    if (clean === "") {
+      if (mode === "percent") {
+        onPercentChange(0);
+      } else {
+        onAmountChange(0);
+      }
+      return;
+    }
+
+    const parsed = Number(clean);
+    if (!isNaN(parsed) && parsed >= 0) {
+      if (mode === "percent") {
+        onPercentChange(Math.min(100, parsed));
+      } else {
+        onAmountChange(roundAmount(parsed));
+      }
+    }
+  };
+
+  const handleModeSwitch = (nextMode: RateAmountMode) => {
+    if (nextMode === mode || disabled) return;
+
+    if (nextMode === "amount") {
+      // Al pasar a monto, precargar el monto equivalente si ya había un porcentaje
+      const derivedAmount = roundAmount(baseTotal * ((percentValue || 0) / 100));
+      onAmountChange(derivedAmount);
+    } else {
+      // Al pasar a porcentaje, precargar el porcentaje equivalente si ya había un monto
+      const derivedPercent =
+        baseTotal > 0 ? roundAmount(((amountValue || 0) / baseTotal) * 100) : 0;
+      onPercentChange(Math.min(100, derivedPercent));
+      onAmountChange(0);
+    }
+
+    setDraft(null);
+    onModeChange(nextMode);
+  };
+
+  const accentColorStyles = {
+    amber: {
+      text: "text-amber-700 dark:text-amber-400",
+      activeTab: "text-amber-700 dark:text-amber-400",
+      focusBorder: "focus:border-amber-500",
+    },
+    blue: {
+      text: "text-blue-700 dark:text-blue-400",
+      activeTab: "text-blue-700 dark:text-blue-400",
+      focusBorder: "focus:border-blue-500",
+    },
+    emerald: {
+      text: "text-emerald-700 dark:text-emerald-400",
+      activeTab: "text-emerald-700 dark:text-emerald-400",
+      focusBorder: "focus:border-emerald-500",
+    },
+    purple: {
+      text: "text-purple-700 dark:text-purple-400",
+      activeTab: "text-purple-700 dark:text-purple-400",
+      focusBorder: "focus:border-purple-500",
+    },
+    slate: {
+      text: "text-slate-800 dark:text-slate-200",
+      activeTab: "text-slate-900 dark:text-slate-100",
+      focusBorder: "focus:border-slate-500",
+    },
+  }[accentColor];
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 transition-colors dark:border-slate-700 dark:bg-slate-900/90",
+        className
+      )}
+    >
+      {/* Botón selector general alternable: al tocar cambia entre % y $ */}
+      <button
+        type="button"
+        onClick={() => handleModeSwitch(mode === "percent" ? "amount" : "percent")}
+        disabled={disabled}
+        aria-label={`Alternar modo de ${label}. Actualmente en ${mode === "percent" ? "porcentaje" : "monto"}. Tocar para cambiar a ${mode === "percent" ? "monto" : "porcentaje"}.`}
+        title={`Tocar para alternar entre Porcentaje (%) y Monto ($). Modo actual: ${mode === "percent" ? "% (Porcentaje)" : "$ (Monto)"}`}
+        className={cn(
+          "flex items-center rounded-md border border-slate-300 bg-slate-100 p-0.5 transition-transform active:scale-95 hover:bg-slate-200/80 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700/80 cursor-pointer select-none touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed",
+          "focus:outline-none focus:ring-1 focus:ring-amber-500/50"
+        )}
+      >
+        <span
+          className={cn(
+            "flex items-center justify-center rounded px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs sm:text-sm font-black leading-none transition select-none pointer-events-none gap-0.5",
+            mode === "percent"
+              ? cn(
+                  "bg-white shadow-xs dark:bg-slate-900",
+                  accentColorStyles.activeTab
+                )
+              : "text-slate-400 dark:text-slate-500"
+          )}
+        >
+          <Percent className="h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={2.5} />
+        </span>
+        <span
+          className={cn(
+            "flex items-center justify-center rounded px-2 py-0.5 sm:px-2.5 sm:py-1 text-xs sm:text-sm font-black leading-none transition select-none pointer-events-none gap-0.5",
+            mode === "amount"
+              ? cn(
+                  "bg-white shadow-xs dark:bg-slate-900",
+                  accentColorStyles.activeTab
+                )
+              : "text-slate-400 dark:text-slate-500"
+          )}
+        >
+          <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4" strokeWidth={2.5} />
+        </span>
+      </button>
+
+      {/* Etiqueta del concepto */}
+      <label
+        htmlFor={id}
+        className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 cursor-pointer"
+      >
+        {label}:
+      </label>
+
+      {/* Input numérico con ancho constante y compacto */}
+      <div className="flex items-center">
+        <input
+          id={id}
+          type="number"
+          inputMode="decimal"
+          step="0.01"
+          min="0"
+          max={mode === "percent" ? 100 : undefined}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          data-lpignore="true"
+          value={displayValue}
+          onFocus={handleNumericInputFocus}
+          onChange={handleInputChange}
+          onBlur={() => setDraft(null)}
+          disabled={disabled}
+          placeholder="0"
+          className={cn(
+            "w-14 sm:w-16 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-center text-xs sm:text-sm font-bold text-slate-900 transition focus:outline-none dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100",
+            accentColorStyles.focusBorder
+          )}
+        />
+      </div>
+
+      {/* Valor complementario calculado entre paréntesis */}
+      <span className={cn("font-bold text-[11px] sm:text-xs whitespace-nowrap", accentColorStyles.text)}>
+        {mode === "percent"
+          ? `(${currency.format(calculatedAmount)})`
+          : `(${equivalentPercent.toFixed(2)} %)`}
+      </span>
+    </div>
+  );
+};

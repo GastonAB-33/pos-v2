@@ -5,6 +5,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import type { Product, StockMovement } from "@/types/entities";
+import { movementTypeLabel } from "@/modules/stock/utils/stock-labels";
 
 interface StockMovementRow {
   movement: StockMovement;
@@ -16,6 +17,18 @@ interface StockMovementsTableProps {
 }
 
 const columnHelper = createColumnHelper<StockMovementRow>();
+
+const referenceTypeLabelMap: Record<string, string> = {
+  adjustment: "Ajuste manual",
+  manual_adjustment: "Ajuste manual",
+  sale: "Venta",
+  purchase: "Compra",
+  in: "Ingreso",
+  out: "Salida",
+};
+
+const getReferenceTypeLabel = (value: string): string => referenceTypeLabelMap[value] ?? value;
+const unitLabel = (product: Product | null): string => product?.sale_mode === "weight" ? "g" : "u.";
 
 export const StockMovementsTable = ({ rows }: StockMovementsTableProps) => {
   const columns = [
@@ -32,27 +45,24 @@ export const StockMovementsTable = ({ rows }: StockMovementsTableProps) => {
     columnHelper.accessor((row) => row.movement.movement_type, {
       id: "type",
       header: "Tipo",
-      cell: (info) => info.getValue(),
+      cell: (info) => movementTypeLabel[info.getValue()] ?? info.getValue(),
     }),
     columnHelper.accessor((row) => row.movement.quantity, {
       id: "quantity",
       header: "Cantidad",
-      cell: (info) => info.getValue().toLocaleString("es-AR"),
+      cell: (info) => {
+        const isWeight = info.row.original.product?.sale_mode === "weight";
+        const qty = isWeight ? info.getValue() * 1000 : info.getValue();
+        return `${qty.toLocaleString("es-AR")} ${unitLabel(info.row.original.product)}`;
+      },
     }),
     columnHelper.display({
       id: "reference",
       header: "Referencia",
       cell: (info) => {
         const movement = info.row.original.movement;
-        return movement.reference_id
-          ? `${movement.reference_type} (${movement.reference_id})`
-          : movement.reference_type;
+        return getReferenceTypeLabel(movement.reference_type);
       },
-    }),
-    columnHelper.accessor((row) => row.movement.created_by ?? "-", {
-      id: "user",
-      header: "Usuario",
-      cell: (info) => info.getValue(),
     }),
   ];
 
@@ -101,4 +111,3 @@ export const StockMovementsTable = ({ rows }: StockMovementsTableProps) => {
     </div>
   );
 };
-

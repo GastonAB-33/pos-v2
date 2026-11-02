@@ -1,28 +1,27 @@
+import { RefreshCw } from "lucide-react";
+import { IconButton } from "@/components/ui/IconButton";
+
 interface PaymentMethodsToolbarProps {
-  canWrite: boolean;
   loading: boolean;
   search: string;
   onSearchChange: (value: string) => void;
-  onCreate: () => void;
   onReload: () => void;
 }
 
 export const PaymentMethodsToolbar = ({
-  canWrite,
   loading,
   search,
   onSearchChange,
-  onCreate,
   onReload,
 }: PaymentMethodsToolbarProps) => {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="workspace-toolbar workspace-toolbar--inline">
       <div className="grid gap-1">
-        <h2 className="text-lg font-semibold text-slate-900">Medios de pago</h2>
-        <p className="text-sm text-slate-500">Configuracion por tenant para POS y caja</p>
+        <p className="ui-section-label">Cobros</p>
+        <h2 className="mt-1 text-lg font-semibold text-slate-900">Medios de pago</h2>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="workspace-toolbar__actions">
         <input
           type="search"
           value={search}
@@ -30,17 +29,7 @@ export const PaymentMethodsToolbar = ({
           placeholder="Buscar por nombre, codigo o tipo"
           className="ui-input w-72"
         />
-        <button type="button" onClick={onReload} className="ui-btn-ghost" disabled={loading}>
-          Recargar
-        </button>
-        <button
-          type="button"
-          onClick={onCreate}
-          className="ui-btn-primary disabled:opacity-50"
-          disabled={!canWrite || loading}
-        >
-          Nuevo medio
-        </button>
+        <IconButton icon={RefreshCw} label="Recargar medios de pago" onClick={onReload} loading={loading} />
       </div>
     </div>
   );

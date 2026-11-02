@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditService } from "@/services/audit.service";
 import { productsService } from "@/services/products.service";
-import { promotionsService } from "@/services/promotions.service";
-import type { Product, Promotion } from "@/types/entities";
+import { buildPromotionBarcode, promotionsService, type PromotionWithDetails } from "@/services/promotions.service";
+import type { Product } from "@/types/entities";
 import type { PromotionFormValues } from "@/modules/promociones/schemas/promotion-form.schema";
 
 type FeedbackType = "success" | "error";
@@ -24,26 +24,51 @@ const toIsoOrNull = (value?: string) => {
   return parsed.toISOString();
 };
 
-const toServiceInput = (values: PromotionFormValues, options?: { isActive?: boolean }) => ({
-  name: values.name.trim(),
-  code: normalizeCode(values.code),
-  description: normalizeText(values.description),
-  type: values.type,
-  scope: values.scope,
-  product_id: values.scope === "product" ? normalizeText(values.productId) : null,
-  min_quantity: normalizeOptionalNumber(values.minQuantity),
-  discount_percent:
-    values.type === "percentage_discount" ? normalizeOptionalNumber(values.discountPercent) : null,
-  discount_amount:
-    values.type === "fixed_discount" ? normalizeOptionalNumber(values.discountAmount) : null,
-  combo_price: values.type === "combo_price" ? normalizeOptionalNumber(values.comboPrice) : null,
-  starts_at: toIsoOrNull(values.startsAt),
-  ends_at: toIsoOrNull(values.endsAt),
-  is_active: options?.isActive ?? true,
-});
+const toServiceInput = (values: PromotionFormValues, options?: { isActive?: boolean }) => {
+  const items = values.bundleItems ?? [];
+  const firstItem = items[0];
+  const isSingleUnitProduct = items.length === 1 && Number(firstItem?.quantity) === 1;
+  const autoScope: "product" | "bundle" = isSingleUnitProduct ? "product" : "bundle";
+  const scope = values.scope || autoScope;
+  const productId = items.length === 1 ? firstItem.productId : (values.productId || null);
+
+  return {
+    name: values.name.trim(),
+    code: normalizeCode(values.code),
+    description: normalizeText(values.description),
+    type: values.type,
+    scope,
+    product_id: productId,
+    min_quantity: items.length === 1 ? Number(firstItem.quantity) : (normalizeOptionalNumber(values.minQuantity) ?? 1),
+    discount_percent:
+      values.type === "percentage_discount" ? normalizeOptionalNumber(values.discountPercent) : null,
+    discount_amount:
+      values.type === "fixed_discount" ? normalizeOptionalNumber(values.discountAmount) : null,
+    combo_price: normalizeOptionalNumber(values.comboPrice),
+    starts_at: toIsoOrNull(values.startsAt),
+    ends_at: toIsoOrNull(values.endsAt),
+    is_active: options?.isActive ?? true,
+  };
+};
+
+const toServiceDetails = (values: PromotionFormValues) => {
+  const items = values.bundleItems && values.bundleItems.length > 0
+    ? values.bundleItems.map((item) => ({
+        product_id: item.productId,
+        quantity: Number(item.quantity) || 1,
+      }))
+    : values.productId
+    ? [{ product_id: values.productId, quantity: Number(values.minQuantity) || 1 }]
+    : [];
+
+  return {
+    barcode: normalizeText(values.barcode) ?? buildPromotionBarcode(values.code),
+    items,
+  };
+};
 
 export const usePromotionsCrud = (tenantId: string | null, userId: string | null) => {
-  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [promotions, setPromotions] = useState<PromotionWithDetails[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -62,7 +87,7 @@ export const usePromotionsCrud = (tenantId: string | null, userId: string | null
     setIsLoading(true);
     try {
       const [allPromotions, allProducts] = await Promise.all([
-        promotionsService.getAllByTenant(tenantId),
+        promotionsService.getAllByTenantWithDetails(tenantId),
         productsService.getAllByTenant(tenantId),
       ]);
 
@@ -84,7 +109,11 @@ export const usePromotionsCrud = (tenantId: string | null, userId: string | null
 
     setIsSubmitting(true);
     try {
-      const created = await promotionsService.create(tenantId, toServiceInput(values));
+      const created = await promotionsService.createWithDetails(
+        tenantId,
+        toServiceInput(values),
+        toServiceDetails(values)
+      );
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "promociones",
@@ -117,10 +146,11 @@ export const usePromotionsCrud = (tenantId: string | null, userId: string | null
 
     setIsSubmitting(true);
     try {
-      const updated = await promotionsService.update(
+      const updated = await promotionsService.updateWithDetails(
         tenantId,
         id,
-        toServiceInput(values, { isActive: existing.is_active })
+        toServiceInput(values, { isActive: existing.is_active }),
+        toServiceDetails(values)
       );
       await auditService.createSafe(tenantId, {
         user_id: userId,

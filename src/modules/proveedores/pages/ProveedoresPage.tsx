@@ -79,7 +79,7 @@ export const ProveedoresPage = () => {
     return (
       <PagePlaceholder
         title="Proveedores"
-        description="No hay tenant activo para operar el modulo"
+        description="No hay un comercio activo"
       />
     );
   }
@@ -94,7 +94,7 @@ export const ProveedoresPage = () => {
   }
 
   return (
-    <PagePlaceholder title="Proveedores" description="CRUD funcional de proveedores">
+    <PagePlaceholder title="Proveedores" description="Datos de contacto y compras por proveedor">
       <div className="space-y-4">
         <SuppliersToolbar
           canWrite={canWriteSuppliers}
@@ -105,18 +105,7 @@ export const ProveedoresPage = () => {
           onReload={() => void reload()}
         />
 
-        {feedback ? (
-          <div
-            className={[
-              "rounded-lg border px-3 py-2 text-sm",
-              feedback.type === "success"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : "border-red-200 bg-red-50 text-red-700",
-            ].join(" ")}
-          >
-            {feedback.message}
-          </div>
-        ) : null}
+        {feedback ? <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>{feedback.message}</div> : null}
 
         {isLoading ? (
           <div className="rounded-lg border border-slate-200 p-8 text-center text-sm text-slate-600">

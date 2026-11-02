@@ -7,7 +7,7 @@ export const promotionTypeOptions: PromotionType[] = [
   "combo_price",
 ];
 
-export const promotionScopeOptions: PromotionScope[] = ["product", "cart"];
+export const promotionScopeOptions: PromotionScope[] = ["product", "cart", "bundle"];
 
 const optionalText = z.string().optional().or(z.literal(""));
 const optionalNumber = z.union([z.literal(""), z.coerce.number().min(0)]);
@@ -20,6 +20,7 @@ export const promotionFormSchema = z
       .min(2, "El codigo es obligatorio")
       .max(60, "Maximo 60 caracteres")
       .regex(/^[a-z0-9_\-]+$/i, "Solo letras, numeros, guion y guion bajo"),
+    barcode: optionalText,
     description: optionalText,
     type: z.enum(promotionTypeOptions as [PromotionType, ...PromotionType[]]),
     scope: z.enum(promotionScopeOptions as [PromotionScope, ...PromotionScope[]]),
@@ -30,13 +31,21 @@ export const promotionFormSchema = z
     comboPrice: optionalNumber,
     startsAt: optionalText,
     endsAt: optionalText,
+    bundleItems: z
+      .array(
+        z.object({
+          productId: z.string().min(1, "Selecciona producto"),
+          quantity: z.coerce.number().min(0.001, "Cantidad mayor a 0"),
+        })
+      )
+      .optional(),
   })
   .superRefine((value, context) => {
-    if (value.scope === "product" && !value.productId?.trim()) {
+    if ((!value.bundleItems || value.bundleItems.length === 0) && !value.productId?.trim()) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["productId"],
-        message: "Selecciona un producto para promocion por producto",
+        path: ["bundleItems"],
+        message: "Selecciona al menos un producto para la promoción",
       });
     }
 
@@ -69,7 +78,7 @@ export const promotionFormSchema = z
         });
       }
 
-      if (value.minQuantity === "" || value.minQuantity < 1) {
+      if (value.scope !== "bundle" && (!value.bundleItems || value.bundleItems.length === 0) && (value.minQuantity === "" || value.minQuantity < 1)) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["minQuantity"],

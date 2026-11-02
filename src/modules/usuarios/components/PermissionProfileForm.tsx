@@ -1,24 +1,18 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { PermissionMatrix } from "@/modules/usuarios/components/PermissionMatrix";
+import { PermissionMatrix, type ModuleGroup } from "@/modules/usuarios/components/PermissionMatrix";
 import {
   permissionProfileFormSchema,
   type PermissionProfileFormValues,
 } from "@/modules/usuarios/schemas/permission-profile-form.schema";
 import { createDefaultPermissionProfile, normalizePermissionProfile, type PermissionProfile } from "@/types/permissions";
 import type { PermissionProfileRecord } from "@/types/entities";
-import type { AppModule } from "@/types/modules";
-
-interface ModuleRow {
-  module: AppModule;
-  label: string;
-}
 
 interface PermissionProfileFormProps {
   mode: "create" | "edit";
   profile?: PermissionProfileRecord;
-  modules: ModuleRow[];
+  moduleGroups: ModuleGroup[];
   disabled?: boolean;
   onCancel: () => void;
   onSubmit: (values: PermissionProfileFormValues, permissions: PermissionProfile) => Promise<void>;
@@ -33,7 +27,7 @@ const defaultValues: PermissionProfileFormValues = {
 export const PermissionProfileForm = ({
   mode,
   profile,
-  modules,
+  moduleGroups,
   disabled,
   onCancel,
   onSubmit,
@@ -102,9 +96,9 @@ export const PermissionProfileForm = ({
       </label>
 
       <div className="space-y-2">
-        <p className="text-sm font-medium text-slate-700">Permisos por modulo</p>
+        <p className="text-sm font-medium text-slate-700">Permisos por modulos y submodulos</p>
         <PermissionMatrix
-          modules={modules}
+          groups={moduleGroups}
           value={permissions}
           onChange={setPermissions}
           disabled={disabled}
@@ -112,7 +106,7 @@ export const PermissionProfileForm = ({
       </div>
 
       <p className="text-xs text-slate-500">
-        El perfil define permisos de lectura y escritura por modulo para todos los usuarios asignados.
+        Cada modulo puede quedar sin acceso, con acceso o con acceso y edicion para usuarios del perfil.
       </p>
 
       <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4">

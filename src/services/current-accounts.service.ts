@@ -10,8 +10,10 @@ const movementsCrud = new TenantCrudService<CurrentAccountMovement>(dbTables.cur
 
 export type CreateCurrentAccountMovementInput = Omit<
   CreateEntityInput<CurrentAccountMovement>,
-  "balance_after"
->;
+  "balance_after" | "sale_id"
+> & {
+  sale_id?: string | null;
+};
 
 const normalizeAmountByType = (
   type: CurrentAccountMovement["type"],

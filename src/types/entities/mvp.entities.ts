@@ -11,6 +11,7 @@ export interface TenantRecord {
   id: string;
   legal_name: string;
   trade_name: string;
+  slug?: string | null;
   cuit: string;
   is_active: boolean;
   created_at: string;
@@ -18,6 +19,7 @@ export interface TenantRecord {
 }
 
 export interface UserRecord extends TenantScopedEntity {
+  auth_user_id?: string | null;
   email: string | null;
   username: string | null;
   full_name: string;
@@ -34,8 +36,9 @@ export interface PermissionProfileRecord extends TenantScopedEntity {
 }
 
 export interface Product extends TenantScopedEntity {
-  code: string;
+  code: string | null;
   name: string;
+  image_url?: string | null;
   brand: string | null;
   supplier: string | null;
   is_favorite: boolean;
@@ -49,6 +52,9 @@ export interface Product extends TenantScopedEntity {
   subcategory: string | null;
   sale_mode: "unit" | "weight";
   currency_code: string;
+  price_without_vat?: number | null;
+  vat_percent?: number | null;
+  profit_percent?: number | null;
   is_active: boolean;
 }
 
@@ -72,6 +78,13 @@ export interface Customer extends TenantScopedEntity {
   address: string | null;
   observations: string | null;
   current_balance: number;
+  current_account_enabled?: boolean | null;
+  current_account_limit?: number | null;
+  discount_percent?: number | null;
+  current_account_pricing_mode?: CurrentAccountPricingMode | null;
+  current_account_surcharge_percent?: number | null;
+  current_account_surcharge_amount?: number | null;
+  current_account_pricing_updated_at?: string | null;
   is_active: boolean;
 }
 
@@ -81,17 +94,40 @@ export interface Supplier extends TenantScopedEntity {
   phone: string | null;
   email: string | null;
   address: string | null;
+  tax_id?: string | null;
+  observations: string | null;
+  current_balance?: number;
+  is_active: boolean;
+}
+
+export interface Employee extends TenantScopedEntity {
+  code: string;
+  full_name: string;
+  document_type: string;
+  document_number: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  position: string;
+  base_salary: number;
+  hourly_rate?: number | null;
+  hire_date?: string | null;
+  current_balance: number;
+  current_account_enabled: boolean;
+  current_account_limit?: number | null;
+  discount_percent?: number | null;
   observations: string | null;
   is_active: boolean;
 }
 
 export type PaymentMethodType =
   | "cash"
+  | "card_debit"
+  | "card_credit"
   | "transfer"
-  | "card"
   | "mercado_pago"
-  | "current_account"
-  | "other";
+  | "cheque"
+  | "current_account";
 
 export interface PaymentMethod extends TenantScopedEntity {
   name: string;
@@ -119,6 +155,32 @@ export interface BankAccount extends TenantScopedEntity {
   currency_code: string;
   notes: string | null;
   is_active: boolean;
+  is_pos_available?: boolean;
+  current_balance?: number;
+}
+
+export type BankAccountMovementType = "income" | "expense";
+
+export type BankAccountMovementOriginType =
+  | "pos_sale"
+  | "customer_collection"
+  | "supplier_payment"
+  | "service_expense"
+  | "manual_income"
+  | "manual_expense"
+  | "account_transfer";
+
+export interface BankAccountMovement extends TenantScopedEntity {
+  bank_account_id: string;
+  type: BankAccountMovementType;
+  origin_type: BankAccountMovementOriginType;
+  concept: string;
+  amount: number;
+  balance_after: number;
+  reference_id?: string | null;
+  voucher_number?: string | null;
+  notes?: string | null;
+  created_by?: string | null;
 }
 
 export interface OriginBank extends TenantScopedEntity {
@@ -155,7 +217,7 @@ export interface PriceListItem extends TenantScopedEntity {
 }
 
 export type PromotionType = "percentage_discount" | "fixed_discount" | "combo_price";
-export type PromotionScope = "product" | "cart";
+export type PromotionScope = "product" | "cart" | "bundle";
 
 export interface Promotion extends TenantScopedEntity {
   name: string;
@@ -173,15 +235,34 @@ export interface Promotion extends TenantScopedEntity {
   is_active: boolean;
 }
 
-export type PurchaseStatus = "confirmed" | "cancelled";
+export interface PromotionItem extends TenantScopedEntity {
+  promotion_id: string;
+  product_id: string;
+  quantity: number;
+}
+
+export interface PromotionBarcode extends TenantScopedEntity {
+  promotion_id: string;
+  barcode: string;
+  is_primary: boolean;
+}
+
+export type PurchaseStatus = "confirmed" | "cancelled" | "partial_return" | "returned" | "pending_pricing";
 
 export interface Purchase extends TenantScopedEntity {
   supplier_id: string;
   purchase_number: string;
+  document_type?: string | null;
+  document_number?: string | null;
+  issue_date?: string | null;
+  payment_method?: string | null;
   status: PurchaseStatus;
   subtotal: number;
+  vat_total?: number;
   total: number;
+  returned_total?: number;
   notes: string | null;
+  invoice_photo_url?: string | null;
   created_by: string | null;
   items?: PurchaseItem[];
   supplier?: Supplier | null;
@@ -193,10 +274,21 @@ export interface PurchaseItem extends TenantScopedEntity {
   product_name_snapshot: string;
   quantity: number;
   unit_cost: number;
+  vat_percent?: number;
+  vat_amount?: number;
+  bonified_quantity?: number;
+  returned_quantity?: number;
   line_total: number;
+  sale_price?: number;
+  product?: Product | null;
 }
 
 export type CurrentAccountMovementType = "debt" | "payment" | "adjustment";
+export type CurrentAccountPricingMode =
+  | "original"
+  | "today_prices"
+  | "surcharge_percentage"
+  | "surcharge_fixed";
 
 export interface CurrentAccountMovement extends TenantScopedEntity {
   customer_id: string;
@@ -206,6 +298,97 @@ export interface CurrentAccountMovement extends TenantScopedEntity {
   balance_after: number;
   notes: string | null;
   created_by: string | null;
+  payment_type?: 'salary' | 'advance';
+  advances_discount_applied?: number;
+}
+
+export type SupplierCurrentAccountMovementType = "debt" | "payment" | "adjustment";
+
+export interface SupplierCurrentAccountMovement extends TenantScopedEntity {
+  supplier_id: string;
+  purchase_id: string | null;
+  type: SupplierCurrentAccountMovementType;
+  amount: number;
+  balance_after: number;
+  payment_method_code: string | null;
+  payment_method_id?: string | null;
+  notes: string | null;
+  created_by: string | null;
+  payment_type?: 'salary' | 'advance';
+  advances_discount_applied?: number;
+}
+
+export type EmployeeAttendanceStatus = "present" | "late" | "absent" | "justified" | "early_leave";
+
+export interface EmployeeAttendance extends TenantScopedEntity {
+  employee_id: string;
+  date: string;
+  check_in: string;
+  check_out: string | null;
+  total_hours: number | null;
+  status: EmployeeAttendanceStatus;
+  notes: string | null;
+  created_by: string | null;
+  payment_type?: 'salary' | 'advance';
+  advances_discount_applied?: number;
+}
+
+export type EmployeeCurrentAccountMovementType = "debt" | "payment" | "adjustment";
+export type EmployeeCurrentAccountCategory =
+  | "product_purchase"
+  | "salary_deduction"
+  | "advance"
+  | "cash_payment"
+  | "adjustment"
+  | "other";
+
+export interface EmployeeCurrentAccountMovement extends TenantScopedEntity {
+  employee_id: string;
+  sale_id: string | null;
+  type: EmployeeCurrentAccountMovementType;
+  amount: number;
+  balance_after: number;
+  category: EmployeeCurrentAccountCategory;
+  notes: string | null;
+  created_by: string | null;
+}
+
+export interface EmployeeSalaryPayment extends TenantScopedEntity {
+  employee_id: string;
+  period: string;
+  gross_amount: number;
+  deductions_amount: number;
+  current_account_discount_applied: number;
+  bonuses_amount: number;
+  net_amount_paid: number;
+  payment_method_code: string;
+  payment_date: string;
+  notes: string | null;
+  created_by: string | null;
+  payment_type?: 'salary' | 'advance';
+  advances_discount_applied?: number;
+}
+
+export type GeneralCashMovementType = "income" | "expense";
+export type GeneralCashOriginType =
+  | "daily_cash_close"
+  | "daily_cash_open"
+  | "manual_income"
+  | "manual_expense"
+  | "bank_deposit"
+  | "supplier_payment";
+
+export interface GeneralCashMovement extends TenantScopedEntity {
+  type: GeneralCashMovementType;
+  amount: number;
+  origin_type: GeneralCashOriginType;
+  concept: string;
+  balance_after: number;
+  reference_id: string | null;
+  notes: string | null;
+  created_by: string | null;
+  payment_type?: 'salary' | 'advance';
+  advances_discount_applied?: number;
 }
 
 export type SaleStatus = "draft" | "completed" | "cancelled";
@@ -276,6 +459,8 @@ export interface Receipt extends TenantScopedEntity {
   total: number;
   notes: string | null;
   created_by: string | null;
+  payment_type?: 'salary' | 'advance';
+  advances_discount_applied?: number;
 }
 
 export interface AuditLog {
@@ -307,13 +492,29 @@ export interface BusinessSettings {
 
 export type PosCartBehavior = "merge_same_product" | "separate_lines";
 
+export type PosRoundingRule = "none" | "integer" | "10" | "50" | "100" | "500" | "1000";
+export type PosRoundingMode = "nearest" | "up" | "down";
+export type PosRoundingTarget = "cash_only" | "all_methods";
+
 export interface PosSettings {
   default_customer_id: string | null;
+  default_payment_method_id: string | null;
   auto_print_receipt: boolean;
   allow_sale_without_customer: boolean;
   allow_negative_stock: boolean;
   barcode_scan_quantity: number;
   cart_behavior: PosCartBehavior;
+  rounding_enabled?: boolean;
+  rounding_rule?: PosRoundingRule;
+  rounding_mode?: PosRoundingMode;
+  rounding_target?: PosRoundingTarget;
+  employee_discount_percent?: number;
+  employee_discount_excluded_categories?: string[];
+}
+
+export interface ReturnablePackageType {
+  name: string;
+  suggestedPrice?: number;
 }
 
 export interface StockSettings {
@@ -322,13 +523,44 @@ export interface StockSettings {
   global_low_stock_threshold: number;
   allow_manual_adjustments: boolean;
   allow_negative_stock: boolean;
+  allow_purchases_profit_margin_adjustment?: boolean;
+  purchase_double_confirmation_enabled?: boolean;
+  returnable_packages?: ReturnablePackageType[];
 }
+
+export type CashReconciliationMode = "cash_only" | "full";
 
 export interface CashSettings {
   require_open_session_for_sale: boolean;
   default_opening_amount: number;
   allow_manual_movements: boolean;
   require_notes_on_manual_movements: boolean;
+  blind_cash_closing?: boolean;
+  cash_reconciliation_mode?: CashReconciliationMode;
+}
+
+export interface CustomerRequiredFieldsSettings {
+  document_number: boolean;
+  phone: boolean;
+  email: boolean;
+  address: boolean;
+}
+
+export interface SupplierRequiredFieldsSettings {
+  tax_id: boolean;
+  phone: boolean;
+  email: boolean;
+  address: boolean;
+}
+
+export interface EntityRequirementsSettings {
+  customer: CustomerRequiredFieldsSettings;
+  supplier: SupplierRequiredFieldsSettings;
+}
+
+export interface PaymentMethodInvoiceRules {
+  mandatory_methods: string[];
+  disabled_methods: string[];
 }
 
 export interface FacturacionSettings {
@@ -345,6 +577,8 @@ export interface FacturacionSettings {
   issuer_address: string;
   issuer_fiscal_condition: string;
   arca: ArcaSettings;
+  entity_requirements?: EntityRequirementsSettings;
+  payment_method_rules?: PaymentMethodInvoiceRules;
 }
 
 export type ArcaMode = "mock" | "sandbox" | "real";
@@ -359,26 +593,43 @@ export interface ArcaSettings {
   fiscal_environment: ArcaFiscalEnvironment;
   force_unavailable: boolean;
   allow_internal_fallback: boolean;
+  certificate_crt?: string | null;
+  certificate_key?: string | null;
+  certificate_expiration?: string | null;
+  last_connection_status?: "connected" | "error" | "untested";
+  last_connection_message?: string | null;
 }
+
+export type BarcodeScaleMode = "weight" | "total_price";
 
 export interface BarcodeScaleSettings {
   scale_parser_enabled: boolean;
+  scale_mode: BarcodeScaleMode;
   scale_prefix: string;
   code_length: number;
   plu_start: number;
   plu_length: number;
   weight_start: number;
   weight_length: number;
+  weight_decimals: number;
   amount_start: number;
   amount_length: number;
+  amount_decimals: number;
   ean13_enabled: boolean;
 }
 
+export type UiFontSize = "compact" | "normal" | "large" | "extra-large";
+
+export type UiTheme = "light" | "midnight" | "dark";
+export type SidebarTheme = "auto" | "dark" | "light";
+
 export interface AppearanceSettings {
-  default_theme: "light" | "dark";
+  default_theme: UiTheme;
+  sidebar_theme?: SidebarTheme;
   accent_color: string;
   display_name: string;
   density: UiDensity;
+  font_size?: UiFontSize;
 }
 
 export interface SystemSettings {
@@ -460,6 +711,9 @@ export interface Invoice extends TenantScopedEntity {
   arca_status: ArcaInvoiceStatus;
   arca_reference: string | null;
   arca_message: string | null;
+  cae?: string | null;
+  cae_due_date?: string | null;
+  qr_data_url?: string | null;
   notes: string | null;
 }
 
@@ -479,6 +733,9 @@ export interface CreditNote extends TenantScopedEntity {
   status: CreditNoteStatus;
   arca_status: ArcaInvoiceStatus;
   arca_reference: string | null;
+  cae?: string | null;
+  cae_due_date?: string | null;
+  qr_data_url?: string | null;
   notes: string | null;
 }
 
@@ -508,6 +765,10 @@ export interface CashSession extends TenantScopedEntity {
   expected_closing_amount: number | null;
   closing_difference: number | null;
   notes: string | null;
+  closing_bill_counts?: Record<string, number> | null;
+  closing_coins_amount?: number | null;
+  opening_bill_counts?: Record<string, number> | null;
+  opening_coins_amount?: number | null;
 }
 
 export type CashMovementType = "income" | "expense" | "sale_payment" | "adjustment";

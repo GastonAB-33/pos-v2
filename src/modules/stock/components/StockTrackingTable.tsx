@@ -1,0 +1,680 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Camera, X } from "lucide-react";
+import { PaginationControls } from "@/components/ui/PaginationControls";
+import { usePagination } from "@/hooks/usePagination";
+import type { Product } from "@/types/entities";
+import { downloadXlsx } from "@/utils/xlsx";
+import {
+  matchesProductSearch,
+  PRODUCT_SEARCH_SCOPE_OPTIONS,
+  getSearchPlaceholder,
+  type ProductSearchScope,
+} from "@/utils/search";
+import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
+import { useProductsStore } from "@/features/products/store/products.store";
+import {
+  getStockStatusFromValues,
+  stockStatusLabel,
+  type StockStatus,
+  type StockStatusFilter,
+} from "@/modules/stock/utils/stock-labels";
+
+type BulkScope = "selected" | "category";
+
+interface StockTrackingTableProps {
+  products: Product[];
+  categories: string[];
+  disabled?: boolean;
+  statusFilter?: StockStatusFilter;
+  onStatusFilterChange?: (filter: StockStatusFilter) => void;
+  globalLowThreshold?: number;
+  onUpdateOne: (productId: string, values: { stockMin: number | null; stockMax: number | null }) => Promise<void>;
+  onUpdateBulk: (productIds: string[], values: { stockMin?: number | null; stockMax?: number | null }) => Promise<void>;
+}
+
+interface StockDraft {
+  stockMin: string;
+  stockMax: string;
+}
+
+const toNullableNumber = (value: string): number | null => {
+  const trimmed = value.trim().replace(",", ".");
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
+};
+
+const normalizeQty = (value: number): string => {
+  return Number(value.toFixed(3)).toString();
+};
+
+const unitLabel = (product: Product): string => (product.sale_mode === "weight" ? "g" : "u.");
+
+const buildReportDateStamp = (): string => new Date().toISOString().slice(0, 10);
+
+const getStatusBadgeClassName = (status: StockStatus): string => {
+  if (status === "low") return "ui-badge ui-badge--warn";
+  if (status === "over") return "ui-badge ui-badge--info";
+  if (status === "unassigned") return "ui-badge ui-badge--neutral";
+  return "ui-badge ui-badge--success";
+};
+
+const resolveThresholds = (product: Product, draft: StockDraft | undefined) => {
+  if (!draft) {
+    return {
+      stockMin: product.stock_min,
+      stockMax: product.stock_max,
+    };
+  }
+
+  const isWeight = product.sale_mode === "weight";
+  const rawMin = toNullableNumber(draft.stockMin);
+  const rawMax = toNullableNumber(draft.stockMax);
+
+  return {
+    stockMin: isWeight && rawMin != null ? rawMin / 1000 : rawMin,
+    stockMax: isWeight && rawMax != null ? rawMax / 1000 : rawMax,
+  };
+};
+
+const sameNullableNumber = (left: number | null, right: number | null): boolean => {
+  if (left == null && right == null) return true;
+  if (left == null || right == null) return false;
+  return Number(left.toFixed(3)) === Number(right.toFixed(3));
+};
+
+export const StockTrackingTable = ({
+  products,
+  categories,
+  disabled,
+  statusFilter: controlledStatusFilter,
+  onStatusFilterChange,
+  onUpdateOne,
+  onUpdateBulk,
+}: StockTrackingTableProps) => {
+  const allBarcodes = useProductsStore((state) => state.allBarcodes);
+  const [search, setSearch] = useState("");
+  const [searchScope, setSearchScope] = useState<ProductSearchScope>("all");
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [internalStatusFilter, setInternalStatusFilter] = useState<StockStatusFilter>("all");
+  const statusFilter = controlledStatusFilter ?? internalStatusFilter;
+
+  const handleStatusFilterChange = (filter: StockStatusFilter) => {
+    if (onStatusFilterChange) {
+      onStatusFilterChange(filter);
+    } else {
+      setInternalStatusFilter(filter);
+    }
+  };
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, StockDraft>>({});
+  const [bulkScope, setBulkScope] = useState<BulkScope>("selected");
+  const [bulkStockMin, setBulkStockMin] = useState("");
+  const [bulkStockMax, setBulkStockMax] = useState("");
+  const [reportMessage, setReportMessage] = useState<string | null>(null);
+  const [isReportMenuOpen, setIsReportMenuOpen] = useState(false);
+  const reportMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const barcodesByProductId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const item of allBarcodes) {
+      const list = map.get(item.product_id) ?? [];
+      list.push(item.barcode.trim().toLowerCase());
+      map.set(item.product_id, list);
+    }
+    return map;
+  }, [allBarcodes]);
+
+  const handleBarcodeDetected = (scannedBarcode: string) => {
+    setIsCameraOpen(false);
+    const normalized = scannedBarcode.trim().toLowerCase();
+    const barcodeMatch = allBarcodes.find(
+      (b) => b.barcode.trim().toLowerCase() === normalized
+    );
+    let matchedProduct = barcodeMatch
+      ? products.find((p) => p.id === barcodeMatch.product_id)
+      : null;
+    if (!matchedProduct) {
+      matchedProduct =
+        products.find((p) => p.code?.trim().toLowerCase() === normalized) ?? null;
+    }
+
+    if (matchedProduct) {
+      setSearch(matchedProduct.name);
+      setReportMessage(`Producto encontrado: ${matchedProduct.name}`);
+    } else {
+      setSearch(scannedBarcode);
+      setReportMessage(`Código escaneado: ${scannedBarcode}`);
+    }
+  };
+
+  useEffect(() => {
+    if (!isReportMenuOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!reportMenuRef.current) return;
+      if (reportMenuRef.current.contains(event.target as Node)) return;
+      setIsReportMenuOpen(false);
+    };
+
+    window.addEventListener("mousedown", handleClickOutside);
+    return () => window.removeEventListener("mousedown", handleClickOutside);
+  }, [isReportMenuOpen]);
+
+  const rows = useMemo(() => {
+    const rawSearch = search.trim();
+
+    return products.filter((product) => {
+      if (!product.is_active) return false;
+
+      const productBarcodes = barcodesByProductId.get(product.id) ?? [];
+      const matches =
+        !rawSearch ||
+        matchesProductSearch(
+          {
+            name: product.name,
+            code: product.code,
+            barcodes: productBarcodes,
+            category: product.category,
+            subcategory: product.subcategory,
+          },
+          rawSearch,
+          searchScope
+        );
+
+      if (!matches) return false;
+
+      const isCodeOrBarcodeSearch = searchScope === "code" || searchScope === "barcode";
+      if (!isCodeOrBarcodeSearch) {
+        if (categoryFilter && product.category !== categoryFilter) return false;
+      }
+
+      const { stockMin, stockMax } = resolveThresholds(product, drafts[product.id]);
+      const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
+      if (statusFilter !== "all" && status !== statusFilter) return false;
+
+      return true;
+    });
+  }, [products, search, searchScope, categoryFilter, statusFilter, drafts, barcodesByProductId]);
+
+  const reportCandidates = useMemo(() => {
+    const rawSearch = search.trim();
+
+    return products.filter((product) => {
+      if (!product.is_active) return false;
+
+      const productBarcodes = barcodesByProductId.get(product.id) ?? [];
+      const matches =
+        !rawSearch ||
+        matchesProductSearch(
+          {
+            name: product.name,
+            code: product.code,
+            barcodes: productBarcodes,
+            category: product.category,
+            subcategory: product.subcategory,
+          },
+          rawSearch,
+          searchScope
+        );
+
+      if (!matches) return false;
+
+      const isCodeOrBarcodeSearch = searchScope === "code" || searchScope === "barcode";
+      if (!isCodeOrBarcodeSearch) {
+        if (categoryFilter && product.category !== categoryFilter) return false;
+      }
+
+      return true;
+    });
+  }, [products, search, searchScope, categoryFilter, barcodesByProductId]);
+
+  const selectedVisibleIds = useMemo(
+    () => selectedIds.filter((id) => rows.some((row) => row.id === id)),
+    [rows, selectedIds]
+  );
+
+  const paginatedRows = usePagination(
+    rows,
+    10,
+    `${search}|${searchScope}|${categoryFilter}|${statusFilter}|${rows.length}`
+  );
+  const selectedPageIds = useMemo(
+    () => selectedIds.filter((id) => paginatedRows.pageItems.some((row) => row.id === id)),
+    [paginatedRows.pageItems, selectedIds]
+  );
+  const allVisibleSelected =
+    paginatedRows.pageItems.length > 0 && selectedPageIds.length === paginatedRows.pageItems.length;
+
+  const updateDraft = (product: Product, patch: Partial<StockDraft>) => {
+    const isWeight = product.sale_mode === "weight";
+    const factor = isWeight ? 1000 : 1;
+    setDrafts((current) => {
+      const currentDraft = current[product.id] ?? {
+        stockMin: product.stock_min != null ? normalizeQty(product.stock_min * factor) : "",
+        stockMax: product.stock_max != null ? normalizeQty(product.stock_max * factor) : "",
+      };
+
+      return {
+        ...current,
+        [product.id]: { ...currentDraft, ...patch },
+      };
+    });
+  };
+
+  const getDraft = (product: Product): StockDraft => {
+    const isWeight = product.sale_mode === "weight";
+    const factor = isWeight ? 1000 : 1;
+    return (
+      drafts[product.id] ?? {
+        stockMin: product.stock_min != null ? normalizeQty(product.stock_min * factor) : "",
+        stockMax: product.stock_max != null ? normalizeQty(product.stock_max * factor) : "",
+      }
+    );
+  };
+
+  const persistRowIfChanged = async (product: Product) => {
+    const draft = getDraft(product);
+    const isWeight = product.sale_mode === "weight";
+    const rawMin = toNullableNumber(draft.stockMin);
+    const rawMax = toNullableNumber(draft.stockMax);
+    const nextMin = isWeight && rawMin != null ? Number((rawMin / 1000).toFixed(4)) : rawMin;
+    const nextMax = isWeight && rawMax != null ? Number((rawMax / 1000).toFixed(4)) : rawMax;
+
+    const currentMin = product.stock_min;
+    const currentMax = product.stock_max;
+
+    if (sameNullableNumber(nextMin, currentMin) && sameNullableNumber(nextMax, currentMax)) {
+      return;
+    }
+
+    await onUpdateOne(product.id, {
+      stockMin: nextMin,
+      stockMax: nextMax,
+    });
+  };
+
+  const toggleRow = (productId: string, checked: boolean) => {
+    setSelectedIds((current) => {
+      if (checked) {
+        if (current.includes(productId)) return current;
+        return [...current, productId];
+      }
+      return current.filter((id) => id !== productId);
+    });
+  };
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    if (!checked) {
+      setSelectedIds((current) =>
+        current.filter((id) => !paginatedRows.pageItems.some((row) => row.id === id))
+      );
+      return;
+    }
+
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      paginatedRows.pageItems.forEach((row) => next.add(row.id));
+      return [...next];
+    });
+  };
+
+  const handleApplyBulk = async () => {
+    const parsedMin = bulkStockMin.trim() ? toNullableNumber(bulkStockMin) : undefined;
+    const parsedMax = bulkStockMax.trim() ? toNullableNumber(bulkStockMax) : undefined;
+
+    const targetIds =
+      bulkScope === "selected"
+        ? selectedVisibleIds
+        : rows.filter((row) => (categoryFilter ? row.category === categoryFilter : true)).map((row) => row.id);
+
+    const targetProducts = products.filter((p) => targetIds.includes(p.id));
+    const unitTargetIds = targetProducts.filter((p) => p.sale_mode !== "weight").map((p) => p.id);
+    const weightTargetIds = targetProducts.filter((p) => p.sale_mode === "weight").map((p) => p.id);
+
+    if (unitTargetIds.length > 0) {
+      await onUpdateBulk(unitTargetIds, {
+        stockMin: parsedMin,
+        stockMax: parsedMax,
+      });
+    }
+
+    if (weightTargetIds.length > 0) {
+      await onUpdateBulk(weightTargetIds, {
+        stockMin: parsedMin !== undefined ? (parsedMin != null ? Number((parsedMin / 1000).toFixed(4)) : null) : undefined,
+        stockMax: parsedMax !== undefined ? (parsedMax != null ? Number((parsedMax / 1000).toFixed(4)) : null) : undefined,
+      });
+    }
+
+    setDrafts((current) => {
+      const next = { ...current };
+      targetIds.forEach((id) => {
+        const baseDraft = next[id] ?? { stockMin: "", stockMax: "" };
+        next[id] = {
+          ...baseDraft,
+          ...(parsedMin !== undefined ? { stockMin: parsedMin == null ? "" : normalizeQty(parsedMin) } : {}),
+          ...(parsedMax !== undefined ? { stockMax: parsedMax == null ? "" : normalizeQty(parsedMax) } : {}),
+        };
+      });
+      return next;
+    });
+  };
+
+  const handleDownloadStatusReport = async (targetStatus: StockStatus) => {
+    const reportRows = reportCandidates
+      .map((product) => {
+        const { stockMin, stockMax } = resolveThresholds(product, drafts[product.id]);
+        const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
+        const isWeight = product.sale_mode === "weight";
+        const factor = isWeight ? 1000 : 1;
+
+        return {
+          producto: product.name,
+          codigo: product.code,
+          categoria: product.category,
+          subcategoria: product.subcategory ?? "",
+          stock_actual: Number((product.stock_current * factor).toFixed(1)),
+          unidad: isWeight ? "g" : "u.",
+          stock_min: stockMin != null ? Number((stockMin * factor).toFixed(1)) : "",
+          stock_max: stockMax != null ? Number((stockMax * factor).toFixed(1)) : "",
+          estado: status,
+        };
+      })
+      .filter((row) => row.estado === targetStatus)
+      .map((row) => ({
+        ...row,
+        estado: stockStatusLabel[row.estado],
+      }));
+
+    if (!reportRows.length) {
+      setReportMessage(`No hay productos en estado "${stockStatusLabel[targetStatus]}" para exportar`);
+      return;
+    }
+
+    const fileNameByStatus: Record<StockStatus, string> = {
+      low: "stock-bajo",
+      normal: "normal",
+      over: "sobrestock",
+      unassigned: "sin-asignar",
+    };
+
+    const ok = await downloadXlsx(
+      `informe-estado-${fileNameByStatus[targetStatus]}-${buildReportDateStamp()}.xlsx`,
+      `Estado ${stockStatusLabel[targetStatus]}`,
+      reportRows
+    );
+
+    setReportMessage(ok ? `Informe "${stockStatusLabel[targetStatus]}" descargado` : "No hay datos para exportar");
+  };
+
+  return (
+    <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-panel">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">Productos</h2>
+          <p className="text-xs text-slate-500">Mostrando {rows.length} de {products.filter((product) => product.is_active).length}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
+            Seleccionados: {selectedVisibleIds.length}
+          </span>
+          <div className="relative" ref={reportMenuRef}>
+            <button
+              type="button"
+              className="ui-btn-ghost px-2 py-1 text-xs"
+              onClick={() => setIsReportMenuOpen((current) => !current)}
+              disabled={!reportCandidates.length}
+            >
+              Exportar
+            </button>
+
+            {isReportMenuOpen ? (
+              <div className="absolute right-0 top-full z-10 mt-1 min-w-[220px] rounded-lg border border-slate-200 bg-white p-1 shadow-panel">
+                {(["low", "no_stock", "normal", "over", "unassigned"] as StockStatus[]).map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    className="block w-full rounded-md px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-50"
+                    onClick={() => {
+                      setIsReportMenuOpen(false);
+                      void handleDownloadStatusReport(status);
+                    }}
+                  >
+                    {stockStatusLabel[status]}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      {reportMessage ? <div className="ui-info-state">{reportMessage}</div> : null}
+
+      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_180px]">
+        <div className="flex gap-2">
+          <div className="flex flex-1 min-w-[260px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden px-2 py-1">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="flex-1 min-w-0 border-0 bg-transparent px-2 py-1 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100"
+              placeholder={getSearchPlaceholder(searchScope)}
+              aria-label="Buscar en stock"
+            />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                title="Limpiar búsqueda"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
+            <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700" />
+            <select
+              value={searchScope}
+              onChange={(e) => setSearchScope(e.target.value as ProductSearchScope)}
+              className="bg-transparent text-xs font-medium text-slate-600 focus:outline-none dark:text-slate-300 cursor-pointer py-1 px-1 shrink-0 max-w-[85px] sm:max-w-none truncate"
+              aria-label="Tipo de búsqueda"
+            >
+              {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsCameraOpen(true)}
+            disabled={disabled}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-50"
+            title="Escanear código de barras con la cámara"
+          >
+            <Camera className="h-4 w-4" />
+            <span className="hidden sm:inline">Cámara</span>
+          </button>
+        </div>
+        <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="ui-input">
+          <option value="">Todas las categorias</option>
+          {categories.map((category) => (
+            <option key={category} value={category}>
+              {category}
+            </option>
+          ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(event) => handleStatusFilterChange(event.target.value as StockStatusFilter)}
+          className="ui-input"
+        >
+          {Object.entries(stockStatusLabel).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <details className="rounded-xl border border-slate-200 bg-slate-50">
+        <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-700">
+          Cambios masivos de minimo/maximo
+        </summary>
+        <div className="grid gap-2 border-t border-slate-200 p-3 md:grid-cols-6">
+          <select
+            value={bulkScope}
+            onChange={(event) => setBulkScope(event.target.value as BulkScope)}
+            className="ui-input"
+            disabled={disabled}
+          >
+            <option value="selected">Aplicar a seleccionados</option>
+            <option value="category">Aplicar a categoria filtrada</option>
+          </select>
+          <input
+            type="number"
+            step="0.001"
+            value={bulkStockMin}
+            onChange={(event) => setBulkStockMin(event.target.value)}
+            className="ui-input"
+            placeholder="Nuevo minimo"
+            disabled={disabled}
+          />
+          <input
+            type="number"
+            step="0.001"
+            value={bulkStockMax}
+            onChange={(event) => setBulkStockMax(event.target.value)}
+            className="ui-input"
+            placeholder="Nuevo maximo"
+            disabled={disabled}
+          />
+          <button
+            type="button"
+            className="ui-btn-primary h-10 md:col-span-2"
+            onClick={() => {
+              void handleApplyBulk();
+            }}
+            disabled={disabled || (!bulkStockMin.trim() && !bulkStockMax.trim())}
+          >
+            Aplicar cambios masivos
+          </button>
+          <button
+            type="button"
+            className="ui-btn-ghost h-10"
+            onClick={() => setSelectedIds([])}
+            disabled={disabled || !selectedVisibleIds.length}
+          >
+            Limpiar seleccion
+          </button>
+        </div>
+      </details>
+
+      {rows.length === 0 ? (
+        <div className="ui-empty-state">No hay productos para los filtros elegidos.</div>
+      ) : (
+        <div className="ui-table-wrap max-h-[520px] overflow-auto">
+          <table className="min-w-full table-auto text-sm">
+            <thead>
+              <tr>
+                <th className="px-3 py-2 text-left">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={(event) => toggleSelectAllVisible(event.target.checked)}
+                    disabled={disabled}
+                  />
+                </th>
+                <th className="w-[28%] px-3 py-2 text-left">Producto</th>
+                <th className="w-[15%] px-3 py-2 text-left">Categoria</th>
+                <th className="w-[12%] px-3 py-2 text-left">Stock actual</th>
+                <th className="w-[16%] px-3 py-2 text-left">Minimo</th>
+                <th className="w-[16%] px-3 py-2 text-left">Maximo</th>
+                <th className="w-[13%] px-3 py-2 text-left">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedRows.pageItems.map((product) => {
+                const draft = getDraft(product);
+                const { stockMin, stockMax } = resolveThresholds(product, draft);
+                const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
+
+                return (
+                  <tr key={product.id}>
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedVisibleIds.includes(product.id)}
+                        onChange={(event) => toggleRow(product.id, event.target.checked)}
+                        disabled={disabled}
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-slate-700">
+                      <p className="font-medium">{product.name}</p>
+                      <p className="text-xs text-slate-500">{product.code}</p>
+                    </td>
+                    <td className="px-3 py-2 text-slate-700">{product.category}</td>
+                    <td className="px-3 py-2 text-slate-700">
+                      {(product.sale_mode === "weight" ? product.stock_current * 1000 : product.stock_current).toLocaleString("es-AR")} {unitLabel(product)}
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        step="0.001"
+                        value={draft.stockMin}
+                        onChange={(event) => updateDraft(product, { stockMin: event.target.value })}
+                        onBlur={() => {
+                          void persistRowIfChanged(product);
+                        }}
+                        className="ui-input"
+                        placeholder="-"
+                        disabled={disabled}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        step="0.001"
+                        value={draft.stockMax}
+                        onChange={(event) => updateDraft(product, { stockMax: event.target.value })}
+                        onBlur={() => {
+                          void persistRowIfChanged(product);
+                        }}
+                        className="ui-input"
+                        placeholder="-"
+                        disabled={disabled}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={getStatusBadgeClassName(status)}>{stockStatusLabel[status]}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <PaginationControls
+        currentPage={paginatedRows.currentPage}
+        pageCount={paginatedRows.pageCount}
+        startItem={paginatedRows.startItem}
+        endItem={paginatedRows.endItem}
+        totalItems={paginatedRows.totalItems}
+        onPageChange={paginatedRows.setCurrentPage}
+      />
+
+      <BarcodeScannerModal
+        open={isCameraOpen}
+        title="Buscar producto en stock"
+        description="Apuntá la cámara al código de barras del producto para filtrarlo."
+        onClose={() => setIsCameraOpen(false)}
+        onDetected={handleBarcodeDetected}
+      />
+    </section>
+  );
+};

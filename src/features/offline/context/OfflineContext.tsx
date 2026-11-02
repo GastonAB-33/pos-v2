@@ -132,6 +132,10 @@ export const OfflineProvider = ({ children }: PropsWithChildren) => {
   }, [refreshPending, tenantId, toast]);
 
   useEffect(() => {
+    void offlineService.hydrate().then(() => refreshPending());
+  }, [refreshPending]);
+
+  useEffect(() => {
     setIsOnline(offlineService.isOnline());
     refreshPending();
 

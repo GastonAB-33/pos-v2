@@ -1,3 +1,6 @@
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
+
 interface ProductCreateModeModalProps {
   canWrite: boolean;
   loading: boolean;
@@ -15,6 +18,7 @@ export const ProductCreateModeModal = ({
   onSelectPhoto,
   onSelectVoice,
 }: ProductCreateModeModalProps) => {
+  useBodyScrollLock(true);
   return (
     <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-4">
       <div className="w-full max-w-xl rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
@@ -23,9 +27,7 @@ export const ProductCreateModeModal = ({
             <h3 className="text-base font-semibold text-slate-900">Nuevo producto</h3>
             <p className="text-xs text-slate-500">Elige como queres cargar el producto</p>
           </div>
-          <button type="button" className="ui-btn-ghost" onClick={onClose} disabled={loading}>
-            Cerrar
-          </button>
+          <ModalCloseButton label="Cerrar opciones" onClick={onClose} disabled={loading} />
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">
