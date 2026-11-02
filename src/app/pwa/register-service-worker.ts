@@ -14,6 +14,8 @@ export const registerServiceWorker = (): void => {
     void navigator.serviceWorker
       .register("/service-worker.js", { scope: "/" })
       .then((registration) => {
+        void registration.update();
+
         registration.addEventListener("updatefound", () => {
           const installingWorker = registration.installing;
           if (!installingWorker) return;

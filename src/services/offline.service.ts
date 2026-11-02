@@ -1,4 +1,7 @@
-﻿import { auditService } from "@/services/audit.service";
+import { dbTables } from "@/lib/database/tables";
+import { supabase } from "@/lib/supabase/client";
+import { dataProvider } from "@/services/config/data-provider";
+import { auditService } from "@/services/audit.service";
 import { cashService } from "@/services/cash.service";
 import { currentAccountsService } from "@/services/current-accounts.service";
 import { productsService } from "@/services/products.service";
@@ -550,7 +553,7 @@ export const offlineService = {
     const tenantRows = offlineService.getPendingSales(tenantId);
     if (!tenantRows.length) return summary;
 
-    const existingSales = await salesService.getAllByTenant(tenantId);
+    let mockExistingSales: Sale[] | null = null;
     const remainingRows: PendingSaleRecord[] = [];
 
     for (const row of tenantRows) {
@@ -558,16 +561,39 @@ export const offlineService = {
 
       try {
         const marker = saleOfflineMarker(row.local_id);
-        const existing = existingSales.find((sale) => (sale.notes ?? "").includes(marker));
+        let existingSaleId: string | null = null;
+        if (dataProvider === "supabase") {
+          const { data: found } = await supabase
+            .from(dbTables.sales)
+            .select("id")
+            .eq("tenant_id", tenantId)
+            .ilike("notes", `%${marker}%`)
+            .limit(1)
+            .maybeSingle();
 
-        if (existing) {
-          linkPendingCashMovementsToSale(tenantId, row.local_id, existing.id);
+          if (found?.id) {
+            existingSaleId = found.id;
+          }
+        } else {
+          if (!mockExistingSales) {
+            mockExistingSales = await salesService.getAllByTenant(tenantId);
+          }
+          const found = mockExistingSales.find((sale) => (sale.notes ?? "").includes(marker));
+          if (found) {
+            existingSaleId = found.id;
+          }
+        }
+
+        if (existingSaleId) {
+          linkPendingCashMovementsToSale(tenantId, row.local_id, existingSaleId);
           summary.synced += 1;
           continue;
         }
 
         const syncedSale = await syncPendingSaleRecord(row);
-        existingSales.push(syncedSale);
+        if (mockExistingSales) {
+          mockExistingSales.push(syncedSale);
+        }
         summary.synced += 1;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Error desconocido al sincronizar venta";
@@ -592,7 +618,7 @@ export const offlineService = {
     const tenantRows = offlineService.getPendingCashMovements(tenantId);
     if (!tenantRows.length) return summary;
 
-    const existingMovements = await cashService.getAllMovementsByTenant(tenantId);
+    let mockExistingMovements: Awaited<ReturnType<typeof cashService.getAllMovementsByTenant>> | null = null;
     const remainingRows: PendingCashMovementRecord[] = [];
 
     for (const row of tenantRows) {
@@ -600,7 +626,27 @@ export const offlineService = {
 
       try {
         const marker = cashOfflineMarker(row.local_id);
-        const alreadySynced = existingMovements.find((movement) => (movement.notes ?? "").includes(marker));
+        let alreadySynced = false;
+
+        if (dataProvider === "supabase") {
+          const { data: found } = await supabase
+            .from(dbTables.cash_movements)
+            .select("id")
+            .eq("tenant_id", tenantId)
+            .ilike("notes", `%${marker}%`)
+            .limit(1)
+            .maybeSingle();
+
+          if (found?.id) {
+            alreadySynced = true;
+          }
+        } else {
+          if (!mockExistingMovements) {
+            mockExistingMovements = await cashService.getAllMovementsByTenant(tenantId);
+          }
+          alreadySynced = Boolean(mockExistingMovements.find((movement) => (movement.notes ?? "").includes(marker)));
+        }
+
         if (alreadySynced) {
           summary.synced += 1;
           continue;
@@ -640,7 +686,9 @@ export const offlineService = {
           created_by: row.created_by,
         });
 
-        existingMovements.push(movement);
+        if (mockExistingMovements) {
+          mockExistingMovements.push(movement);
+        }
 
         await auditService.createSafe(tenantId, {
           user_id: row.created_by,

@@ -1,4 +1,6 @@
 import { dbTables } from "@/lib/database/tables";
+import { supabase } from "@/lib/supabase/client";
+import { dataProvider } from "@/services/config/data-provider";
 import {
   TenantCrudService,
   type CreateEntityInput,
@@ -18,6 +20,17 @@ export const priceListsService = {
   getAllByTenant: (tenantId: string) => priceListsCrud.getAllByTenant(tenantId),
 
   getActiveByTenant: async (tenantId: string) => {
+    if (dataProvider === "supabase") {
+      const { data, error } = await supabase
+        .from(dbTables.price_lists)
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true);
+
+      if (error) throw error;
+      return (data ?? []) as PriceList[];
+    }
+
     const all = await priceListsCrud.getAllByTenant(tenantId);
     return all.filter((priceList) => priceList.is_active);
   },
@@ -38,6 +51,17 @@ export const priceListsService = {
   },
 
   getItemsByPriceList: async (tenantId: string, priceListId: string) => {
+    if (dataProvider === "supabase") {
+      const { data, error } = await supabase
+        .from(dbTables.price_list_items)
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .eq("price_list_id", priceListId);
+
+      if (error) throw error;
+      return (data ?? []) as PriceListItem[];
+    }
+
     const allItems = await priceListItemsCrud.getAllByTenant(tenantId);
     return allItems.filter((item) => item.price_list_id === priceListId);
   },
@@ -49,6 +73,31 @@ export const priceListsService = {
     fixedPrice: number
   ) => {
     const normalized = roundAmount(Math.max(0, fixedPrice));
+
+    if (dataProvider === "supabase") {
+      const { data: existing, error } = await supabase
+        .from(dbTables.price_list_items)
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .eq("price_list_id", priceListId)
+        .eq("product_id", productId)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (existing) {
+        return priceListItemsCrud.update(tenantId, existing.id, {
+          fixed_price: normalized,
+        });
+      }
+
+      return priceListItemsCrud.create(tenantId, {
+        price_list_id: priceListId,
+        product_id: productId,
+        fixed_price: normalized,
+      });
+    }
+
     const existingItems = await priceListsService.getItemsByPriceList(tenantId, priceListId);
     const existing = existingItems.find((item) => item.product_id === productId);
 
@@ -66,6 +115,21 @@ export const priceListsService = {
   },
 
   removeProductFixedPrice: async (tenantId: string, priceListId: string, productId: string) => {
+    if (dataProvider === "supabase") {
+      const { data: existing, error } = await supabase
+        .from(dbTables.price_list_items)
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .eq("price_list_id", priceListId)
+        .eq("product_id", productId)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!existing) return false;
+
+      return priceListItemsCrud.delete(tenantId, existing.id);
+    }
+
     const existingItems = await priceListsService.getItemsByPriceList(tenantId, priceListId);
     const existing = existingItems.find((item) => item.product_id === productId);
 
@@ -86,6 +150,21 @@ export const priceListsService = {
     if (priceList.price_mode === "percentage") {
       const adjustment = priceList.percentage_adjustment ?? 0;
       return roundAmount(basePrice * (1 + adjustment / 100));
+    }
+
+    if (dataProvider === "supabase") {
+      const { data, error } = await supabase
+        .from(dbTables.price_list_items)
+        .select("fixed_price")
+        .eq("tenant_id", tenantId)
+        .eq("price_list_id", priceListId)
+        .eq("product_id", productId)
+        .maybeSingle();
+
+      if (!error && data && typeof data.fixed_price === "number") {
+        return roundAmount(data.fixed_price);
+      }
+      return roundAmount(basePrice);
     }
 
     const items = await priceListsService.getItemsByPriceList(tenantId, priceListId);

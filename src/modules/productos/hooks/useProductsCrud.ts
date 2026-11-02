@@ -285,12 +285,17 @@ export const useProductsCrud = (tenantId: string | null, userId: string | null) 
 
     setIsLoading(true);
     try {
-      const [list, barcodeMap, barcodes, lists] = await Promise.all([
+      const [list, barcodes, lists] = await Promise.all([
         productsService.getAllByTenant(tenantId),
-        productsService.getPrimaryBarcodesMapByTenant(tenantId),
         productsService.getBarcodesByTenant(tenantId),
         priceListsService.getAllByTenant(tenantId),
       ]);
+      const barcodeMap: Record<string, string> = {};
+      for (const item of barcodes) {
+        if (item.is_primary) {
+          barcodeMap[item.product_id] = item.barcode;
+        }
+      }
       setProducts(list);
       setAllBarcodes(barcodes);
       setPrimaryBarcodes(barcodeMap);

@@ -1,5 +1,6 @@
-const APP_CACHE = "pos-v2-app-shell-v1";
-const RUNTIME_CACHE = "pos-v2-runtime-v1";
+const APP_CACHE = "pos-v2-app-shell-v2";
+const RUNTIME_CACHE = "pos-v2-runtime-v2";
+const MAX_RUNTIME_ITEMS = 60;
 
 const APP_SHELL_ASSETS = [
   "/",
@@ -8,6 +9,21 @@ const APP_SHELL_ASSETS = [
   "/icons/icon-192.svg",
   "/icons/icon-512.svg",
 ];
+
+const trimCache = async (cacheName, maxItems = MAX_RUNTIME_ITEMS) => {
+  try {
+    const cache = await caches.open(cacheName);
+    const keys = await cache.keys();
+    if (keys.length > maxItems) {
+      const deleteCount = keys.length - maxItems;
+      for (let i = 0; i < deleteCount; i++) {
+        await cache.delete(keys[i]);
+      }
+    }
+  } catch {
+    // Manejo silencioso de errores de limpieza
+  }
+};
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -50,29 +66,22 @@ const shouldHandleRequest = (request) => {
   return true;
 };
 
-const cacheFirstWithRefresh = async (request) => {
-  const cache = await caches.open(RUNTIME_CACHE);
-  const cached = await cache.match(request);
-
-  const fetchPromise = fetch(request)
-    .then((response) => {
-      if (response && response.ok) {
-        cache.put(request, response.clone());
-      }
-      return response;
-    })
-    .catch(() => null);
-
-  if (cached) {
-    return cached;
+const networkFirstWithCacheFallback = async (request) => {
+  try {
+    const response = await fetch(request);
+    if (response && response.ok) {
+      const cache = await caches.open(RUNTIME_CACHE);
+      cache.put(request, response.clone());
+      void trimCache(RUNTIME_CACHE);
+    }
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    if (cached) {
+      return cached;
+    }
+    return new Response("Offline", { status: 503, statusText: "Offline" });
   }
-
-  const networkResponse = await fetchPromise;
-  if (networkResponse) {
-    return networkResponse;
-  }
-
-  return new Response("Offline", { status: 503, statusText: "Offline" });
 };
 
 self.addEventListener("fetch", (event) => {
@@ -86,8 +95,13 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const cloned = response.clone();
-          caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, cloned));
+          if (response && response.ok) {
+            const cloned = response.clone();
+            caches.open(RUNTIME_CACHE).then((cache) => {
+              cache.put(request, cloned);
+              void trimCache(RUNTIME_CACHE);
+            });
+          }
           return response;
         })
         .catch(async () => {
@@ -119,7 +133,7 @@ self.addEventListener("fetch", (event) => {
     destination === "font";
 
   if (isStaticAsset) {
-    event.respondWith(cacheFirstWithRefresh(request));
+    event.respondWith(networkFirstWithCacheFallback(request));
     return;
   }
 
@@ -127,7 +141,10 @@ self.addEventListener("fetch", (event) => {
     fetch(request)
       .then((response) => {
         if (response && response.ok) {
-          caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, response.clone()));
+          caches.open(RUNTIME_CACHE).then((cache) => {
+            cache.put(request, response.clone());
+            void trimCache(RUNTIME_CACHE);
+          });
         }
         return response;
       })

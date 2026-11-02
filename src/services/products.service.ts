@@ -1,4 +1,6 @@
 import { dbTables } from "@/lib/database/tables";
+import { supabase } from "@/lib/supabase/client";
+import { dataProvider } from "@/services/config/data-provider";
 import {
   TenantCrudService,
   type CreateEntityInput,
@@ -27,6 +29,20 @@ export const productsService = {
     const barcode = normalizeBarcode(rawBarcode);
     if (!barcode) return null;
 
+    if (dataProvider === "supabase") {
+      const { data, error } = await supabase
+        .from(dbTables.product_barcodes)
+        .select("product_id, is_primary")
+        .eq("tenant_id", tenantId)
+        .eq("barcode", barcode);
+
+      if (error) throw error;
+      if (!data || data.length === 0) return null;
+
+      const preferred = data.find((item) => item.is_primary) ?? data[0];
+      return crud.getById(tenantId, preferred.product_id);
+    }
+
     const allBarcodes = await barcodeCrud.getAllByTenant(tenantId);
     const matches = allBarcodes.filter((item) => normalizeBarcode(item.barcode) === barcode);
     if (!matches.length) return null;
@@ -36,6 +52,21 @@ export const productsService = {
   },
 
   getPrimaryBarcodesMapByTenant: async (tenantId: string): Promise<Record<string, string>> => {
+    if (dataProvider === "supabase") {
+      const { data, error } = await supabase
+        .from(dbTables.product_barcodes)
+        .select("product_id, barcode")
+        .eq("tenant_id", tenantId)
+        .eq("is_primary", true);
+
+      if (error) throw error;
+      const primaryMap: Record<string, string> = {};
+      for (const item of data ?? []) {
+        primaryMap[item.product_id] = item.barcode;
+      }
+      return primaryMap;
+    }
+
     const allBarcodes = await barcodeCrud.getAllByTenant(tenantId);
     const primaryMap: Record<string, string> = {};
 
@@ -53,6 +84,70 @@ export const productsService = {
     rawBarcode: string
   ): Promise<ProductBarcode | null> => {
     const barcode = normalizeBarcode(rawBarcode);
+
+    if (dataProvider === "supabase") {
+      if (!barcode) {
+        const { data: primaryRows, error: fetchErr } = await supabase
+          .from(dbTables.product_barcodes)
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .eq("product_id", productId)
+          .eq("is_primary", true);
+
+        if (fetchErr) throw fetchErr;
+        if (primaryRows?.length) {
+          await Promise.all(primaryRows.map((row) => barcodeCrud.delete(tenantId, row.id)));
+        }
+        return null;
+      }
+
+      const { data: duplicateMatches, error: dupErr } = await supabase
+        .from(dbTables.product_barcodes)
+        .select("id, product_id")
+        .eq("tenant_id", tenantId)
+        .eq("barcode", barcode)
+        .neq("product_id", productId)
+        .limit(1);
+
+      if (dupErr) throw dupErr;
+      if (duplicateMatches && duplicateMatches.length > 0) {
+        throw new Error("El codigo de barras ya esta asignado a otro producto");
+      }
+
+      const { data: currentProductBarcodesData, error: curErr } = await supabase
+        .from(dbTables.product_barcodes)
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .eq("product_id", productId);
+
+      if (curErr) throw curErr;
+      const currentProductBarcodes = (currentProductBarcodesData ?? []) as ProductBarcode[];
+
+      const existing = currentProductBarcodes.find(
+        (item) => normalizeBarcode(item.barcode) === barcode
+      );
+
+      await Promise.all(
+        currentProductBarcodes
+          .filter((item) => item.id !== existing?.id && item.is_primary)
+          .map((item) => barcodeCrud.update(tenantId, item.id, { is_primary: false }))
+      );
+
+      if (existing) {
+        const updated = await barcodeCrud.update(tenantId, existing.id, {
+          barcode,
+          is_primary: true,
+        });
+        return updated;
+      }
+
+      return barcodeCrud.create(tenantId, {
+        product_id: productId,
+        barcode,
+        is_primary: true,
+      } satisfies CreateProductBarcodeInput);
+    }
+
     const allBarcodes = await barcodeCrud.getAllByTenant(tenantId);
     const currentProductBarcodes = allBarcodes.filter((item) => item.product_id === productId);
 
