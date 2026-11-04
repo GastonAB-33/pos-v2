@@ -25,4 +25,13 @@ export const stockService = {
   },
   update: (tenantId: string, id: string, input: UpdateStockMovementInput) => crud.update(tenantId, id, input),
   delete: (tenantId: string, id: string) => crud.delete(tenantId, id),
+
+  getRecentByTenant: (tenantId: string, limit = 300) =>
+    crud.query(tenantId, { order: { column: "created_at", ascending: false }, limit }),
+
+  getMovementsSince: (tenantId: string, sinceIso: string) =>
+    crud.query(tenantId, {
+      gte: { created_at: sinceIso },
+      order: { column: "created_at", ascending: false },
+    }),
 };

@@ -28,4 +28,7 @@ export const receiptsService = {
     if (saleIds.length === 0) return [];
     return crud.query(tenantId, { in: { sale_id: saleIds } });
   },
+
+  getRecentByTenant: (tenantId: string, limit = 200) =>
+    crud.query(tenantId, { order: { column: "created_at", ascending: false }, limit }),
 };

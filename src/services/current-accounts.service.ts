@@ -28,6 +28,8 @@ const normalizeAmountByType = (
 
 export const currentAccountsService = {
   getAllByTenant: (tenantId: string) => movementsCrud.getAllByTenant(tenantId),
+  getRecentByTenant: (tenantId: string, limit = 200) =>
+    movementsCrud.query(tenantId, { order: { column: "created_at", ascending: false }, limit }),
 
   getByCustomer: async (tenantId: string, customerId: string): Promise<CurrentAccountMovement[]> => {
     return movementsCrud.query(tenantId, {

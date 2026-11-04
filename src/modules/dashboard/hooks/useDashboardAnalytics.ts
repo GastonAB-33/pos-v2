@@ -169,10 +169,17 @@ export const useDashboardAnalytics = (tenantId: string | null): DashboardAnalyti
     setError(null);
 
     try {
+      const now = new Date();
+      const startToday = getDayStart(now);
+      const startMonth = getMonthStart(now);
+      const sevenDaysAgo = new Date(startToday);
+      sevenDaysAgo.setDate(startToday.getDate() - 6);
+      const sinceSales = new Date(Math.min(startMonth.getTime(), sevenDaysAgo.getTime())).toISOString();
+      const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString();
+
+      // Consultas optimizadas con filtros de fecha en base de datos
       const [
         sales,
-        saleItems,
-        salePayments,
         products,
         customers,
         purchases,
@@ -180,24 +187,25 @@ export const useDashboardAnalytics = (tenantId: string | null): DashboardAnalyti
         cashSessions,
         cashMovements,
       ] = await Promise.all([
-        salesService.getAllByTenant(tenantId),
-        salesService.getAllItemsByTenant(tenantId),
-        salesService.getAllPaymentsByTenant(tenantId),
+        salesService.getSalesSince(tenantId, sinceSales),
         productsService.getAllByTenant(tenantId),
         customersService.getAllByTenant(tenantId),
-        purchasesService.getAllByTenant(tenantId),
+        purchasesService.getPurchasesSince(tenantId, sixMonthsAgo),
         paymentMethodsService.getAllByTenant(tenantId),
-        cashService.getAllByTenant(tenantId),
-        cashService.getAllMovementsByTenant(tenantId),
+        cashService.getRecentSessions(tenantId, 60),
+        cashService.getMovementsSince(tenantId, sinceSales),
       ]);
-
-      const now = new Date();
-      const startToday = getDayStart(now);
-      const startMonth = getMonthStart(now);
 
       const completedSales = sales.filter((sale) => sale.status === "completed");
       const completedSalesToday = completedSales.filter((sale) => isOnOrAfter(sale.created_at, startToday));
       const completedSalesMonth = completedSales.filter((sale) => isOnOrAfter(sale.created_at, startMonth));
+      const monthSaleIdList = completedSalesMonth.map((sale) => sale.id);
+
+      // Cargar items y pagos unicamente de las ventas completadas del periodo en vez de la BD entera
+      const [saleItems, salePayments] = await Promise.all([
+        monthSaleIdList.length ? salesService.getItemsBySaleIds(tenantId, monthSaleIdList) : [],
+        monthSaleIdList.length ? salesService.getPaymentsBySaleIds(tenantId, monthSaleIdList) : [],
+      ]);
 
       const salesToday = roundAmount(completedSalesToday.reduce((acc, sale) => acc + sale.total, 0));
       const salesMonth = roundAmount(completedSalesMonth.reduce((acc, sale) => acc + sale.total, 0));
@@ -270,7 +278,7 @@ export const useDashboardAnalytics = (tenantId: string | null): DashboardAnalyti
       const paymentMethodNameByCode = new Map(
         paymentMethods.map((method) => [method.code, method.name])
       );
-      const monthSaleIds = new Set(completedSalesMonth.map((sale) => sale.id));
+      const monthSaleIds = new Set(monthSaleIdList);
 
       const salesByPaymentMap = new Map<string, number>();
       for (const payment of salePayments) {

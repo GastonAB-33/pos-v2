@@ -28,7 +28,7 @@ export const useReceiptsModule = (tenantId: string | null, userId: string | null
     setIsLoading(true);
 
     try {
-      const list = await receiptsService.getAllByTenant(tenantId);
+      const list = await receiptsService.getRecentByTenant(tenantId, 250);
       setReceipts(list.sort((a, b) => b.issued_at.localeCompare(a.issued_at)));
     } catch {
       setFeedback({ type: "error", message: "No se pudieron cargar los comprobantes" });

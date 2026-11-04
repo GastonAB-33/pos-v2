@@ -189,8 +189,39 @@ export const cashService = {
     return rows.map((row) => normalizeMovement(row as CashMovementDbCompat));
   },
 
-  getMovementsBySessionId: async (tenantId: string, cashSessionId: string) => {
-    const allMovements = await cashService.getAllMovementsByTenant(tenantId);
-    return allMovements.filter((movement) => movement.cash_session_id === cashSessionId);
+  getRecentSessions: (tenantId: string, limit = 60) =>
+    cashSessionsCrud.query(tenantId, { order: { column: "opened_at", ascending: false }, limit }),
+
+  getRecentMovements: async (tenantId: string, limit = 500): Promise<CashMovement[]> => {
+    const rows = await cashMovementsCrud.query(tenantId, {
+      order: { column: "created_at", ascending: false },
+      limit,
+    });
+    return rows.map((row) => normalizeMovement(row as CashMovementDbCompat));
+  },
+
+  getMovementsBySessionIds: async (tenantId: string, sessionIds: string[]): Promise<CashMovement[]> => {
+    if (sessionIds.length === 0) return [];
+    const rows = await cashMovementsCrud.query(tenantId, {
+      in: { cash_session_id: sessionIds },
+      order: { column: "created_at", ascending: false },
+    });
+    return rows.map((row) => normalizeMovement(row as CashMovementDbCompat));
+  },
+
+  getMovementsSince: async (tenantId: string, sinceIso: string): Promise<CashMovement[]> => {
+    const rows = await cashMovementsCrud.query(tenantId, {
+      gte: { created_at: sinceIso },
+      order: { column: "created_at", ascending: false },
+    });
+    return rows.map((row) => normalizeMovement(row as CashMovementDbCompat));
+  },
+
+  getMovementsBySessionId: async (tenantId: string, cashSessionId: string): Promise<CashMovement[]> => {
+    const rows = await cashMovementsCrud.query(tenantId, {
+      eq: { cash_session_id: cashSessionId },
+      order: { column: "created_at", ascending: true },
+    });
+    return rows.map((row) => normalizeMovement(row as CashMovementDbCompat));
   },
 };

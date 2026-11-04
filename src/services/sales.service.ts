@@ -120,4 +120,23 @@ export const salesService = {
   // Relacion preparada para medios de pago y futuras integraciones (Mercado Pago/ARCA).
   getPaymentsBySaleId: (tenantId: string, saleId: string) =>
     salePaymentsCrud.query(tenantId, { eq: { sale_id: saleId } }),
+
+  getPaymentsBySaleIds: async (tenantId: string, saleIds: string[]): Promise<SalePayment[]> => {
+    if (saleIds.length === 0) return [];
+    return salePaymentsCrud.query(tenantId, { in: { sale_id: saleIds } });
+  },
+
+  getSalesSince: async (tenantId: string, sinceIso: string): Promise<Sale[]> => {
+    return salesCrud.query(tenantId, {
+      gte: { created_at: sinceIso },
+      order: { column: "created_at", ascending: false },
+    });
+  },
+
+  getRecentSales: async (tenantId: string, limit = 200): Promise<Sale[]> => {
+    return salesCrud.query(tenantId, {
+      order: { column: "created_at", ascending: false },
+      limit,
+    });
+  },
 };

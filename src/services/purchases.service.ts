@@ -29,9 +29,21 @@ export const purchasesService = {
 
   getAllItemsByTenant: (tenantId: string) => purchaseItemsCrud.getAllByTenant(tenantId),
 
-  getItemsByPurchaseId: async (tenantId: string, purchaseId: string) => {
-    const allItems = await purchaseItemsCrud.getAllByTenant(tenantId);
-    return allItems.filter((item) => item.purchase_id === purchaseId);
+  getRecentByTenant: (tenantId: string, limit = 100) =>
+    purchasesCrud.query(tenantId, { order: { column: "created_at", ascending: false }, limit }),
+
+  getPurchasesSince: (tenantId: string, sinceIso: string) =>
+    purchasesCrud.query(tenantId, {
+      gte: { created_at: sinceIso },
+      order: { column: "created_at", ascending: false },
+    }),
+
+  getItemsByPurchaseIds: async (tenantId: string, purchaseIds: string[]): Promise<PurchaseItem[]> => {
+    if (purchaseIds.length === 0) return [];
+    return purchaseItemsCrud.query(tenantId, { in: { purchase_id: purchaseIds } });
   },
+
+  getItemsByPurchaseId: (tenantId: string, purchaseId: string) =>
+    purchaseItemsCrud.query(tenantId, { eq: { purchase_id: purchaseId } }),
 };
 
