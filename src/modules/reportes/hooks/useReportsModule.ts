@@ -248,34 +248,47 @@ export const useReportsModule = (tenantId: string | null) => {
     setError(null);
 
     try {
+      // Consultas optimizadas con limites y filtros por rango de fecha
       const [
         sales,
-        saleItems,
-        salePayments,
+        purchases,
+        cashSessions,
+        cashMovements,
         stockMovements,
+        currentAccountMovements,
         products,
         customers,
         paymentMethods,
-        purchases,
-        purchaseItems,
         suppliers,
-        cashSessions,
-        cashMovements,
-        currentAccountMovements,
       ] = await Promise.all([
-        salesService.getAllByTenant(tenantId),
-        salesService.getAllItemsByTenant(tenantId),
-        salesService.getAllPaymentsByTenant(tenantId),
-        stockService.getAllByTenant(tenantId),
+        filters.dateFrom
+          ? salesService.getSalesSince(tenantId, filters.dateFrom)
+          : salesService.getRecentSales(tenantId, 300),
+        filters.dateFrom
+          ? purchasesService.getPurchasesSince(tenantId, filters.dateFrom)
+          : purchasesService.getRecentByTenant(tenantId, 200),
+        cashService.getRecentSessions(tenantId, 100),
+        filters.dateFrom
+          ? cashService.getMovementsSince(tenantId, filters.dateFrom)
+          : cashService.getRecentMovements(tenantId, 300),
+        filters.dateFrom
+          ? stockService.getMovementsSince(tenantId, filters.dateFrom)
+          : stockService.getRecentByTenant(tenantId, 300),
+        currentAccountsService.getRecentByTenant(tenantId, 300),
         productsService.getAllByTenant(tenantId),
         customersService.getAllByTenant(tenantId),
         paymentMethodsService.getAllByTenant(tenantId),
-        purchasesService.getAllByTenant(tenantId),
-        purchasesService.getAllItemsByTenant(tenantId),
         suppliersService.getAllByTenant(tenantId),
-        cashService.getAllByTenant(tenantId),
-        cashService.getAllMovementsByTenant(tenantId),
-        currentAccountsService.getAllByTenant(tenantId),
+      ]);
+
+      const saleIds = sales.map((s) => s.id);
+      const purchaseIds = purchases.map((p) => p.id);
+
+      // Cargar items y pagos unicamente asociados a las ventas y compras recuperadas
+      const [saleItems, salePayments, purchaseItems] = await Promise.all([
+        saleIds.length ? salesService.getItemsBySaleIds(tenantId, saleIds) : [],
+        saleIds.length ? salesService.getPaymentsBySaleIds(tenantId, saleIds) : [],
+        purchaseIds.length ? purchasesService.getItemsByPurchaseIds(tenantId, purchaseIds) : [],
       ]);
 
       setData({
@@ -299,7 +312,7 @@ export const useReportsModule = (tenantId: string | null) => {
     } finally {
       setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, filters.dateFrom]);
 
   useEffect(() => {
     void load();

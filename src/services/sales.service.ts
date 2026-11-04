@@ -104,10 +104,39 @@ export const salesService = {
   getAllItemsByTenant: (tenantId: string) => saleItemsCrud.getAllByTenant(tenantId),
   getAllPaymentsByTenant: (tenantId: string) => salePaymentsCrud.getAllByTenant(tenantId),
 
+  getByIds: async (tenantId: string, ids: string[]): Promise<Sale[]> => {
+    if (ids.length === 0) return [];
+    return salesCrud.query(tenantId, { in: { id: ids } });
+  },
+
   getItemsBySaleId: (tenantId: string, saleId: string) =>
     saleItemsCrud.query(tenantId, { eq: { sale_id: saleId } }),
+
+  getItemsBySaleIds: async (tenantId: string, saleIds: string[]): Promise<SaleItem[]> => {
+    if (saleIds.length === 0) return [];
+    return saleItemsCrud.query(tenantId, { in: { sale_id: saleIds } });
+  },
 
   // Relacion preparada para medios de pago y futuras integraciones (Mercado Pago/ARCA).
   getPaymentsBySaleId: (tenantId: string, saleId: string) =>
     salePaymentsCrud.query(tenantId, { eq: { sale_id: saleId } }),
+
+  getPaymentsBySaleIds: async (tenantId: string, saleIds: string[]): Promise<SalePayment[]> => {
+    if (saleIds.length === 0) return [];
+    return salePaymentsCrud.query(tenantId, { in: { sale_id: saleIds } });
+  },
+
+  getSalesSince: async (tenantId: string, sinceIso: string): Promise<Sale[]> => {
+    return salesCrud.query(tenantId, {
+      gte: { created_at: sinceIso },
+      order: { column: "created_at", ascending: false },
+    });
+  },
+
+  getRecentSales: async (tenantId: string, limit = 200): Promise<Sale[]> => {
+    return salesCrud.query(tenantId, {
+      order: { column: "created_at", ascending: false },
+      limit,
+    });
+  },
 };

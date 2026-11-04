@@ -172,6 +172,11 @@ export const invoicesService = {
   getBySaleId: (tenantId: string, saleId: string) =>
     invoicesCrud.query(tenantId, { eq: { sale_id: saleId } }),
 
+  getBySaleIds: async (tenantId: string, saleIds: string[]): Promise<Invoice[]> => {
+    if (saleIds.length === 0) return [];
+    return invoicesCrud.query(tenantId, { in: { sale_id: saleIds } });
+  },
+
   generateDocumentNumber: generateNextDocumentNumber,
 
   createBudget: async (

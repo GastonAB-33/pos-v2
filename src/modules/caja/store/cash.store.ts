@@ -116,35 +116,51 @@ export const useCashStore = create<CashStoreState>()((set, get) => ({
     }
 
     try {
+      // Optimizacion radical de egress: Cargar solo jornadas recientes y catalogos
       const [
-        allSessions,
-        allMovements,
+        recentSessions,
         tenantSettings,
         allUsers,
         allPaymentMethods,
-        allCurrentAccountMovements,
         allCustomers,
-        allSales,
         allBankAccounts,
-        allSalePayments,
-        allInvoices,
+        recentCurrentAccountMovements,
       ] = await Promise.all([
-        cashService.getAllByTenant(tenantId),
-        cashService.getAllMovementsByTenant(tenantId),
+        cashService.getRecentSessions(tenantId, 60),
         settingsService.getByTenant(tenantId),
         usersService.getAllByTenant(tenantId),
         paymentMethodsService.getAllByTenant(tenantId),
-        currentAccountsService.getAllByTenant(tenantId),
         customersService.getAllByTenant(tenantId),
-        salesService.getAllByTenant(tenantId),
         bankAccountsService.getActiveByTenant(tenantId).catch(() => []),
-        salesService.getAllPaymentsByTenant(tenantId).catch(() => []),
-        invoicesService.getAllByTenant(tenantId).catch(() => []),
+        currentAccountsService.getRecentByTenant(tenantId, 200).catch(() => []),
       ]);
 
-      const sortedSessions = allSessions.sort((a, b) => b.opened_at.localeCompare(a.opened_at));
+      const sessionIds = recentSessions.map((s) => s.id);
+
+      // Cargar movimientos indexados unicamente de las jornadas activas/recientes
+      const allMovements = sessionIds.length
+        ? await cashService.getMovementsBySessionIds(tenantId, sessionIds)
+        : [];
+
+      // Identificar ventas referenciadas en los movimientos de caja para no escanear toda la tabla de ventas
+      const saleIds = Array.from(
+        new Set([
+          ...allMovements
+            .filter((m) => m.reference_id && (m.movement_type === "sale_payment" || m.reference_type === "sale" || m.reference_type === "transfer" || m.reference_type === "card"))
+            .map((m) => m.reference_id as string),
+          ...recentCurrentAccountMovements.map((m) => m.sale_id).filter(Boolean) as string[],
+        ])
+      );
+
+      const [allSales, allSalePayments, allInvoices] = await Promise.all([
+        saleIds.length ? salesService.getByIds(tenantId, saleIds).catch(() => []) : [],
+        saleIds.length ? salesService.getPaymentsBySaleIds(tenantId, saleIds).catch(() => []) : [],
+        saleIds.length ? invoicesService.getBySaleIds(tenantId, saleIds).catch(() => []) : [],
+      ]);
+
+      const sortedSessions = recentSessions.sort((a, b) => b.opened_at.localeCompare(a.opened_at));
       const sortedMovements = allMovements.sort((a, b) => b.created_at.localeCompare(a.created_at));
-      const sortedCurrentAccountMovements = allCurrentAccountMovements.sort((a, b) =>
+      const sortedCurrentAccountMovements = recentCurrentAccountMovements.sort((a, b) =>
         b.created_at.localeCompare(a.created_at)
       );
 

@@ -145,16 +145,38 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
     tenantId: string,
     options: {
       eq?: Record<string, unknown>;
+      in?: Record<string, unknown[]>;
+      gte?: Record<string, unknown>;
+      lte?: Record<string, unknown>;
       order?: { column: string; ascending?: boolean };
       limit?: number;
     } = {}
   ): Promise<TEntity[]> {
-    if (dataProvider === "mock") {
-      let rows = this.getMockRows().filter((row) => {
+    const filterAndSortMock = (rawRows: TEntity[]): TEntity[] => {
+      let rows = rawRows.filter((row) => {
         if (row.tenant_id !== tenantId) return false;
+        const rowRec = row as unknown as Record<string, unknown>;
         if (options.eq) {
           for (const [key, val] of Object.entries(options.eq)) {
-            if ((row as unknown as Record<string, unknown>)[key] !== val) return false;
+            if (rowRec[key] !== val) return false;
+          }
+        }
+        if (options.in) {
+          for (const [key, vals] of Object.entries(options.in)) {
+            const rowVal = rowRec[key];
+            if (!vals.includes(rowVal)) return false;
+          }
+        }
+        if (options.gte) {
+          for (const [key, val] of Object.entries(options.gte)) {
+            const rowVal = rowRec[key];
+            if (rowVal == null || (rowVal as any) < (val as any)) return false;
+          }
+        }
+        if (options.lte) {
+          for (const [key, val] of Object.entries(options.lte)) {
+            const rowVal = rowRec[key];
+            if (rowVal == null || (rowVal as any) > (val as any)) return false;
           }
         }
         return true;
@@ -177,6 +199,10 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
         rows = rows.slice(0, options.limit);
       }
       return rows;
+    };
+
+    if (dataProvider === "mock") {
+      return filterAndSortMock(this.getMockRows());
     }
 
     try {
@@ -185,6 +211,27 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
         if (options.eq) {
           for (const [key, val] of Object.entries(options.eq)) {
             builder = builder.eq(key, val);
+          }
+        }
+        if (options.in) {
+          for (const [key, vals] of Object.entries(options.in)) {
+            if (vals && vals.length > 0) {
+              builder = builder.in(key, vals);
+            }
+          }
+        }
+        if (options.gte) {
+          for (const [key, val] of Object.entries(options.gte)) {
+            if (val != null) {
+              builder = builder.gte(key, val);
+            }
+          }
+        }
+        if (options.lte) {
+          for (const [key, val] of Object.entries(options.lte)) {
+            if (val != null) {
+              builder = builder.lte(key, val);
+            }
           }
         }
         if (options.order) {
@@ -204,33 +251,7 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
         console.warn(
           `[TenantCrudService] Tabla "${this.tableName}" no encontrada en Supabase al consultar. Utilizando almacenamiento local de respaldo.`
         );
-        let rows = this.getMockRows().filter((row) => {
-          if (row.tenant_id !== tenantId) return false;
-          if (options.eq) {
-            for (const [key, val] of Object.entries(options.eq)) {
-              if ((row as unknown as Record<string, unknown>)[key] !== val) return false;
-            }
-          }
-          return true;
-        });
-        if (options.order) {
-          const col = options.order.column;
-          const asc = options.order.ascending ?? true;
-          rows = [...rows].sort((a, b) => {
-            const valA = (a as unknown as Record<string, unknown>)[col];
-            const valB = (b as unknown as Record<string, unknown>)[col];
-            if (valA == null && valB == null) return 0;
-            if (valA == null) return asc ? -1 : 1;
-            if (valB == null) return asc ? 1 : -1;
-            if (valA < valB) return asc ? -1 : 1;
-            if (valA > valB) return asc ? 1 : -1;
-            return 0;
-          });
-        }
-        if (options.limit != null) {
-          rows = rows.slice(0, options.limit);
-        }
-        return rows;
+        return filterAndSortMock(this.getMockRows());
       }
       throw error;
     }

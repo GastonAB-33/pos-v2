@@ -130,7 +130,6 @@ export const usePurchasesStore = create<PurchasesStoreState>()((set, get) => ({
         allProductBarcodes,
         allSuppliers,
         allPurchases,
-        allPurchaseItems,
         allBankAccounts,
         activeCashSession,
         allUsers,
@@ -138,14 +137,18 @@ export const usePurchasesStore = create<PurchasesStoreState>()((set, get) => ({
         productsService.getAllByTenant(tenantId),
         productsService.getBarcodesByTenant(tenantId),
         suppliersService.getAllByTenant(tenantId),
-        purchasesService.getAllByTenant(tenantId),
-        purchasesService.getAllItemsByTenant(tenantId),
+        purchasesService.getRecentByTenant(tenantId, 100),
         bankAccountsService.getActiveByTenant(tenantId),
         userId != null
           ? cashService.getOpenSessionByUser(tenantId, userId).then((s) => s ?? cashService.getOpenSession(tenantId))
           : cashService.getOpenSession(tenantId),
         usersService.getAllByTenant(tenantId).catch(() => []),
       ]);
+
+      const purchaseIds = allPurchases.map((p) => p.id);
+      const allPurchaseItems = purchaseIds.length
+        ? await purchasesService.getItemsByPurchaseIds(tenantId, purchaseIds)
+        : [];
 
       const usersMap = (allUsers || []).reduce<Record<string, string>>((acc, u) => {
         acc[u.id] = u.full_name?.trim() || u.email?.trim() || u.username?.trim() || u.id;

@@ -1,36 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/utils/cn";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { IconButton } from "@/components/ui/IconButton";
-import { Banknote, Camera, CreditCard, FileText, Landmark, LockOpen, Moon, MoonStar, RefreshCw, Search, ShoppingCart, Sun, User as UserIcon, X } from "lucide-react";
+import { Banknote, CreditCard, FileText, Landmark, LockOpen, RefreshCw, Search, User as UserIcon, X } from "lucide-react";
 import { useToast } from "@/components/ui/useToast";
 import { routePaths } from "@/config/routes";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { useOffline } from "@/features/offline/hooks/useOffline";
 import { offlineService } from "@/services/offline.service";
-import { usePwa } from "@/features/pwa/hooks/usePwa";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { PosCustomerModal, type PosCustomerModalValues } from "@/modules/pos/components/PosCustomerModal";
 import { getEditableDocumentNumber } from "@/modules/configuracion/hooks/useEntityRequirements";
 import { CashOpenForm } from "@/modules/caja/components/CashOpenForm";
 import { serializeCloseSnapshot, type CashCloseSnapshot } from "@/modules/caja/hooks/useCashModule";
 import { ReceiptTicketPanel } from "@/modules/comprobantes/components/ReceiptTicketPanel";
-import { PosCart } from "@/modules/pos/components/PosCart";
 import { PosCartDiscountModal } from "@/modules/pos/components/PosCartDiscountModal";
 import { PosCartItemEditModal } from "@/modules/pos/components/PosCartItemEditModal";
 import { PosCheckoutPanel } from "@/modules/pos/components/PosCheckoutPanel";
 import { PosDebtPaymentModal } from "@/modules/pos/components/PosDebtPaymentModal";
 import { PosItemPromoModal } from "@/modules/pos/components/PosItemPromoModal";
-import { PosProductList } from "@/modules/pos/components/PosProductList";
 import { PosQuickProductModal } from "@/modules/pos/components/PosQuickProductModal";
 import { PosSmartView } from "@/modules/pos/components/PosSmartView";
 import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
 import { usePosSale, type PosCartItemComputed, getBackendErrorMessage } from "@/modules/pos/hooks/usePosSale";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
-import { useUiStore } from "@/store/ui.store";
 import { useProductsStore } from "@/features/products/store/products.store";
 import type { OpenCashValues } from "@/modules/caja/schemas/cash.schemas";
 import { computePricingBackward, roundMoney } from "@/modules/productos/utils/product-pricing";
@@ -153,7 +148,7 @@ const buildCustomerCode = (name: string): string => {
 };
 
 export const PosPage = () => {
-  const { tenant, tenantId } = useTenant();
+  const { tenantId } = useTenant();
   const user = useAuthStore((state) => state.user);
   const { canRead, canWrite } = usePermissions();
   const canReadPos = canRead("pos");
@@ -161,21 +156,15 @@ export const PosPage = () => {
   const canWriteCustomers = canWrite("clientes");
   const canWriteProducts = canWrite("productos");
   const { success: toastSuccess, error: toastError } = useToast();
-  const location = useLocation();
-  const navigate = useNavigate();
   const {
     isOnline,
     isSyncing,
-    lastSyncMessage,
-    lastSyncError,
     syncNow,
     clearSyncError,
   } = useOffline();
-  const { canInstall, isInstalled, isInstalling, installApp, isInstallSupported } = usePwa();
 
   const {
     products,
-    favoriteProducts,
     primaryBarcodes,
     actualPrimaryBarcodes,
     customers,
@@ -186,18 +175,11 @@ export const PosPage = () => {
     posSettings,
     mercadoPagoSettings,
     mercadoPagoStatus,
-    saleTabs,
-    activeTabId,
-    switchSaleTab,
-    createNewSaleTab,
-    closeSaleTab,
     selectedCustomerId,
     selectedCustomer,
     employees,
     selectedEmployeeId,
-    selectedEmployee,
     selectEmployee,
-    appliedPriceList,
     cart,
     cartManualDiscount,
     manualCartDiscountTotal,
@@ -207,7 +189,6 @@ export const PosPage = () => {
     applyItemPromotion,
     subtotalBeforePromotions,
     promotionDiscountTotal,
-    cartPromotionDiscountTotal,
     discountsEnabled,
     toggleDiscounts,
     roundingEnabled,
@@ -258,7 +239,7 @@ export const PosPage = () => {
   } = usePosSale(tenantId);
 
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState("");
-  const [visibleBarcodeValue, setVisibleBarcodeValue] = useState("");
+  const [, setVisibleBarcodeValue] = useState("");
   const [searchResetToken, setSearchResetToken] = useState(0);
   const [isReceiptsListModalOpen, setIsReceiptsListModalOpen] = useState(false);
   const [recentReceipts, setRecentReceipts] = useState<PosRecentReceiptItem[]>([]);
@@ -273,15 +254,10 @@ export const PosPage = () => {
   const [isCartDiscountModalOpen, setIsCartDiscountModalOpen] = useState(false);
   const [itemPromoModalTarget, setItemPromoModalTarget] = useState<PosCartItemComputed | null>(null);
   const [lastNotFoundBarcode, setLastNotFoundBarcode] = useState<string>("");
-  const posWindowMode = useUiStore((state) => state.posWindowMode);
-  const theme = useUiStore((state) => state.theme);
-  const cycleTheme = useUiStore((state) => state.cycleTheme);
-  const isSmartPos = posWindowMode === "smart_pos";
+  // posWindowMode removed (smart_pos is locked)
   const [editingCartItemId, setEditingCartItemId] = useState<string | null>(null);
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   const [isCustomerModalSubmitting, setIsCustomerModalSubmitting] = useState(false);
-  const [clientLogoUrl, setClientLogoUrl] = useState<string | null>(null);
-  const [clientDisplayName, setClientDisplayName] = useState("POS");
   const [isRefreshingCatalog, setIsRefreshingCatalog] = useState(false);
   const [openCashSessionId, setOpenCashSessionId] = useState<string | null>(null);
   const [resolvedOperatorUserId, setResolvedOperatorUserId] = useState<string | null>(null);
@@ -315,7 +291,6 @@ export const PosPage = () => {
     };
   }, []);
   const scannerCaptureRef = useRef<HTMLInputElement | null>(null);
-  const cartPanelId = "pos-cart-panel";
   const checkoutPanelId = "pos-checkout-panel";
   const checkoutFormId = "pos-checkout-form";
   const isCashGateResolving =
@@ -385,27 +360,7 @@ export const PosPage = () => {
     () => cart.find((item) => item.is_debt_payment_item) ?? null,
     [cart]
   );
-  const returnToPanelPath = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    const returnTo = params.get("returnTo");
-
-    if (returnTo?.startsWith("/") && !returnTo.startsWith("//")) {
-      return returnTo;
-    }
-
-    return routePaths.home;
-  }, [location.search]);
-
-  const shouldShowReturnToPanel = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    return isInstalled || params.get("from") === "panel-web" || params.has("returnTo");
-  }, [isInstalled, location.search]);
-
-  const handleReturnToPanel = useCallback(() => {
-    navigate(returnToPanelPath);
-  }, [navigate, returnToPanelPath]);
-
-  const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
+const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
     if (!tenantId || !selectedCustomer) return null;
 
     const legacyProfile = posCustomerProfilesService.getProfile(tenantId, selectedCustomer.id);
@@ -997,18 +952,6 @@ export const PosPage = () => {
     [handleBarcodeScan]
   );
 
-  const handleVisibleBarcodeSubmit = useCallback(() => {
-    if (isCheckoutModalOpen) return;
-    const barcode = visibleBarcodeValue.trim();
-    if (!barcode) return;
-
-    void handleBarcodeScan(barcode).then((ok) => {
-      if (ok) {
-        setVisibleBarcodeValue("");
-      }
-    });
-  }, [handleBarcodeScan, isCheckoutModalOpen, visibleBarcodeValue]);
-
   useBarcodeScanner({
     enabled: Boolean(
       tenantId &&
@@ -1556,44 +1499,7 @@ export const PosPage = () => {
     receiptModal,
   ]);
 
-  useEffect(() => {
-    if (!tenantId) {
-      setClientLogoUrl(null);
-      setClientDisplayName("POS");
-      return;
-    }
 
-    let active = true;
-
-    setClientDisplayName(tenant?.tradeName || tenant?.legalName || "POS");
-
-    const loadBusinessIdentity = async () => {
-      try {
-        const tenantSettings = await settingsService.getByTenant(tenantId);
-        if (!active) return;
-
-        const logo = tenantSettings.negocio.logo_url?.trim() || null;
-        const businessName =
-          tenantSettings.negocio.trade_name?.trim() ||
-          tenantSettings.negocio.legal_name?.trim() ||
-          tenant?.tradeName ||
-          tenant?.legalName ||
-          "POS";
-
-        setClientLogoUrl(logo);
-        setClientDisplayName(businessName);
-      } catch {
-        if (!active) return;
-        setClientLogoUrl(null);
-      }
-    };
-
-    void loadBusinessIdentity();
-
-    return () => {
-      active = false;
-    };
-  }, [tenant?.legalName, tenant?.tradeName, tenantId]);
 
   const handleRefreshCatalog = useCallback(async () => {
     if (isRefreshingCatalog) return;
@@ -1662,7 +1568,7 @@ export const PosPage = () => {
   }
 
   return (
-    <div className={cn("pos-page space-y-4 pb-24 lg:pb-2", isSmartPos && "pos-page--smart p-1 sm:p-2")}>
+    <div className="pos-page pos-page--smart space-y-4 p-1 sm:p-2 pb-24 lg:pb-2">
       {/* Input invisible de captura permanente para lector de códigos de barra físico */}
       <input
         ref={scannerCaptureRef}
@@ -1698,8 +1604,7 @@ export const PosPage = () => {
         }}
       />
 
-      {isSmartPos ? (
-        <PosSmartView
+              <PosSmartView
           items={cart}
           isHighlighted={isCartHighlighted}
           onIncrease={increaseQuantity}
@@ -1774,286 +1679,6 @@ export const PosPage = () => {
           }}
           onOpenQuickProduct={() => setIsQuickProductModalOpen(true)}
         />
-      ) : (
-        <>
-          <section className="pos-surface pos-surface--header space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                {clientLogoUrl ? (
-                  <img
-                    src={clientLogoUrl}
-                    alt={clientDisplayName}
-                    className="h-10 w-10 rounded-xl bg-slate-50 object-cover"
-                  />
-                ) : (
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-sm font-semibold text-white">
-                    {clientDisplayName.slice(0, 2).toUpperCase()}
-                  </span>
-                )}
-                <div>
-                  <p className="pos-overline uppercase tracking-wider text-[11px] font-bold text-slate-500">{clientDisplayName}</p>
-                  <h1 className="pos-title font-bold text-slate-900 dark:text-slate-100">Punto de venta</h1>
-                </div>
-              </div>
-
-              <div className="flex items-center">
-                {isCashGateResolving && !openCashSessionId ? (
-                  <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
-                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
-                    Validando caja...
-                  </span>
-                ) : openCashSessionId ? (
-                  <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                    Caja abierta
-                  </span>
-                ) : (
-                  <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                    Caja cerrada
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                {shouldShowReturnToPanel ? (
-                  <button
-                    type="button"
-                    onClick={handleReturnToPanel}
-                    className="ui-btn-ghost text-xs"
-                  >
-                    Volver al panel
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={cycleTheme}
-                  className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
-                  title={`Tema: ${theme === "midnight" ? "Azul Medianoche" : theme === "dark" ? "Oscuro" : "Claro"}. Clic para cambiar.`}
-                >
-                  {theme === "midnight" ? (
-                    <MoonStar size={14} className="text-indigo-400" />
-                  ) : theme === "dark" ? (
-                    <Moon size={14} className="text-amber-300" />
-                  ) : (
-                    <Sun size={14} className="text-amber-500" />
-                  )}
-                  <span className="hidden sm:inline">
-                    {theme === "midnight" ? "Azul" : theme === "dark" ? "Oscuro" : "Claro"}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleRefreshCatalog();
-                  }}
-                  disabled={isRefreshingCatalog || isSubmitting}
-                  className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
-                  title="Actualizar productos y catálogo desde el servidor"
-                >
-                  <RefreshCw
-                    size={14}
-                    className={isRefreshingCatalog || isSyncing ? "animate-spin text-brand-600" : ""}
-                  />
-                  <span className="hidden sm:inline">
-                    {isRefreshingCatalog ? "Actualizando..." : "Actualizar productos"}
-                  </span>
-                </button>
-                {isInstallSupported && canInstall ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void installApp();
-                    }}
-                    className="ui-btn-ghost text-xs"
-                    disabled={isInstalling}
-                  >
-                    {isInstalling ? "Instalando..." : "Instalar app"}
-                  </button>
-                ) : null}
-                {canWritePos ? (
-                  <button
-                    type="button"
-                    onClick={() => setIsQuickProductModalOpen(true)}
-                    className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
-                    title="Producto rápido (F8)"
-                  >
-                    <span>Producto rápido</span>
-                    <kbd className="rounded border border-fuchsia-200 bg-fuchsia-100/80 px-1.5 py-0.5 text-[10px] font-bold text-fuchsia-600 dark:border-fuchsia-800 dark:bg-fuchsia-950/60 dark:text-fuchsia-400">
-                      F8
-                    </kbd>
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsReceiptsListModalOpen(true);
-                    void loadRecentReceipts();
-                  }}
-                  className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
-                  title="Ver comprobantes y tickets recientes"
-                >
-                  <FileText size={14} />
-                  Comprobantes
-                </button>
-                <IconButton
-                  icon={Camera}
-                  label="Escanear con cámara"
-                  onClick={() => setIsCameraScannerOpen(true)}
-                  disabled={!canWritePos}
-                />
-                {canWritePos && selectedEmployee ? (
-                  <div className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 shadow-2xs">
-                    <span className="font-semibold truncate max-w-[170px]" title={selectedEmployee.full_name}>
-                      👔 {selectedEmployee.full_name} ({selectedEmployee.discount_percent ?? (posSettings.employee_discount_percent ?? 10)}% OFF)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => selectEmployee(null)}
-                      className="p-0.5 hover:text-rose-600 rounded transition cursor-pointer"
-                      title="Quitar empleado de la venta"
-                    >
-                      <X size={12} strokeWidth={2.5} />
-                    </button>
-                  </div>
-                ) : canWritePos && selectedCustomerId ? (
-                  <IconButton
-                    icon={ShoppingCart}
-                    label="Ver perfil del cliente"
-                    onClick={() => {
-                      const customer = customers.find((item) => item.id === selectedCustomerId);
-                      if (customer) {
-                        openCustomerModal(customer);
-                      }
-                    }}
-                  />
-                ) : null}
-                <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-2.5 py-1 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-600 text-[11px] font-bold text-white">
-                    {operatorInitials}
-                  </span>
-                  <div className="leading-tight">
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">
-                      {user?.fullName ?? "Operador"}
-                    </p>
-                    <p className="text-[10px] text-slate-500">Operador de caja</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {lastSyncMessage ? (
-              <p className={`text-xs ${lastSyncError ? "text-red-600" : "text-slate-500"}`}>
-                {lastSyncMessage}
-              </p>
-            ) : null}
-          </section>
-
-          {selectedCustomer && appliedPriceList && !appliedPriceList.is_active ? (
-            <p className="text-xs text-amber-700">
-              El cliente tiene una lista inactiva asignada. Se mantiene por compatibilidad.
-            </p>
-          ) : null}
-
-          {!paymentMethods.length ? (
-            <div className="ui-empty-state">
-              No hay medios de pago activos. Configuralos desde el modulo Medios de pago.
-            </div>
-          ) : null}
-
-          {isLoading ? (
-            <div className="ui-loading">Cargando POS...</div>
-          ) : (
-            <div className="pos-content-grid">
-              <PosProductList
-                products={products}
-                favoriteProducts={favoriteProducts}
-                primaryBarcodes={primaryBarcodes}
-                saleTabs={saleTabs}
-                activeTabId={activeTabId}
-                onSwitchSaleTab={switchSaleTab}
-                onCreateSaleTab={createNewSaleTab}
-                onCloseSaleTab={closeSaleTab}
-                canWrite={canWritePos}
-                disabled={isSubmitting || isCashGateBlocking || isCheckoutModalOpen}
-                searchResetToken={searchResetToken}
-                onAddProduct={async (product, quantity) => {
-                  if (!canWritePos || isCashGateBlocking || isCheckoutModalOpen) return;
-                  const added = await addProductToCart(product, quantity);
-                  if (added) {
-                    triggerCartSuccessHighlight();
-                    window.setTimeout(() => {
-                      focusScannerCapture();
-                    }, 0);
-                  }
-                  return added;
-                }}
-              />
-
-              <div className="pos-side-column">
-                <PosCart
-                  id={cartPanelId}
-                  items={cart}
-                  isHighlighted={isCartHighlighted}
-                  barcodeValue={visibleBarcodeValue}
-                  subtotalBeforePromotions={subtotalBeforePromotions}
-                  promotionDiscountTotal={promotionDiscountTotal}
-                  cartPromotionDiscountTotal={cartPromotionDiscountTotal}
-                  cartManualDiscount={cartManualDiscount}
-                  manualCartDiscountTotal={manualCartDiscountTotal}
-                  subtotal={checkoutSummary.subtotal}
-                  surchargeTotal={0}
-                  paymentDiscountTotal={0}
-                  roundingAdjustment={checkoutSummary.roundingAdjustment}
-                  roundingEnabled={roundingEnabled}
-                  onToggleRounding={toggleRounding}
-                  total={checkoutSummary.total}
-                  discountsEnabled={discountsEnabled}
-                  onToggleDiscounts={toggleDiscounts}
-                  onOpenCartDiscountModal={() => setIsCartDiscountModalOpen(true)}
-                  onRemoveCartDiscount={() => applyCartDiscount(null)}
-                  onOpenItemPromoModal={(item) => setItemPromoModalTarget(item)}
-                  canWrite={canWritePos}
-                  disabled={isSubmitting || isCashGateBlocking || isCheckoutModalOpen}
-                  onBarcodeChange={setVisibleBarcodeValue}
-                  onBarcodeSubmit={handleVisibleBarcodeSubmit}
-                  onIncrease={increaseQuantity}
-                  onDecrease={decreaseQuantity}
-                  onSetQuantity={setCartItemQuantity}
-                  onEdit={(item) => setEditingCartItemId(item.product_id)}
-                  onRemove={removeFromCart}
-                  onCycleReturnableStatus={cycleReturnableStatus}
-                  onClearCart={() => {
-                    clearCart();
-                    setSearchResetToken((prev) => prev + 1);
-                    setVisibleBarcodeValue("");
-                  }}
-                  onOpenQuickProduct={() => setIsQuickProductModalOpen(true)}
-                  onCheckout={() => setIsCheckoutModalOpen(true)}
-                />
-              </div>
-            </div>
-          )}
-
-          {!isLoading && cart.length && !isCashGateBlocking ? (
-            <div className="pos-mobile-dock">
-              <div>
-                <p className="text-xs uppercase tracking-[0.12em] text-slate-500">Carrito</p>
-                <p className="text-sm font-semibold text-slate-900">
-                  {cart.length} items | {currency.format(checkoutSummary.total)}
-                </p>
-              </div>
-              <button
-                type="button"
-                className="ui-btn-primary whitespace-nowrap"
-                onClick={() => {
-                  setIsCheckoutModalOpen(true);
-                }}
-              >
-                Confirmar venta
-              </button>
-            </div>
-          ) : null}
-        </>
-      )}
 
       {shouldShowCashOpeningModal ? (
         <section className="fixed inset-0 z-[75] flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-3">

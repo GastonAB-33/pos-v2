@@ -138,6 +138,10 @@ export const productsService = {
     return all.filter((p) => !isArchivedDeletedProduct(p) && !isSystemProduct(p));
   },
   getById: (tenantId: string, id: string) => crud.getById(tenantId, id),
+  getByIds: async (tenantId: string, ids: string[]): Promise<Product[]> => {
+    if (ids.length === 0) return [];
+    return crud.query(tenantId, { in: { id: ids } });
+  },
   create: async (tenantId: string, input: CreateProductInput) => {
     const rawCode = input.code?.trim();
     if (rawCode) {
