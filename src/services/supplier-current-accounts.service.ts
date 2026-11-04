@@ -38,10 +38,10 @@ export const supplierCurrentAccountsService = {
     tenantId: string,
     supplierId: string
   ): Promise<SupplierCurrentAccountMovement[]> => {
-    const all = await movementsCrud.getAllByTenant(tenantId);
-    return all
-      .filter((m) => m.supplier_id === supplierId)
-      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    return movementsCrud.query(tenantId, {
+      eq: { supplier_id: supplierId },
+      order: { column: "created_at", ascending: true },
+    });
   },
 
   getSupplierBalance: async (tenantId: string, supplierId: string): Promise<number> => {

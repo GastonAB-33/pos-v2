@@ -145,6 +145,7 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
     tenantId: string,
     options: {
       eq?: Record<string, unknown>;
+      in?: Record<string, unknown[]>;
       order?: { column: string; ascending?: boolean };
       limit?: number;
     } = {}
@@ -155,6 +156,12 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
         if (options.eq) {
           for (const [key, val] of Object.entries(options.eq)) {
             if ((row as unknown as Record<string, unknown>)[key] !== val) return false;
+          }
+        }
+        if (options.in) {
+          for (const [key, vals] of Object.entries(options.in)) {
+            const rowVal = (row as unknown as Record<string, unknown>)[key];
+            if (!vals.includes(rowVal)) return false;
           }
         }
         return true;
@@ -185,6 +192,13 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
         if (options.eq) {
           for (const [key, val] of Object.entries(options.eq)) {
             builder = builder.eq(key, val);
+          }
+        }
+        if (options.in) {
+          for (const [key, vals] of Object.entries(options.in)) {
+            if (vals && vals.length > 0) {
+              builder = builder.in(key, vals);
+            }
           }
         }
         if (options.order) {

@@ -20,7 +20,12 @@ export const receiptsService = {
   delete: (tenantId: string, id: string) => crud.delete(tenantId, id),
 
   getBySaleId: async (tenantId: string, saleId: string) => {
-    const all = await crud.getAllByTenant(tenantId);
-    return all.find((receipt) => receipt.sale_id === saleId) ?? null;
+    const rows = await crud.query(tenantId, { eq: { sale_id: saleId }, limit: 1 });
+    return rows[0] ?? null;
+  },
+
+  getBySaleIds: async (tenantId: string, saleIds: string[]): Promise<Receipt[]> => {
+    if (saleIds.length === 0) return [];
+    return crud.query(tenantId, { in: { sale_id: saleIds } });
   },
 };

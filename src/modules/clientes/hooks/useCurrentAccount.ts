@@ -267,31 +267,33 @@ export const useCurrentAccount = (
       let nextSaleDetailsById: Record<string, CurrentAccountSaleDetail> = {};
 
       if (saleIds.length) {
-        const saleIdSet = new Set(saleIds);
-        const [allSales, allSaleItems, allReceipts, allProducts] = await Promise.all([
-          salesService.getAllByTenant(tenantId),
-          salesService.getAllItemsByTenant(tenantId),
-          receiptsService.getAllByTenant(tenantId),
-          productsService.getAllByTenant(tenantId),
+        const [targetSales, targetSaleItems, targetReceipts] = await Promise.all([
+          salesService.getByIds(tenantId, saleIds),
+          salesService.getItemsBySaleIds(tenantId, saleIds),
+          receiptsService.getBySaleIds(tenantId, saleIds),
         ]);
 
-        const salesById = new Map(
-          allSales.filter((sale) => saleIdSet.has(sale.id)).map((sale) => [sale.id, sale])
+        const productIds = Array.from(
+          new Set(targetSaleItems.map((item) => item.product_id).filter(Boolean))
         );
-        const saleItemsBySaleId = allSaleItems.reduce<Map<string, typeof allSaleItems>>((acc, item) => {
-          if (!saleIdSet.has(item.sale_id)) return acc;
+        const targetProducts = productIds.length > 0
+          ? await productsService.getByIds(tenantId, productIds)
+          : [];
+
+        const salesById = new Map(targetSales.map((sale) => [sale.id, sale]));
+        const saleItemsBySaleId = targetSaleItems.reduce<Map<string, typeof targetSaleItems>>((acc, item) => {
           const current = acc.get(item.sale_id) ?? [];
           current.push(item);
           acc.set(item.sale_id, current);
           return acc;
         }, new Map());
-        const receiptsBySaleId = allReceipts.reduce<Map<string, string>>((acc, receipt) => {
-          if (!saleIdSet.has(receipt.sale_id)) return acc;
+        const receiptsBySaleId = targetReceipts.reduce<Map<string, string>>((acc, receipt) => {
+          if (!receipt.sale_id) return acc;
           if (acc.has(receipt.sale_id)) return acc;
           acc.set(receipt.sale_id, receipt.receipt_number);
           return acc;
         }, new Map());
-        const productPriceById = new Map(allProducts.map((product) => [product.id, product.price]));
+        const productPriceById = new Map(targetProducts.map((product) => [product.id, product.price]));
 
         nextSaleDetailsById = saleIds.reduce<Record<string, CurrentAccountSaleDetail>>(
           (acc, saleId) => {
@@ -377,7 +379,8 @@ export const useCurrentAccount = (
       setAccountSummary(buildAccountSummary(customer, list, nextSaleDetailsById));
       setHasOpenCashSession(Boolean(openSession));
       setOpenCashSessionId(openSession?.id ?? null);
-    } catch {
+    } catch (err) {
+      console.error("Error al cargar cuenta corriente:", err);
       setFeedback({ type: "error", message: "No se pudo cargar la cuenta corriente" });
       setMovements([]);
       setBalance(0);

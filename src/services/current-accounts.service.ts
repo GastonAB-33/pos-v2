@@ -30,11 +30,10 @@ export const currentAccountsService = {
   getAllByTenant: (tenantId: string) => movementsCrud.getAllByTenant(tenantId),
 
   getByCustomer: async (tenantId: string, customerId: string): Promise<CurrentAccountMovement[]> => {
-    const all = await movementsCrud.getAllByTenant(tenantId);
-
-    return all
-      .filter((movement) => movement.customer_id === customerId)
-      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    return movementsCrud.query(tenantId, {
+      eq: { customer_id: customerId },
+      order: { column: "created_at", ascending: true },
+    });
   },
 
   getCustomerBalance: async (tenantId: string, customerId: string): Promise<number> => {
