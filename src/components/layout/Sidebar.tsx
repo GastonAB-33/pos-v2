@@ -3,7 +3,6 @@ import {
   BarChart3,
   ChevronDown,
   ClipboardList,
-  ExternalLink,
   Package,
   ShoppingCart,
   Tags,
@@ -156,7 +155,7 @@ export const Sidebar = () => {
     setExpandedGroupId(activeGroup.id);
   }, [location.pathname]);
 
-  const { openPos, getPosUrl, posWindowMode } = usePosNavigation();
+  const { openPos, getPosUrl } = usePosNavigation();
 
   const handleOpenPos = () => {
     openPos();
@@ -251,18 +250,11 @@ export const Sidebar = () => {
                   ? "border-brand-500/40 bg-brand-500/15 text-slate-900"
                   : "border-brand-500/30 bg-brand-500/10 text-slate-700 hover:bg-brand-500/20 hover:text-slate-900"
               )}
-              title={
-                posWindowMode === "new_window"
-                  ? "Abrir Punto de venta (configurado en nueva ventana)"
-                  : "Abrir Punto de venta"
-              }
+              title="Abrir Punto de venta (POS Inteligente)"
             >
               <span className="flex items-center gap-2">
                 <ShoppingCart aria-hidden="true" size={16} /> Punto de venta
               </span>
-              {posWindowMode === "new_window" ? (
-                <ExternalLink aria-hidden="true" size={14} className="opacity-60" />
-              ) : null}
             </Link>
           </section>
         ) : null}

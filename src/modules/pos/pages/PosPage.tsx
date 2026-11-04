@@ -273,10 +273,10 @@ export const PosPage = () => {
   const [isCartDiscountModalOpen, setIsCartDiscountModalOpen] = useState(false);
   const [itemPromoModalTarget, setItemPromoModalTarget] = useState<PosCartItemComputed | null>(null);
   const [lastNotFoundBarcode, setLastNotFoundBarcode] = useState<string>("");
-  const posWindowMode = useUiStore((state) => state.posWindowMode);
+  // posWindowMode removed (smart_pos is locked)
   const theme = useUiStore((state) => state.theme);
   const cycleTheme = useUiStore((state) => state.cycleTheme);
-  const isSmartPos = posWindowMode === "smart_pos";
+  const isSmartPos = true;
   const [editingCartItemId, setEditingCartItemId] = useState<string | null>(null);
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
   const [isCustomerModalSubmitting, setIsCustomerModalSubmitting] = useState(false);

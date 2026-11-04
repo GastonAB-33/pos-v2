@@ -6,7 +6,6 @@ import { IconButton } from "@/components/ui/IconButton";
 import {
   Activity,
   AlertTriangle,
-  AppWindow,
   Ban,
   Building2,
   Calculator,
@@ -14,7 +13,6 @@ import {
   Coins,
   CreditCard,
   Download,
-  ExternalLink,
   FileCheck2,
   FileText,
   Key,
@@ -317,8 +315,6 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
   const setDensity = useUiStore((state) => state.setDensity);
   const fontSize = useUiStore((state) => state.fontSize);
   const setFontSize = useUiStore((state) => state.setFontSize);
-  const posWindowMode = useUiStore((state) => state.posWindowMode);
-  const setPosWindowMode = useUiStore((state) => state.setPosWindowMode);
 
   const [activeTab, setActiveTab] = useState<ConfigTabKey>(() => {
     if (scopePreset.visibleSections.apariencia && scope === "sistema") return "apariencia";
@@ -1244,94 +1240,26 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               </select>
             </div>
 
-            <div className="md:col-span-2 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Modo de Apertura del Punto de Venta
-                </span>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Elegí cómo preferís que se abra la terminal POS al hacer clic en los accesos directos
-                </p>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-3">
-                <button
-                  type="button"
-                  onClick={() => setPosWindowMode("same_tab")}
-                  className={cn(
-                    "flex flex-col rounded-lg border p-3.5 text-left transition-all",
-                    posWindowMode === "same_tab"
-                      ? "border-blue-600 bg-white ring-2 ring-blue-500/20 dark:border-blue-500 dark:bg-slate-900"
-                      : "border-slate-200 bg-white/70 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/50"
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <span className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100">
-                      <AppWindow size={16} className="text-blue-600 dark:text-blue-400" />
-                      Misma pestaña (Estándar)
-                    </span>
-                    {posWindowMode === "same_tab" ? (
-                      <span className="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-                        ACTIVO
-                      </span>
-                    ) : null}
+            <div className="md:col-span-2 space-y-3 rounded-xl border border-fuchsia-200/80 bg-gradient-to-r from-fuchsia-50/60 via-purple-50/40 to-white p-4.5 dark:border-fuchsia-900/40 dark:from-fuchsia-950/20 dark:via-purple-950/10 dark:to-slate-900/60 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-950/80 dark:text-fuchsia-300 shadow-2xs">
+                    <Sparkles size={20} />
                   </div>
-                  <p className="text-xs text-slate-500">
-                    Navega dentro de la ventana actual manteniendo el catálogo tradicional a la izquierda y el carrito a la derecha.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPosWindowMode("new_window")}
-                  className={cn(
-                    "flex flex-col rounded-lg border p-3.5 text-left transition-all",
-                    posWindowMode === "new_window"
-                      ? "border-blue-600 bg-white ring-2 ring-blue-500/20 dark:border-blue-500 dark:bg-slate-900"
-                      : "border-slate-200 bg-white/70 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/50"
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <span className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100">
-                      <ExternalLink size={16} className="text-blue-600 dark:text-blue-400" />
-                      Nueva ventana / pestaña
-                    </span>
-                    {posWindowMode === "new_window" ? (
-                      <span className="rounded bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-                        ACTIVO
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                        Terminal de Venta: POS Inteligente
+                      </h3>
+                      <span className="rounded-full bg-fuchsia-100 px-2.5 py-0.5 text-[10px] font-bold tracking-wide text-fuchsia-700 dark:bg-fuchsia-900/60 dark:text-fuchsia-300">
+                        ACTIVO Y EXCLUSIVO
                       </span>
-                    ) : null}
+                    </div>
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                      Modo estándar y definitivo del sistema. Combina el catálogo interactivo de 2 columnas al centro, buscador superior inteligente y cobro ergonómico en pantalla unificada.
+                    </p>
                   </div>
-                  <p className="text-xs text-slate-500">
-                    Abre el Punto de Venta en una ventana independiente. Ideal para trabajar en pantalla completa o utilizar un segundo monitor en caja.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPosWindowMode("smart_pos")}
-                  className={cn(
-                    "flex flex-col rounded-lg border p-3.5 text-left transition-all",
-                    posWindowMode === "smart_pos"
-                      ? "border-blue-600 bg-white ring-2 ring-blue-500/20 dark:border-blue-500 dark:bg-slate-900"
-                      : "border-slate-200 bg-white/70 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900/50"
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <span className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-slate-100">
-                      <Sparkles size={16} className="text-fuchsia-500 dark:text-fuchsia-400" />
-                      POS Inteligente
-                    </span>
-                    {posWindowMode === "smart_pos" ? (
-                      <span className="rounded bg-fuchsia-100 px-2 py-0.5 text-[10px] font-bold text-fuchsia-700 dark:bg-fuchsia-900/60 dark:text-fuchsia-300">
-                        ACTIVO
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    Diseño optimizado y minimalista en la misma pantalla: productos escaneados en 2 columnas al centro, buscador superior y totales y funciones a la derecha.
-                  </p>
-                </button>
+                </div>
               </div>
             </div>
 

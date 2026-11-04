@@ -96,7 +96,7 @@ export const useUiStore = create<UiStore>()(
       sidebarTheme: getInitialSidebarTheme(),
       density: "standard",
       fontSize: "normal",
-      posWindowMode: "same_tab",
+      posWindowMode: "smart_pos",
       accentColor: "#0056b3",
       toasts: [],
 
@@ -113,7 +113,7 @@ export const useUiStore = create<UiStore>()(
         }),
       setDensity: (density) => set({ density }),
       setFontSize: (fontSize) => set({ fontSize }),
-      setPosWindowMode: (posWindowMode) => set({ posWindowMode }),
+      setPosWindowMode: () => set({ posWindowMode: "smart_pos" }),
       cycleFontSize: () =>
         set((state) => {
           const currentIndex = fontSizeCycleOrder.indexOf(state.fontSize);
@@ -150,6 +150,11 @@ export const useUiStore = create<UiStore>()(
     }),
     {
       name: storageKeys.ui,
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.posWindowMode = "smart_pos";
+        }
+      },
       partialize: (state) => ({
         sidebarOpen: state.sidebarOpen,
         theme: state.theme,
