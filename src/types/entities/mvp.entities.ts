@@ -16,6 +16,11 @@ export interface TenantRecord {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  subscription_status?: string | null;
+  trial_ends_at?: string | null;
+  subscription_ends_at?: string | null;
+  plan_id?: string | null;
+  mrr_amount?: number | null;
 }
 
 export interface UserRecord extends TenantScopedEntity {

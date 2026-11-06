@@ -14,9 +14,8 @@ import {
   Receipt,
   FileCheck,
 } from "lucide-react";
-import { JirehLogo } from "@/components/brand/JirehLogo";
-import { useNavigate } from "react-router-dom";
-import { routePaths } from "@/config/routes";
+import { JirehLogo } from "./brand/JirehLogo";
+import { POS_LOGIN_URL, SUPPORT_WHATSAPP_PHONE } from "../config/app-urls";
 
 export interface PlanDetails {
   id: string;
@@ -37,7 +36,6 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
   onClose,
   plan,
 }) => {
-  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState<"checkout" | "processing" | "success">("checkout");
   const [paymentMethod, setPaymentMethod] = useState<"mercadopago" | "card" | "transfer">("mercadopago");
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">(plan.period);
@@ -152,241 +150,206 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setBillingPeriod("annual")}
-                    className={`px-3 py-1 text-xs font-semibold rounded-md flex items-center gap-1 transition ${
+                    className={`px-3 py-1 text-xs font-semibold rounded-md transition flex items-center gap-1 ${
                       billingPeriod === "annual"
                         ? "bg-emerald-600 text-white shadow-sm"
                         : "text-slate-600 hover:text-slate-900"
                     }`}
                   >
                     <span>Anual</span>
-                    <span className="rounded bg-amber-400/30 text-amber-800 text-[10px] font-extrabold">
+                    <span className="rounded bg-emerald-100 text-emerald-800 text-[10px] px-1 font-bold">
                       -20%
                     </span>
                   </button>
                 </div>
               </div>
 
-              {billingPeriod === "annual" && savings > 0 && (
-                <div className="mt-2 text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-1.5 border border-emerald-200 flex items-center gap-1.5 font-medium">
-                  <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>¡Genial! Con la suscripción anual estás ahorrando <strong>${savings.toLocaleString("es-AR")} ARS al año por sucursal</strong>.</span>
+              {savings > 0 && (
+                <div className="mt-2 text-xs text-emerald-700 font-medium bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Ahorras ${savings.toLocaleString("es-AR")} ARS al abonar el período anual completo.</span>
                 </div>
               )}
 
-              <form onSubmit={handleProcessPayment} className="mt-5 space-y-4">
-                {/* 1. Datos de Facturación */}
+              <form onSubmit={handleProcessPayment} className="mt-4 space-y-4">
+                {/* 1. Datos del Comercio / Facturación */}
                 <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
                     1. Datos de Titular y Facturación
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Nombre o Comercio *</label>
-                      <input
-                        type="text"
-                        required
-                        value={billingData.businessName}
-                        onChange={(e) => setBillingData({ ...billingData, businessName: e.target.value })}
-                        placeholder="Ej. Tienda Central"
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-sky-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">CUIT / DNI *</label>
-                      <input
-                        type="text"
-                        required
-                        value={billingData.taxId}
-                        onChange={(e) => setBillingData({ ...billingData, taxId: e.target.value })}
-                        placeholder="20-12345678-9"
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-sky-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">Email de facturación y acceso *</label>
-                      <input
-                        type="email"
-                        required
-                        value={billingData.email}
-                        onChange={(e) => setBillingData({ ...billingData, email: e.target.value })}
-                        placeholder="cuenta@comercio.com"
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-sky-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-700 mb-1">WhatsApp / Teléfono *</label>
-                      <input
-                        type="tel"
-                        required
-                        value={billingData.phone}
-                        onChange={(e) => setBillingData({ ...billingData, phone: e.target.value })}
-                        placeholder="+54 9 11 9876-5432"
-                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-sky-500 focus:outline-none"
-                      />
-                    </div>
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <input
+                      type="text"
+                      placeholder="Nombre del Comercio *"
+                      required
+                      value={billingData.businessName}
+                      onChange={(e) => setBillingData({ ...billingData, businessName: e.target.value })}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-sky-500 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      placeholder="CUIT / CUIL / DNI *"
+                      required
+                      value={billingData.taxId}
+                      onChange={(e) => setBillingData({ ...billingData, taxId: e.target.value })}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-sky-500 focus:outline-none"
+                    />
+                    <input
+                      type="email"
+                      placeholder="Correo Electrónico (para factura y acceso) *"
+                      required
+                      value={billingData.email}
+                      onChange={(e) => setBillingData({ ...billingData, email: e.target.value })}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-sky-500 focus:outline-none"
+                    />
+                    <input
+                      type="tel"
+                      placeholder="Teléfono / WhatsApp *"
+                      required
+                      value={billingData.phone}
+                      onChange={(e) => setBillingData({ ...billingData, phone: e.target.value })}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 focus:border-sky-500 focus:outline-none"
+                    />
                   </div>
                 </div>
 
-                {/* 2. Selector de Pasarela / Medio de Pago */}
+                {/* 2. Método de Pago */}
                 <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                    2. Selecciona la Pasarela de Pago
-                  </h3>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                    2. Selecciona Medio de Pago
+                  </h4>
                   <div className="grid grid-cols-3 gap-2">
-                    {/* Mercado Pago */}
                     <button
                       type="button"
                       onClick={() => setPaymentMethod("mercadopago")}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition ${
                         paymentMethod === "mercadopago"
-                          ? "border-sky-600 bg-sky-50/80 text-sky-900 ring-2 ring-sky-500/20"
-                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                          ? "border-[#00B5C8] bg-sky-50/50 text-[#008999] shadow-sm font-bold ring-2 ring-[#00B5C8]/30"
+                          : "border-slate-200 hover:border-slate-300 text-slate-600"
                       }`}
                     >
-                      <div className="h-7 w-7 rounded-full bg-sky-100 flex items-center justify-center text-sky-600 mb-1">
-                        <QrCode className="h-4 w-4" />
-                      </div>
+                      <QrCode className="h-5 w-5 mb-1 text-[#009ee3]" />
                       <span className="text-xs font-bold">Mercado Pago</span>
-                      <span className="text-[10px] text-slate-500">Saldo, Débito o QR</span>
+                      <span className="text-[10px] text-slate-500">Débito / Dinero / Tarjetas</span>
                     </button>
 
-                    {/* Tarjeta de Crédito / Débito */}
                     <button
                       type="button"
                       onClick={() => setPaymentMethod("card")}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition ${
                         paymentMethod === "card"
-                          ? "border-emerald-600 bg-emerald-50/80 text-emerald-900 ring-2 ring-emerald-500/20"
-                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                          ? "border-emerald-500 bg-emerald-50/50 text-emerald-800 shadow-sm font-bold ring-2 ring-emerald-500/30"
+                          : "border-slate-200 hover:border-slate-300 text-slate-600"
                       }`}
                     >
-                      <div className="h-7 w-7 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 mb-1">
-                        <CreditCard className="h-4 w-4" />
-                      </div>
-                      <span className="text-xs font-bold">Tarjetas</span>
-                      <span className="text-[10px] text-slate-500">Crédito y Débito</span>
+                      <CreditCard className="h-5 w-5 mb-1 text-emerald-600" />
+                      <span className="text-xs font-bold">Tarjeta Déb./Créd.</span>
+                      <span className="text-[10px] text-slate-500">Visa, Master, Amex</span>
                     </button>
 
-                    {/* Transferencia Bancaria Directa */}
                     <button
                       type="button"
                       onClick={() => setPaymentMethod("transfer")}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition ${
                         paymentMethod === "transfer"
-                          ? "border-amber-600 bg-amber-50/80 text-amber-900 ring-2 ring-amber-500/20"
-                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+                          ? "border-amber-500 bg-amber-50/50 text-amber-800 shadow-sm font-bold ring-2 ring-amber-500/30"
+                          : "border-slate-200 hover:border-slate-300 text-slate-600"
                       }`}
                     >
-                      <div className="h-7 w-7 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 mb-1">
-                        <Building className="h-4 w-4" />
-                      </div>
+                      <Building className="h-5 w-5 mb-1 text-amber-600" />
                       <span className="text-xs font-bold">Transferencia</span>
-                      <span className="text-[10px] text-slate-500">CBU / Alias</span>
+                      <span className="text-[10px] text-slate-500">CBU / Alias inmediato</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Sub-formulario según método elegido */}
-                <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                {/* Contenido dinámico según método */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
                   {paymentMethod === "mercadopago" && (
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-sky-700 font-bold text-sm">
-                          <QrCode className="h-5 w-5" />
-                          <span>Pagar con Mercado Pago Checkout</span>
-                        </div>
-                        <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                          Acreditación instantánea
-                        </span>
+                    <div className="space-y-2 text-xs text-slate-600">
+                      <div className="flex items-center gap-2 text-slate-800 font-semibold">
+                        <QrCode className="h-4 w-4 text-[#009ee3]" />
+                        <span>Suscripción segura procesada por Mercado Pago</span>
                       </div>
-                      <p className="text-xs text-slate-600">
-                        Al hacer clic en "Procesar Pago", se conectará de manera segura con Mercado Pago para abonar con tu dinero en cuenta, tarjeta guardada o escaneando el código QR oficial.
+                      <p>
+                        Al presionar "Confirmar y Pagar", se procesará el cobro automático con cualquier medio adherido a tu cuenta de Mercado Pago o con tarjeta de débito/crédito.
                       </p>
-                      <div className="rounded-lg bg-white p-3 border border-slate-200 flex items-center justify-between text-xs">
-                        <span className="text-slate-600">Comercio receptor:</span>
-                        <span className="font-bold text-slate-800">Jireh POS Solutions</span>
+                      <div className="rounded-lg bg-sky-100/60 p-2 text-[11px] text-sky-900 flex items-center gap-1.5">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-sky-700 shrink-0" />
+                        <span>Tu comercio queda habilitado al instante sin demoras de activación.</span>
                       </div>
                     </div>
                   )}
 
                   {paymentMethod === "card" && (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs font-medium text-slate-700 mb-1">Número de Tarjeta</label>
+                    <div className="space-y-2.5">
+                      <div className="relative">
                         <input
                           type="text"
                           required
+                          placeholder="Número de Tarjeta (16 dígitos)"
+                          maxLength={19}
                           value={cardData.cardNumber}
                           onChange={(e) => setCardData({ ...cardData, cardNumber: e.target.value })}
-                          placeholder="4500 0000 0000 0000"
-                          maxLength={19}
-                          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 bg-white focus:border-emerald-500 focus:outline-none"
+                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-sky-500 focus:outline-none"
                         />
+                        <CreditCard className="absolute right-3 top-2 h-4 w-4 text-slate-400" />
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium text-slate-700 mb-1">Nombre en la Tarjeta</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          required
+                          placeholder="Nombre en la Tarjeta"
+                          value={cardData.cardHolder}
+                          onChange={(e) => setCardData({ ...cardData, cardHolder: e.target.value })}
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-sky-500 focus:outline-none"
+                        />
+                        <div className="grid grid-cols-2 gap-1.5">
                           <input
                             type="text"
                             required
-                            value={cardData.cardHolder}
-                            onChange={(e) => setCardData({ ...cardData, cardHolder: e.target.value })}
-                            placeholder="TAL CUAL FIGURA"
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 bg-white focus:border-emerald-500 focus:outline-none uppercase"
+                            placeholder="MM/AA"
+                            maxLength={5}
+                            value={cardData.expiry}
+                            onChange={(e) => setCardData({ ...cardData, expiry: e.target.value })}
+                            className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-center text-slate-900 focus:border-sky-500 focus:outline-none"
                           />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-xs font-medium text-slate-700 mb-1">Vto (MM/AA)</label>
-                            <input
-                              type="text"
-                              required
-                              value={cardData.expiry}
-                              onChange={(e) => setCardData({ ...cardData, expiry: e.target.value })}
-                              placeholder="12/28"
-                              maxLength={5}
-                              className="w-full rounded-lg border border-slate-300 px-2 py-2 text-xs text-slate-900 bg-white text-center focus:border-emerald-500 focus:outline-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-slate-700 mb-1">CVV</label>
-                            <input
-                              type="password"
-                              required
-                              value={cardData.cvv}
-                              onChange={(e) => setCardData({ ...cardData, cvv: e.target.value })}
-                              placeholder="123"
-                              maxLength={4}
-                              className="w-full rounded-lg border border-slate-300 px-2 py-2 text-xs text-slate-900 bg-white text-center focus:border-emerald-500 focus:outline-none"
-                            />
-                          </div>
+                          <input
+                            type="password"
+                            required
+                            placeholder="CVV"
+                            maxLength={4}
+                            value={cardData.cvv}
+                            onChange={(e) => setCardData({ ...cardData, cvv: e.target.value })}
+                            className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-center text-slate-900 focus:border-sky-500 focus:outline-none"
+                          />
                         </div>
                       </div>
                     </div>
                   )}
 
                   {paymentMethod === "transfer" && (
-                    <div className="space-y-3">
-                      <div className="text-xs text-slate-600">
-                        Realiza la transferencia por el total exacto de <strong className="text-slate-900">${totalToPay.toLocaleString("es-AR")}</strong> a la cuenta corporativa oficial de Jireh:
-                      </div>
-
-                      <div className="rounded-lg bg-white p-3 border border-slate-200 space-y-2 text-xs">
+                    <div className="space-y-2.5 text-xs text-slate-700">
+                      <p className="font-semibold text-slate-800">
+                        Transfiere a la cuenta oficial de Jireh POS:
+                      </p>
+                      
+                      <div className="rounded-lg bg-white p-2.5 border border-slate-200 space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-500">Titular:</span>
-                          <span className="font-bold text-slate-800">Jireh Sistemas Cloud S.A.S.</span>
+                          <span className="text-slate-400">Banco / Entidad:</span>
+                          <span className="font-bold text-slate-800">Mercado Pago / Banco Santander</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-500">CUIT:</span>
-                          <span className="font-semibold text-slate-800">30-71689234-8</span>
+                          <span className="text-slate-400">Titular:</span>
+                          <span className="font-bold text-slate-800">Jireh POS Sistemas S.A.S.</span>
                         </div>
-                        <div className="flex items-center justify-between border-t border-slate-100 pt-1.5">
-                          <span className="text-slate-500">Alias CBU:</span>
-                          <div className="flex items-center gap-1.5 font-mono font-bold text-sky-700">
-                            <span>JIREH.POS.PAGO</span>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Alias:</span>
+                          <div className="flex items-center gap-1 font-mono font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-100">
+                            <span>jirehpos.oficial.mp</span>
                             <button
                               type="button"
-                              onClick={() => handleCopy("JIREH.POS.PAGO", "alias")}
+                              onClick={() => handleCopy("jirehpos.oficial.mp", "alias")}
                               className="text-slate-400 hover:text-slate-600 p-0.5"
                               title="Copiar Alias"
                             >
@@ -395,8 +358,8 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
                           </div>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-500">CBU:</span>
-                          <div className="flex items-center gap-1.5 font-mono text-slate-700">
+                          <span className="text-slate-400">CBU / CVU:</span>
+                          <div className="flex items-center gap-1 font-mono text-[11px] font-semibold text-slate-700 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
                             <span>0000003100049281726301</span>
                             <button
                               type="button"
@@ -498,16 +461,12 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
               </div>
 
               <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    navigate(routePaths.login);
-                  }}
-                  className="flex-1 rounded-xl bg-gradient-to-r from-[#00B5C8] via-[#10B981] to-[#FF7800] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-teal-600/25 hover:scale-[1.01] transition"
+                <a
+                  href={POS_LOGIN_URL}
+                  className="flex-1 flex items-center justify-center rounded-xl bg-gradient-to-r from-[#00B5C8] via-[#10B981] to-[#FF7800] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-teal-600/25 hover:scale-[1.01] transition"
                 >
                   Acceder a mi panel Jireh POS
-                </button>
+                </a>
                 <button
                   type="button"
                   onClick={() => alert(`Descargando comprobante oficial ${transactionCode}...`)}

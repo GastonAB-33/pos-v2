@@ -34,7 +34,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({ onOpenFreeTrial }) => 
             <span className="flex h-2 w-2 rounded-full bg-[#7CE01E] animate-pulse" />
             <span className="text-[#00B5C8]">Software Punto de Venta & Gestión</span>
             <span className="text-slate-300">•</span>
-            <span className="text-[#FF7800] font-extrabold">15 Días Gratis</span>
+            <span className="text-[#FF7800] font-extrabold">7 Días Gratis</span>
           </div>
 
           {/* Título Principal */}
@@ -57,7 +57,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({ onOpenFreeTrial }) => 
               className="w-full sm:w-auto flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-[#00B5C8] via-[#10B981] to-[#FF7800] px-8 py-4 text-base font-extrabold text-white shadow-xl shadow-teal-600/25 hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition-all"
             >
               <Sparkles className="h-5 w-5 text-amber-200" />
-              <span>Iniciar Prueba Gratuita (15 días)</span>
+              <span>Iniciar Prueba Gratuita (7 días)</span>
               <ArrowRight className="h-5 w-5" />
             </button>
 

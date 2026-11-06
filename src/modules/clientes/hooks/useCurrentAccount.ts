@@ -238,7 +238,8 @@ export const useCurrentAccount = (
 
     setIsLoading(true);
     try {
-      const [list, currentBalance, openSession, methods, activeBankAccounts, activeOriginBanks, activeInstallmentPlans] = await Promise.all([
+      const [freshCustomer, list, currentBalance, openSession, methods, activeBankAccounts, activeOriginBanks, activeInstallmentPlans] = await Promise.all([
+        customersService.getById(tenantId, customer.id),
         currentAccountsService.getByCustomer(tenantId, customer.id),
         currentAccountsService.getCustomerBalance(tenantId, customer.id),
         userId
@@ -249,6 +250,8 @@ export const useCurrentAccount = (
         originBanksService.getActiveByTenant(tenantId),
         installmentPlansService.getActiveByTenant(tenantId),
       ]);
+
+      const effectiveCustomer = freshCustomer ?? customer;
 
       const availableMethods = methods.sort((a, b) => {
         const priorityDiff = paymentMethodPriority(a) - paymentMethodPriority(b);
@@ -376,7 +379,7 @@ export const useCurrentAccount = (
       );
       setSaleDetailsById(nextSaleDetailsById);
       setDebtSales(nextDebtSales);
-      setAccountSummary(buildAccountSummary(customer, list, nextSaleDetailsById));
+      setAccountSummary(buildAccountSummary(effectiveCustomer, list, nextSaleDetailsById));
       setHasOpenCashSession(Boolean(openSession));
       setOpenCashSessionId(openSession?.id ?? null);
     } catch (err) {

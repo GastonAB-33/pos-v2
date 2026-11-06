@@ -19,6 +19,10 @@ const toTenant = (record: TenantRecord): Tenant => ({
   createdAt: record.created_at,
   defaultBranchId: null,
   branches: [],
+  subscriptionStatus: (record.subscription_status as any) ?? 'active',
+  trialEndsAt: record.trial_ends_at ?? null,
+  subscriptionEndsAt: record.subscription_ends_at ?? null,
+  planId: record.plan_id ?? 'formalizando',
 });
 
 const fromTenantInput = (input: {

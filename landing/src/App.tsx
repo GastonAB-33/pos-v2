@@ -12,7 +12,7 @@ import { LandingFooter } from "./components/LandingFooter";
 import { FreeTrialModal } from "./components/FreeTrialModal";
 import { PaymentGatewayModal, type PlanDetails } from "./components/PaymentGatewayModal";
 
-export const LandingPage: React.FC = () => {
+export const App: React.FC = () => {
   const [isFreeTrialOpen, setIsFreeTrialOpen] = useState(false);
   const [selectedPlanForTrial, setSelectedPlanForTrial] = useState('Plan "Me Estoy Formalizando"');
 
@@ -36,7 +36,7 @@ export const LandingPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 flex flex-col selection:bg-sky-500 selection:text-white font-sans antialiased">
+    <div className="min-h-screen bg-white text-slate-900 flex flex-col selection:bg-[#00B5C8] selection:text-white font-sans antialiased">
       {/* Barra de navegación superior */}
       <LandingNavbar onOpenFreeTrial={() => handleOpenFreeTrial()} />
 
@@ -88,4 +88,5 @@ export const LandingPage: React.FC = () => {
     </div>
   );
 };
-export default LandingPage;
+
+export default App;

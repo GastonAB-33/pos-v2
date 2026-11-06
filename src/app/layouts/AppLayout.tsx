@@ -6,6 +6,9 @@ import { Topbar } from "@/components/layout/Topbar";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { useDeviceProfile } from "@/hooks/useDeviceProfile";
 import { useUiStore } from "@/store/ui.store";
+import { useAuthStore } from "@/features/auth/store/auth.store";
+import { SubscriptionBanner } from "@/components/subscription/SubscriptionBanner";
+import { SubscriptionPaywallModal } from "@/components/subscription/SubscriptionPaywallModal";
 import { cn } from "@/utils/cn";
 
 export const AppLayout = () => {
@@ -14,8 +17,20 @@ export const AppLayout = () => {
   const { isDesktop, deviceKind } = useDeviceProfile();
   const sidebarOpen = useUiStore((state) => state.sidebarOpen);
   const setSidebarOpen = useUiStore((state) => state.setSidebarOpen);
+  const tenant = useAuthStore((state) => state.tenant);
+
   const isPosRoute =
     location.pathname === routePaths.pos || location.pathname.startsWith(`${routePaths.pos}/`);
+
+  // Detección de vencimiento de prueba o bloqueo de suscripción (Paywall Forzado)
+  const isEnforcedPaywall = Boolean(
+    tenant &&
+      ((tenant.subscriptionStatus === "trial" &&
+        tenant.trialEndsAt &&
+        new Date(tenant.trialEndsAt) <= new Date()) ||
+        tenant.subscriptionStatus === "suspended" ||
+        tenant.subscriptionStatus === "past_due")
+  );
 
   useEffect(() => {
     setSidebarOpen(isDesktop);
@@ -88,12 +103,16 @@ export const AppLayout = () => {
           />
         ) : null}
         <Sidebar />
-        <div className="app-content">
-          <main className="app-main app-main--pos">
+        <div className="app-content flex flex-col">
+          <SubscriptionBanner />
+          <main className="app-main app-main--pos flex-1">
             <Outlet />
           </main>
           <MobileBottomNav />
         </div>
+
+        {/* Modal Paywall si la suscripción está vencida */}
+        <SubscriptionPaywallModal isOpen={isEnforcedPaywall} isEnforced={true} />
       </div>
     );
   }
@@ -116,13 +135,17 @@ export const AppLayout = () => {
         />
       ) : null}
       <Sidebar />
-      <div className="app-content">
+      <div className="app-content flex flex-col">
+        <SubscriptionBanner />
         <Topbar />
-        <main className="app-main">
+        <main className="app-main flex-1">
           <Outlet />
         </main>
         <MobileBottomNav />
       </div>
+
+      {/* Modal Paywall si la suscripción está vencida */}
+      <SubscriptionPaywallModal isOpen={isEnforcedPaywall} isEnforced={true} />
     </div>
   );
 };

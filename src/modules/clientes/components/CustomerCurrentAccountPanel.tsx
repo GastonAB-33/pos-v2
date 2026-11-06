@@ -211,6 +211,16 @@ export const CustomerCurrentAccountPanel = ({
   }) => {
     const success = await registerAdjustment(values);
     if (!success) return false;
+    if (tenantId && currentCustomer?.id) {
+      try {
+        const fresh = await customersService.getById(tenantId, currentCustomer.id);
+        if (fresh) {
+          setCurrentCustomer(fresh);
+        }
+      } catch {
+        // Fallback silently
+      }
+    }
     onBalanceUpdated();
     return true;
   };

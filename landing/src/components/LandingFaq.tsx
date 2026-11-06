@@ -6,12 +6,12 @@ export const LandingFaq: React.FC = () => {
 
   const faqs = [
     {
-      q: "¿Cómo funciona la prueba gratuita de 15 días? ¿Tengo que ingresar una tarjeta?",
-      a: "¡No necesitas tarjeta de crédito! La prueba de 15 días es 100% gratuita y sin compromiso. Solo ingresas el nombre de tu comercio, tu email y contraseña para empezar a usar inmediatamente todas las funciones del sistema.",
+      q: "¿Cómo funciona la prueba gratuita de 7 días? ¿Tengo que ingresar una tarjeta?",
+      a: "¡No necesitas tarjeta de crédito! La prueba de 7 días es 100% gratuita y sin compromiso. Solo ingresas el nombre de tu comercio, tu email y contraseña para empezar a usar inmediatamente todas las funciones del sistema.",
     },
     {
-      q: "¿Qué sucede cuando terminan los 15 días de prueba?",
-      a: "Al finalizar el período de 15 días, todos tus productos, stock cargado y configuraciones permanecen intactos y resguardados en tu base de datos. Puedes elegir cualquiera de nuestros planes: 'Estoy Arrancando' ($25.000 ARS/mes), 'Me Estoy Formalizando' ($40.000 ARS/mes con Facturación AFIP) o 'Lo Quiero a Mi Manera' ($60.000 ARS/mes con ajustes a medida).",
+      q: "¿Qué sucede cuando terminan los 7 días de prueba?",
+      a: "Al finalizar el período de 7 días, todos tus productos, stock cargado y configuraciones permanecen intactos y resguardados en tu base de datos. Puedes elegir cualquiera de nuestros planes: 'Estoy Arrancando' ($25.000 ARS/mes), 'Me Estoy Formalizando' ($40.000 ARS/mes con Facturación AFIP) o 'Lo Quiero a Mi Manera' ($60.000 ARS/mes con ajustes a medida).",
     },
     {
       q: "¿Cómo funciona el modelo por sucursal y la carga masiva de datos?",
@@ -54,7 +54,7 @@ export const LandingFaq: React.FC = () => {
             </span>
           </h2>
           <p className="mt-3 text-base text-slate-600">
-            Todo lo que necesitas saber antes de comenzar tus 15 días gratis.
+            Todo lo que necesitas saber antes de comenzar tus 7 días gratis.
           </p>
         </div>
 

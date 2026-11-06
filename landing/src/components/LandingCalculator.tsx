@@ -135,7 +135,7 @@ export const LandingCalculator: React.FC<LandingCalculatorProps> = ({ onOpenFree
                   onClick={onOpenFreeTrial}
                   className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 via-emerald-500 to-amber-500 py-3.5 text-sm font-extrabold text-white shadow-lg hover:scale-[1.02] active:scale-[0.98] transition"
                 >
-                  <span>Probar 15 días y comprobarlo</span>
+                  <span>Probar 7 días y comprobarlo</span>
                   <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
