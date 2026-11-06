@@ -1,7 +1,6 @@
 import React from "react";
-import { JirehLogo } from "@/components/brand/JirehLogo";
-import { Link } from "react-router-dom";
-import { routePaths } from "@/config/routes";
+import { JirehLogo } from "./brand/JirehLogo";
+import { POS_LOGIN_URL, SUPPORT_WHATSAPP_PHONE } from "../config/app-urls";
 import { Sparkles, MessageSquare, Mail, Phone, ShieldCheck, ArrowRight } from "lucide-react";
 
 interface LandingFooterProps {
@@ -17,7 +16,7 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ onOpenFreeTrial })
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-center">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 px-3.5 py-1 text-xs font-bold text-amber-300 border border-amber-500/30">
             <Sparkles className="h-3.5 w-3.5" />
-            15 Días Sin Cargo
+            7 Días Sin Cargo
           </span>
           <h2 className="mt-4 text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
             ¿Listo para llevar el control de tu negocio al siguiente nivel?
@@ -31,15 +30,15 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ onOpenFreeTrial })
               className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00B5C8] via-[#10B981] to-[#FF7800] px-8 py-3.5 text-base font-extrabold text-white shadow-xl hover:scale-[1.02] active:scale-[0.98] transition"
             >
               <Sparkles className="h-4 w-4 text-amber-300" />
-              <span>Activar mis 15 Días Gratis</span>
+              <span>Activar mis 7 Días Gratis</span>
               <ArrowRight className="h-4 w-4" />
             </button>
-            <Link
-              to={routePaths.login}
+            <a
+              href={POS_LOGIN_URL}
               className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-6 py-3.5 text-sm font-bold text-white hover:bg-white/10 transition"
             >
               <span>Acceder al Sistema</span>
-            </Link>
+            </a>
           </div>
         </div>
       </div>
@@ -99,7 +98,7 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ onOpenFreeTrial })
               <li className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-emerald-400 shrink-0" />
                 <a
-                  href="https://wa.me/?text=Hola%20Jireh%20POS!%20Deseo%20informaci%C3%B3n%20comercial."
+                  href={`https://wa.me/${SUPPORT_WHATSAPP_PHONE}?text=${encodeURIComponent("Hola Jireh POS! Deseo información comercial.")}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-white transition"
@@ -118,12 +117,12 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ onOpenFreeTrial })
             </ul>
 
             <div className="pt-2">
-              <Link
-                to={routePaths.login}
+              <a
+                href={POS_LOGIN_URL}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20 transition"
               >
                 <span>Acceso Clientes Registrados →</span>
-              </Link>
+              </a>
             </div>
           </div>
 

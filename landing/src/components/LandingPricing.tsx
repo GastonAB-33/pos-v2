@@ -114,7 +114,7 @@ export const LandingPricing: React.FC<LandingPricingProps> = ({
             </span>
             <span className="inline-flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-full border border-slate-200 shadow-sm">
               <Sparkles className="h-3.5 w-3.5 text-amber-600" />
-              15 días de prueba gratuita sin tarjeta
+              7 días de prueba gratuita sin tarjeta
             </span>
           </div>
 
@@ -228,7 +228,7 @@ export const LandingPricing: React.FC<LandingPricingProps> = ({
                       className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-600 via-emerald-600 to-amber-600 py-3 text-sm font-extrabold text-white shadow-md hover:scale-[1.01] active:scale-[0.99] transition"
                     >
                       <Sparkles className="h-4 w-4 text-amber-300" />
-                      <span>Probar 15 Días Gratis</span>
+                      <span>Probar 7 Días Gratis</span>
                     </button>
 
                     {/* Botón 2: Contratar con Pasarela de Pago */}

@@ -6,6 +6,8 @@ export interface Branch {
   isActive: boolean;
 }
 
+export type SubscriptionStatus = "trial" | "active" | "past_due" | "suspended" | "cancelled";
+
 export interface Tenant {
   id: string;
   legalName: string;
@@ -16,4 +18,9 @@ export interface Tenant {
   createdAt: string;
   defaultBranchId?: string | null;
   branches?: Branch[];
+  // Campos SaaS de licenciamiento y prueba
+  subscriptionStatus?: SubscriptionStatus;
+  trialEndsAt?: string | null;
+  subscriptionEndsAt?: string | null;
+  planId?: string | null;
 }

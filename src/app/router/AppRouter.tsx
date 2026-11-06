@@ -8,9 +8,20 @@ import { useLandingPath } from "@/features/auth/hooks/useLandingPath";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { LoginPage } from "@/modules/usuarios/pages/LoginPage";
 import { UnauthorizedPage } from "@/modules/usuarios/pages/UnauthorizedPage";
-import { LandingPage } from "@/features/landing/LandingPage";
 import { isTenantMatchingInput, normalizeTenantSlug } from "@/utils/tenant-slug";
 
+const RootRedirect = () => {
+  const landingPath = useLandingPath();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const user = useAuthStore((state) => state.user);
+  const tenantId = useAuthStore((state) => state.tenantId);
+
+  if (!isAuthenticated || !user?.isActive || !tenantId) {
+    return <Navigate to={routePaths.login} replace />;
+  }
+
+  return <Navigate to={landingPath} replace />;
+};
 
 const TenantSlugGateway = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
@@ -46,9 +57,9 @@ const TenantSlugGateway = () => {
 export const AppRouter = () => {
   return (
     <Routes>
-      {/* 1. Landing Page pública oficial en la raíz / y en /landing */}
-      <Route path={routePaths.home} element={<LandingPage />} />
-      <Route path={routePaths.landing} element={<LandingPage />} />
+      {/* 1. Entrada directa al sistema POS (aislado por seguridad de la landing page) */}
+      <Route path={routePaths.home} element={<RootRedirect />} />
+      <Route path={routePaths.landing} element={<Navigate to={routePaths.login} replace />} />
 
       {/* 2. Acceso y autenticación */}
       <Route path={routePaths.login} element={<LoginPage />} />

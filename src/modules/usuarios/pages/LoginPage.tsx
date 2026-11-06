@@ -112,13 +112,7 @@ export const LoginPage = () => {
           <Link to="/" title="Ir a la página principal">
             <JirehLogo size="md" />
           </Link>
-          <Link
-            to="/landing"
-            className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition"
-          >
-            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-            <span>Prueba 15 Días</span>
-          </Link>
+          <a href={import.meta.env.VITE_LANDING_URL || "https://jirehpos.com"} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition"><Sparkles className="h-3.5 w-3.5 text-amber-500" /><span>Prueba 7 Días</span></a>
         </div>
 
         <h1 className="text-2xl font-semibold text-slate-900">

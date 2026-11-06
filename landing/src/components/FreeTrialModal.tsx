@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import { CheckCircle2, Sparkles, X, ArrowRight, ShieldCheck, Store, Mail, Phone, Lock, User, Clock } from "lucide-react";
-import { JirehLogo } from "@/components/brand/JirehLogo";
-import { useNavigate } from "react-router-dom";
-import { routePaths } from "@/config/routes";
+import { CheckCircle2, Sparkles, X, ArrowRight, ShieldCheck, Store, Mail, Phone, Lock, User, Clock, AlertCircle } from "lucide-react";
+import { JirehLogo } from "./brand/JirehLogo";
+import { POS_APP_URL, POS_LOGIN_URL, SUPPORT_WHATSAPP_PHONE } from "../config/app-urls";
+import { onboardingService } from "../services/onboarding.service";
 
 interface FreeTrialModalProps {
   isOpen: boolean;
@@ -15,8 +15,9 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
   onClose,
   selectedPlanName = 'Plan "Me Estoy Formalizando"',
 }) => {
-  const navigate = useNavigate();
   const [step, setStep] = useState<"form" | "loading" | "success">("form");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [createdLoginPath, setCreatedLoginPath] = useState<string>("/login");
   const [formData, setFormData] = useState({
     businessName: "",
     category: "Almacén y Kiosco",
@@ -35,22 +36,39 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
     setStep("loading");
-    setTimeout(() => {
-      // Simular creación del tenant y asignación de 15 días de prueba
+
+    const result = await onboardingService.registerTrial({
+      businessName: formData.businessName,
+      category: formData.category,
+      fullName: formData.fullName,
+      email: formData.email,
+      phone: formData.phone,
+      password: formData.password,
+      selectedPlanName,
+    });
+
+    if (result.success) {
+      setCreatedLoginPath(result.loginPath || `/${result.tenantSlug || "demo"}/login`);
       setStep("success");
-    }, 1200);
+    } else {
+      setErrorMessage(result.error || "Ocurrió un error al procesar el alta.");
+      setStep("form");
+    }
   };
 
   const expirationDate = new Date();
-  expirationDate.setDate(expirationDate.getDate() + 15);
+  expirationDate.setDate(expirationDate.getDate() + 7);
   const formattedExpiration = expirationDate.toLocaleDateString("es-AR", {
     day: "numeric",
     month: "long",
     year: "numeric",
   });
+
+  const finalLoginUrl = `${POS_APP_URL}${createdLoginPath}`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
@@ -75,7 +93,7 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
                 <JirehLogo size="sm" />
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 border border-amber-200">
                   <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                  Prueba Gratis de 15 Días
+                  Prueba Gratis de 7 Días
                 </span>
               </div>
 
@@ -83,8 +101,15 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
                 Comienza hoy sin costo con Jireh POS
               </h2>
               <p className="mt-1 text-sm text-slate-600">
-                Acceso ilimitado a todas las funciones por 15 días. Sin tarjeta de crédito ni compromisos.
+                Acceso ilimitado a todas las funciones por 7 días. Sin tarjeta de crédito ni compromisos.
               </p>
+
+              {errorMessage && (
+                <div className="mt-4 flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs text-rose-700 font-medium">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+                  <span>{errorMessage}</span>
+                </div>
+              )}
 
               <form onSubmit={handleSubmit} className="mt-5 space-y-3.5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -205,14 +230,14 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
 
                 <div className="flex items-center gap-2 pt-1 text-xs text-slate-500">
                   <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span>Configurado con el {selectedPlanName} durante los 15 días gratis.</span>
+                  <span>Configurado con el {selectedPlanName} durante los 7 días gratis.</span>
                 </div>
 
                 <button
                   type="submit"
                   className="w-full mt-2 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00B5C8] via-[#10B981] to-[#FF7800] px-6 py-3 text-base font-bold text-white shadow-lg shadow-teal-500/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
                 >
-                  <span>Activar mis 15 días gratis</span>
+                  <span>Activar mis 7 días gratis</span>
                   <ArrowRight className="h-5 w-5" />
                 </button>
               </form>
@@ -223,10 +248,10 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
             <div className="py-12 text-center">
               <div className="mx-auto h-14 w-14 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-600" />
               <h3 className="mt-6 text-xl font-bold text-slate-900">
-                Preparando tu entorno de prueba en Jireh POS...
+                Aprovisionando tu entorno en Jireh POS...
               </h3>
               <p className="mt-2 text-sm text-slate-600 max-w-sm mx-auto">
-                Estamos configurando tu punto de venta, bases de datos de inventario y listas de precios para {formData.businessName || "tu comercio"}.
+                Estamos creando tu comercio en la nube, configurando bases de datos de inventario y asignando tus 7 días de acceso ilimitado para {formData.businessName || "tu comercio"}.
               </p>
             </div>
           )}
@@ -241,7 +266,7 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
                 ¡Bienvenido a Jireh POS!
               </h3>
               <p className="mt-1 text-sm text-slate-600">
-                Tu período de prueba gratuita de <span className="font-bold text-emerald-600">15 días</span> ha sido activado con éxito.
+                Tu período de prueba gratuita de <span className="font-bold text-emerald-600">7 días</span> ha sido activado con éxito.
               </p>
 
               <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-left space-y-2.5">
@@ -267,17 +292,14 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
               </div>
 
               <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                <button
-                  onClick={() => {
-                    onClose();
-                    navigate(routePaths.login);
-                  }}
-                  className="flex-1 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-md shadow-emerald-600/25 hover:bg-emerald-700 transition"
+                <a
+                  href={finalLoginUrl}
+                  className="flex-1 flex items-center justify-center rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-md shadow-emerald-600/25 hover:bg-emerald-700 transition"
                 >
                   Ingresar a mi sistema ahora
-                </button>
+                </a>
                 <a
-                  href={`https://wa.me/?text=${encodeURIComponent("Hola Jireh POS! Acabo de activar mi prueba de 15 días para " + (formData.businessName || "mi comercio") + " y quiero soporte inicial.")}`}
+                  href={`https://wa.me/${SUPPORT_WHATSAPP_PHONE}?text=${encodeURIComponent("Hola Jireh POS! Acabo de activar mi prueba de 7 días para " + (formData.businessName || "mi comercio") + " y quiero soporte inicial.")}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"

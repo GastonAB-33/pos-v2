@@ -202,7 +202,7 @@ export const LandingTools: React.FC<LandingToolsProps> = ({ onOpenFreeTrial }) =
                   onClick={onOpenFreeTrial}
                   className="flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white hover:bg-slate-800 transition"
                 >
-                  <span>Probar {currentTool.title} gratis por 15 días</span>
+                  <span>Probar {currentTool.title} gratis por 7 días</span>
                   <ArrowRight className="h-4 w-4 text-emerald-400" />
                 </button>
               </div>
@@ -249,7 +249,7 @@ export const LandingTools: React.FC<LandingToolsProps> = ({ onOpenFreeTrial }) =
 
                 <div className="mt-5 text-center">
                   <p className="text-[11px] text-slate-500">
-                    Todos los módulos están 100% habilitados en tu período de prueba de 15 días.
+                    Todos los módulos están 100% habilitados en tu período de prueba de 7 días.
                   </p>
                 </div>
               </div>
