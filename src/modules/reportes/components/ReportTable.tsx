@@ -32,27 +32,29 @@ export const ReportTable = <TRow,>({
   }
 
   return (
-    <div className="ui-table-wrap">
-      <table className="min-w-full divide-y divide-slate-200 text-sm">
-        <thead className="bg-slate-50">
+    <div className="ui-table-wrap rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900 overflow-hidden">
+      <table className="min-w-full text-sm">
+        <thead className="bg-slate-50/90 dark:bg-slate-800/70 border-b border-slate-200/80 dark:border-slate-800">
           <tr>
             {columns.map((column) => (
               <th
                 key={column.id}
-                className={`px-3 py-2 font-medium text-slate-700 ${getAlignClass(column.align)}`}
+                className={`px-3.5 py-3 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200 ${getAlignClass(
+                  column.align
+                )}`}
               >
                 {column.header}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-200 bg-white">
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900">
           {rows.map((row) => (
-            <tr key={getRowId(row)}>
+            <tr key={getRowId(row)} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
               {columns.map((column) => (
                 <td
                   key={column.id}
-                  className={`px-3 py-2 align-top text-slate-700 ${getAlignClass(column.align)}`}
+                  className={`px-3.5 py-3 align-top text-slate-700 dark:text-slate-200 ${getAlignClass(column.align)}`}
                 >
                   {column.cell(row)}
                 </td>

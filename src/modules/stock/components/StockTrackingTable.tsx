@@ -1,5 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, X } from "lucide-react";
+import {
+  Camera,
+  X,
+  ChevronDown,
+  ChevronRight,
+  RefreshCw,
+  Download,
+  AlertTriangle,
+  AlertCircle,
+  CheckCircle2,
+  Search,
+  SlidersHorizontal,
+  FilterX,
+} from "lucide-react";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { PaginationControls } from "@/components/ui/PaginationControls";
 import { usePagination } from "@/hooks/usePagination";
 import type { Product } from "@/types/entities";
@@ -18,6 +32,7 @@ import {
   type StockStatus,
   type StockStatusFilter,
 } from "@/modules/stock/utils/stock-labels";
+import { cn } from "@/utils/cn";
 
 type BulkScope = "selected" | "category";
 
@@ -30,6 +45,12 @@ interface StockTrackingTableProps {
   globalLowThreshold?: number;
   onUpdateOne: (productId: string, values: { stockMin: number | null; stockMax: number | null }) => Promise<void>;
   onUpdateBulk: (productIds: string[], values: { stockMin?: number | null; stockMax?: number | null }) => Promise<void>;
+  summary?: {
+    activeProducts: number;
+    lowStock: number;
+    overMax: number;
+    unassigned: number;
+  };
 }
 
 interface StockDraft {
@@ -53,11 +74,18 @@ const unitLabel = (product: Product): string => (product.sale_mode === "weight" 
 
 const buildReportDateStamp = (): string => new Date().toISOString().slice(0, 10);
 
-const getStatusBadgeClassName = (status: StockStatus): string => {
-  if (status === "low") return "ui-badge ui-badge--warn";
-  if (status === "over") return "ui-badge ui-badge--info";
-  if (status === "unassigned") return "ui-badge ui-badge--neutral";
-  return "ui-badge ui-badge--success";
+const getProductInitials = (name: string): string => {
+  if (!name) return "PR";
+  const trimmed = name.trim();
+  const firstWord = trimmed.split(/\s+/)[0];
+  if (firstWord && firstWord.length <= 4) {
+    return firstWord.toUpperCase();
+  }
+  const words = trimmed.split(/\s+/).slice(0, 3);
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  return trimmed.slice(0, 3).toUpperCase();
 };
 
 const resolveThresholds = (product: Product, draft: StockDraft | undefined) => {
@@ -92,14 +120,22 @@ export const StockTrackingTable = ({
   onStatusFilterChange,
   onUpdateOne,
   onUpdateBulk,
+  summary: _summary,
 }: StockTrackingTableProps) => {
   const allBarcodes = useProductsStore((state) => state.allBarcodes);
   const [search, setSearch] = useState("");
   const [searchScope, setSearchScope] = useState<ProductSearchScope>("all");
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
+  useBodyScrollLock(isAdvancedFiltersOpen);
   const [categoryFilter, setCategoryFilter] = useState("");
   const [internalStatusFilter, setInternalStatusFilter] = useState<StockStatusFilter>("all");
   const statusFilter = controlledStatusFilter ?? internalStatusFilter;
+
+  const activeAdvancedFiltersCount =
+    (categoryFilter ? 1 : 0) +
+    (statusFilter !== "all" ? 1 : 0) +
+    (searchScope !== "all" ? 1 : 0);
 
   const handleStatusFilterChange = (filter: StockStatusFilter) => {
     if (onStatusFilterChange) {
@@ -111,12 +147,26 @@ export const StockTrackingTable = ({
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Record<string, StockDraft>>({});
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
   const [bulkScope, setBulkScope] = useState<BulkScope>("selected");
   const [bulkStockMin, setBulkStockMin] = useState("");
   const [bulkStockMax, setBulkStockMax] = useState("");
   const [reportMessage, setReportMessage] = useState<string | null>(null);
   const [isReportMenuOpen, setIsReportMenuOpen] = useState(false);
   const reportMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (reportMenuRef.current && !reportMenuRef.current.contains(event.target as Node)) {
+        setIsReportMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const barcodesByProductId = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -128,203 +178,148 @@ export const StockTrackingTable = ({
     return map;
   }, [allBarcodes]);
 
-  const handleBarcodeDetected = (scannedBarcode: string) => {
-    setIsCameraOpen(false);
-    const normalized = scannedBarcode.trim().toLowerCase();
-    const barcodeMatch = allBarcodes.find(
-      (b) => b.barcode.trim().toLowerCase() === normalized
-    );
-    let matchedProduct = barcodeMatch
-      ? products.find((p) => p.id === barcodeMatch.product_id)
-      : null;
-    if (!matchedProduct) {
-      matchedProduct =
-        products.find((p) => p.code?.trim().toLowerCase() === normalized) ?? null;
-    }
-
-    if (matchedProduct) {
-      setSearch(matchedProduct.name);
-      setReportMessage(`Producto encontrado: ${matchedProduct.name}`);
-    } else {
-      setSearch(scannedBarcode);
-      setReportMessage(`Código escaneado: ${scannedBarcode}`);
-    }
-  };
-
-  useEffect(() => {
-    if (!isReportMenuOpen) return;
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!reportMenuRef.current) return;
-      if (reportMenuRef.current.contains(event.target as Node)) return;
-      setIsReportMenuOpen(false);
-    };
-
-    window.addEventListener("mousedown", handleClickOutside);
-    return () => window.removeEventListener("mousedown", handleClickOutside);
-  }, [isReportMenuOpen]);
+  const reportCandidates = useMemo(() => {
+    return products.filter((product) => {
+      if (!product.is_active) return false;
+      if (categoryFilter && product.category !== categoryFilter) return false;
+      return true;
+    });
+  }, [products, categoryFilter]);
 
   const rows = useMemo(() => {
-    const rawSearch = search.trim();
+    const cleanSearch = search.trim().toLowerCase();
 
     return products.filter((product) => {
       if (!product.is_active) return false;
 
-      const productBarcodes = barcodesByProductId.get(product.id) ?? [];
-      const matches =
-        !rawSearch ||
-        matchesProductSearch(
+      if (cleanSearch) {
+        const barcodes = barcodesByProductId.get(product.id);
+        const matches = matchesProductSearch(
           {
             name: product.name,
             code: product.code,
-            barcodes: productBarcodes,
             category: product.category,
             subcategory: product.subcategory,
+            barcodes,
           },
-          rawSearch,
+          cleanSearch,
           searchScope
         );
 
-      if (!matches) return false;
-
-      const isCodeOrBarcodeSearch = searchScope === "code" || searchScope === "barcode";
-      if (!isCodeOrBarcodeSearch) {
-        if (categoryFilter && product.category !== categoryFilter) return false;
+        if (!matches) {
+          return false;
+        }
       }
 
-      const { stockMin, stockMax } = resolveThresholds(product, drafts[product.id]);
+      if (categoryFilter && product.category !== categoryFilter) {
+        return false;
+      }
+
+      const draft = drafts[product.id];
+      const { stockMin, stockMax } = resolveThresholds(product, draft);
       const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
-      if (statusFilter !== "all" && status !== statusFilter) return false;
 
-      return true;
-    });
-  }, [products, search, searchScope, categoryFilter, statusFilter, drafts, barcodesByProductId]);
+      if (statusFilter === "low" && status !== "low") {
+        return false;
+      }
 
-  const reportCandidates = useMemo(() => {
-    const rawSearch = search.trim();
+      if (statusFilter === "over" && status !== "over") {
+        return false;
+      }
 
-    return products.filter((product) => {
-      if (!product.is_active) return false;
+      if (statusFilter === "unassigned" && status !== "unassigned") {
+        return false;
+      }
 
-      const productBarcodes = barcodesByProductId.get(product.id) ?? [];
-      const matches =
-        !rawSearch ||
-        matchesProductSearch(
-          {
-            name: product.name,
-            code: product.code,
-            barcodes: productBarcodes,
-            category: product.category,
-            subcategory: product.subcategory,
-          },
-          rawSearch,
-          searchScope
-        );
-
-      if (!matches) return false;
-
-      const isCodeOrBarcodeSearch = searchScope === "code" || searchScope === "barcode";
-      if (!isCodeOrBarcodeSearch) {
-        if (categoryFilter && product.category !== categoryFilter) return false;
+      if (statusFilter === "normal" && status !== "normal") {
+        return false;
       }
 
       return true;
     });
-  }, [products, search, searchScope, categoryFilter, barcodesByProductId]);
+  }, [products, search, searchScope, categoryFilter, drafts, statusFilter, barcodesByProductId]);
 
+  const handleBarcodeDetected = (code: string) => {
+    setSearch(code);
+    setIsCameraOpen(false);
+  };
+
+  const paginatedRows = usePagination(rows, 12, `${search}-${categoryFilter}-${statusFilter}`);
+  const visibleIds = useMemo(() => paginatedRows.pageItems.map((item) => item.id), [paginatedRows.pageItems]);
   const selectedVisibleIds = useMemo(
-    () => selectedIds.filter((id) => rows.some((row) => row.id === id)),
-    [rows, selectedIds]
+    () => selectedIds.filter((id) => visibleIds.includes(id)),
+    [selectedIds, visibleIds]
   );
+  const allVisibleSelected = visibleIds.length > 0 && selectedVisibleIds.length === visibleIds.length;
 
-  const paginatedRows = usePagination(
-    rows,
-    10,
-    `${search}|${searchScope}|${categoryFilter}|${statusFilter}|${rows.length}`
-  );
-  const selectedPageIds = useMemo(
-    () => selectedIds.filter((id) => paginatedRows.pageItems.some((row) => row.id === id)),
-    [paginatedRows.pageItems, selectedIds]
-  );
-  const allVisibleSelected =
-    paginatedRows.pageItems.length > 0 && selectedPageIds.length === paginatedRows.pageItems.length;
+  const toggleSelectAllVisible = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds((current) => Array.from(new Set([...current, ...visibleIds])));
+      return;
+    }
 
-  const updateDraft = (product: Product, patch: Partial<StockDraft>) => {
-    const isWeight = product.sale_mode === "weight";
-    const factor = isWeight ? 1000 : 1;
-    setDrafts((current) => {
-      const currentDraft = current[product.id] ?? {
-        stockMin: product.stock_min != null ? normalizeQty(product.stock_min * factor) : "",
-        stockMax: product.stock_max != null ? normalizeQty(product.stock_max * factor) : "",
-      };
+    setSelectedIds((current) => current.filter((id) => !visibleIds.includes(id)));
+  };
 
-      return {
-        ...current,
-        [product.id]: { ...currentDraft, ...patch },
-      };
+  const toggleRow = (id: string, checked: boolean) => {
+    setSelectedIds((current) => {
+      if (checked) {
+        return Array.from(new Set([...current, id]));
+      }
+
+      return current.filter((currentId) => currentId !== id);
     });
   };
 
   const getDraft = (product: Product): StockDraft => {
+    const existing = drafts[product.id];
+    if (existing) return existing;
+
     const isWeight = product.sale_mode === "weight";
-    const factor = isWeight ? 1000 : 1;
-    return (
-      drafts[product.id] ?? {
-        stockMin: product.stock_min != null ? normalizeQty(product.stock_min * factor) : "",
-        stockMax: product.stock_max != null ? normalizeQty(product.stock_max * factor) : "",
-      }
-    );
+    return {
+      stockMin:
+        product.stock_min == null
+          ? ""
+          : normalizeQty(isWeight ? product.stock_min * 1000 : product.stock_min),
+      stockMax:
+        product.stock_max == null
+          ? ""
+          : normalizeQty(isWeight ? product.stock_max * 1000 : product.stock_max),
+    };
+  };
+
+  const updateDraft = (product: Product, patch: Partial<StockDraft>) => {
+    const current = getDraft(product);
+    setDrafts((prev) => ({
+      ...prev,
+      [product.id]: {
+        ...current,
+        ...patch,
+      },
+    }));
   };
 
   const persistRowIfChanged = async (product: Product) => {
-    const draft = getDraft(product);
-    const isWeight = product.sale_mode === "weight";
-    const rawMin = toNullableNumber(draft.stockMin);
-    const rawMax = toNullableNumber(draft.stockMax);
-    const nextMin = isWeight && rawMin != null ? Number((rawMin / 1000).toFixed(4)) : rawMin;
-    const nextMax = isWeight && rawMax != null ? Number((rawMax / 1000).toFixed(4)) : rawMax;
+    const draft = drafts[product.id];
+    if (!draft) return;
 
-    const currentMin = product.stock_min;
-    const currentMax = product.stock_max;
+    const { stockMin, stockMax } = resolveThresholds(product, draft);
+    const minChanged = !sameNullableNumber(stockMin, product.stock_min);
+    const maxChanged = !sameNullableNumber(stockMax, product.stock_max);
 
-    if (sameNullableNumber(nextMin, currentMin) && sameNullableNumber(nextMax, currentMax)) {
-      return;
-    }
+    if (!minChanged && !maxChanged) return;
 
     await onUpdateOne(product.id, {
-      stockMin: nextMin,
-      stockMax: nextMax,
-    });
-  };
-
-  const toggleRow = (productId: string, checked: boolean) => {
-    setSelectedIds((current) => {
-      if (checked) {
-        if (current.includes(productId)) return current;
-        return [...current, productId];
-      }
-      return current.filter((id) => id !== productId);
-    });
-  };
-
-  const toggleSelectAllVisible = (checked: boolean) => {
-    if (!checked) {
-      setSelectedIds((current) =>
-        current.filter((id) => !paginatedRows.pageItems.some((row) => row.id === id))
-      );
-      return;
-    }
-
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      paginatedRows.pageItems.forEach((row) => next.add(row.id));
-      return [...next];
+      stockMin,
+      stockMax,
     });
   };
 
   const handleApplyBulk = async () => {
     const parsedMin = bulkStockMin.trim() ? toNullableNumber(bulkStockMin) : undefined;
     const parsedMax = bulkStockMax.trim() ? toNullableNumber(bulkStockMax) : undefined;
+
+    if (parsedMin === undefined && parsedMax === undefined) return;
 
     const targetIds =
       bulkScope === "selected"
@@ -363,7 +358,7 @@ export const StockTrackingTable = ({
     });
   };
 
-  const handleDownloadStatusReport = async (targetStatus: StockStatus) => {
+  const handleDownloadStatusReport = async (targetStatus?: StockStatus) => {
     const reportRows = reportCandidates
       .map((product) => {
         const { stockMin, stockMax } = resolveThresholds(product, drafts[product.id]);
@@ -383,67 +378,118 @@ export const StockTrackingTable = ({
           estado: status,
         };
       })
-      .filter((row) => row.estado === targetStatus)
+      .filter((row) => (targetStatus ? row.estado === targetStatus : true))
       .map((row) => ({
         ...row,
         estado: stockStatusLabel[row.estado],
       }));
 
     if (!reportRows.length) {
-      setReportMessage(`No hay productos en estado "${stockStatusLabel[targetStatus]}" para exportar`);
+      setReportMessage(
+        targetStatus
+          ? `No hay productos en estado "${stockStatusLabel[targetStatus]}" para exportar`
+          : "No hay productos para exportar"
+      );
       return;
     }
 
-    const fileNameByStatus: Record<StockStatus, string> = {
-      low: "stock-bajo",
-      normal: "normal",
-      over: "sobrestock",
-      unassigned: "sin-asignar",
-    };
-
+    const fileName = targetStatus ? `informe-stock-${targetStatus}` : "informe-stock-general";
     const ok = await downloadXlsx(
-      `informe-estado-${fileNameByStatus[targetStatus]}-${buildReportDateStamp()}.xlsx`,
-      `Estado ${stockStatusLabel[targetStatus]}`,
+      `${fileName}-${buildReportDateStamp()}.xlsx`,
+      "Control de Stock",
       reportRows
     );
 
-    setReportMessage(ok ? `Informe "${stockStatusLabel[targetStatus]}" descargado` : "No hay datos para exportar");
+    setReportMessage(ok ? "Informe descargado correctamente" : "No hay datos para exportar");
+  };
+
+  const renderStatusBadge = (status: StockStatus) => {
+    switch (status) {
+      case "low":
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 border border-amber-200/80 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800/60">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+            <span>Stock bajo</span>
+          </span>
+        );
+      case "over":
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 border border-blue-200/80 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800/60">
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+            <span>Sobrestock</span>
+          </span>
+        );
+      case "unassigned":
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700/60">
+            <span className="h-1.5 w-1.5 rounded-full bg-slate-400 dark:bg-slate-500" />
+            <span>Sin asignar</span>
+          </span>
+        );
+      case "normal":
+      default:
+        return (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 border border-emerald-200/80 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/60">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <span>Nivel óptimo</span>
+          </span>
+        );
+    }
   };
 
   return (
-    <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-panel">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900">Productos</h2>
-          <p className="text-xs text-slate-500">Mostrando {rows.length} de {products.filter((product) => product.is_active).length}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
-            Seleccionados: {selectedVisibleIds.length}
+    <section className="space-y-4 rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-3.5 sm:p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900 min-w-0 max-w-full overflow-hidden">
+      {/* Encabezado de la Sección con Contador y Exportar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 min-w-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <h2 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100">
+            Productos en Stock
+          </h2>
+          <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 border border-blue-200/70 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800/60">
+            {rows.length.toLocaleString("es-AR")} registros
           </span>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="rounded-full border border-slate-200/90 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300">
+            Seleccionados: <strong>{selectedVisibleIds.length}</strong>
+          </span>
+
           <div className="relative" ref={reportMenuRef}>
             <button
               type="button"
-              className="ui-btn-ghost px-2 py-1 text-xs"
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-750 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
               onClick={() => setIsReportMenuOpen((current) => !current)}
               disabled={!reportCandidates.length}
             >
-              Exportar
+              <Download size={14} className="text-slate-500 dark:text-slate-400" />
+              <span>Exportar</span>
             </button>
 
             {isReportMenuOpen ? (
-              <div className="absolute right-0 top-full z-10 mt-1 min-w-[220px] rounded-lg border border-slate-200 bg-white p-1 shadow-panel">
-                {(["low", "no_stock", "normal", "over", "unassigned"] as StockStatus[]).map((status) => (
+              <div className="absolute right-0 top-full z-20 mt-1.5 min-w-[220px] rounded-2xl border border-slate-200/90 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900 animate-in fade-in zoom-in-95 duration-100">
+                <button
+                  type="button"
+                  className="block w-full rounded-xl px-3 py-2 text-left text-xs font-bold text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/50 transition-colors"
+                  onClick={() => {
+                    setIsReportMenuOpen(false);
+                    void handleDownloadStatusReport();
+                  }}
+                >
+                  Exportar listado completo (XLSX)
+                </button>
+                <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+                {(["low", "normal", "over", "unassigned"] as StockStatus[]).map((status) => (
                   <button
                     key={status}
                     type="button"
-                    className="block w-full rounded-md px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-50"
+                    className="block w-full rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800 transition-colors"
                     onClick={() => {
                       setIsReportMenuOpen(false);
                       void handleDownloadStatusReport(status);
                     }}
                   >
-                    {stockStatusLabel[status]}
+                    Solo: {stockStatusLabel[status]}
                   </button>
                 ))}
               </div>
@@ -452,15 +498,20 @@ export const StockTrackingTable = ({
         </div>
       </div>
 
-      {reportMessage ? <div className="ui-info-state">{reportMessage}</div> : null}
+      {reportMessage ? (
+        <div className="rounded-2xl ui-info-state text-xs">{reportMessage}</div>
+      ) : null}
 
-      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_180px]">
-        <div className="flex gap-2">
-          <div className="flex flex-1 min-w-[260px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 focus-within:ring-2 focus-within:ring-blue-500 overflow-hidden px-2 py-1">
+      {/* Franja Unificada de Búsqueda y Filtros */}
+      <div className="space-y-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2.5 min-w-0">
+          {/* Input de Búsqueda Redondeado con Cámara integrada */}
+          <div className="flex flex-1 min-w-0 items-center gap-2.5 rounded-xl sm:rounded-2xl border border-slate-200/80 bg-slate-50/60 px-3.5 py-2 shadow-2xs focus-within:border-blue-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/20 dark:border-slate-700/80 dark:bg-slate-800/40 dark:focus-within:bg-slate-900 transition-all">
+            <Search className="h-4 w-4 text-slate-400 dark:text-slate-500 shrink-0" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="flex-1 min-w-0 border-0 bg-transparent px-2 py-1 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100"
+              className="flex-1 min-w-0 border-0 bg-transparent px-1 py-0.5 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100 dark:placeholder:text-slate-500"
               placeholder={getSearchPlaceholder(searchScope)}
               aria-label="Buscar en stock"
             />
@@ -468,159 +519,384 @@ export const StockTrackingTable = ({
               <button
                 type="button"
                 onClick={() => setSearch("")}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full shrink-0 cursor-pointer"
                 title="Limpiar búsqueda"
               >
                 <X className="h-4 w-4" />
               </button>
             ) : null}
-            <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700" />
-            <select
-              value={searchScope}
-              onChange={(e) => setSearchScope(e.target.value as ProductSearchScope)}
-              className="bg-transparent text-xs font-medium text-slate-600 focus:outline-none dark:text-slate-300 cursor-pointer py-1 px-1 shrink-0 max-w-[85px] sm:max-w-none truncate"
-              aria-label="Tipo de búsqueda"
+            <button
+              type="button"
+              onClick={() => setIsCameraOpen(true)}
+              disabled={disabled}
+              className="p-1 text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200 shrink-0 transition-colors rounded-lg cursor-pointer"
+              title="Escanear código de barras con la cámara"
+              aria-label="Escanear con cámara"
             >
-              {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+              <Camera size={18} />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsCameraOpen(true)}
-            disabled={disabled}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-3 py-2 text-xs font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-50"
-            title="Escanear código de barras con la cámara"
-          >
-            <Camera className="h-4 w-4" />
-            <span className="hidden sm:inline">Cámara</span>
-          </button>
+
+          {/* En escritorio ancho (lg:), selectores rápidos inline */}
+          <div className="hidden lg:inline-flex items-center gap-2 shrink-0">
+            {/* Selector Estado Redondeado */}
+            <div className="relative inline-flex items-center shrink-0">
+              <select
+                value={statusFilter}
+                onChange={(event) => handleStatusFilterChange(event.target.value as StockStatusFilter)}
+                className="appearance-none cursor-pointer rounded-xl sm:rounded-2xl border border-slate-200/80 bg-slate-50/70 hover:bg-slate-100 pl-3.5 pr-8 py-2 text-xs sm:text-sm font-medium text-slate-700 dark:border-slate-700/80 dark:bg-slate-800/60 dark:hover:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+              >
+                <option value="all">Todos los estados</option>
+                {Object.entries(stockStatusLabel).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="pointer-events-none absolute right-3 text-slate-400 dark:text-slate-500" />
+            </div>
+
+            {/* Selector Categoría Redondeado */}
+            <div className="relative inline-flex items-center shrink-0">
+              <select
+                value={categoryFilter}
+                onChange={(event) => setCategoryFilter(event.target.value)}
+                className="appearance-none cursor-pointer rounded-xl sm:rounded-2xl border border-slate-200/80 bg-slate-50/70 hover:bg-slate-100 pl-3.5 pr-8 py-2 text-xs sm:text-sm font-medium text-slate-700 dark:border-slate-700/80 dark:bg-slate-800/60 dark:hover:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+              >
+                <option value="">Todas las categorías</option>
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="pointer-events-none absolute right-3 text-slate-400 dark:text-slate-500" />
+            </div>
+          </div>
+
+          {/* Botón Filtros Avanzados (ancho completo en móvil debajo del buscador, inline en desktop) */}
+          <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => setIsAdvancedFiltersOpen(true)}
+              className={cn(
+                "w-full sm:w-auto flex-1 sm:flex-none flex items-center justify-center gap-2 rounded-xl sm:rounded-2xl border border-slate-200/80 bg-slate-50/70 hover:bg-slate-100 px-4 py-2 text-xs sm:text-sm font-medium text-slate-700 dark:border-slate-700/80 dark:bg-slate-800/60 dark:hover:bg-slate-800 dark:text-slate-200 shrink-0 transition-all cursor-pointer shadow-2xs",
+                activeAdvancedFiltersCount > 0 &&
+                  "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-semibold"
+              )}
+            >
+              <SlidersHorizontal size={15} className="text-blue-600 dark:text-blue-400" />
+              <span>Filtros avanzados</span>
+              {activeAdvancedFiltersCount > 0 ? (
+                <span className="rounded-full bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  {activeAdvancedFiltersCount}
+                </span>
+              ) : null}
+            </button>
+
+            {(search || activeAdvancedFiltersCount > 0) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setCategoryFilter("");
+                  handleStatusFilterChange("all");
+                  setSearchScope("all");
+                }}
+                className="inline-flex items-center justify-center h-9 w-9 rounded-xl sm:rounded-2xl border border-slate-200/80 bg-slate-50/70 hover:bg-slate-100 text-slate-500 hover:text-slate-700 dark:border-slate-700/80 dark:bg-slate-800/60 dark:hover:bg-slate-800 dark:text-slate-400 transition-colors shrink-0 cursor-pointer"
+                title="Limpiar todos los filtros"
+                aria-label="Limpiar todos los filtros"
+              >
+                <FilterX size={16} />
+              </button>
+            )}
+          </div>
         </div>
-        <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="ui-input">
-          <option value="">Todas las categorias</option>
-          {categories.map((category) => (
-            <option key={category} value={category}>
-              {category}
-            </option>
-          ))}
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(event) => handleStatusFilterChange(event.target.value as StockStatusFilter)}
-          className="ui-input"
+
+        {/* Banner Desplegable de Cambios Masivos (Imagen 1 y 2) */}
+        <details
+          open={isBulkOpen}
+          onToggle={(e) => setIsBulkOpen((e.target as HTMLDetailsElement).open)}
+          className="rounded-2xl border border-blue-200/90 bg-blue-50/50 dark:border-blue-900/60 dark:bg-blue-950/30 overflow-hidden transition-all"
         >
-          {Object.entries(stockStatusLabel).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
+          <summary className="flex items-center justify-between cursor-pointer px-4 py-2.5 text-xs sm:text-sm font-semibold text-blue-900 dark:text-blue-200 hover:bg-blue-100/60 dark:hover:bg-blue-900/40 transition-colors select-none">
+            <div className="flex items-center gap-2">
+              <RefreshCw size={15} className="text-blue-600 dark:text-blue-400 shrink-0" />
+              <span className="hidden sm:inline">Cambios masivos de mínimo / máximo y actualización por lote</span>
+              <span className="sm:hidden inline">Cambios masivos de mínimo / máximo</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline text-xs font-normal text-blue-700/80 dark:text-blue-300/80">
+                Aplica valores simultáneos a filas seleccionadas
+              </span>
+              <ChevronRight
+                size={15}
+                className={cn("transition-transform duration-200 text-blue-600 dark:text-blue-400", isBulkOpen && "rotate-90")}
+              />
+            </div>
+          </summary>
+
+          <div className="grid gap-2.5 border-t border-blue-200/70 p-3.5 dark:border-blue-900/60 md:grid-cols-6 bg-white/70 dark:bg-slate-900/70">
+            <select
+              value={bulkScope}
+              onChange={(event) => setBulkScope(event.target.value as BulkScope)}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              disabled={disabled}
+            >
+              <option value="selected">Aplicar a seleccionados ({selectedVisibleIds.length})</option>
+              <option value="category">Aplicar a categoría filtrada</option>
+            </select>
+            <input
+              type="number"
+              step="0.001"
+              value={bulkStockMin}
+              onChange={(event) => setBulkStockMin(event.target.value)}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              placeholder="Nuevo mínimo"
+              disabled={disabled}
+            />
+            <input
+              type="number"
+              step="0.001"
+              value={bulkStockMax}
+              onChange={(event) => setBulkStockMax(event.target.value)}
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              placeholder="Nuevo máximo"
+              disabled={disabled}
+            />
+            <button
+              type="button"
+              className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 active:scale-95 disabled:opacity-50 transition-all md:col-span-2 cursor-pointer"
+              onClick={() => {
+                void handleApplyBulk();
+              }}
+              disabled={disabled || (!bulkStockMin.trim() && !bulkStockMax.trim())}
+            >
+              Aplicar cambios masivos
+            </button>
+            <button
+              type="button"
+              className="rounded-xl border border-slate-200/90 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition-all active:scale-95 cursor-pointer"
+              onClick={() => setSelectedIds([])}
+              disabled={disabled || !selectedVisibleIds.length}
+            >
+              Limpiar selección
+            </button>
+          </div>
+        </details>
       </div>
 
-      <details className="rounded-xl border border-slate-200 bg-slate-50">
-        <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-slate-700">
-          Cambios masivos de minimo/maximo
-        </summary>
-        <div className="grid gap-2 border-t border-slate-200 p-3 md:grid-cols-6">
-          <select
-            value={bulkScope}
-            onChange={(event) => setBulkScope(event.target.value as BulkScope)}
-            className="ui-input"
-            disabled={disabled}
-          >
-            <option value="selected">Aplicar a seleccionados</option>
-            <option value="category">Aplicar a categoria filtrada</option>
-          </select>
-          <input
-            type="number"
-            step="0.001"
-            value={bulkStockMin}
-            onChange={(event) => setBulkStockMin(event.target.value)}
-            className="ui-input"
-            placeholder="Nuevo minimo"
-            disabled={disabled}
-          />
-          <input
-            type="number"
-            step="0.001"
-            value={bulkStockMax}
-            onChange={(event) => setBulkStockMax(event.target.value)}
-            className="ui-input"
-            placeholder="Nuevo maximo"
-            disabled={disabled}
-          />
-          <button
-            type="button"
-            className="ui-btn-primary h-10 md:col-span-2"
-            onClick={() => {
-              void handleApplyBulk();
-            }}
-            disabled={disabled || (!bulkStockMin.trim() && !bulkStockMax.trim())}
-          >
-            Aplicar cambios masivos
-          </button>
-          <button
-            type="button"
-            className="ui-btn-ghost h-10"
-            onClick={() => setSelectedIds([])}
-            disabled={disabled || !selectedVisibleIds.length}
-          >
-            Limpiar seleccion
-          </button>
-        </div>
-      </details>
-
       {rows.length === 0 ? (
-        <div className="ui-empty-state">No hay productos para los filtros elegidos.</div>
+        <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-8 text-center text-sm text-slate-500 shadow-xs dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+          No hay productos para los filtros elegidos.
+        </div>
       ) : (
-        <div className="ui-table-wrap max-h-[520px] overflow-auto">
-          <table className="min-w-full table-auto text-sm">
-            <thead>
-              <tr>
-                <th className="px-3 py-2 text-left">
-                  <input
-                    type="checkbox"
-                    checked={allVisibleSelected}
-                    onChange={(event) => toggleSelectAllVisible(event.target.checked)}
-                    disabled={disabled}
-                  />
-                </th>
-                <th className="w-[28%] px-3 py-2 text-left">Producto</th>
-                <th className="w-[15%] px-3 py-2 text-left">Categoria</th>
-                <th className="w-[12%] px-3 py-2 text-left">Stock actual</th>
-                <th className="w-[16%] px-3 py-2 text-left">Minimo</th>
-                <th className="w-[16%] px-3 py-2 text-left">Maximo</th>
-                <th className="w-[13%] px-3 py-2 text-left">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedRows.pageItems.map((product) => {
-                const draft = getDraft(product);
-                const { stockMin, stockMax } = resolveThresholds(product, draft);
-                const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
+        <>
+          {/* VISTA ESCRITORIO: TABLA REDONDEADA SEGÚN IMAGEN 1 (SIN COLUMNA DE ACCIONES) */}
+          <div className="hidden md:block ui-table-wrap rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900 overflow-hidden">
+            <table className="min-w-full table-auto text-sm">
+              <thead className="bg-slate-50/90 dark:bg-slate-800/70 border-b border-slate-200/80 dark:border-slate-800">
+                <tr>
+                  <th className="w-12 px-4 py-3.5 text-left">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={(event) => toggleSelectAllVisible(event.target.checked)}
+                      disabled={disabled}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900"
+                    />
+                  </th>
+                  <th className="px-4 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    PRODUCTO / REFERENCIA
+                  </th>
+                  <th className="px-4 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    CATEGORÍA
+                  </th>
+                  <th className="px-4 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    STOCK ACTUAL
+                  </th>
+                  <th className="px-4 py-3.5 text-center text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 w-28">
+                    MÍNIMO
+                  </th>
+                  <th className="px-4 py-3.5 text-center text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 w-28">
+                    MÁXIMO
+                  </th>
+                  <th className="px-4 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 w-36">
+                    ESTADO
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                {paginatedRows.pageItems.map((product) => {
+                  const draft = getDraft(product);
+                  const { stockMin, stockMax } = resolveThresholds(product, draft);
+                  const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
+                  const initials = getProductInitials(product.name);
+                  const primaryBarcode = barcodesByProductId.get(product.id)?.[0] ?? "";
+                  const isSelected = selectedVisibleIds.includes(product.id);
+                  const currentStock = product.sale_mode === "weight" ? product.stock_current * 1000 : product.stock_current;
 
-                return (
-                  <tr key={product.id}>
-                    <td className="px-3 py-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedVisibleIds.includes(product.id)}
-                        onChange={(event) => toggleRow(product.id, event.target.checked)}
-                        disabled={disabled}
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-slate-700">
-                      <p className="font-medium">{product.name}</p>
-                      <p className="text-xs text-slate-500">{product.code}</p>
-                    </td>
-                    <td className="px-3 py-2 text-slate-700">{product.category}</td>
-                    <td className="px-3 py-2 text-slate-700">
-                      {(product.sale_mode === "weight" ? product.stock_current * 1000 : product.stock_current).toLocaleString("es-AR")} {unitLabel(product)}
-                    </td>
-                    <td className="px-3 py-2">
+                  return (
+                    <tr
+                      key={product.id}
+                      className={cn(
+                        "hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors",
+                        isSelected && "bg-blue-50/30 dark:bg-blue-950/20"
+                      )}
+                    >
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(event) => toggleRow(product.id, event.target.checked)}
+                          disabled={disabled}
+                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900"
+                        />
+                      </td>
+
+                      {/* Producto con Avatar/Iniciales y SKU/Código */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 font-bold text-xs border border-blue-100/80 dark:border-blue-900/40">
+                            {initials}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-900 dark:text-slate-100 text-sm leading-tight">
+                              {product.name}
+                            </p>
+                            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                              {product.code ? `SKU: ${product.code}` : "Sin código"}
+                              {primaryBarcode ? ` · Cód. Barra: ${primaryBarcode}` : ""}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Categoría en Píldora */}
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                          {product.category}
+                        </span>
+                      </td>
+
+                      {/* Stock Actual en Píldora Verde Suave */}
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 border border-emerald-200/80 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/60 shadow-2xs">
+                          {currentStock.toLocaleString("es-AR")} {unitLabel(product)}
+                        </span>
+                      </td>
+
+                      {/* Mínimo Input Redondeado */}
+                      <td className="px-4 py-3 text-center">
+                        <input
+                          type="number"
+                          step="0.001"
+                          value={draft.stockMin}
+                          onChange={(event) => updateDraft(product, { stockMin: event.target.value })}
+                          onBlur={() => {
+                            void persistRowIfChanged(product);
+                          }}
+                          className="w-20 mx-auto rounded-xl border border-slate-200/90 bg-slate-50/60 hover:bg-white focus:bg-white text-center py-1 text-xs font-semibold text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-850 dark:text-slate-100 dark:focus:bg-slate-900 transition-all"
+                          placeholder="-"
+                          disabled={disabled}
+                        />
+                      </td>
+
+                      {/* Máximo Input Redondeado */}
+                      <td className="px-4 py-3 text-center">
+                        <input
+                          type="number"
+                          step="0.001"
+                          value={draft.stockMax}
+                          onChange={(event) => updateDraft(product, { stockMax: event.target.value })}
+                          onBlur={() => {
+                            void persistRowIfChanged(product);
+                          }}
+                          className="w-20 mx-auto rounded-xl border border-slate-200/90 bg-slate-50/60 hover:bg-white focus:bg-white text-center py-1 text-xs font-semibold text-slate-800 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-850 dark:text-slate-100 dark:focus:bg-slate-900 transition-all"
+                          placeholder="-"
+                          disabled={disabled}
+                        />
+                      </td>
+
+                      {/* Estado */}
+                      <td className="px-4 py-3">
+                        {renderStatusBadge(status)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* VISTA MÓVIL: TARJETAS INDIVIDUALES (SEGÚN IMAGEN 2, SIN HERRAMIENTAS INTERNAS DE LA IMAGEN 3) */}
+          <div className="block md:hidden space-y-3">
+            {paginatedRows.pageItems.map((product) => {
+              const draft = getDraft(product);
+              const { stockMin, stockMax } = resolveThresholds(product, draft);
+              const status = getStockStatusFromValues(product.stock_current, stockMin, stockMax);
+              const initials = getProductInitials(product.name);
+              const isSelected = selectedVisibleIds.includes(product.id);
+              const currentStock = product.sale_mode === "weight" ? product.stock_current * 1000 : product.stock_current;
+
+              return (
+                <div
+                  key={product.id}
+                  className={cn(
+                    "rounded-2xl border bg-white p-3.5 shadow-xs dark:bg-slate-900 space-y-3 transition-all",
+                    isSelected
+                      ? "border-blue-500 ring-1 ring-blue-500/25 bg-blue-50/15 dark:border-blue-500/80 dark:bg-blue-950/15"
+                      : "border-slate-200/90 dark:border-slate-800"
+                  )}
+                >
+                  {/* Fila Superior: Checkbox + Avatar + Nombre/Cat/Código + Stock Actual */}
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(event) => toggleRow(product.id, event.target.checked)}
+                      disabled={disabled}
+                      className="mt-2.5 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 shrink-0"
+                      aria-label={`Seleccionar ${product.name}`}
+                    />
+
+                    {/* Avatar / Iniciales */}
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 font-bold text-xs border border-blue-100/80 dark:border-blue-900/40">
+                      {initials}
+                    </div>
+
+                    {/* Nombre y metadatos */}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-slate-900 dark:text-slate-100 text-sm truncate leading-snug">
+                        {product.name}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300 truncate max-w-[120px]">
+                          {product.category}
+                        </span>
+                        {product.code ? (
+                          <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                            #{product.code}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {/* Stock Actual Píldora Verde */}
+                    <div className="shrink-0">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-200/80 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800/60 shadow-2xs">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        <span>{currentStock.toLocaleString("es-AR")} {unitLabel(product)}</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Fila Media: Panel de Mínimo Sugerido y Máximo Bodega */}
+                  <div className="rounded-xl bg-slate-50/80 border border-slate-200/70 dark:bg-slate-800/40 dark:border-slate-700/60 p-2.5 grid grid-cols-2 text-center divide-x divide-slate-200/70 dark:divide-slate-700/60">
+                    <div className="px-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-400">
+                        MÍNIMO SUGERIDO
+                      </p>
                       <input
                         type="number"
                         step="0.001"
@@ -629,12 +905,15 @@ export const StockTrackingTable = ({
                         onBlur={() => {
                           void persistRowIfChanged(product);
                         }}
-                        className="ui-input"
                         placeholder="-"
                         disabled={disabled}
+                        className="mt-0.5 w-20 mx-auto text-center font-bold text-xs text-slate-800 dark:text-slate-200 bg-transparent border-b border-transparent focus:border-blue-500 focus:outline-none"
                       />
-                    </td>
-                    <td className="px-3 py-2">
+                    </div>
+                    <div className="px-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-400">
+                        MÁXIMO BODEGA
+                      </p>
                       <input
                         type="number"
                         step="0.001"
@@ -643,22 +922,51 @@ export const StockTrackingTable = ({
                         onBlur={() => {
                           void persistRowIfChanged(product);
                         }}
-                        className="ui-input"
                         placeholder="-"
                         disabled={disabled}
+                        className="mt-0.5 w-20 mx-auto text-center font-bold text-xs text-slate-800 dark:text-slate-200 bg-transparent border-b border-transparent focus:border-blue-500 focus:outline-none"
                       />
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className={getStatusBadgeClassName(status)}>{stockStatusLabel[status]}</span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                    </div>
+                  </div>
+
+                  {/* Fila Inferior: Indicador de alerta/estado (SIN herramientas internas de ajuste) */}
+                  <div className="flex items-center justify-between pt-0.5 text-xs">
+                    <div>
+                      {status === "low" ? (
+                        <span className="flex items-center gap-1 font-semibold text-amber-600 dark:text-amber-400">
+                          <AlertTriangle size={13} />
+                          <span>Reponer pronto</span>
+                        </span>
+                      ) : status === "over" ? (
+                        <span className="flex items-center gap-1 font-semibold text-blue-600 dark:text-blue-400">
+                          <AlertCircle size={13} />
+                          <span>Exceso de stock</span>
+                        </span>
+                      ) : status === "unassigned" ? (
+                        <span className="flex items-center gap-1 font-medium text-slate-400 dark:text-slate-500">
+                          <span className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-slate-600" />
+                          <span>Sin umbrales fijados</span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
+                          <CheckCircle2 size={13} />
+                          <span>Nivel óptimo</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      {renderStatusBadge(status)}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
+      {/* Paginador Redondeado */}
       <PaginationControls
         currentPage={paginatedRows.currentPage}
         pageCount={paginatedRows.pageCount}
@@ -675,6 +983,128 @@ export const StockTrackingTable = ({
         onClose={() => setIsCameraOpen(false)}
         onDetected={handleBarcodeDetected}
       />
+
+      {/* Modal de Filtros Avanzados */}
+      {isAdvancedFiltersOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => setIsAdvancedFiltersOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-100 dark:border-blue-900/40">
+                  <SlidersHorizontal size={17} />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+                    Filtros avanzados
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
+                    Control de stock y criterios de búsqueda
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAdvancedFiltersOpen(false)}
+                className="!rounded-full h-8 w-8 inline-flex items-center justify-center border border-slate-200/90 bg-white text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-750 transition-all cursor-pointer"
+                aria-label="Cerrar modal"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Controles del Modal */}
+            <div className="space-y-3.5">
+              {/* 1. Estado de Stock */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                  Estado de stock
+                </label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => handleStatusFilterChange(e.target.value as StockStatusFilter)}
+                  className="w-full rounded-xl border border-slate-200/90 bg-slate-50/70 p-2.5 text-xs sm:text-sm font-medium text-slate-800 focus:border-blue-500 focus:bg-white focus:outline-none dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-200 transition-all cursor-pointer"
+                >
+                  <option value="all">Todos los estados</option>
+                  {Object.entries(stockStatusLabel).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 2. Categoría */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                  Categoría
+                </label>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200/90 bg-slate-50/70 p-2.5 text-xs sm:text-sm font-medium text-slate-800 focus:border-blue-500 focus:bg-white focus:outline-none dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-200 transition-all cursor-pointer"
+                >
+                  <option value="">Todas las categorías</option>
+                  {categories.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 3. Alcance de búsqueda */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
+                  Criterio de búsqueda
+                </label>
+                <select
+                  value={searchScope}
+                  onChange={(e) => setSearchScope(e.target.value as ProductSearchScope)}
+                  className="w-full rounded-xl border border-slate-200/90 bg-slate-50/70 p-2.5 text-xs sm:text-sm font-medium text-slate-800 focus:border-blue-500 focus:bg-white focus:outline-none dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-200 transition-all cursor-pointer"
+                >
+                  {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCategoryFilter("");
+                  handleStatusFilterChange("all");
+                  setSearchScope("all");
+                }}
+                disabled={activeAdvancedFiltersCount === 0}
+                className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-750 transition-all cursor-pointer"
+              >
+                Limpiar filtros
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsAdvancedFiltersOpen(false)}
+                className="rounded-xl bg-blue-600 hover:bg-blue-700 px-5 py-2 text-xs font-semibold text-white shadow-xs transition-all cursor-pointer active:scale-95"
+              >
+                Aplicar filtros
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 };

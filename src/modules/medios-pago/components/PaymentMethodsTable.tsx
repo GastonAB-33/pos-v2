@@ -2,6 +2,7 @@ import {
   normalizePaymentMethodCode,
 } from "@/services/payment-methods.service";
 import type { PaymentMethod } from "@/types/entities";
+import { cn } from "@/utils/cn";
 
 interface PaymentMethodsTableProps {
   paymentMethods: PaymentMethod[];
@@ -35,12 +36,16 @@ export const PaymentMethodsTable = ({
   });
 
   if (!paymentMethods.length) {
-    return <div className="ui-empty-state">No hay medios de pago para mostrar.</div>;
+    return (
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+        No hay medios de pago para mostrar.
+      </div>
+    );
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-2">
-      <div className="payment-methods-tabs" role="tablist" aria-label="Medios de pago">
+    <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-2 sm:p-2.5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2" role="tablist" aria-label="Medios de pago">
         {orderedMethods.map((method) => {
           const isSelected = selectedPaymentMethodId === method.id;
           return (
@@ -49,15 +54,23 @@ export const PaymentMethodsTable = ({
               type="button"
               role="tab"
               aria-selected={isSelected}
-              className={
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl sm:rounded-2xl px-4 py-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer",
                 isSelected
-                  ? "payment-methods-tab payment-methods-tab--active"
-                  : "payment-methods-tab"
-              }
+                  ? "bg-blue-600 text-white shadow-sm shadow-blue-500/25 active:scale-95"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/80 dark:hover:text-slate-100"
+              )}
               disabled={disabled}
               onClick={() => onSelect(method)}
             >
-              {method.name}
+              <span>{method.name}</span>
+              <span
+                className={cn(
+                  "h-2 w-2 rounded-full",
+                  method.is_active ? "bg-emerald-400" : "bg-slate-300 dark:bg-slate-600"
+                )}
+                title={method.is_active ? "Activo" : "Inactivo"}
+              />
             </button>
           );
         })}

@@ -49,7 +49,7 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
   const [statusFilter, setStatusFilter] = useState<InvoiceStatusFilter>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [arcaProcessingInvoiceId, setArcaProcessingInvoiceId] = useState<string | null>(null);
   const [isCancellingWithCreditNote, setIsCancellingWithCreditNote] = useState(false);
@@ -597,3 +597,4 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
     cancelInvoiceWithCreditNote,
   };
 };
+

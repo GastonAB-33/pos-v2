@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useToast } from "@/components/ui/useToast";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import type { Employee } from "@/types/entities";
 import { DollarSign, Coins } from "lucide-react";
 
@@ -55,6 +56,7 @@ export const SalaryAdvanceModal = ({
   onClose,
   onSubmit,
 }: SalaryAdvanceModalProps) => {
+  useBodyScrollLock(open);
   const toast = useToast();
   const [employeeId, setEmployeeId] = useState("");
   const [amount, setAmount] = useState("");
@@ -109,31 +111,33 @@ export const SalaryAdvanceModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-300 dark:border-slate-700 overflow-hidden dark:bg-slate-900">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
+      <div className="w-full max-w-lg rounded-2xl sm:rounded-3xl bg-white shadow-2xl border border-slate-200/90 dark:border-slate-800 overflow-hidden dark:bg-slate-900 flex flex-col max-h-[92dvh] my-auto">
         {/* Encabezado */}
-        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4 bg-amber-50/60 dark:bg-amber-950/30">
+        <div className="flex items-center justify-between border-b border-slate-200/90 dark:border-slate-800 px-4 py-3 sm:px-6 sm:py-4 bg-amber-50/60 dark:bg-amber-950/30 shrink-0">
           <div>
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-950 border border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300">
+            <div className="flex items-center gap-2 sm:gap-2.5">
+              <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl sm:rounded-2xl bg-amber-100 dark:bg-amber-950 border border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300 shrink-0">
                 <Coins size={18} />
               </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
                 Registrar Adelanto de Sueldo
               </h3>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 ml-10">
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1 ml-10 sm:ml-11">
               Registrá anticipos de dinero entregados a cuenta de la próxima liquidación o quincena.
             </p>
           </div>
           <ModalCloseButton label="Cerrar modal" onClick={onClose} disabled={isSubmitting} />
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-          {/* Ficha Empleado Receptor (Informativa, sin dropdown redundante) */}
+        <form onSubmit={handleSubmit} autoComplete="off" className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          {/* Contenido Scrollable */}
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4">
+            {/* Ficha Empleado Receptor */}
           {selectedEmployee && (
-            <div className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 p-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-xs">
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 p-3.5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-100 font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-sm">
                 {selectedEmployee.full_name.charAt(0).toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
@@ -141,11 +145,11 @@ export const SalaryAdvanceModal = ({
                   <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
                     {selectedEmployee.full_name}
                   </span>
-                  <span className="font-mono text-[10px] font-semibold text-slate-500 bg-slate-200/60 dark:bg-slate-700 px-1.5 py-0.5 rounded">
+                  <span className="font-mono text-[10px] font-semibold text-slate-500 bg-slate-200/60 dark:bg-slate-700 px-2 py-0.5 rounded-md">
                     {selectedEmployee.code}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
                   {selectedEmployee.position || "Personal"} {selectedEmployee.base_salary ? `• Sueldo Base: ${currency.format(selectedEmployee.base_salary)}` : ""}
                 </p>
               </div>
@@ -154,13 +158,13 @@ export const SalaryAdvanceModal = ({
 
           {/* Importe del Adelanto */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5">
               Monto del Adelanto ($) *
             </label>
             <div className="relative">
               <DollarSign
                 size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
               />
               <input
                 type="number"
@@ -174,7 +178,7 @@ export const SalaryAdvanceModal = ({
                 autoCapitalize="off"
                 spellCheck={false}
                 data-lpignore="true"
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 py-2.5 pl-9 pr-3 text-base font-bold font-mono text-slate-900 dark:text-slate-100 focus:border-amber-500 focus:outline-none"
+                className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 py-2.5 pl-10 pr-4 text-base font-bold font-mono text-slate-900 dark:text-slate-100 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                 required
                 autoFocus
               />
@@ -184,13 +188,13 @@ export const SalaryAdvanceModal = ({
           {/* Medio de Pago y Período / Referencia */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5">
                 Medio de pago *
               </label>
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-amber-500 focus:outline-none"
+                className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
               >
                 <option value="cash">Efectivo</option>
                 <option value="transfer">Transferencia Bancaria</option>
@@ -200,7 +204,7 @@ export const SalaryAdvanceModal = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5">
                 Período / Referencia
               </label>
               <input
@@ -209,14 +213,18 @@ export const SalaryAdvanceModal = ({
                 onChange={(e) => setPeriod(e.target.value)}
                 placeholder="Ej: Adelanto 1ra Quincena Octubre 2026"
                 autoComplete="off"
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-amber-500 focus:outline-none"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-lpignore="true"
+                className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
               />
             </div>
           </div>
 
           {/* Motivo u Observaciones */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5">
               Motivo u Observaciones (opcional)
             </label>
             <textarea
@@ -224,18 +232,23 @@ export const SalaryAdvanceModal = ({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Ej: Adelanto a cuenta solicitado por gastos imprevistos..."
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:border-amber-500 focus:outline-none"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              data-lpignore="true"
+              className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-xs text-slate-900 dark:text-slate-100 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
             />
           </div>
 
           {/* Resumen Visual del Adelanto */}
           {parsedAmount > 0 && (
-            <div className="flex items-center justify-between rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-3.5">
+            <div className="flex items-center justify-between rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-4">
               <div>
                 <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
                   Desembolso de Adelanto:
                 </span>
-                <p className="text-xs text-amber-700 dark:text-amber-400">
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
                   Quedará registrado para deducirlo automáticamente en la liquidación quincenal.
                 </p>
               </div>
@@ -245,20 +258,22 @@ export const SalaryAdvanceModal = ({
             </div>
           )}
 
-          {/* Botones de Acción */}
-          <div className="flex items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
+          </div>
+
+          {/* Botones de Acción Fijo */}
+          <div className="flex items-center justify-end gap-2.5 border-t border-slate-200/90 dark:border-slate-800 p-3 sm:p-4 bg-slate-50/50 dark:bg-slate-900 shrink-0">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition cursor-pointer"
+              className="rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={isSubmitting || parsedAmount <= 0}
-              className="rounded-xl bg-amber-600 hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-500 px-4 py-2 text-xs font-bold text-white shadow-sm transition disabled:opacity-50 cursor-pointer"
+              className="rounded-xl sm:rounded-2xl bg-amber-600 hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-500 px-5 py-2 text-xs font-bold text-white shadow-xs transition disabled:opacity-50 cursor-pointer active:scale-[0.98]"
             >
               {isSubmitting ? "Registrando..." : "Confirmar Adelanto"}
             </button>

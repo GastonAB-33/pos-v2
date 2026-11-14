@@ -464,7 +464,7 @@ export const PurchaseCart = ({
   };
 
   return (
-    <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-3.5 sm:p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 w-full max-w-full">
+    <section className="space-y-3 rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900 w-full max-w-full">
       {/* Header con Buscador / Escáner directo y botón Nuevo producto */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
         <div className="flex items-center gap-2 shrink-0">
@@ -528,7 +528,7 @@ export const PurchaseCart = ({
                   }
                 }}
                 onKeyDown={handleInputKeyDown}
-                className="w-full h-10 pl-10 pr-9 text-xs sm:text-sm font-medium rounded-xl border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950/80 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 dark:focus:border-brand-400 shadow-xs transition-colors"
+                className="w-full h-10 pl-10 pr-9 text-xs sm:text-sm font-medium rounded-xl sm:rounded-2xl border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950/80 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 dark:focus:border-brand-400 shadow-xs transition-colors"
               />
               {searchQuery && (
                 <button
@@ -570,7 +570,7 @@ export const PurchaseCart = ({
             {isDropdownOpen && searchQuery.trim().length > 0 && (
               <div
                 ref={dropdownRef}
-                className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-80 overflow-y-auto rounded-xl border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 shadow-2xl divide-y divide-slate-100 dark:divide-slate-800"
+                className="absolute left-0 right-0 top-full mt-1.5 z-50 max-h-80 overflow-y-auto rounded-2xl border border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden"
               >
                 {searchResults.length > 0 ? (
                   <>
@@ -681,7 +681,7 @@ export const PurchaseCart = ({
 
       {/* Lista de productos o estado vacío */}
       {!items.length ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/40 py-8 text-center dark:border-slate-700/80 dark:bg-slate-800/40">
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/40 py-10 text-center dark:bg-slate-800/40">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-50 text-brand-600 dark:bg-brand-950/60 dark:text-brand-400">
             <ShoppingBag className="h-5 w-5" />
           </div>
@@ -737,7 +737,7 @@ export const PurchaseCart = ({
             return (
               <article
                 key={item.product_id}
-                className="w-full max-w-full overflow-hidden rounded-lg border border-slate-200/80 bg-slate-50/40 p-3 transition hover:border-slate-300 hover:bg-slate-50/80 dark:border-slate-700/80 dark:bg-slate-800/50 dark:hover:border-slate-600 dark:hover:bg-slate-800/80"
+                className="w-full max-w-full overflow-hidden rounded-xl border border-slate-200/90 bg-slate-50/50 p-3.5 transition hover:border-slate-300 hover:bg-slate-50/80 dark:border-slate-700/80 dark:bg-slate-800/50 dark:hover:border-slate-600 dark:hover:bg-slate-800/80"
               >
                 <div className="flex items-start justify-between gap-2 w-full max-w-full">
                   <div className="min-w-0 flex-1">
@@ -1331,7 +1331,7 @@ export const PurchaseCart = ({
           {/* LADO DERECHO: Detalle de Pago Completo + Botón Proceder al Pago */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 shrink-0 justify-end w-full lg:w-auto">
             {/* Panel de desglose de liquidación / pago */}
-            <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/90 p-3 sm:p-3.5 shadow-sm min-w-[260px] sm:min-w-[280px] space-y-1.5 text-xs">
+            <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs p-3.5 sm:p-4 min-w-[260px] sm:min-w-[280px] space-y-1.5 text-xs">
               <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 dark:border-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 <span className="flex items-center gap-1">
                   <Receipt className="h-3 w-3 text-slate-400 dark:text-slate-500" />

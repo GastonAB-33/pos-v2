@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useToast } from "@/components/ui/useToast";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import type { Employee, EmployeeSalaryPayment } from "@/types/entities";
-import { Receipt, AlertCircle, Coins, ChevronDown, ChevronUp } from "lucide-react";
+import { Receipt, Coins, ChevronDown, ChevronUp } from "lucide-react";
 
 interface SalaryPaymentModalProps {
   open: boolean;
@@ -62,6 +63,7 @@ export const SalaryPaymentModal = ({
   onClose,
   onSubmit,
 }: SalaryPaymentModalProps) => {
+  useBodyScrollLock(open);
   const toast = useToast();
   const [employeeId, setEmployeeId] = useState("");
   const [period, setPeriod] = useState(getCurrentMonthPeriod());
@@ -131,7 +133,6 @@ export const SalaryPaymentModal = ({
     }
   }, [totalRecentAdvances, employeeId]);
 
-
   const parsedGross = parseFloat(grossAmount.replace(",", ".")) || 0;
   const parsedBonuses = parseFloat(bonuses.replace(",", ".")) || 0;
   const parsedAdvancesDiscount = parseFloat(advancesDiscount.replace(",", ".")) || 0;
@@ -199,33 +200,35 @@ export const SalaryPaymentModal = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl border border-slate-300 dark:border-slate-700 overflow-hidden dark:bg-slate-900">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
+      <div className="w-full max-w-2xl rounded-2xl sm:rounded-3xl bg-white shadow-2xl border border-slate-200/90 dark:border-slate-800 overflow-hidden dark:bg-slate-900 flex flex-col max-h-[92dvh] my-auto">
         {/* Encabezado */}
-        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4 bg-slate-50 dark:bg-slate-800/50">
+        <div className="flex items-center justify-between border-b border-slate-200/90 dark:border-slate-800 px-4 py-3 sm:px-6 sm:py-4 bg-slate-50 dark:bg-slate-800/50 shrink-0">
           <div>
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300">
+            <div className="flex items-center gap-2 sm:gap-2.5">
+              <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl sm:rounded-2xl bg-indigo-100 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 shrink-0">
                 <Receipt size={18} />
               </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
                 Registrar Pago de Sueldo
               </h3>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 ml-10">
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1 ml-10 sm:ml-11">
               Liquidá haberes con deducción automática de adelantos del período y compras en cuenta corriente.
             </p>
           </div>
           <ModalCloseButton label="Cerrar modal" onClick={onClose} disabled={isSubmitting} />
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[82vh] overflow-y-auto">
-          {/* Ficha Empleado Receptor (Fija para la ficha abierta) y Período Liquidado */}
+        <form onSubmit={handleSubmit} autoComplete="off" className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          {/* Contenido con Scroll */}
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4">
+            {/* Ficha Empleado Receptor y Período Liquidado */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
             <div className="md:col-span-2">
               {selectedEmployee && (
-                <div className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 p-2.5">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-100 font-bold text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 text-xs">
+                <div className="flex items-center gap-3 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 p-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-100 font-bold text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 text-xs">
                     {selectedEmployee.full_name.charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -233,12 +236,12 @@ export const SalaryPaymentModal = ({
                       <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
                         {selectedEmployee.full_name}
                       </span>
-                      <span className="font-mono text-[10px] font-semibold text-slate-500 bg-slate-200/60 dark:bg-slate-700 px-1.5 py-0.5 rounded">
+                      <span className="font-mono text-[10px] font-semibold text-slate-500 bg-slate-200/60 dark:bg-slate-700 px-2 py-0.5 rounded-md">
                         {selectedEmployee.code}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                      {selectedEmployee.position || "Personal"} {selectedEmployee.base_salary ? `• Sueldo Base: ${currency.format(selectedEmployee.base_salary)}` : ""}
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                      {selectedEmployee.position || "Personal"} • Sueldo base: {currency.format(selectedEmployee.base_salary)}
                     </p>
                   </div>
                 </div>
@@ -255,224 +258,26 @@ export const SalaryPaymentModal = ({
                 onChange={(e) => setPeriod(e.target.value)}
                 placeholder="Ej: 1ra Quincena Octubre 2026"
                 autoComplete="off"
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-lpignore="true"
+                className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 required
               />
             </div>
           </div>
 
-          {/* PANEL DE ADELANTOS: Control individual de descuento */}
-          <div className="rounded-2xl border border-amber-300 dark:border-amber-800/80 bg-amber-50/80 dark:bg-amber-950/30 p-4 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-950 border border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300 shrink-0">
-                  <Coins size={18} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-xs font-bold text-amber-900 dark:text-amber-200">
-                      Adelantos registrados: <span className="font-mono text-sm">{currency.format(totalRecentAdvances)}</span>
-                    </p>
-                    <select
-                      value={advancesLookbackDays}
-                      onChange={(e) => setAdvancesLookbackDays(Number(e.target.value))}
-                      className="rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 px-2 py-0.5 text-[11px] font-bold text-amber-900 dark:text-amber-200 cursor-pointer"
-                    >
-                      <option value={14}>Últimas 2 semanas (Quincena)</option>
-                      <option value={7}>Última semana (7 días)</option>
-                      <option value={30}>Último mes (30 días)</option>
-                    </select>
-                  </div>
-                  <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                    {recentAdvances.length === 0
-                      ? "No se registraron adelantos en este período."
-                      : `${recentAdvances.length} adelanto(s) entregado(s) en este período.`}
-                  </p>
-                </div>
-              </div>
+          {/* Bloque de Haberes (Base + Bonificaciones) */}
+          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 p-4 space-y-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              1. Haberes y Asignaciones
+            </span>
 
-              {recentAdvances.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAdvancesBreakdown(!showAdvancesBreakdown)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-amber-300 dark:border-amber-700 bg-white/80 dark:bg-slate-900/80 px-2 py-1 text-[11px] font-bold text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 cursor-pointer self-start sm:self-auto"
-                >
-                  <span>Ver detalle</span>
-                  {showAdvancesBreakdown ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                </button>
-              )}
-            </div>
-
-            {/* Desglose desplegable de adelantos del período */}
-            {showAdvancesBreakdown && recentAdvances.length > 0 && (
-              <div className="pt-2 border-t border-amber-200 dark:border-amber-800/80 space-y-1.5 text-xs">
-                {recentAdvances.map((adv) => (
-                  <div
-                    key={adv.id}
-                    className="flex items-center justify-between rounded-lg bg-white/70 dark:bg-slate-900/70 p-2 border border-amber-200 dark:border-amber-900/60"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[11px] text-slate-500">{adv.payment_date}</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">{adv.period}</span>
-                      {adv.notes && (
-                        <span className="text-[11px] text-slate-500 italic max-w-xs truncate">
-                          ({adv.notes})
-                        </span>
-                      )}
-                    </div>
-                    <span className="font-mono font-bold text-amber-700 dark:text-amber-300">
-                      {currency.format(adv.net_amount_paid || adv.gross_amount)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Campo y opciones de asignación de monto a descontar */}
-            <div className="pt-2.5 border-t border-amber-200/80 dark:border-amber-800/60 flex flex-wrap items-center justify-between gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-amber-900 dark:text-amber-200">
-                  Monto a descontar de adelantos ($)
-                </label>
-                <span className="text-[11px] text-amber-700 dark:text-amber-400">
-                  {parsedAdvancesDiscount > 0
-                    ? `Descontando ${currency.format(parsedAdvancesDiscount)} en esta liquidación`
-                    : "Sin descuento de adelantos"}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <div className="relative w-36">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-600 dark:text-amber-400 pointer-events-none">$</span>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={advancesDiscount}
-                    onChange={(e) => setAdvancesDiscount(e.target.value)}
-                    placeholder="0.00"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    data-lpignore="true"
-                    className="w-full rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 py-1.5 pl-7 pr-2.5 text-sm font-bold font-mono text-amber-900 dark:text-amber-100 focus:border-amber-500 focus:outline-none"
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setAdvancesDiscount(String(totalRecentAdvances))}
-                  disabled={totalRecentAdvances <= 0}
-                  className="inline-flex items-center gap-1 rounded-xl bg-amber-600 hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-2xs transition disabled:opacity-40 cursor-pointer"
-                  title="Rellenar con el total de adelantos registrados"
-                >
-                  <span>Total</span>
-                  {totalRecentAdvances > 0 && <span className="opacity-90">({currency.format(totalRecentAdvances)})</span>}
-                </button>
-
-                {parsedAdvancesDiscount > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setAdvancesDiscount("0")}
-                    className="rounded-xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-800 px-2 py-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition cursor-pointer"
-                    title="No descontar adelantos en este recibo"
-                  >
-                    $ 0
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* PANEL DE CUENTA CORRIENTE: Control individual de descuento */}
-          <div className="rounded-2xl border border-rose-300 dark:border-rose-900/80 bg-rose-50/80 dark:bg-rose-950/30 p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-100 dark:bg-rose-950 border border-rose-300 dark:border-rose-900 text-rose-700 dark:text-rose-300 shrink-0">
-                  <AlertCircle size={18} />
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-rose-900 dark:text-rose-200">
-                    Productos pendientes en Cuenta Corriente: <span className="font-mono text-sm">{currency.format(employeeDebt)}</span>
-                  </p>
-                  <p className="text-[11px] text-rose-700 dark:text-rose-400">
-                    {employeeDebt > 0
-                      ? "Podés descontar la totalidad o asignar qué monto descontar en este pago."
-                      : "El empleado no tiene deuda pendiente en cuenta corriente."}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Campo y opciones de asignación de monto a descontar */}
-            <div className="pt-2.5 border-t border-rose-200/80 dark:border-rose-900/60 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <label className="block text-xs font-bold text-rose-900 dark:text-rose-200">
-                  Monto a descontar de cuenta corriente ($)
-                </label>
-                <span className="text-[11px] text-rose-700 dark:text-rose-400">
-                  {parsedCtaCteDiscount > 0
-                    ? `Descontando ${currency.format(parsedCtaCteDiscount)} de la deuda del empleado`
-                    : "Sin descuento de cuenta corriente"}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <div className="relative w-36">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-rose-600 dark:text-rose-400 pointer-events-none">$</span>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={currentAccountDiscount}
-                    onChange={(e) => setCurrentAccountDiscount(e.target.value)}
-                    placeholder="0.00"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    data-lpignore="true"
-                    className="w-full rounded-xl border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-900 py-1.5 pl-7 pr-2.5 text-sm font-bold font-mono text-rose-900 dark:text-rose-100 focus:border-rose-500 focus:outline-none"
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setCurrentAccountDiscount(String(employeeDebt))}
-                  disabled={employeeDebt <= 0}
-                  className="inline-flex items-center gap-1 rounded-xl bg-rose-600 hover:bg-rose-700 dark:bg-rose-600 dark:hover:bg-rose-500 px-3 py-1.5 text-xs font-bold text-white shadow-2xs transition disabled:opacity-40 cursor-pointer"
-                  title="Rellenar con el total adeudado en cuenta corriente"
-                >
-                  <span>Total</span>
-                  {employeeDebt > 0 && <span className="opacity-90">({currency.format(employeeDebt)})</span>}
-                </button>
-
-                {parsedCtaCteDiscount > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setCurrentAccountDiscount("0")}
-                    className="rounded-xl border border-rose-300 dark:border-rose-800 bg-white dark:bg-slate-800 px-2 py-1.5 text-xs font-semibold text-rose-800 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-950/50 transition cursor-pointer"
-                    title="No descontar cuenta corriente en este recibo"
-                  >
-                    $ 0
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Desglose de Haberes y Deducciones */}
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 p-4 space-y-4">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 border-b pb-1 dark:border-slate-700">
-              Cálculo de Haberes y Descuentos
-            </h4>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Sueldo Base */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                  Sueldo Base ($) *
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Sueldo Base Acordado ($) *
                 </label>
                 <input
                   type="number"
@@ -480,20 +285,18 @@ export const SalaryPaymentModal = ({
                   min="0"
                   value={grossAmount}
                   onChange={(e) => setGrossAmount(e.target.value)}
-                  placeholder="0.00"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
                   spellCheck={false}
                   data-lpignore="true"
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-bold font-mono text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm font-mono font-bold text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                   required
                 />
               </div>
 
-              {/* Bonos / Horas Extras */}
               <div>
-                <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-400 mb-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Adicionales / Bonos / Horas Extras ($)
                 </label>
                 <input
@@ -508,33 +311,135 @@ export const SalaryPaymentModal = ({
                   autoCapitalize="off"
                   spellCheck={false}
                   data-lpignore="true"
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-mono text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm font-mono text-emerald-700 dark:text-emerald-300 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Bloque de Deducciones y Adelantos */}
+          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 p-4 space-y-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              2. Retenciones y Deducciones de Sueldo
+            </span>
+
+            {/* Sub-bloque 2.1: Deducción de Adelantos */}
+            <div className="rounded-2xl border border-amber-200/90 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 p-3 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <Coins size={14} className="text-amber-600 dark:text-amber-400" />
+                  <label className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                    Deducir Adelantos / Anticipos Otorgados ($)
+                  </label>
+                </div>
+
+                {recentAdvances.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvancesBreakdown(!showAdvancesBreakdown)}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 dark:text-amber-300 hover:underline cursor-pointer"
+                  >
+                    <span>{recentAdvances.length} adelanto(s) detectado(s)</span>
+                    {showAdvancesBreakdown ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={advancesDiscount}
+                  onChange={(e) => setAdvancesDiscount(e.target.value)}
+                  placeholder="0.00"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                  className="w-full rounded-xl sm:rounded-2xl border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm font-mono font-bold text-amber-900 dark:text-amber-200 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                />
+
+                {totalRecentAdvances > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setAdvancesDiscount(String(totalRecentAdvances))}
+                    className="shrink-0 rounded-xl sm:rounded-2xl border border-amber-300 dark:border-amber-700 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950 dark:hover:bg-amber-900 px-3 py-2 text-xs font-semibold text-amber-900 dark:text-amber-200 transition cursor-pointer"
+                    title="Aplicar el total de adelantos recientes registrados"
+                  >
+                    Cargar Total ({currency.format(totalRecentAdvances)})
+                  </button>
+                )}
+              </div>
+
+              {/* Desglose desplegable de adelantos recientes */}
+              {showAdvancesBreakdown && recentAdvances.length > 0 && (
+                <div className="rounded-xl border border-amber-200 dark:border-amber-800/60 bg-white dark:bg-slate-900/80 p-2.5 space-y-1.5 text-xs">
+                  <p className="font-bold text-[10px] uppercase text-amber-800 dark:text-amber-400">
+                    Historial de adelantos en el rango analizado:
+                  </p>
+                  <ul className="divide-y divide-amber-100 dark:divide-amber-950 text-slate-700 dark:text-slate-300">
+                    {recentAdvances.map((adv) => (
+                      <li key={adv.id} className="py-1 flex items-center justify-between">
+                        <span className="font-mono text-[11px] text-slate-500">
+                          {adv.payment_date} ({adv.period || "Adelanto"})
+                        </span>
+                        <span className="font-mono font-bold text-amber-800 dark:text-amber-200">
+                          {currency.format(adv.net_amount_paid || adv.gross_amount)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="pt-1 flex items-center justify-between text-[11px] text-slate-400">
+                    <span>Ventana de detección:</span>
+                    <select
+                      value={advancesLookbackDays}
+                      onChange={(e) => setAdvancesLookbackDays(Number(e.target.value))}
+                      className="rounded border border-amber-200 dark:border-amber-800 bg-transparent px-1 py-0.5 text-[10px]"
+                    >
+                      <option value={7}>Últimos 7 días</option>
+                      <option value={14}>Últimos 14 días (quincenal)</option>
+                      <option value={31}>Último mes (31 días)</option>
+                      <option value={60}>Últimos 60 días</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Sub-bloque 2.2: Descuento por Cuenta Corriente y Otras retenciones */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Desc. Cuenta Corriente ($)
+                  </label>
+                  {employeeDebt > 0 && (
+                    <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold">
+                      Deuda: {currency.format(employeeDebt)}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={currentAccountDiscount}
+                  onChange={(e) => setCurrentAccountDiscount(e.target.value)}
+                  placeholder="0.00"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  data-lpignore="true"
+                  className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm font-mono text-rose-600 dark:text-rose-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>
 
-              {/* Resumen de Deducciones asignadas arriba */}
-              <div className="flex items-center justify-between rounded-xl bg-amber-50/70 dark:bg-amber-950/30 p-2.5 border border-amber-200 dark:border-amber-800/60">
-                <span className="text-xs font-semibold text-amber-900 dark:text-amber-200">
-                  Descuento por Adelantos:
-                </span>
-                <span className="font-mono font-bold text-xs text-amber-800 dark:text-amber-300">
-                  {parsedAdvancesDiscount > 0 ? `-${currency.format(parsedAdvancesDiscount)}` : "$ 0,00"}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between rounded-xl bg-rose-50/70 dark:bg-rose-950/30 p-2.5 border border-rose-200 dark:border-rose-900/60">
-                <span className="text-xs font-semibold text-rose-900 dark:text-rose-200">
-                  Descuento Cuenta Corriente:
-                </span>
-                <span className="font-mono font-bold text-xs text-rose-800 dark:text-rose-300">
-                  {parsedCtaCteDiscount > 0 ? `-${currency.format(parsedCtaCteDiscount)}` : "$ 0,00"}
-                </span>
-              </div>
-
-              {/* Otras Deducciones */}
-              <div className="md:col-span-2">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                  Otras Deducciones / Retenciones ($)
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Otras Retenciones / Aportes ($)
                 </label>
                 <input
                   type="number"
@@ -548,18 +453,18 @@ export const SalaryPaymentModal = ({
                   autoCapitalize="off"
                   spellCheck={false}
                   data-lpignore="true"
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-mono text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm font-mono text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>
             </div>
 
             {/* Total Neto Calculado */}
-            <div className="flex items-center justify-between rounded-xl bg-indigo-600 p-4 text-white shadow-md">
+            <div className="flex items-center justify-between rounded-2xl bg-indigo-600 p-4 text-white shadow-xs">
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider text-indigo-100">
                   Sueldo Neto a Pagar
                 </span>
-                <p className="text-[11px] text-indigo-200">
+                <p className="text-[11px] text-indigo-200 mt-0.5">
                   (Base: {currency.format(parsedGross)}
                   {parsedBonuses > 0 ? ` + Adic: ${currency.format(parsedBonuses)}` : ""}
                   {parsedAdvancesDiscount > 0 ? ` - Adelantos: ${currency.format(parsedAdvancesDiscount)}` : ""}
@@ -576,13 +481,13 @@ export const SalaryPaymentModal = ({
           {/* Medio de Pago y Fecha */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5">
                 Medio de Pago *
               </label>
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
               >
                 <option value="transfer">Transferencia Bancaria</option>
                 <option value="cash">Efectivo</option>
@@ -592,21 +497,21 @@ export const SalaryPaymentModal = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5">
                 Fecha de Pago *
               </label>
               <input
                 type="date"
                 value={paymentDate}
                 onChange={(e) => setPaymentDate(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-medium text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm font-medium text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5">
               Observaciones del Recibo / Pago
             </label>
             <textarea
@@ -614,23 +519,26 @@ export const SalaryPaymentModal = ({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Detalle adicional de la liquidación o número de comprobante..."
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none"
+              className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-xs text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             />
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
+          </div>
+
+          {/* Footer Fijo */}
+          <div className="flex items-center justify-end gap-2.5 border-t border-slate-200/90 dark:border-slate-800 p-3 sm:p-4 bg-slate-50/50 dark:bg-slate-900 shrink-0">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer"
+              className="rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer transition"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={isSubmitting || parsedGross <= 0}
-              className="rounded-xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 px-4 py-2 text-xs font-bold text-white shadow-sm transition disabled:opacity-50 cursor-pointer"
+              className="rounded-xl sm:rounded-2xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 px-5 py-2 text-xs font-bold text-white shadow-xs transition disabled:opacity-50 cursor-pointer active:scale-[0.98]"
             >
               {isSubmitting ? "Registrando..." : "Confirmar Liquidación de Sueldo"}
             </button>

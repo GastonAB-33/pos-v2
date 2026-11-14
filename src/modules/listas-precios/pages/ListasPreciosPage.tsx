@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { LoadingState } from "@/components/ui/UiStates";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -63,7 +63,7 @@ export const ListasPreciosPage = () => {
   const handleDeleteClick = async (priceList: PriceList) => {
     if (!canWritePriceLists) return;
 
-    const confirmed = window.confirm(`Eliminar lista ${priceList.name}?`);
+    const confirmed = window.confirm(`¿Eliminar lista ${priceList.name}?`);
     if (!confirmed) return;
 
     await deletePriceList(priceList.id);
@@ -82,90 +82,93 @@ export const ListasPreciosPage = () => {
 
   if (!tenantId) {
     return (
-      <PagePlaceholder
-        title="Listas de precios"
-        description="No hay un comercio activo"
-      />
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-xs dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+        No hay un comercio activo.
+      </div>
     );
   }
 
   if (!canReadPriceLists) {
     return (
-      <PagePlaceholder
-        title="Listas de precios"
-        description="No tenes permisos de lectura para este modulo"
-      />
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-xs dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+        No tenés permisos de lectura para este módulo.
+      </div>
     );
   }
 
   return (
-    <PagePlaceholder
-      title="Listas de precios"
-      description="Listas con ajuste porcentual o precio fijo"
-    >
-      <div className="space-y-4">
-        <PriceListsToolbar
-          canWrite={canWritePriceLists}
-          loading={isLoading || isSubmitting}
-          search={search}
-          onSearchChange={setSearch}
-          onCreate={handleCreateClick}
-          onReload={() => void reload()}
+    <div className="space-y-4 w-full min-w-0 max-w-full">
+      <PriceListsToolbar
+        canWrite={canWritePriceLists}
+        loading={isLoading || isSubmitting}
+        search={search}
+        onSearchChange={setSearch}
+        onCreate={handleCreateClick}
+        onReload={() => void reload()}
+      />
+
+      {feedback ? (
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm font-medium ${
+            feedback.type === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-300"
+              : "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300"
+          }`}
+        >
+          {feedback.message}
+        </div>
+      ) : null}
+
+      {isLoading ? (
+        <LoadingState
+          message="Cargando listas de precios..."
+          description="Sincronizando listas, márgenes de ganancia y reglas de precio..."
         />
+      ) : (
+        <PriceListsTable
+          priceLists={priceLists}
+          selectedPriceListId={selectedPriceListId}
+          canWrite={canWritePriceLists}
+          onSelect={(priceList) => setSelectedPriceListId(priceList.id)}
+          onEdit={handleEditClick}
+          onDelete={handleDeleteClick}
+          onToggleActive={(priceList) => {
+            void togglePriceListActive(priceList.id);
+          }}
+        />
+      )}
 
-        {feedback ? (
-          <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>
-            {feedback.message}
-          </div>
-        ) : null}
+      {selectedPriceList ? (
+        <PriceListDetailPanel
+          priceList={selectedPriceList}
+          products={products}
+          itemByProductId={itemByProductId}
+          canWrite={canWritePriceLists}
+          disabled={isSubmitting}
+          onSetFixedPrice={setProductFixedPrice}
+          onRemoveFixedPrice={removeProductFixedPrice}
+        />
+      ) : null}
 
-        {isLoading ? (
-          <div className="ui-loading">Cargando listas de precios...</div>
-        ) : (
-          <PriceListsTable
-            priceLists={priceLists}
-            selectedPriceListId={selectedPriceListId}
-            canWrite={canWritePriceLists}
-            onSelect={(priceList) => setSelectedPriceListId(priceList.id)}
-            onEdit={handleEditClick}
-            onDelete={handleDeleteClick}
-            onToggleActive={(priceList) => {
-              void togglePriceListActive(priceList.id);
-            }}
-          />
-        )}
+      {formOpen ? (
+        <section className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+          <h3 className="mb-4 text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100">
+            {formMode === "create" ? "Crear lista de precios" : "Editar lista de precios"}
+          </h3>
 
-        {selectedPriceList ? (
-          <PriceListDetailPanel
-            priceList={selectedPriceList}
-            products={products}
-            itemByProductId={itemByProductId}
-            canWrite={canWritePriceLists}
+          <PriceListForm
+            mode={formMode}
+            priceList={selectedForEdit}
             disabled={isSubmitting}
-            onSetFixedPrice={setProductFixedPrice}
-            onRemoveFixedPrice={removeProductFixedPrice}
+            onCancel={() => {
+              setFormOpen(false);
+              setSelectedForEdit(undefined);
+            }}
+            onSubmit={handleSubmitForm}
           />
-        ) : null}
-
-        {formOpen ? (
-          <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <h3 className="mb-4 text-base font-semibold text-slate-900">
-              {formMode === "create" ? "Crear lista de precios" : "Editar lista de precios"}
-            </h3>
-
-            <PriceListForm
-              mode={formMode}
-              priceList={selectedForEdit}
-              disabled={isSubmitting}
-              onCancel={() => {
-                setFormOpen(false);
-                setSelectedForEdit(undefined);
-              }}
-              onSubmit={handleSubmitForm}
-            />
-          </section>
-        ) : null}
-      </div>
-    </PagePlaceholder>
+        </section>
+      ) : null}
+    </div>
   );
 };
+

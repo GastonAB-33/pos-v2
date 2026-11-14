@@ -89,7 +89,7 @@ export const PromotionsTable = ({
     columnHelper.accessor("type", {
       header: "Tipo",
       cell: (info) => (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
           {getTypeLabel(info.getValue())}
         </span>
       ),
@@ -97,7 +97,7 @@ export const PromotionsTable = ({
     columnHelper.accessor("scope", {
       header: "Alcance",
       cell: (info) => (
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
           {getScopeLabel(info.getValue())}
         </span>
       ),
@@ -143,21 +143,21 @@ export const PromotionsTable = ({
         const promo = info.row.original;
         if (promo.combo_price != null && promo.combo_price > 0) {
           return (
-            <span className="font-extrabold text-emerald-600 dark:text-emerald-400">
+            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
               {currency.format(promo.combo_price)}
             </span>
           );
         }
         if (promo.discount_percent != null && promo.discount_percent > 0) {
           return (
-            <span className="font-bold text-blue-600 dark:text-sky-400">
+            <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
               -{promo.discount_percent}%
             </span>
           );
         }
         if (promo.discount_amount != null && promo.discount_amount > 0) {
           return (
-            <span className="font-bold text-indigo-600 dark:text-indigo-400">
+            <span className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-bold text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
               -{currency.format(promo.discount_amount)}
             </span>
           );
@@ -178,11 +178,11 @@ export const PromotionsTable = ({
       header: "Estado",
       cell: (info) =>
         info.getValue() ? (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
             Activa
           </span>
         ) : (
-          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
             Inactiva
           </span>
         ),
@@ -199,10 +199,35 @@ export const PromotionsTable = ({
 
         return (
           <div className="flex items-center gap-1.5">
-            <IconButton size="sm" icon={Pencil} label="Editar promoción" onClick={() => onEdit(promotion)} />
-            <IconButton size="sm" icon={Barcode} label="Generar código de barras" onClick={() => onBarcode(promotion)} />
-            <IconButton size="sm" icon={Power} label={promotion.is_active ? "Desactivar promoción" : "Activar promoción"} onClick={() => onToggleActive(promotion)} />
-            <IconButton size="sm" icon={Trash2} label="Eliminar promoción" tone="danger" onClick={() => onDelete(promotion)} />
+            <IconButton
+              size="sm"
+              icon={Pencil}
+              label="Editar promoción"
+              onClick={() => onEdit(promotion)}
+              className="!rounded-full"
+            />
+            <IconButton
+              size="sm"
+              icon={Barcode}
+              label="Generar código de barras"
+              onClick={() => onBarcode(promotion)}
+              className="!rounded-full"
+            />
+            <IconButton
+              size="sm"
+              icon={Power}
+              label={promotion.is_active ? "Desactivar promoción" : "Activar promoción"}
+              onClick={() => onToggleActive(promotion)}
+              className="!rounded-full"
+            />
+            <IconButton
+              size="sm"
+              icon={Trash2}
+              label="Eliminar promoción"
+              tone="danger"
+              onClick={() => onDelete(promotion)}
+              className="!rounded-full"
+            />
           </div>
         );
       },
@@ -216,13 +241,17 @@ export const PromotionsTable = ({
   });
 
   if (!promotions.length) {
-    return <div className="ui-empty-state">No hay promociones cargadas.</div>;
+    return (
+      <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-12 text-center text-sm text-slate-500 shadow-xs dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+        No hay promociones cargadas.
+      </div>
+    );
   }
 
   return (
-    <div className="ui-table-wrap overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-panel">
+    <div className="overflow-x-auto rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900">
       <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-sm">
-        <thead className="bg-slate-50 dark:bg-slate-800/70">
+        <thead className="bg-slate-50/90 dark:bg-slate-800/70 border-b border-slate-200/90 dark:border-slate-800">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
@@ -242,7 +271,7 @@ export const PromotionsTable = ({
           {table.getRowModel().rows.map((row) => (
             <tr
               key={row.id}
-              className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition"
+              className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
             >
               {row.getVisibleCells().map((cell) => (
                 <td key={cell.id} className="px-4 py-3 text-slate-800 dark:text-slate-200">

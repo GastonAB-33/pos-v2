@@ -1,13 +1,14 @@
 import React from "react";
 import { CrmLead, LeadStage } from "../types/crm.types";
-import { MessageSquare, Phone, Store, User, ArrowRight, ArrowLeft, Clock, DollarSign } from "lucide-react";
+import { MessageSquare, Phone, Store, User, ArrowRight, ArrowLeft, Clock, DollarSign, Sparkles } from "lucide-react";
 
 interface CrmPipelineProps {
   leads: CrmLead[];
   onMoveStage: (leadId: string, newStage: LeadStage) => void;
+  onActivateTrial?: (lead: CrmLead) => void;
 }
 
-export const CrmPipeline: React.FC<CrmPipelineProps> = ({ leads, onMoveStage }) => {
+export const CrmPipeline: React.FC<CrmPipelineProps> = ({ leads, onMoveStage, onActivateTrial }) => {
   const columns: { id: LeadStage; title: string; color: string; badge: string }[] = [
     { id: "lead", title: "1. Nuevos Leads", color: "border-sky-500/40 bg-sky-950/20", badge: "bg-sky-500/20 text-sky-300" },
     { id: "trial", title: "2. Trial 7 Días", color: "border-amber-500/40 bg-amber-950/20", badge: "bg-amber-500/20 text-amber-300" },
@@ -103,6 +104,18 @@ export const CrmPipeline: React.FC<CrmPipelineProps> = ({ leads, onMoveStage }) 
                           <p className="text-[10px] text-slate-400 bg-slate-950 p-1.5 rounded border border-slate-800/50 line-clamp-2">
                             {lead.notes}
                           </p>
+                        )}
+
+                        {/* Botón Activar Prueba 7 Días */}
+                        {lead.stage === "lead" && onActivateTrial && (
+                          <button
+                            type="button"
+                            onClick={() => onActivateTrial(lead)}
+                            className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-emerald-600 hover:from-amber-400 hover:to-emerald-500 text-white text-[11px] font-bold shadow transition"
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            <span>Activar Prueba 7 Días</span>
+                          </button>
                         )}
 
                         {/* Botón WhatsApp directo */}

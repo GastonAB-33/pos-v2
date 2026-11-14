@@ -189,7 +189,7 @@ export const mapEntityToProduct = (
 
 export const getProductAuditLog = async (tenantId: string, limit = 24): Promise<ProductAuditEntry[]> => {
   const [logs, users] = await Promise.all([
-    auditService.getByFilters(tenantId, { module: "productos" }),
+    auditService.getByFilters(tenantId, { module: "productos" }, Math.max(limit * 2, 48)),
     usersService.getAllByTenant(tenantId),
   ]);
 

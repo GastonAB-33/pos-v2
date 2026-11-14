@@ -3,6 +3,7 @@ import { cashService } from "@/services/cash.service";
 import { customersService } from "@/services/customers.service";
 import { paymentMethodsService } from "@/services/payment-methods.service";
 import { productsService } from "@/services/products.service";
+import { useProductsStore } from "@/features/products/store/products.store";
 import { purchasesService } from "@/services/purchases.service";
 import { salesService } from "@/services/sales.service";
 import type { CashMovement, Product } from "@/types/entities";
@@ -155,7 +156,7 @@ const buildStockCriticalRows = (products: Product[]): StockCriticalRow[] => {
 };
 
 export const useDashboardAnalytics = (tenantId: string | null): DashboardAnalyticsState => {
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DashboardAnalyticsData>(initialData);
 
@@ -177,18 +178,28 @@ export const useDashboardAnalytics = (tenantId: string | null): DashboardAnalyti
       const sinceSales = new Date(Math.min(startMonth.getTime(), sevenDaysAgo.getTime())).toISOString();
       const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString();
 
-      // Consultas optimizadas con filtros de fecha en base de datos
+      // Consultas optimizadas con filtros de fecha en base de datos y cache en memoria
+      const cachedProducts = useProductsStore.getState().products;
+      const productsPromise =
+        cachedProducts.length > 0 && useProductsStore.getState().loadedTenantId === tenantId
+          ? Promise.resolve(cachedProducts)
+          : useProductsStore
+              .getState()
+              .loadCatalog(tenantId)
+              .then(() => useProductsStore.getState().products)
+              .catch(() => productsService.getAllByTenant(tenantId));
+
       const [
-        sales,
-        products,
-        customers,
-        purchases,
-        paymentMethods,
-        cashSessions,
-        cashMovements,
-      ] = await Promise.all([
+        salesRes,
+        productsRes,
+        customersRes,
+        purchasesRes,
+        paymentMethodsRes,
+        cashSessionsRes,
+        cashMovementsRes,
+      ] = await Promise.allSettled([
         salesService.getSalesSince(tenantId, sinceSales),
-        productsService.getAllByTenant(tenantId),
+        productsPromise,
         customersService.getAllByTenant(tenantId),
         purchasesService.getPurchasesSince(tenantId, sixMonthsAgo),
         paymentMethodsService.getAllByTenant(tenantId),
@@ -196,16 +207,32 @@ export const useDashboardAnalytics = (tenantId: string | null): DashboardAnalyti
         cashService.getMovementsSince(tenantId, sinceSales),
       ]);
 
+      const sales = salesRes.status === "fulfilled" ? salesRes.value : [];
+      const products = productsRes.status === "fulfilled" ? productsRes.value : [];
+      const customers = customersRes.status === "fulfilled" ? customersRes.value : [];
+      const purchases = purchasesRes.status === "fulfilled" ? purchasesRes.value : [];
+      const paymentMethods = paymentMethodsRes.status === "fulfilled" ? paymentMethodsRes.value : [];
+      const cashSessions = cashSessionsRes.status === "fulfilled" ? cashSessionsRes.value : [];
+      const cashMovements = cashMovementsRes.status === "fulfilled" ? cashMovementsRes.value : [];
+
+      if (salesRes.status === "rejected") {
+        console.warn("[useDashboardAnalytics] Error al consultar ventas:", salesRes.reason);
+      }
+
       const completedSales = sales.filter((sale) => sale.status === "completed");
       const completedSalesToday = completedSales.filter((sale) => isOnOrAfter(sale.created_at, startToday));
       const completedSalesMonth = completedSales.filter((sale) => isOnOrAfter(sale.created_at, startMonth));
       const monthSaleIdList = completedSalesMonth.map((sale) => sale.id);
 
-      // Cargar items y pagos unicamente de las ventas completadas del periodo en vez de la BD entera
-      const [saleItems, salePayments] = await Promise.all([
-        monthSaleIdList.length ? salesService.getItemsBySaleIds(tenantId, monthSaleIdList) : [],
-        monthSaleIdList.length ? salesService.getPaymentsBySaleIds(tenantId, monthSaleIdList) : [],
+      // Cargar items y pagos unicamente de las ventas completadas del periodo (acotado a 200 para consumo minimo)
+      const targetSaleIds = monthSaleIdList.slice(0, 200);
+      const [saleItemsRes, salePaymentsRes] = await Promise.allSettled([
+        targetSaleIds.length ? salesService.getItemsBySaleIds(tenantId, targetSaleIds) : Promise.resolve([]),
+        targetSaleIds.length ? salesService.getPaymentsBySaleIds(tenantId, targetSaleIds) : Promise.resolve([]),
       ]);
+
+      const saleItems = saleItemsRes.status === "fulfilled" ? saleItemsRes.value : [];
+      const salePayments = salePaymentsRes.status === "fulfilled" ? salePaymentsRes.value : [];
 
       const salesToday = roundAmount(completedSalesToday.reduce((acc, sale) => acc + sale.total, 0));
       const salesMonth = roundAmount(completedSalesMonth.reduce((acc, sale) => acc + sale.total, 0));
@@ -391,8 +418,9 @@ export const useDashboardAnalytics = (tenantId: string | null): DashboardAnalyti
         purchasesByPeriod,
         cashMovementsBySource,
       });
-    } catch {
-      setError("No se pudieron cargar las estadisticas");
+    } catch (err) {
+      console.error("[useDashboardAnalytics] Error cargando estadísticas:", err);
+      setError("No se pudieron cargar las estadísticas");
       setData(initialData);
     } finally {
       setIsLoading(false);
@@ -413,3 +441,4 @@ export const useDashboardAnalytics = (tenantId: string | null): DashboardAnalyti
     [isLoading, error, data, load]
   );
 };
+

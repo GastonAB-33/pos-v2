@@ -1,3 +1,4 @@
+import "@/utils/uuid";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { registerServiceWorker } from "@/app/pwa/register-service-worker";

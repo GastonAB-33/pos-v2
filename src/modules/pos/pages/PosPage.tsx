@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/utils/cn";
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { LoadingState } from "@/components/ui/UiStates";
 import { IconButton } from "@/components/ui/IconButton";
-import { Banknote, CreditCard, FileText, Landmark, LockOpen, RefreshCw, Search, User as UserIcon, X } from "lucide-react";
+import { Banknote, CreditCard, FileText, Landmark, Loader2, LockOpen, RefreshCw, Search, ShoppingCart, User as UserIcon, X } from "lucide-react";
 import { useToast } from "@/components/ui/useToast";
 import { routePaths } from "@/config/routes";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -911,14 +912,17 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
       try {
         const result = await addProductByBarcode(cleanBarcode);
         if (!result.ok || (!result.product && !result.promotion)) {
-          // Guardar el código escaneado que no fue encontrado para precargar en Producto Rápido
+          // Guardar el código escaneado que no fue encontrado y abrir modal rápido
+          // Si existe en el Catálogo Maestro Global, se precargará automáticamente con nombre y categoría
           setLastNotFoundBarcode(cleanBarcode);
+          setIsQuickProductModalOpen(true);
           return false;
         }
 
         const scannedProduct = result.product;
         if (!scannedProduct && !result.promotion) {
           setLastNotFoundBarcode(cleanBarcode);
+          setIsQuickProductModalOpen(true);
           return false;
         }
 
@@ -1567,6 +1571,42 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
     );
   }
 
+  if (isLoading && products.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-6rem)] p-6 text-center select-none">
+        <div className="w-full max-w-md p-8 rounded-3xl border border-slate-200/90 bg-white/95 dark:border-slate-800 dark:bg-slate-900/95 shadow-xl backdrop-blur-md space-y-6">
+          <div className="relative mx-auto flex items-center justify-center w-20 h-20 rounded-3xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200/80 dark:border-blue-800/80 shadow-inner">
+            <ShoppingCart className="w-10 h-10 text-blue-600 dark:text-blue-400" />
+            <div className="absolute -inset-1 rounded-3xl border-2 border-blue-500/30 dark:border-blue-400/20 animate-ping pointer-events-none" />
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+              Iniciando Punto de Venta
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Cargando catálogo de productos, promociones vigentes, listas de precios y métodos de pago...
+            </p>
+          </div>
+
+          <div className="flex items-center justify-center gap-3 py-2">
+            <Loader2 className="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin" />
+            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+              Sincronizando caja y catálogo operativo...
+            </span>
+          </div>
+
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-center gap-2 text-[11px] text-slate-400 dark:text-slate-500">
+            <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 font-mono font-bold text-slate-600 dark:text-slate-300">
+              F4
+            </span>
+            <span>Acceso rápido permanente al POS</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="pos-page pos-page--smart space-y-4 p-1 sm:p-2 pb-24 lg:pb-2">
       {/* Input invisible de captura permanente para lector de códigos de barra físico */}
@@ -1716,7 +1756,7 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
       ) : null}
 
       {isCheckoutModalOpen ? (
-        <section className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-3 sm:p-4">
+        <section className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-2 sm:p-4">
           <button
             type="button"
             aria-label="Cerrar confirmacion de venta"
@@ -2064,7 +2104,9 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
 
             <div className="max-h-[65vh] space-y-3 overflow-y-auto pr-1">
               {isLoadingReceipts ? (
-                <div className="ui-loading py-8">Cargando comprobantes...</div>
+                <div className="py-6">
+                  <LoadingState message="Cargando comprobantes recientes..." />
+                </div>
               ) : !filteredReceipts.length ? (
                 <div className="ui-empty-state py-8">
                   {receiptsSearchTerm
@@ -2393,3 +2435,4 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
     </div>
   );
 };
+

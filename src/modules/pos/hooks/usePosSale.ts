@@ -34,6 +34,10 @@ import { salesService } from "@/services/sales.service";
 import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
 import { settingsService } from "@/services/settings.service";
 import { stockService } from "@/services/stock.service";
+import {
+  formatDisplaySaleNumber,
+  getNextDailySaleNumbers,
+} from "@/utils/voucher-format.utils";
 import type { ArcaSettings, BankAccount, BarcodeScaleSettings, Customer, Employee, InstallmentPlan, Invoice, InvoiceDocumentType,
   PaymentMethodInvoiceRules, MercadoPagoSettings, OriginBank, PaymentMethod, PaymentMethodType, PosSettings, PriceList, Product, ProductBarcode, Receipt, Sale } from "@/types/entities";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
@@ -500,7 +504,7 @@ export const usePosSale = (tenantId: string | null) => {
     { id: "sale-1", label: "Venta 1", cart: [], selectedCustomerId: "" },
   ]);
   const [activeTabId, setActiveTabId] = useState<string>("sale-1");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMercadoPagoLoading, setIsMercadoPagoLoading] = useState(false);
   const [feedback, setFeedback] = useState<PosFeedback | null>(null);
@@ -1268,7 +1272,8 @@ export const usePosSale = (tenantId: string | null) => {
       if (item.is_debt_payment_item || item.is_package_refund_item || item.unit_price < 0) return false;
       if (isEmployeeDiscount && item.category) {
         const cat = item.category.trim().toLowerCase();
-        if (excludedCategories.includes(cat)) return false;
+        const parts = cat.split("/").map((p) => p.trim());
+        if (excludedCategories.includes(cat) || excludedCategories.some((exc) => parts.includes(exc))) return false;
       }
       return true;
     };
@@ -1388,7 +1393,8 @@ export const usePosSale = (tenantId: string | null) => {
           if (item.is_debt_payment_item) return false;
           if (isEmployeeDiscount && item.category) {
             const cat = item.category.trim().toLowerCase();
-            if (excludedCategories.includes(cat)) return false;
+            const parts = cat.split("/").map((p) => p.trim());
+            if (excludedCategories.includes(cat) || excludedCategories.some((exc) => parts.includes(exc))) return false;
           }
           return true;
         })
@@ -2850,7 +2856,7 @@ export const usePosSale = (tenantId: string | null) => {
       tenant_id: tenantId ?? "tenant-offline",
       sale_id: `sale-off-${Date.now()}`,
       sale_number: saleNumber,
-      receipt_number: `TCK-OFF-${Date.now()}`,
+      receipt_number: `TCK-${saleNumber.replace(/^VTA-/, "")}`,
       issued_at: now,
       customer_name: customerName,
       payment_method: normalizePaymentMethodCode(paymentMethod.code) as PaymentMethodType,
@@ -3003,7 +3009,12 @@ export const usePosSale = (tenantId: string | null) => {
     }
 
     const summary = getCheckoutSummary(paymentMethod.id);
-    const saleNumber = buildSaleNumber();
+    const { saleNumber, receiptNumber: nextReceiptNumber } = tenantId
+      ? await getNextDailySaleNumbers(tenantId)
+      : {
+          saleNumber: buildSaleNumber(),
+          receiptNumber: `TCK-${Date.now()}`,
+        };
     const normalizedCustomerId = values.customerId?.trim() ?? "";
     const selectedCustomerForSale = normalizedCustomerId
       ? customers.find((customer) => customer.id === normalizedCustomerId) ?? null
@@ -3877,7 +3888,7 @@ export const usePosSale = (tenantId: string | null) => {
       const receiptPayload = {
         sale_id: sale.id,
         sale_number: sale.sale_number,
-        receipt_number: `TCK-${Date.now()}`,
+        receipt_number: nextReceiptNumber,
         issued_at: new Date().toISOString(),
         customer_name: selectedCustomerForSale?.full_name ?? null,
         payment_method: paymentMethodCode as PaymentMethodType,
@@ -4112,7 +4123,7 @@ export const usePosSale = (tenantId: string | null) => {
         action: "sale_confirmed",
         entity_type: "sale",
         entity_id: sale.id,
-        description: `Venta confirmada: ${sale.sale_number}`,
+        description: `Venta confirmada: ${formatDisplaySaleNumber(sale.sale_number)}`,
         metadata: {
           sale_number: sale.sale_number,
           customer_id: sale.customer_id,
@@ -4129,8 +4140,8 @@ export const usePosSale = (tenantId: string | null) => {
           values.issueInvoice && generatedInvoiceFromSale
             ? "Factura emitida correctamente"
             : isSplit
-              ? `Venta ${sale.sale_number} registrada correctamente con pago combinado (${splitPayments.length} métodos)`
-              : "Venta registrada correctamente",
+              ? `Venta ${formatDisplaySaleNumber(sale.sale_number)} registrada correctamente con pago combinado (${splitPayments.length} métodos)`
+              : `Venta ${formatDisplaySaleNumber(sale.sale_number)} registrada correctamente`,
       });
 
       setMercadoPagoIntent(null);
@@ -4300,3 +4311,4 @@ export const usePosSale = (tenantId: string | null) => {
     clearGeneratedReceipt,
   };
 };
+

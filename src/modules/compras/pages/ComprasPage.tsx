@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { LoadingState } from "@/components/ui/UiStates";
 import { IconButton } from "@/components/ui/IconButton";
 import { ArrowLeft, Plus, RefreshCw, Trash2, X } from "lucide-react";
-import { settingsService } from "@/services/settings.service";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -56,7 +56,7 @@ const DuplicateProductReviewModal = ({
 
   return (
     <section className="fixed inset-0 z-[60] flex items-center justify-center bg-[var(--ui-overlay)] p-4">
-      <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-5 shadow-panel dark:border-slate-800 dark:bg-slate-900">
+      <div className="w-full max-w-2xl rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
           <div>
             <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -93,7 +93,7 @@ const DuplicateProductReviewModal = ({
               </div>
               <button
                 type="button"
-                className="ui-btn-primary px-3 py-2 text-xs"
+                className="rounded-xl bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-blue-700 active:scale-95 disabled:opacity-50 transition-all"
                 onClick={() => onUseExisting(product)}
                 disabled={disabled}
               >
@@ -112,7 +112,7 @@ const DuplicateProductReviewModal = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className="ui-btn-ghost text-xs border border-slate-300 dark:border-slate-700 dark:text-slate-200"
+              className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition-all"
               onClick={onEditProduct}
               disabled={disabled}
             >
@@ -121,7 +121,7 @@ const DuplicateProductReviewModal = ({
             {!isStrictDuplicate ? (
               <button
                 type="button"
-                className="ui-btn-ghost text-xs border border-slate-300 dark:border-slate-700 dark:text-slate-200"
+                className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition-all"
                 onClick={onCreateAnyway}
                 disabled={disabled}
               >
@@ -141,29 +141,10 @@ export const ComprasPage = () => {
   const { canRead, canWrite } = usePermissions();
   const canReadPurchases = canRead("compras");
   const canWritePurchases = canWrite("compras");
-  const canAdjustProfitMarginPerm = canWrite("compras_margen");
-  const [allowProfitMarginBySetting, setAllowProfitMarginBySetting] = useState(true);
-  const [isDoubleConfirmationSetting, setIsDoubleConfirmationSetting] = useState(false);
+  const canAdjustProfitMargin = canWrite("compras_margen");
+  const canApprovePricing = canWrite("compras_doble_confirmacion");
 
-  useEffect(() => {
-    if (!tenantId) return;
-    let active = true;
-    void settingsService.getByTenant(tenantId).then((settings) => {
-      if (active) {
-        if (settings?.stock?.allow_purchases_profit_margin_adjustment !== undefined) {
-          setAllowProfitMarginBySetting(settings.stock.allow_purchases_profit_margin_adjustment);
-        }
-        setIsDoubleConfirmationSetting(Boolean(settings?.stock?.purchase_double_confirmation_enabled));
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, [tenantId]);
-
-  // Si no está permitido por configuración, o no tiene permiso, o está activa la doble confirmación:
-  // los empleados no pueden ni modificar ni ver porcentaje de ganancia ni precios de venta
-  const canAdjustProfitMargin = allowProfitMarginBySetting && canAdjustProfitMarginPerm && !isDoubleConfirmationSetting;
+  // Si el usuario no tiene el permiso compras_margen, no puede ver ni modificar márgenes ni precios de venta
 
   const [viewMode, setViewMode] = useState<"history" | "create" | "review">("history");
   const [reviewPurchaseTarget, setReviewPurchaseTarget] = useState<{
@@ -492,14 +473,16 @@ export const ComprasPage = () => {
                 <span className="ui-badge ui-badge--info">{purchases.length}</span>
               </div>
               {isLoading && purchases.length === 0 ? (
-                <div className="rounded-lg border border-slate-200 dark:border-slate-800 p-8 text-center text-sm text-slate-600 dark:text-slate-400">
-                  Cargando historial...
-                </div>
+                <LoadingState
+                  message="Cargando historial de compras a proveedores..."
+                  description="Sincronizando comprobantes registrados, proveedores y costos..."
+                />
               ) : (
                 <PurchasesHistoryTable
                   rows={historyRows}
                   products={allProducts}
                   canWrite={canWritePurchases}
+                  canApprovePricing={canApprovePricing}
                   disabled={isSubmitting}
                   onOpenReturnModal={(purchase, supplier) =>
                     setReturnModalTarget({ purchase, supplier })
@@ -766,5 +749,6 @@ export const ComprasPage = () => {
     </PagePlaceholder>
   );
 };
+
 
 

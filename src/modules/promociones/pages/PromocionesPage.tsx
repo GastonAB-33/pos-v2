@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { LoadingState } from "@/components/ui/UiStates";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -146,110 +146,116 @@ export const PromocionesPage = () => {
 
   if (!tenantId) {
     return (
-      <PagePlaceholder
-        title="Promociones"
-        description="No hay un comercio activo"
-      />
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-xs dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+        No hay un comercio activo.
+      </div>
     );
   }
 
   if (!canReadPromociones) {
     return (
-      <PagePlaceholder
-        title="Promociones"
-        description="No tenés permisos de lectura para este módulo"
-      />
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-xs dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+        No tenés permisos de lectura para este módulo.
+      </div>
     );
   }
 
   return (
-    <PagePlaceholder title="Promociones" description="Reglas y combos automáticos aplicables en POS">
-      <div className="space-y-4">
-        <PromotionsToolbar
-          canWrite={canWritePromociones}
-          loading={isLoading || isSubmitting}
-          search={search}
-          onSearchChange={setSearch}
-          onCreate={handleCreateClick}
-          onReload={() => void reload()}
+    <div className="space-y-4 w-full min-w-0 max-w-full">
+      <PromotionsToolbar
+        canWrite={canWritePromociones}
+        loading={isLoading || isSubmitting}
+        search={search}
+        onSearchChange={setSearch}
+        onCreate={handleCreateClick}
+        onReload={() => void reload()}
+      />
+
+      {feedback ? (
+        <div
+          className={`rounded-2xl border px-4 py-3 text-sm font-medium ${
+            feedback.type === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-300"
+              : "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-800/80 dark:bg-rose-950/40 dark:text-rose-300"
+          }`}
+        >
+          {feedback.message}
+        </div>
+      ) : null}
+
+      {isLoading ? (
+        <LoadingState
+          message="Cargando promociones vigentes..."
+          description="Sincronizando combos, descuentos y promociones activas..."
         />
+      ) : (
+        <PromotionsTable
+          promotions={promotions}
+          productNameById={productNameById}
+          canWrite={canWritePromociones}
+          onEdit={handleEditClick}
+          onDelete={handleDeleteClick}
+          onToggleActive={handleToggleClick}
+          onBarcode={setBarcodePromotion}
+        />
+      )}
 
-        {feedback ? (
-          <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>
-            {feedback.message}
-          </div>
-        ) : null}
-
-        {isLoading ? (
-          <div className="ui-loading">Cargando promociones...</div>
-        ) : (
-          <PromotionsTable
-            promotions={promotions}
-            productNameById={productNameById}
-            canWrite={canWritePromociones}
-            onEdit={handleEditClick}
-            onDelete={handleDeleteClick}
-            onToggleActive={handleToggleClick}
-            onBarcode={setBarcodePromotion}
-          />
-        )}
-
-        {/* Modal Principal de Creación / Edición de Promociones */}
-        {formOpen ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-fade-in">
-            <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden">
-              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-5 py-4 shrink-0 bg-slate-50/70 dark:bg-slate-900">
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                    {formMode === "create" ? "Nueva Promoción" : "Editar Promoción"}
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Configurá descuentos individuales, packs por volumen o combos de múltiples productos
-                  </p>
-                </div>
-                <ModalCloseButton
-                  onClick={() => {
-                    setFormOpen(false);
-                    setSelectedPromotion(undefined);
-                  }}
-                />
+      {/* Modal Principal de Creación / Edición de Promociones */}
+      {formOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-fade-in">
+          <div className="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 px-5 py-4 shrink-0 bg-slate-50/70 dark:bg-slate-900">
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+                  {formMode === "create" ? "Nueva Promoción" : "Editar Promoción"}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Configurá descuentos individuales, packs por volumen o combos de múltiples productos
+                </p>
               </div>
+              <ModalCloseButton
+                onClick={() => {
+                  setFormOpen(false);
+                  setSelectedPromotion(undefined);
+                }}
+              />
+            </div>
 
-              <div className="flex-1 overflow-y-auto p-5">
-                <PromotionForm
-                  mode={formMode}
-                  promotion={selectedPromotion}
-                  products={products}
-                  disabled={isSubmitting}
-                  onCancel={() => {
-                    setFormOpen(false);
-                    setSelectedPromotion(undefined);
-                  }}
-                  onSubmit={handleSubmitForm}
-                  onRequestCreateProduct={() => setIsProductModalOpen(true)}
-                  newlyCreatedProduct={newlyCreatedProduct}
-                />
-              </div>
+            <div className="flex-1 overflow-y-auto p-5">
+              <PromotionForm
+                mode={formMode}
+                promotion={selectedPromotion}
+                products={products}
+                disabled={isSubmitting}
+                onCancel={() => {
+                  setFormOpen(false);
+                  setSelectedPromotion(undefined);
+                }}
+                onSubmit={handleSubmitForm}
+                onRequestCreateProduct={() => setIsProductModalOpen(true)}
+                newlyCreatedProduct={newlyCreatedProduct}
+              />
             </div>
           </div>
-        ) : null}
+        </div>
+      ) : null}
 
-        {/* Modal para Crear Producto sobre la marcha */}
-        <ProductFormModal
-          open={isProductModalOpen}
-          mode="create"
-          categoryOptions={categoryOptions}
-          subcategoryOptions={subcategoryOptions}
-          onClose={() => setIsProductModalOpen(false)}
-          onSubmit={handleProductModalSubmit}
-        />
+      {/* Modal para Crear Producto sobre la marcha */}
+      <ProductFormModal
+        open={isProductModalOpen}
+        mode="create"
+        categoryOptions={categoryOptions}
+        subcategoryOptions={subcategoryOptions}
+        onClose={() => setIsProductModalOpen(false)}
+        onSubmit={handleProductModalSubmit}
+      />
 
-        {/* Modal de Código de Barras */}
-        <PromotionBarcodeModal
-          promotion={barcodePromotion}
-          onClose={() => setBarcodePromotion(null)}
-        />
-      </div>
-    </PagePlaceholder>
+      {/* Modal de Código de Barras */}
+      <PromotionBarcodeModal
+        promotion={barcodePromotion}
+        onClose={() => setBarcodePromotion(null)}
+      />
+    </div>
   );
 };
+

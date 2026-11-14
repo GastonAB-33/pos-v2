@@ -31,17 +31,18 @@ const matchesFilter = (row: AuditLog, filters: AuditFilters): boolean => {
 };
 
 export const auditService = {
-  async getAllByTenant(tenantId: string): Promise<AuditLog[]> {
+  async getAllByTenant(tenantId: string, limit = 200): Promise<AuditLog[]> {
     if (dataProvider === "mock") {
       const rows = getAuditMockRows().filter((row) => row.tenant_id === tenantId);
-      return sortByCreatedAtDesc(rows);
+      return sortByCreatedAtDesc(rows).slice(0, limit);
     }
 
     const { data, error } = await supabase
       .from(dbTables.audit_logs)
       .select("*")
       .eq("tenant_id", tenantId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(limit);
 
     if (error) throw error;
     return (data ?? []) as AuditLog[];
@@ -94,9 +95,38 @@ export const auditService = {
     }
   },
 
-  async getByFilters(tenantId: string, filters: AuditFilters): Promise<AuditLog[]> {
-    const all = await auditService.getAllByTenant(tenantId);
-    return all.filter((row) => matchesFilter(row, filters));
+  async getByFilters(tenantId: string, filters: AuditFilters, limit = 200): Promise<AuditLog[]> {
+    if (dataProvider === "mock") {
+      const rows = getAuditMockRows().filter((row) => row.tenant_id === tenantId);
+      return sortByCreatedAtDesc(rows.filter((row) => matchesFilter(row, filters))).slice(0, limit);
+    }
+
+    let builder = supabase
+      .from(dbTables.audit_logs)
+      .select("*")
+      .eq("tenant_id", tenantId);
+
+    if (filters.userId) {
+      builder = builder.eq("user_id", filters.userId);
+    }
+    if (filters.module) {
+      builder = builder.eq("module", filters.module);
+    }
+    if (filters.action) {
+      builder = builder.eq("action", filters.action);
+    }
+    if (filters.dateFrom) {
+      builder = builder.gte("created_at", `${filters.dateFrom}T00:00:00.000Z`);
+    }
+    if (filters.dateTo) {
+      builder = builder.lte("created_at", `${filters.dateTo}T23:59:59.999Z`);
+    }
+
+    builder = builder.order("created_at", { ascending: false }).limit(limit);
+
+    const { data, error } = await builder;
+    if (error) throw error;
+    return (data ?? []) as AuditLog[];
   },
 
   async deleteOlderThan(tenantId: string, cutoffDateIso: string): Promise<number> {

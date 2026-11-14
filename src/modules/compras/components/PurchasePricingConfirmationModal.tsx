@@ -272,7 +272,7 @@ export const PurchasePricingConfirmationModal = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-2 sm:p-4 backdrop-blur-[1px] animate-fadeIn">
-      <div className="flex max-h-[92dvh] sm:max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-panel dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex max-h-[92dvh] sm:max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
         {/* Cabecera */}
         <header className="flex items-start justify-between gap-3 border-b border-slate-200 p-4 sm:px-6 dark:border-slate-800 bg-amber-50/50 dark:bg-amber-950/20">
           <div className="min-w-0">

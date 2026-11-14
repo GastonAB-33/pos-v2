@@ -1,4 +1,5 @@
 import { auditService } from "@/services/audit.service";
+import { generateUuid } from "@/utils/uuid";
 import { storageKeys } from "@/utils/local-storage";
 
 export type SupportTicketType = "falla" | "sugerencia" | "consulta";
@@ -253,7 +254,7 @@ export const supportCenterStorage = {
     const ticketNumber = getNextTicketNumber(all);
 
     const message: SupportTicketMessage = {
-      id: crypto.randomUUID(),
+      id: generateUuid(),
       ticketId: "",
       createdAt,
       authorId: input.requesterUserId,
@@ -263,7 +264,7 @@ export const supportCenterStorage = {
     };
 
     const ticket: SupportTicket = {
-      id: crypto.randomUUID(),
+      id: generateUuid(),
       ticketNumber,
       tenantId: input.tenantId,
       tenantName: input.tenantName || "Comercio",
@@ -328,7 +329,7 @@ export const supportCenterStorage = {
 
     const ticket = all[index];
     const message: SupportTicketMessage = {
-      id: crypto.randomUUID(),
+      id: generateUuid(),
       ticketId: ticket.id,
       createdAt: now,
       authorId: input.authorId,

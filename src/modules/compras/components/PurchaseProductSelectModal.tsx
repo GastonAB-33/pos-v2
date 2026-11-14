@@ -177,7 +177,7 @@ export const PurchaseProductSelectModal = ({
 
   return (
     <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-2 sm:p-4">
-      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-panel dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
         {/* Header */}
         <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-3.5 py-2.5 sm:px-5 sm:py-4 dark:border-slate-800">
           <div className="min-w-0">

@@ -3,6 +3,7 @@ import { auditService } from "@/services/audit.service";
 import { cashService } from "@/services/cash.service";
 import { productsService } from "@/services/products.service";
 import { useProductsStore } from "@/features/products/store/products.store";
+import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePurchasesStore } from "@/modules/compras/store/purchases.store";
 import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
 import { generalCashService } from "@/services/general-cash.service";
@@ -505,6 +506,12 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
   ): Promise<Purchase | null> => {
     if (!tenantId) return null;
 
+    const canWritePurchases = useAuthStore.getState().hasPermission("compras", "write");
+    if (!canWritePurchases) {
+      setFeedback({ type: "error", message: "No tienes permiso para registrar compras." });
+      return null;
+    }
+
     if (!cart.length) {
       setFeedback({ type: "error", message: "No se puede registrar una compra sin ítems" });
       return null;
@@ -709,8 +716,9 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       const combinedNotes =
         [fiscalNotes, headerValues.notes?.trim(), paymentDetailNotes].filter(Boolean).join(" | ") || null;
 
+      const canAdjustProfitMargin = useAuthStore.getState().hasPermission("compras_margen", "write");
       const tenantSettings = await settingsService.getByTenant(tenantId).catch(() => null);
-      const isDoubleConfirmation = Boolean(tenantSettings?.stock?.purchase_double_confirmation_enabled);
+      const isDoubleConfirmation = Boolean(tenantSettings?.stock?.purchase_double_confirmation_enabled) || !canAdjustProfitMargin;
       const initialStatus = isDoubleConfirmation ? "pending_pricing" : "confirmed";
 
       // Generar correlativo humano y ordenado: CP-00001, CP-00002...
@@ -1001,6 +1009,13 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       ) {
         message =
           "Error de proveedor: El proveedor seleccionado no existe en la base de datos remota. Por favor recarga los proveedores o pulsa '+ Nuevo' para darlo de alta.";
+      } else if (
+        raw.toLowerCase().includes("purchases_tenant_id_purchase_number_key") ||
+        raw.toLowerCase().includes("purchase_number") ||
+        (raw.toLowerCase().includes("duplicate key") && raw.toLowerCase().includes("purchase"))
+      ) {
+        message =
+          "El número interno de compra generado ya existe o tu lista de compras en pantalla está desactualizada. Por favor, recargá la página (F5 o botón de recargar) para actualizar el contador de compras y volvé a confirmar. Si el inconveniente continúa, comunicate con soporte indicando el código de referencia: [ERR-CP-NUM-DUP-409].";
       }
       setFeedback({ type: "error", message });
       return null;
@@ -1014,6 +1029,16 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     itemsUpdates: PurchasePricingItemUpdate[]
   ): Promise<boolean> => {
     if (!tenantId) return false;
+
+    const canApprovePricing = useAuthStore.getState().hasPermission("compras_doble_confirmacion", "write");
+    if (!canApprovePricing) {
+      setFeedback({
+        type: "error",
+        message: "No tienes permiso para aprobar precios ni finalizar la doble confirmación de compras.",
+      });
+      return false;
+    }
+
     setIsSubmitting(true);
     try {
       for (const item of itemsUpdates) {
@@ -1097,8 +1122,20 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     payload: PurchaseReviewConfirmationPayload
   ): Promise<boolean> => {
     if (!tenantId) return false;
-    setIsSubmitting(true);
+
     const isFinalizing = payload.finalize !== false;
+    if (isFinalizing) {
+      const canApprovePricing = useAuthStore.getState().hasPermission("compras_doble_confirmacion", "write");
+      if (!canApprovePricing) {
+        setFeedback({
+          type: "error",
+          message: "No tienes permiso para aprobar la doble confirmación de compras ni fijar precios.",
+        });
+        return false;
+      }
+    }
+
+    setIsSubmitting(true);
     try {
       const existingPurchase = purchases.find((p) => p.id === payload.purchaseId);
 

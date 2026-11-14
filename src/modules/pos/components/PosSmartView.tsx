@@ -381,7 +381,7 @@ export const PosSmartView = ({
       <section
         className={cn(
           "lg:col-span-8 flex flex-col rounded-2xl border transition-all duration-300",
-          "bg-white dark:bg-[#0b1325] border-slate-200 dark:border-slate-800/90 p-4 sm:p-5 shadow-sm min-h-[580px]",
+          "bg-white dark:bg-[#0b1325] border-slate-200 dark:border-slate-800/90 p-3 sm:p-5 shadow-sm min-h-[580px]",
           isHighlighted && "ring-2 ring-emerald-500/60 border-emerald-500/80"
         )}
       >
@@ -415,7 +415,7 @@ export const PosSmartView = ({
           className="relative mb-5 z-20"
         >
           <div
-            className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-[#0f1a33] px-3.5 py-2.5 focus-within:border-blue-500 dark:focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:focus-within:ring-sky-500/20 transition-all shadow-inner cursor-text"
+            className="flex items-center gap-1.5 sm:gap-2 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50 dark:bg-[#0f1a33] px-2.5 sm:px-3.5 py-2 sm:py-2.5 focus-within:border-blue-500 dark:focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:focus-within:ring-sky-500/20 transition-all shadow-inner cursor-text"
             onClick={() => {
               if (searchQuery.trim()) {
                 setIsSearchOpen(true);
@@ -441,7 +441,7 @@ export const PosSmartView = ({
                 if (searchQuery.trim()) setIsSearchOpen(true);
               }}
               onKeyDown={handleSearchKeyDown}
-              placeholder={getSearchPlaceholder(searchScope)}
+              placeholder={searchScope === "all" ? "Buscar producto o código..." : getSearchPlaceholder(searchScope)}
               className="flex-1 bg-transparent text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none min-w-0"
               autoComplete="off"
               autoCorrect="off"
@@ -457,14 +457,14 @@ export const PosSmartView = ({
                   setIsSearchOpen(false);
                   searchInputRef.current?.focus();
                 }}
-                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition shrink-0"
                 title="Limpiar búsqueda"
               >
                 <X size={14} />
               </button>
             ) : null}
 
-            <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700/80 mx-1 shrink-0" />
+            <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700/80 mx-0.5 sm:mx-1 shrink-0" />
 
             <select
               value={searchScope}
@@ -473,7 +473,7 @@ export const PosSmartView = ({
                 setSearchScope(e.target.value as ProductSearchScope);
                 if (searchQuery.trim()) setIsSearchOpen(true);
               }}
-              className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer py-0.5 px-1 shrink-0 max-w-[150px] truncate"
+              className="bg-transparent text-[11px] sm:text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer py-0.5 px-0.5 sm:px-1 shrink-0 max-w-[62px] sm:max-w-[140px] truncate border-0"
               aria-label="Filtro de búsqueda"
             >
               {PRODUCT_SEARCH_SCOPE_OPTIONS.map((opt) => (
@@ -795,7 +795,7 @@ export const PosSmartView = ({
                   </div>
 
                   {/* Controles de cantidad táctiles interactivos */}
-                  <div className="flex items-center shrink-0">
+                  <div className="flex items-center justify-between gap-2 shrink-0 w-full sm:w-auto">
                     {item.is_debt_payment_item ? (
                       <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60">
                         Pago único
@@ -912,12 +912,27 @@ export const PosSmartView = ({
                         </button>
                       </div>
                     )}
+
+                    {/* Subtotal en vista móvil (a la derecha de la fila de cantidad) */}
+                    <div className="text-right sm:hidden">
+                      <span className="text-[10px] block text-slate-400">Subtotal</span>
+                      <span className={cn(
+                        "font-extrabold text-sm tracking-tight",
+                        itemSubtotal < 0 ? "text-rose-600 dark:text-rose-400" : "text-blue-600 dark:text-sky-400"
+                      )}>
+                        {currency.format(itemSubtotal)}
+                      </span>
+                      {"promotion_discount_total" in item && typeof item.promotion_discount_total === "number" && item.promotion_discount_total > 0 ? (
+                        <span className="block text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                          -{currency.format(item.promotion_discount_total)}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
 
-                  {/* Subtotal destacado y botones de acción */}
-                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200 dark:border-slate-800/60">
-                    <div className="text-left sm:text-right min-w-[90px]">
-                      <span className="text-[10px] block text-slate-400 sm:hidden">Subtotal</span>
+                  {/* Subtotal en escritorio y botones de acción */}
+                  <div className="flex items-center justify-end gap-1.5 sm:gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200 dark:border-slate-800/60 w-full sm:w-auto">
+                    <div className="hidden sm:block text-right min-w-[90px]">
                       <span className={cn(
                         "font-extrabold text-sm sm:text-base tracking-tight",
                         itemSubtotal < 0 ? "text-rose-600 dark:text-rose-400" : "text-blue-600 dark:text-sky-400"
@@ -931,7 +946,7 @@ export const PosSmartView = ({
                       ) : null}
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
                       {!item.is_debt_payment_item && !("is_returnable_package_item" in item && item.is_returnable_package_item) && onOpenItemPromoModal ? (
                         <button
                           type="button"
@@ -939,7 +954,7 @@ export const PosSmartView = ({
                           disabled={disabled || !canWrite}
                           title="Aplicar promoción o descuento manual a este producto"
                           className={cn(
-                            "px-2.5 py-1 rounded-lg border text-xs font-semibold transition disabled:opacity-40 flex items-center gap-1 cursor-pointer",
+                            "px-2 sm:px-2.5 py-1 rounded-lg border text-xs font-semibold transition disabled:opacity-40 flex items-center gap-1 cursor-pointer",
                             ("manual_discount" in item && (item as PosCartItemComputed).manual_discount) ||
                             ("manual_promotion" in item && (item as PosCartItemComputed).manual_promotion)
                               ? "border-emerald-400 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 font-bold"
@@ -964,7 +979,7 @@ export const PosSmartView = ({
                           type="button"
                           onClick={() => onEdit(item)}
                           disabled={disabled || !canWrite}
-                          className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 text-xs font-semibold transition disabled:opacity-40"
+                          className="px-2 sm:px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 text-xs font-semibold transition disabled:opacity-40"
                         >
                           Editar
                         </button>
@@ -973,7 +988,7 @@ export const PosSmartView = ({
                         type="button"
                         onClick={() => onRemove(item.product_id)}
                         disabled={disabled || !canWrite}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition disabled:opacity-40"
+                        className="p-1 sm:p-1.5 rounded-lg text-slate-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition disabled:opacity-40 shrink-0"
                         title={"is_package_refund_item" in item && item.is_package_refund_item || item.unit_price < 0 ? "Quitar devolución de envase" : "is_returnable_package_item" in item && item.is_returnable_package_item ? "Quitar cobro de envase" : "Eliminar producto"}
                       >
                         <Trash2 size={15} />

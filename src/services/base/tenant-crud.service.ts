@@ -152,6 +152,61 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
       limit?: number;
     } = {}
   ): Promise<TEntity[]> {
+    // Si un filtro 'in' viene vacio (ej. sale_id: []), el resultado logico debe ser vacio
+    if (options.in && Object.values(options.in).some((vals) => Array.isArray(vals) && vals.length === 0)) {
+      return [];
+    }
+
+    // Prevencion de desbordamiento de URL (HTTP 414 / URI Too Long) en filtros 'in' grandes
+    if (options.in) {
+      const inEntries = Object.entries(options.in);
+      const largeEntry = inEntries.find(([, vals]) => Array.isArray(vals) && vals.length > 30);
+      if (largeEntry) {
+        const [largeKey, largeVals] = largeEntry;
+        const CHUNK_SIZE = 30;
+        const chunks: unknown[][] = [];
+        for (let i = 0; i < largeVals.length; i += CHUNK_SIZE) {
+          chunks.push(largeVals.slice(i, i + CHUNK_SIZE));
+        }
+
+        const otherIn = Object.fromEntries(inEntries.filter(([k]) => k !== largeKey));
+        const chunkResults = await Promise.all(
+          chunks.map((chunk) =>
+            this.query(tenantId, {
+              ...options,
+              in: {
+                ...otherIn,
+                [largeKey]: chunk as unknown[],
+              },
+              limit: undefined, // No truncar pedazos intermedios
+            })
+          )
+        );
+
+        let merged = chunkResults.flat();
+        if (options.order) {
+          const col = options.order.column;
+          const asc = options.order.ascending ?? true;
+          merged = merged.sort((a, b) => {
+            const valA = (a as unknown as Record<string, unknown>)[col];
+            const valB = (b as unknown as Record<string, unknown>)[col];
+            if (valA == null && valB == null) return 0;
+            if (valA == null) return asc ? -1 : 1;
+            if (valB == null) return asc ? 1 : -1;
+            if (valA < valB) return asc ? -1 : 1;
+            if (valA > valB) return asc ? 1 : -1;
+            return 0;
+          });
+        }
+
+        if (options.limit != null) {
+          merged = merged.slice(0, options.limit);
+        }
+
+        return merged;
+      }
+    }
+
     const filterAndSortMock = (rawRows: TEntity[]): TEntity[] => {
       let rows = rawRows.filter((row) => {
         if (row.tenant_id !== tenantId) return false;

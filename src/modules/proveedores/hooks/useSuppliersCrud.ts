@@ -14,7 +14,7 @@ interface CrudFeedback {
 export const useSuppliersCrud = (tenantId: string | null) => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [search, setSearch] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<CrudFeedback | null>(null);
 
@@ -133,6 +133,7 @@ export const useSuppliersCrud = (tenantId: string | null) => {
 
   return {
     suppliers: filteredSuppliers,
+    totalCount: suppliers.length,
     search,
     setSearch,
     isLoading,
@@ -146,4 +147,5 @@ export const useSuppliersCrud = (tenantId: string | null) => {
     toggleSupplierActive,
   };
 };
+
 

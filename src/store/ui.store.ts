@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { storageKeys } from "@/utils/local-storage";
+import { generateUuid } from "@/utils/uuid";
 
 export type UiTheme = "light" | "midnight" | "dark";
 export type SidebarTheme = "auto" | "dark" | "light";
@@ -18,6 +19,8 @@ export interface UiToast {
 
 interface UiStore {
   sidebarOpen: boolean;
+  sidebarPinned: boolean;
+  sidebarHovered: boolean;
   theme: UiTheme;
   sidebarTheme: SidebarTheme;
   density: UiDensity;
@@ -27,6 +30,9 @@ interface UiStore {
   toasts: UiToast[];
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
+  setSidebarPinned: (pinned: boolean) => void;
+  toggleSidebarPinned: () => void;
+  setSidebarHovered: (hovered: boolean) => void;
   setTheme: (theme: UiTheme) => void;
   setSidebarTheme: (sidebarTheme: SidebarTheme) => void;
   cycleTheme: () => void;
@@ -92,6 +98,8 @@ export const useUiStore = create<UiStore>()(
   persist(
     (set) => ({
       sidebarOpen: true,
+      sidebarPinned: true,
+      sidebarHovered: false,
       theme: getInitialTheme(),
       sidebarTheme: getInitialSidebarTheme(),
       density: "standard",
@@ -102,6 +110,10 @@ export const useUiStore = create<UiStore>()(
 
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+      setSidebarPinned: (pinned) => set({ sidebarPinned: pinned, sidebarHovered: false }),
+      toggleSidebarPinned: () =>
+        set((state) => ({ sidebarPinned: !state.sidebarPinned, sidebarHovered: false })),
+      setSidebarHovered: (hovered) => set({ sidebarHovered: hovered }),
 
       setTheme: (theme) => set({ theme }),
       setSidebarTheme: (sidebarTheme) => set({ sidebarTheme }),
@@ -134,7 +146,7 @@ export const useUiStore = create<UiStore>()(
         }),
 
       pushToast: (toast) => {
-        const id = crypto.randomUUID();
+        const id = generateUuid();
         set((state) => ({
           toasts: [...state.toasts, { ...toast, id }],
         }));
@@ -153,10 +165,12 @@ export const useUiStore = create<UiStore>()(
       onRehydrateStorage: () => (state) => {
         if (state) {
           state.posWindowMode = "smart_pos";
+          state.sidebarHovered = false;
         }
       },
       partialize: (state) => ({
         sidebarOpen: state.sidebarOpen,
+        sidebarPinned: state.sidebarPinned,
         theme: state.theme,
         sidebarTheme: state.sidebarTheme,
         density: state.density,

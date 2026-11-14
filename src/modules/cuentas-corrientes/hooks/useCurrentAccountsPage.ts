@@ -22,7 +22,7 @@ export const useCurrentAccountsPage = (
   );
   const [search, setSearch] = useState("");
   const [filterMode, setFilterMode] = useState<CurrentAccountsFilterMode>("all");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(Boolean(tenantId));
   const [feedback, setFeedback] = useState<CurrentAccountsPageFeedback | null>(null);
 
   const clearFeedback = () => setFeedback(null);

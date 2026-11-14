@@ -141,7 +141,7 @@ const resolveProfileOrError = (
   return { ok: true, profile };
 };
 
-export const useMockLogin = (expectedTenantSlug?: string) => {
+export const useMockLogin = (expectedTenantSlug?: string, defaultEmail?: string) => {
   const setSession = useAuthStore((state) => state.setSession);
 
   const [tenantId, setTenantId] = useState("");
@@ -150,8 +150,8 @@ export const useMockLogin = (expectedTenantSlug?: string) => {
   const [tenantInput, setTenantInput] = useState(
     dataProvider === "mock" ? DEV_TENANT_LOGIN : normalizeTenantSlug(expectedTenantSlug)
   );
-  const [usernameInput, setUsernameInput] = useState(DEV_ADMIN_USERNAME);
-  const [passwordInput, setPasswordInput] = useState(DEV_ADMIN_PASSWORD);
+  const [usernameInput, setUsernameInput] = useState(() => (defaultEmail ? defaultEmail : dataProvider === "mock" ? DEV_ADMIN_USERNAME : ""));
+  const [passwordInput, setPasswordInput] = useState(() => (dataProvider === "mock" ? DEV_ADMIN_PASSWORD : ""));
   const [tenants, setTenants] = useState<TenantRecord[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [profilesById, setProfilesById] = useState<Map<string, PermissionProfileRecord>>(new Map());
@@ -160,6 +160,18 @@ export const useMockLogin = (expectedTenantSlug?: string) => {
   const [error, setError] = useState<string | null>(null);
 
   const clearError = () => setError(null);
+
+  useEffect(() => {
+    if (defaultEmail) {
+      setUsernameInput(defaultEmail);
+    }
+  }, [defaultEmail]);
+
+  useEffect(() => {
+    if (expectedTenantSlug && dataProvider !== "mock") {
+      setTenantInput(normalizeTenantSlug(expectedTenantSlug));
+    }
+  }, [expectedTenantSlug]);
 
   const selectedTenant = useMemo(
     () => tenants.find((tenant) => tenant.id === tenantId) ?? null,

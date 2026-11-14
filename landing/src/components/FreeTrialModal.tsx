@@ -1,7 +1,18 @@
 import React, { useState } from "react";
-import { CheckCircle2, Sparkles, X, ArrowRight, ShieldCheck, Store, Mail, Phone, Lock, User, Clock, AlertCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  X,
+  Store,
+  Mail,
+  Phone,
+  User,
+  Lock,
+  AlertCircle,
+  MapPin,
+} from "lucide-react";
 import { JirehLogo } from "./brand/JirehLogo";
-import { POS_APP_URL, POS_LOGIN_URL, SUPPORT_WHATSAPP_PHONE } from "../config/app-urls";
+import { WhatsAppIcon } from "./brand/WhatsAppIcon";
+import { SUPPORT_WHATSAPP_PHONE } from "../config/app-urls";
 import { onboardingService } from "../services/onboarding.service";
 
 interface FreeTrialModalProps {
@@ -17,7 +28,6 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
 }) => {
   const [step, setStep] = useState<"form" | "loading" | "success">("form");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [createdLoginPath, setCreatedLoginPath] = useState<string>("/login");
   const [formData, setFormData] = useState({
     businessName: "",
     category: "Almacén y Kiosco",
@@ -25,11 +35,15 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
     email: "",
     phone: "",
     password: "",
+    city: "",
+    notes: "",
   });
 
   if (!isOpen) return null;
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
     setFormData((prev) => ({
       ...prev,
       [e.target.name]: e.target.value,
@@ -41,41 +55,44 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
     setErrorMessage(null);
     setStep("loading");
 
-    const result = await onboardingService.registerTrial({
+    const result = await onboardingService.submitFichaLead({
       businessName: formData.businessName,
       category: formData.category,
       fullName: formData.fullName,
       email: formData.email,
       phone: formData.phone,
       password: formData.password,
+      city: formData.city,
       selectedPlanName,
+      notes: formData.notes,
     });
 
     if (result.success) {
-      setCreatedLoginPath(result.loginPath || `/${result.tenantSlug || "demo"}/login`);
       setStep("success");
     } else {
-      setErrorMessage(result.error || "Ocurrió un error al procesar el alta.");
+      setErrorMessage(result.error || "Ocurrió un error al enviar la ficha.");
       setStep("form");
     }
   };
 
-  const expirationDate = new Date();
-  expirationDate.setDate(expirationDate.getDate() + 7);
-  const formattedExpiration = expirationDate.toLocaleDateString("es-AR", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  const whatsappMessage = encodeURIComponent(
+    `¡Hola equipo de Jireh! Acabo de enviar la ficha para iniciar mi período de prueba gratuita de 7 días.\n\n` +
+      `• *Comercio:* ${formData.businessName || "Mi comercio"}\n` +
+      `• *Rubro:* ${formData.category}\n` +
+      `• *Titular:* ${formData.fullName}\n` +
+      `• *WhatsApp:* ${formData.phone}\n` +
+      `• *Email:* ${formData.email}\n` +
+      `• *Plan de interés:* ${selectedPlanName}\n\n` +
+      `¿Podemos coordinar para activar mi cuenta de prueba?`
+  );
 
-  const finalLoginUrl = `${POS_APP_URL}${createdLoginPath}`;
+  const directWhatsAppUrl = `https://wa.me/${SUPPORT_WHATSAPP_PHONE}?text=${whatsappMessage}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="relative w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200">
-        
-        {/* Barra superior de acento con los 3 colores Jireh (Turquesa, Verde Lima y Naranja) */}
-        <div className="h-2.5 w-full bg-gradient-to-r from-[#00B5C8] via-[#7CE01E] to-[#FF7800]" />
+        {/* Barra superior de acento con gradiente */}
+        <div className="h-2.5 w-full bg-gradient-to-r from-[#25D366] via-[#00B5C8] to-[#FF7800]" />
 
         {/* Botón cerrar */}
         <button
@@ -91,28 +108,30 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
             <>
               <div className="flex items-center gap-3">
                 <JirehLogo size="sm" />
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 border border-amber-200">
-                  <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                  Prueba Gratis de 7 Días
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 border border-emerald-200">
+                  <WhatsAppIcon className="h-3.5 w-3.5 text-emerald-600" />
+                  Atención Personalizada 1 a 1
                 </span>
               </div>
 
               <h2 className="mt-3 text-2xl font-extrabold text-slate-900 tracking-tight">
-                Comienza hoy sin costo con Jireh POS
+                Ficha de Solicitud de Prueba Gratis (7 Días)
               </h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Acceso ilimitado a todas las funciones por 7 días. Sin tarjeta de crédito ni compromisos.
+              <p className="mt-1 text-xs sm:text-sm text-slate-600 leading-relaxed">
+                Completá los datos de tu comercio. Tu <strong>agente personal de soporte</strong> se
+                comunicará directamente por WhatsApp para darte la bienvenida, entregarte tus credenciales
+                privadas y acompañarte en la puesta en marcha de tu sistema.
               </p>
 
               {errorMessage && (
-                <div className="mt-4 flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs text-rose-700 font-medium">
+                <div className="mt-3 flex items-center gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs text-rose-700 font-medium">
                   <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
                   <span>{errorMessage}</span>
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="mt-5 space-y-3.5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
                       Nombre de tu Comercio *
@@ -125,38 +144,38 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
                         required
                         value={formData.businessName}
                         onChange={handleChange}
-                        placeholder="Ej. Autoservicio Central"
-                        className="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                        placeholder="Ej. Kiosco Belgrano"
+                        className="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                       />
                     </div>
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Rubro del Comercio
+                      Rubro del Comercio *
                     </label>
                     <select
                       name="category"
                       value={formData.category}
                       onChange={handleChange}
-                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                     >
                       <option>Almacén y Kiosco</option>
                       <option>Minimarket / Supermercado</option>
+                      <option>Ferretería y Corralón</option>
                       <option>Indumentaria y Calzado</option>
                       <option>Gastronomía / Cafetería</option>
-                      <option>Ferretería y Corralón</option>
                       <option>Farmacia / Perfumería</option>
                       <option>Distribuidora / Mayorista</option>
-                      <option>Otro comercio</option>
+                      <option>Otro rubro</option>
                     </select>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Tu Nombre y Apellido *
+                      Tu Nombre y Apellido (Titular) *
                     </label>
                     <div className="relative">
                       <User className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -166,18 +185,18 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
                         required
                         value={formData.fullName}
                         onChange={handleChange}
-                        placeholder="Ej. Laura González"
-                        className="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                        placeholder="Ej. Juan Pérez"
+                        className="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                       />
                     </div>
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      WhatsApp / Celular *
+                      WhatsApp / Celular de Contacto *
                     </label>
                     <div className="relative">
-                      <Phone className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                      <Phone className="absolute left-3 top-2.5 h-4 w-4 text-emerald-600" />
                       <input
                         type="tel"
                         name="phone"
@@ -185,61 +204,104 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
                         value={formData.phone}
                         onChange={handleChange}
                         placeholder="Ej. +54 9 11 2345-6789"
-                        className="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
+                        className="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                       />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Email de Contacto *
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                      <input
+                        type="email"
+                        name="email"
+                        required
+                        value={formData.email}
+                        onChange={handleChange}
+                        placeholder="juan@tunegocio.com"
+                        className="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Contraseña para tu cuenta *
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                      <input
+                        type="password"
+                        name="password"
+                        required
+                        minLength={6}
+                        value={formData.password}
+                        onChange={handleChange}
+                        placeholder="Mínimo 6 caracteres"
+                        className="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Ciudad / Localidad
+                    </label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                      <input
+                        type="text"
+                        name="city"
+                        value={formData.city}
+                        onChange={handleChange}
+                        placeholder="Ej. Villa Mercedes, San Luis"
+                        className="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Plan Seleccionado
+                    </label>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-sky-700 h-[38px] flex items-center">
+                      {selectedPlanName}
                     </div>
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Correo Electrónico (será tu usuario) *
+                    Comentarios o consultas para tu agente (opcional)
                   </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                    <input
-                      type="email"
-                      name="email"
-                      required
-                      value={formData.email}
-                      onChange={handleChange}
-                      placeholder="tunegocio@gmail.com"
-                      className="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Crea una Contraseña Segura *
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                    <input
-                      type="password"
-                      name="password"
-                      required
-                      minLength={6}
-                      value={formData.password}
-                      onChange={handleChange}
-                      placeholder="Mínimo 6 caracteres"
-                      className="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-1 text-xs text-slate-500">
-                  <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span>Configurado con el {selectedPlanName} durante los 7 días gratis.</span>
+                  <textarea
+                    name="notes"
+                    rows={2}
+                    value={formData.notes}
+                    onChange={handleChange}
+                    placeholder="Ej. Tengo balanza Systel / Quiero importar mis productos desde un Excel..."
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  />
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full mt-2 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00B5C8] via-[#10B981] to-[#FF7800] px-6 py-3 text-base font-bold text-white shadow-lg shadow-teal-500/25 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                  className="w-full mt-2 flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-[#25D366] via-[#10B981] to-[#059669] px-6 py-3.5 text-base font-extrabold text-white shadow-lg shadow-emerald-600/30 hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all"
                 >
-                  <span>Activar mis 7 días gratis</span>
-                  <ArrowRight className="h-5 w-5" />
+                  <WhatsAppIcon className="h-5 w-5 text-white" />
+                  <span>Enviar Ficha a mi Agente de Soporte</span>
                 </button>
+
+                <p className="text-[11px] text-center text-slate-500 pt-1">
+                  🔒 Tus datos están protegidos. No solicitamos datos de tarjetas ni medios de pago para la prueba.
+                </p>
               </form>
             </>
           )}
@@ -248,64 +310,69 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
             <div className="py-12 text-center">
               <div className="mx-auto h-14 w-14 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-600" />
               <h3 className="mt-6 text-xl font-bold text-slate-900">
-                Aprovisionando tu entorno en Jireh POS...
+                Registrando tu ficha en el CRM de Soporte...
               </h3>
               <p className="mt-2 text-sm text-slate-600 max-w-sm mx-auto">
-                Estamos creando tu comercio en la nube, configurando bases de datos de inventario y asignando tus 7 días de acceso ilimitado para {formData.businessName || "tu comercio"}.
+                Estamos conectando con tu agente personal para coordinar la activación de {formData.businessName || "tu comercio"}.
               </p>
             </div>
           )}
 
           {step === "success" && (
-            <div className="py-4 text-center">
+            <div className="py-3 text-center">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 ring-8 ring-emerald-50">
-                <CheckCircle2 className="h-10 w-10" />
+                <CheckCircle2 className="h-10 w-10 text-emerald-600" />
               </div>
 
               <h3 className="mt-4 text-2xl font-black text-slate-900">
-                ¡Bienvenido a Jireh POS!
+                ¡Ficha Recibida con Éxito!
               </h3>
-              <p className="mt-1 text-sm text-slate-600">
-                Tu período de prueba gratuita de <span className="font-bold text-emerald-600">7 días</span> ha sido activado con éxito.
+              <p className="mt-1 text-sm text-slate-600 max-w-md mx-auto">
+                Tu <strong>agente personal de soporte</strong> ya tiene los datos de tu comercio y se comunicará a la brevedad por WhatsApp para entregarte tus accesos y guiarte en tus 7 días gratis.
               </p>
 
-              <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-left space-y-2.5">
-                <div className="flex items-center justify-between text-sm">
+              {/* Ficha Resumen */}
+              <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-left space-y-2 text-xs sm:text-sm">
+                <div className="flex items-center justify-between">
                   <span className="text-slate-500">Comercio:</span>
-                  <span className="font-bold text-slate-800">{formData.businessName || "Comercio Demo"}</span>
+                  <span className="font-bold text-slate-800">{formData.businessName}</span>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Usuario / Email:</span>
-                  <span className="font-semibold text-slate-800">{formData.email || "demo@jirehpos.com"}</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Titular:</span>
+                  <span className="font-semibold text-slate-800">{formData.fullName}</span>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">Plan activado:</span>
-                  <span className="font-semibold text-sky-700">{selectedPlanName} (Prueba completa)</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">WhatsApp:</span>
+                  <span className="font-bold text-emerald-700">{formData.phone}</span>
                 </div>
-                <div className="flex items-center justify-between text-sm border-t border-slate-200 pt-2">
-                  <span className="flex items-center gap-1.5 text-slate-500">
-                    <Clock className="h-4 w-4 text-amber-500" />
-                    Válido sin cargo hasta:
-                  </span>
-                  <span className="font-bold text-amber-700">{formattedExpiration}</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500">Email:</span>
+                  <span className="font-medium text-slate-800">{formData.email}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-200 pt-2">
+                  <span className="text-slate-500">Plan de Interés:</span>
+                  <span className="font-bold text-sky-700">{selectedPlanName}</span>
                 </div>
               </div>
 
+              {/* Botón WhatsApp Inmediato */}
               <div className="mt-6 flex flex-col sm:flex-row gap-3">
                 <a
-                  href={finalLoginUrl}
-                  className="flex-1 flex items-center justify-center rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white shadow-md shadow-emerald-600/25 hover:bg-emerald-700 transition"
-                >
-                  Ingresar a mi sistema ahora
-                </a>
-                <a
-                  href={`https://wa.me/${SUPPORT_WHATSAPP_PHONE}?text=${encodeURIComponent("Hola Jireh POS! Acabo de activar mi prueba de 7 días para " + (formData.businessName || "mi comercio") + " y quiero soporte inicial.")}`}
+                  href={directWhatsAppUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+                  className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] px-5 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-emerald-600/30 transition hover:scale-[1.01]"
                 >
-                  <span>Pedir ayuda por WhatsApp</span>
+                  <WhatsAppIcon className="h-5 w-5 text-white" />
+                  <span>Chatear con mi Agente por WhatsApp Ahora</span>
                 </a>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex items-center justify-center rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+                >
+                  Cerrar
+                </button>
               </div>
             </div>
           )}

@@ -262,7 +262,7 @@ export const PurchasePaymentModal = ({
       aria-labelledby="purchase-payment-title"
       className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in duration-150"
     >
-      <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
         {/* Header con monto destacado y botón de cierre */}
         <div className="flex items-start justify-between border-b border-slate-100 bg-slate-50/70 p-4.5 sm:p-5 dark:border-slate-800 dark:bg-slate-800/50">
           <div>

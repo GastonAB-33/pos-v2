@@ -52,7 +52,7 @@ export const usePurchasesStore = create<PurchasesStoreState>()((set, get) => ({
   openCashSession: null,
   loadedTenantId: null,
   lastLoadedAt: null,
-  isLoading: false,
+  isLoading: true,
   isBackgroundRefreshing: false,
   error: null,
 
@@ -205,3 +205,4 @@ export const usePurchasesStore = create<PurchasesStoreState>()((set, get) => ({
     }
   },
 }));
+

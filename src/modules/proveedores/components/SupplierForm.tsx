@@ -29,6 +29,9 @@ const defaultValues: SupplierFormValues = {
   observations: "",
 };
 
+const inputClass =
+  "w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-400 transition-all";
+
 export const SupplierForm = ({
   mode,
   supplier,
@@ -84,12 +87,12 @@ export const SupplierForm = ({
     <form autoComplete="off" className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
       <div>
         <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-          Nombre <span className="text-red-500">*</span>
+          Nombre o Razón Social <span className="text-red-500 dark:text-red-400 ml-1">*</span>
         </label>
         <input
           {...register("name")}
-          placeholder="Ej: Distribuidora Central"
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+          placeholder="Ej: Distribuidora Central S.A."
+          className={inputClass}
           disabled={disabled}
           autoComplete="off"
           autoCorrect="off"
@@ -105,7 +108,7 @@ export const SupplierForm = ({
           <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
             CUIT / Identificación fiscal{" "}
             {activeReq.tax_id ? (
-              <span className="text-red-500">*</span>
+              <span className="text-red-500 dark:text-red-400 ml-1">*</span>
             ) : (
               <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
             )}
@@ -113,7 +116,7 @@ export const SupplierForm = ({
           <input
             {...register("taxId")}
             placeholder="Ej: 30-12345678-9"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+            className={inputClass}
             disabled={disabled}
             autoComplete="off"
             autoCorrect="off"
@@ -128,15 +131,15 @@ export const SupplierForm = ({
           <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Teléfono{" "}
             {activeReq.phone ? (
-              <span className="text-red-500">*</span>
+              <span className="text-red-500 dark:text-red-400 ml-1">*</span>
             ) : (
               <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
             )}
           </label>
           <input
             {...register("phone")}
-            placeholder="Ej: 2664123456"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+            placeholder="Ej: 11 1234-5678"
+            className={inputClass}
             disabled={disabled}
             autoComplete="off"
             autoCorrect="off"
@@ -153,7 +156,7 @@ export const SupplierForm = ({
           <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Email{" "}
             {activeReq.email ? (
-              <span className="text-red-500">*</span>
+              <span className="text-red-500 dark:text-red-400 ml-1">*</span>
             ) : (
               <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
             )}
@@ -161,8 +164,8 @@ export const SupplierForm = ({
           <input
             type="email"
             {...register("email")}
-            placeholder="proveedor@ejemplo.com"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+            placeholder="ventas@proveedor.com"
+            className={inputClass}
             disabled={disabled}
             autoComplete="off"
             autoCorrect="off"
@@ -177,7 +180,7 @@ export const SupplierForm = ({
           <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Dirección{" "}
             {activeReq.address ? (
-              <span className="text-red-500">*</span>
+              <span className="text-red-500 dark:text-red-400 ml-1">*</span>
             ) : (
               <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
             )}
@@ -185,7 +188,7 @@ export const SupplierForm = ({
           <input
             {...register("address")}
             placeholder="Ej: Av. San Martín 1234"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+            className={inputClass}
             disabled={disabled}
             autoComplete="off"
             autoCorrect="off"
@@ -199,7 +202,9 @@ export const SupplierForm = ({
 
       <div>
         <div className="mb-1 flex items-center justify-between gap-2">
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">Observaciones</label>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+            Observaciones <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
+          </label>
           <VoiceDictationButton
             value={observationsValue ?? ""}
             onValueChange={(nextValue) =>
@@ -213,26 +218,27 @@ export const SupplierForm = ({
         <textarea
           rows={3}
           {...register("observations")}
-          placeholder="Notas adicionales o información de contacto..."
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+          placeholder="Notas internas sobre días de entrega, vendedor asignado, condiciones comerciales..."
+          className={inputClass}
           disabled={disabled}
           autoComplete="off"
           spellCheck={false}
         />
       </div>
 
-      <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+      {/* Footer de Acciones */}
+      <div className="flex items-center justify-end gap-2 border-t border-slate-200/80 pt-4 dark:border-slate-800">
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          className="rounded-xl border border-slate-200/90 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-750 transition-all cursor-pointer"
           disabled={disabled}
         >
           Cancelar
         </button>
         <button
           type="submit"
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+          className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-semibold text-white shadow-sm shadow-blue-500/25 hover:bg-blue-700 active:scale-95 disabled:opacity-60 transition-all cursor-pointer"
           disabled={disabled}
         >
           {mode === "create" ? "Crear proveedor" : "Guardar cambios"}

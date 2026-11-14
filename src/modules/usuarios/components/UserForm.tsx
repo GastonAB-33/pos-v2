@@ -64,14 +64,14 @@ export const UserForm = ({
   return (
     <form className="grid gap-4" onSubmit={handleSubmit(onSubmit)} autoComplete="off">
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+        <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200">
           Nombre completo
         </label>
         <input
           {...register("fullName")}
-          className="ui-input"
+          className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-2xs focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-blue-400"
           disabled={disabled}
-          placeholder="Ej: Juan Perez"
+          placeholder="Ej: Juan Pérez"
           autoComplete="off"
           autoCorrect="off"
           autoCapitalize="off"
@@ -81,14 +81,14 @@ export const UserForm = ({
         {errors.fullName ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.fullName.message}</p> : null}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-            Nombre de perfil
+          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+            Nombre de perfil / usuario
           </label>
           <input
             {...register("username")}
-            className="ui-input"
+            className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-2xs focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-blue-400"
             disabled={disabled}
             placeholder="Ej: juan.perez"
             autoComplete="off"
@@ -100,13 +100,13 @@ export const UserForm = ({
           {errors.username ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.username.message}</p> : null}
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200">
             Correo electrónico
           </label>
           <input
             type="email"
             {...register("email")}
-            className="ui-input"
+            className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-2xs focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-blue-400"
             disabled={disabled}
             placeholder="correo@empresa.com"
             autoComplete="off"
@@ -120,12 +120,12 @@ export const UserForm = ({
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+        <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200">
           Nivel de permisos
         </label>
         <select
           {...register("permissionProfileId")}
-          className="ui-input"
+          className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-2xs focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-blue-400 cursor-pointer"
           disabled={disabled}
         >
           <option value="">Seleccionar nivel</option>
@@ -140,15 +140,15 @@ export const UserForm = ({
         ) : null}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200">
             Contraseña
           </label>
           <input
             type="password"
             {...register("password")}
-            className="ui-input"
+            className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-2xs focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-blue-400"
             disabled={disabled}
             placeholder={mode === "create" ? "Mínimo 8 caracteres" : "Dejar vacío para mantener"}
             autoComplete="new-password"
@@ -160,13 +160,13 @@ export const UserForm = ({
           {errors.password ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.password.message}</p> : null}
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200">
             Repetir contraseña
           </label>
           <input
             type="password"
             {...register("confirmPassword")}
-            className="ui-input"
+            className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-2xs focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-blue-400"
             disabled={disabled}
             placeholder={mode === "create" ? "Repetir contraseña" : "Repetir nueva contraseña"}
             autoComplete="new-password"
@@ -185,11 +185,20 @@ export const UserForm = ({
         Debe existir al menos un perfil activo para asignar nivel de acceso al usuario.
       </p>
 
-      <div className="flex items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800 pt-4">
-        <button type="button" className="ui-btn-ghost" onClick={onCancel} disabled={disabled}>
+      <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 border-t border-slate-200 dark:border-slate-800 pt-4">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={disabled}
+          className="w-full sm:w-auto rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 sm:py-2 text-xs sm:text-sm font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 active:scale-95 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer text-center"
+        >
           Cancelar
         </button>
-        <button type="submit" className="ui-btn-primary" disabled={disabled}>
+        <button
+          type="submit"
+          disabled={disabled}
+          className="w-full sm:w-auto rounded-xl bg-blue-600 px-5 py-2.5 sm:py-2 text-xs sm:text-sm font-semibold text-white shadow-sm shadow-blue-500/25 hover:bg-blue-700 active:scale-95 disabled:opacity-50 transition-all cursor-pointer text-center"
+        >
           {mode === "create" ? "Crear usuario" : "Guardar cambios"}
         </button>
       </div>

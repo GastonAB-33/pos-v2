@@ -8,7 +8,8 @@ import { VoiceDictationButton } from "@/components/form/VoiceDictationButton";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { ProductImageEditorModal } from "@/modules/productos/components/ProductImageEditorModal";
 import { ReturnablePackagesModal } from "@/modules/productos/components/ReturnablePackagesModal";
-import { Package } from "lucide-react";
+import { Camera, Package, Sparkles } from "lucide-react";
+import { masterProductsService, type MasterProduct } from "@/services/master-products.service";
 import {
   computePricingForward,
   computePricingReverse,
@@ -205,7 +206,10 @@ export const ProductFormModal = ({
   const [isPackagesManagerOpen, setIsPackagesManagerOpen] = useState(false);
   const [isCustomPackageMode, setIsCustomPackageMode] = useState(false);
   const [customPackageInput, setCustomPackageInput] = useState("");
-  const [localCategories, setLocalCategories] = useState<string[]>(() => normalizeToUniqueSorted(categoryOptions));
+  const [masterMatch, setMasterMatch] = useState<MasterProduct | null>(null);
+  const [localCategories, setLocalCategories] = useState<string[]>(() =>
+    normalizeToUniqueSorted([...categoryOptions, ...masterProductsService.getDefaultCategories()])
+  );
   const [localSubcategories, setLocalSubcategories] = useState<string[]>(() =>
     normalizeToUniqueSorted(subcategoryOptions)
   );
@@ -226,10 +230,13 @@ export const ProductFormModal = ({
     setImageDraftFile(null);
     setImageRemoved(false);
     setLocalPreviewUrl(null);
+    setMasterMatch(null);
   }, [open]);
 
   useEffect(() => {
-    setLocalCategories((current) => normalizeToUniqueSorted([...current, ...categoryOptions]));
+    setLocalCategories((current) =>
+      normalizeToUniqueSorted([...current, ...categoryOptions, ...masterProductsService.getDefaultCategories()])
+    );
   }, [categoryOptions]);
 
   useEffect(() => {
@@ -367,6 +374,42 @@ export const ProductFormModal = ({
     );
     return productWithCode ?? null;
   }, [catalogBarcodes, catalogProducts, codigoBarras, currentProductId]);
+
+  // Búsqueda inteligente en Catálogo Maestro Global al ingresar código de barras en alta
+  useEffect(() => {
+    if (!open || mode !== "create") return;
+    const clean = normalizeVoiceBarcode(codigoBarras ?? "");
+    if (!clean || clean.length < 6) {
+      setMasterMatch(null);
+      return;
+    }
+
+    let isMounted = true;
+    masterProductsService.getByBarcode(clean).then((found) => {
+      if (!isMounted) return;
+      setMasterMatch(found);
+      if (found) {
+        const currentNombre = getValues("nombre")?.trim() ?? "";
+        if (!currentNombre) {
+          setValue("nombre", found.name, { shouldDirty: true, shouldValidate: true });
+        }
+        const currentCat = getValues("categoria")?.trim() ?? "";
+        if (!currentCat && found.category) {
+          setValue("categoria", found.category, { shouldDirty: true, shouldValidate: true });
+          setLocalCategories((prev) => normalizeToUniqueSorted([...prev, found.category]));
+        }
+        const currentSub = getValues("subcategoria")?.trim() ?? "";
+        if (!currentSub && found.subcategory) {
+          setValue("subcategoria", found.subcategory, { shouldDirty: true, shouldValidate: true });
+          setLocalSubcategories((prev) => normalizeToUniqueSorted([...prev, found.subcategory || ""]));
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [codigoBarras, mode, open, getValues, setValue]);
 
   useEffect(() => {
     if (!open) return;
@@ -565,36 +608,44 @@ export const ProductFormModal = ({
       imagenFile: imageDraftFile,
       imagenEliminada: imageRemoved,
     });
+
+    // Retroalimentar el Catálogo Maestro Global de forma colaborativa y no bloqueante
+    if (values.codigoBarras?.trim() && values.nombre?.trim() && values.categoria?.trim()) {
+      void masterProductsService.contribute({
+        barcode: values.codigoBarras.trim(),
+        name: values.nombre.trim(),
+        category: values.categoria.trim(),
+        subcategory: values.subcategoria?.trim(),
+      });
+    }
   };
 
   if (!open) return null;
 
   return (
-    <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-3 sm:p-4 backdrop-blur-[1px]">
-      <div className="flex flex-col max-h-[88dvh] sm:max-h-[90vh] w-full max-w-5xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-brand-700 dark:text-brand-400">Gestión de productos</p>
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              Cálculo automático en vivo. Guardado solo con el botón "Guardar".
-            </p>
+    <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-2 sm:p-4 backdrop-blur-[1px] overflow-hidden">
+      <div className="flex flex-col max-h-[92dvh] sm:max-h-[90vh] w-full max-w-5xl rounded-2xl sm:rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden dark:border-slate-800 dark:bg-slate-900 min-w-0">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 px-4 sm:px-5 py-3.5 sm:py-4 dark:border-slate-800 shrink-0 bg-white dark:bg-slate-900 min-w-0">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase truncate">
+              <span className="text-slate-400 dark:text-slate-500">INVENTARIO</span>
+              <span className="text-slate-400 dark:text-slate-500 font-bold">›</span>
+              <span className="text-blue-600 dark:text-blue-400 font-bold">GESTIÓN DE PRODUCTOS</span>
+            </div>
+            <h3 className="mt-0.5 text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 truncate">{title}</h3>
           </div>
           <ModalCloseButton label="Cerrar producto" onClick={onClose} disabled={disabled} />
         </div>
 
-        <form className="flex flex-col flex-1 min-h-0 overflow-hidden" onSubmit={handleSubmit(handleFormSubmit)} onKeyDown={handlePreventEnterSubmit} autoComplete="off">
-          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
-            <div className="grid gap-5 xl:grid-cols-[1fr_280px]">
-              <div className="space-y-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5 dark:border-slate-800 dark:bg-slate-950/40">
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Datos básicos</h4>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    Información principal del producto, identificación y stock.
-                  </p>
+        <form className="flex flex-col flex-1 min-h-0 min-w-0 overflow-hidden" onSubmit={handleSubmit(handleFormSubmit)} onKeyDown={handlePreventEnterSubmit} autoComplete="off">
+          <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden p-3.5 sm:p-4 md:p-6 space-y-4 sm:space-y-6">
+            <div className="min-w-0 grid gap-4 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
+              <div className="min-w-0 space-y-4 sm:space-y-5 rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-slate-50/70 p-3.5 sm:p-5 dark:border-slate-800 dark:bg-slate-950/40 overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Datos básicos</h4>
                 </div>
-                <div className="grid gap-3.5 rounded-xl border border-slate-200 bg-white p-3.5 sm:grid-cols-2 dark:border-slate-700/80 dark:bg-slate-900/90">
-                  <div>
+                <div className="min-w-0 grid gap-3.5 sm:gap-4 rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-5 sm:grid-cols-2 dark:border-slate-700/80 dark:bg-slate-900 shadow-xs overflow-hidden">
+                  <div className="min-w-0">
                     <div className="mb-1 flex min-h-[34px] items-center justify-between gap-2">
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">Nombre</label>
                       <div className="shrink-0">
@@ -628,7 +679,7 @@ export const ProductFormModal = ({
                     {errors.nombre ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.nombre.message}</p> : null}
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     <div className="mb-1 flex min-h-[34px] items-center justify-between gap-2">
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                         {saleMode === "weight" ? "Stock en gramos (g)" : "Stock (unidades)"}
@@ -667,52 +718,47 @@ export const ProductFormModal = ({
                       className="ui-input"
                       disabled={disabled}
                     />
-                    <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                      {saleMode === "weight"
-                        ? "Para pesables, el stock se gestiona en gramos. Ej: 1 kg disponible = 1000 g."
-                        : "Para unitarios, el stock se guarda como unidades."}
-                    </p>
                     {errors.stock ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.stock.message}</p> : null}
                   </div>
 
-                  <div className="sm:col-span-2">
-                    <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">Tipo de venta</label>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-800/80">
+                  <div className="min-w-0 sm:col-span-2">
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Tipo de venta</label>
+                    <div className="grid gap-2.5 sm:grid-cols-2">
+                      <label className={cn(
+                        "flex cursor-pointer items-center gap-3 rounded-xl sm:rounded-2xl border p-3 text-sm transition-all shadow-2xs",
+                        saleMode === "unit"
+                          ? "border-blue-500 bg-blue-50/50 dark:border-blue-500/80 dark:bg-blue-950/30 text-blue-900 dark:text-blue-100"
+                          : "border-slate-200/90 bg-white hover:border-slate-300 dark:border-slate-700/80 dark:bg-slate-900 text-slate-700 dark:text-slate-200"
+                      )}>
                         <input
                           type="radio"
                           value="unit"
                           {...register("saleMode")}
                           disabled={disabled}
-                          className="mt-1"
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500"
                         />
-                        <span>
-                          <span className="block font-semibold text-slate-900 dark:text-slate-100">Por unidad</span>
-                          <span className="block text-xs text-slate-500 dark:text-slate-400">
-                            Precio por unidad y stock en unidades.
-                          </span>
-                        </span>
+                        <span className="font-semibold text-slate-900 dark:text-slate-100">Por unidad</span>
                       </label>
-                      <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-800/80">
+                      <label className={cn(
+                        "flex cursor-pointer items-center gap-3 rounded-xl sm:rounded-2xl border p-3 text-sm transition-all shadow-2xs",
+                        saleMode === "weight"
+                          ? "border-blue-500 bg-blue-50/50 dark:border-blue-500/80 dark:bg-blue-950/30 text-blue-900 dark:text-blue-100"
+                          : "border-slate-200/90 bg-white hover:border-slate-300 dark:border-slate-700/80 dark:bg-slate-900 text-slate-700 dark:text-slate-200"
+                      )}>
                         <input
                           type="radio"
                           value="weight"
                           {...register("saleMode")}
                           disabled={disabled}
-                          className="mt-1"
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500"
                         />
-                        <span>
-                          <span className="block font-semibold text-slate-900 dark:text-slate-100">Pesable</span>
-                          <span className="block text-xs text-slate-500 dark:text-slate-400">
-                            Precio por kg, stock en gramos y ventas por gramos.
-                          </span>
-                        </span>
+                        <span className="font-semibold text-slate-900 dark:text-slate-100">Pesable (por kg)</span>
                       </label>
                     </div>
                   </div>
 
-                <div>
-                  <label className="mb-1 block whitespace-nowrap text-sm font-medium leading-5 text-slate-700 dark:text-slate-200">
+                <div className="min-w-0">
+                  <label className="mb-1 block text-sm font-medium leading-5 text-slate-700 dark:text-slate-200">
                     Código de barras
                   </label>
                   <div className="mb-1 flex h-8 items-center gap-1">
@@ -733,11 +779,14 @@ export const ProductFormModal = ({
                     </div>
                     <button
                       type="button"
-                      className="ui-btn-ghost shrink-0 whitespace-nowrap px-2 py-1 text-xs"
+                      className="inline-flex h-8 w-8 sm:w-auto items-center justify-center gap-1.5 rounded-full border border-slate-200/90 bg-white p-0 sm:px-3 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 active:scale-95 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200 transition-all shrink-0"
                       onClick={() => setScannerOpen(true)}
                       disabled={disabled}
+                      title="Escanear código de barras con la cámara"
+                      aria-label="Escanear código de barras con la cámara"
                     >
-                      Escanear cámara
+                      <Camera className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
+                      <span className="hidden sm:inline">Escanear cámara</span>
                     </button>
                   </div>
                   <input
@@ -767,8 +816,8 @@ export const ProductFormModal = ({
                   ) : null}
                 </div>
 
-                <div>
-                  <label className="mb-1 block whitespace-nowrap text-sm font-medium leading-5 text-slate-700 dark:text-slate-200">
+                <div className="min-w-0">
+                  <label className="mb-1 block text-sm font-medium leading-5 text-slate-700 dark:text-slate-200">
                     Código de producto
                   </label>
                   <div className="mb-1 flex h-8 items-center justify-start">
@@ -814,16 +863,49 @@ export const ProductFormModal = ({
                     </p>
                   ) : null}
                 </div>
+
+                {/* Banner de Catálogo Global que abarca el ancho completo (sm:col-span-2) sin desbordar en móvil */}
+                {masterMatch && mode === "create" ? (
+                  <div className="sm:col-span-2 rounded-2xl bg-blue-50/90 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/70 p-3 text-xs text-blue-950 dark:text-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 min-w-0 w-full overflow-hidden">
+                    <div className="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-xs mt-0.5 sm:mt-0">
+                        <Sparkles size={13} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-blue-900 dark:text-blue-200 leading-tight">
+                          Catálogo Global
+                        </p>
+                        <p className="truncate text-slate-600 dark:text-slate-300 text-[11.5px]">
+                          {masterMatch.name} {masterMatch.category ? `· ${masterMatch.category}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setValue("nombre", masterMatch.name, { shouldDirty: true, shouldValidate: true });
+                        setValue("categoria", masterMatch.category, { shouldDirty: true, shouldValidate: true });
+                        setLocalCategories((prev) => normalizeToUniqueSorted([...prev, masterMatch.category]));
+                        if (masterMatch.subcategory) {
+                          setValue("subcategoria", masterMatch.subcategory, { shouldDirty: true, shouldValidate: true });
+                          setLocalSubcategories((prev) => normalizeToUniqueSorted([...prev, masterMatch.subcategory!]));
+                        }
+                      }}
+                      className="self-start sm:self-auto shrink-0 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-blue-700 active:scale-95 transition-all whitespace-nowrap"
+                    >
+                      Reaplicar datos
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
-              <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700/80 dark:bg-slate-900/90">
+              <div className="min-w-0 overflow-hidden space-y-3 rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 dark:border-slate-700/80 dark:bg-slate-900 shadow-xs">
                 <div>
-                  <h5 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Clasificación</h5>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Asigna categoría y subcategoría para organizar mejor el catálogo.</p>
+                  <h5 className="text-sm font-bold text-slate-900 dark:text-slate-100">Clasificación</h5>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div>
+                <div className="grid gap-3 md:grid-cols-2 min-w-0">
+                  <div className="min-w-0">
                     <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
                       Categoría <span className="text-red-500">*</span>
                     </label>
@@ -848,21 +930,21 @@ export const ProductFormModal = ({
                     </datalist>
                     {trimmedCategory ? (
                       isCategoryCreated ? (
-                        <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                          Categoría existente
+                        <p className="mt-1 flex items-start gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 leading-tight">
+                          <span className="mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                          <span>Categoría existente</span>
                         </p>
                       ) : (
-                        <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
-                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
-                          Esta categoría no está creada (se creará al guardar)
+                        <p className="mt-1 flex items-start gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 leading-tight">
+                          <span className="mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                          <span>Esta categoría no está creada (se creará al guardar)</span>
                         </p>
                       )
                     ) : null}
                     {errors.categoria ? <p className="mt-1 text-xs text-red-600">{errors.categoria.message}</p> : null}
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Subcategoría</label>
                     <input
                       list="subcategorias-productos"
@@ -885,14 +967,14 @@ export const ProductFormModal = ({
                     </datalist>
                     {trimmedSubcategory ? (
                       isSubcategoryCreated ? (
-                        <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                          Subcategoría existente
+                        <p className="mt-1 flex items-start gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 leading-tight">
+                          <span className="mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                          <span>Subcategoría existente</span>
                         </p>
                       ) : (
-                        <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
-                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
-                          Esta subcategoría no está creada (se creará al guardar)
+                        <p className="mt-1 flex items-start gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400 leading-tight">
+                          <span className="mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                          <span>Esta subcategoría no está creada (se creará al guardar)</span>
                         </p>
                       )
                     ) : null}
@@ -904,12 +986,11 @@ export const ProductFormModal = ({
               </div>
             </div>
 
-            <aside className="flex flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <aside className="min-w-0 overflow-hidden flex flex-col rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
               <div>
-                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Fotografía</h4>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Agrega una imagen para identificar el producto rápidamente en el catálogo y en POS.</p>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Fotografía</h4>
               </div>
-              <div className="mt-3 flex h-60 items-center justify-center overflow-hidden rounded-xl border border-dashed border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-950/40">
+              <div className="mt-3 flex h-60 items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-950/40">
                 {imagenPreview ? (
                   <img src={imagenPreview} alt="Foto del producto" className="h-full w-full object-cover" />
                 ) : (
@@ -929,7 +1010,7 @@ export const ProductFormModal = ({
               <div className="mt-3 grid gap-2">
                 <button
                   type="button"
-                  className="ui-btn-ghost w-full justify-center gap-2 px-2 py-1.5 text-xs"
+                  className="rounded-xl border border-slate-200/90 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition-all active:scale-95 flex items-center justify-center gap-2"
                   onClick={() => photoInputRef.current?.click()}
                   disabled={disabled}
                 >
@@ -940,7 +1021,7 @@ export const ProductFormModal = ({
                 </button>
                 <button
                   type="button"
-                  className="ui-btn-ghost w-full justify-center gap-2 px-2 py-1.5 text-xs"
+                  className="rounded-xl border border-slate-200/90 bg-white px-3 py-2 text-xs font-semibold text-rose-600 shadow-2xs hover:bg-rose-50 dark:border-slate-700/80 dark:bg-slate-900 dark:text-rose-400 dark:hover:bg-rose-950/40 transition-all active:scale-95 flex items-center justify-center gap-2"
                   onClick={handleRemovePhoto}
                   disabled={disabled || !imagenPreview}
                 >
@@ -955,16 +1036,13 @@ export const ProductFormModal = ({
             </aside>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5 dark:border-slate-800 dark:bg-slate-950/40">
+          <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-slate-50/70 p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-950/40 min-w-0 overflow-hidden">
             <div className="mb-3">
-              <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Precios y cálculo</h4>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Modifica costo, ganancia, IVA o precio final y el sistema recalcula automáticamente.
-              </p>
+              <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Precios y cálculo</h4>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700/80 dark:bg-slate-900/90">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5 min-w-0">
+              <div className="min-w-0 rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 dark:border-slate-700/80 dark:bg-slate-900 shadow-xs">
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
                   {saleMode === "weight" ? "Precio de costo por kg" : "Precio de costo"}
                 </label>
@@ -996,7 +1074,7 @@ export const ProductFormModal = ({
                 ) : null}
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700/80 dark:bg-slate-900/90">
+              <div className="min-w-0 rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 dark:border-slate-700/80 dark:bg-slate-900 shadow-xs">
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">% Ganancia</label>
                 <input
                   type="number"
@@ -1029,7 +1107,7 @@ export const ProductFormModal = ({
                 ) : null}
               </div>
 
-              <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 dark:border-sky-800/80 dark:bg-sky-950/40">
+              <div className="min-w-0 rounded-2xl border border-sky-200 bg-sky-50 p-3.5 sm:p-4 dark:border-sky-800/80 dark:bg-sky-950/40 shadow-xs">
                 <div className="mb-1 flex items-center gap-2">
                   <label className="block text-sm font-medium text-slate-700 dark:text-sky-200">Precio sin IVA</label>
                   <span className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-sky-700 dark:border-sky-700/80 dark:bg-sky-900/80 dark:text-sky-200">
@@ -1049,7 +1127,7 @@ export const ProductFormModal = ({
                 ) : null}
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700/80 dark:bg-slate-900/90">
+              <div className="min-w-0 rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 dark:border-slate-700/80 dark:bg-slate-900 shadow-xs">
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">% IVA</label>
                 <input
                   type="number"
@@ -1078,7 +1156,7 @@ export const ProductFormModal = ({
                 ) : null}
               </div>
 
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-800/80 dark:bg-emerald-950/40">
+              <div className="min-w-0 rounded-2xl border border-emerald-200 bg-emerald-50 p-3.5 sm:p-4 dark:border-emerald-800/80 dark:bg-emerald-950/40 shadow-xs">
                 <div className="mb-1 flex items-center gap-2">
                   <label className="block text-sm font-medium text-slate-700 dark:text-emerald-200">
                     {saleMode === "weight" ? "Precio final por kg" : "Precio final"}
@@ -1115,24 +1193,15 @@ export const ProductFormModal = ({
                 ) : null}
               </div>
             </div>
-
-            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-              {saleMode === "weight"
-                ? "En productos pesables, costo, precio sin IVA y precio final se interpretan por kg."
-                : "El cálculo se actualiza automáticamente al escribir y al salir de cada campo."}
-            </p>
           </div>
 
           {/* Envase retornable */}
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5 dark:border-slate-800 dark:bg-slate-900/60">
+          <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-slate-50/70 p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900 shadow-xs min-w-0 overflow-hidden">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                   Envase retornable
                 </h4>
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                  Activa si este producto requiere un envase físico (garrafa, bidón, cajón, botella de vidrio).
-                </p>
               </div>
               <label className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center">
                 <input
@@ -1147,9 +1216,9 @@ export const ProductFormModal = ({
             </div>
 
             {isReturnable && (
-              <div className="mt-4 space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
+              <div className="mt-4 space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800 min-w-0">
+                <div className="grid gap-3 sm:grid-cols-2 min-w-0">
+                  <div className="min-w-0">
                     <div className="mb-1 flex items-center justify-between">
                       <label className="block text-xs font-semibold text-slate-700 dark:text-slate-200">
                         Tipo de envase configurado
@@ -1215,14 +1284,11 @@ export const ProductFormModal = ({
                           disabled={disabled}
                           required
                         />
-                        <p className="text-[10px] text-amber-700 dark:text-amber-400">
-                          💡 Se guardará como tipo de envase para futuros productos y Cuentas Corrientes.
-                        </p>
                       </div>
                     )}
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
                       Precio del envase (si no trae el vacío)
                     </label>
@@ -1235,38 +1301,29 @@ export const ProductFormModal = ({
                       className="ui-input w-full text-xs"
                       disabled={disabled}
                     />
-                    <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                      Monto a cobrar si el cliente no entrega el envase vacío.
-                    </p>
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:p-5 dark:border-slate-800 dark:bg-slate-950/40">
-            <h4 className="mb-3 text-sm font-semibold text-slate-900 dark:text-slate-100">Estado y seguimiento de inventario</h4>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200">
-                <div>
-                  <p className="font-medium text-slate-900 dark:text-slate-100">Realizar seguimiento de stock</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Controla existencias y genera alertas cuando el stock es bajo o nulo.</p>
-                </div>
+          <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-slate-50/70 p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-950/40 min-w-0 overflow-hidden">
+            <h4 className="mb-3 text-sm font-bold text-slate-900 dark:text-slate-100">Estado y seguimiento de inventario</h4>
+            <div className="grid gap-3 sm:grid-cols-2 min-w-0">
+              <label className="flex items-center justify-between rounded-xl sm:rounded-2xl border border-slate-200/90 bg-white p-3.5 text-sm text-slate-700 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 shadow-xs cursor-pointer min-w-0">
+                <span className="font-semibold text-slate-900 dark:text-slate-100">Seguimiento de stock</span>
                 <span className="relative inline-flex h-6 w-11 shrink-0 items-center">
                   <input type="checkbox" className="peer sr-only" {...register("trackStock")} disabled={disabled} />
-                  <span className="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-brand-600 peer-disabled:opacity-50" />
+                  <span className="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-blue-600 peer-disabled:opacity-50 dark:bg-slate-700" />
                   <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
                 </span>
               </label>
 
-              <label className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200">
-                <div>
-                  <p className="font-medium text-slate-900 dark:text-slate-100">Producto activo</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Controla si el producto está disponible en el sistema.</p>
-                </div>
+              <label className="flex items-center justify-between rounded-xl sm:rounded-2xl border border-slate-200/90 bg-white p-3.5 text-sm text-slate-700 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 shadow-xs cursor-pointer min-w-0">
+                <span className="font-semibold text-slate-900 dark:text-slate-100">Producto activo</span>
                 <span className="relative inline-flex h-6 w-11 shrink-0 items-center">
                   <input type="checkbox" className="peer sr-only" {...register("estadoActivo")} disabled={disabled} />
-                  <span className="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-brand-600 peer-disabled:opacity-50" />
+                  <span className="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-blue-600 peer-disabled:opacity-50 dark:bg-slate-700" />
                   <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
                 </span>
               </label>
@@ -1276,10 +1333,10 @@ export const ProductFormModal = ({
           </div>
 
           {/* Pie de modal: Pegado 100% abajo, sólido, sin transparencias ni paneles visibles detrás */}
-          <div className="shrink-0 flex items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-3.5 dark:border-slate-800 dark:bg-slate-900 md:px-6">
+          <div className="shrink-0 flex items-center justify-end gap-2 border-t border-slate-200/80 bg-white px-4 sm:px-5 py-3 sm:py-3.5 dark:border-slate-800 dark:bg-slate-900 md:px-6 min-w-0">
             <button
               type="button"
-              className="ui-btn-ghost px-4 py-2 text-xs font-semibold"
+              className="rounded-xl sm:rounded-2xl border border-slate-200/90 bg-white px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-semibold text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-750 transition-all"
               onClick={onClose}
               disabled={disabled}
             >
@@ -1287,7 +1344,7 @@ export const ProductFormModal = ({
             </button>
             <button
               type="submit"
-              className="ui-btn-primary px-5 py-2 text-xs font-semibold"
+              className="rounded-xl sm:rounded-2xl bg-blue-600 px-6 py-2.5 text-xs sm:text-sm font-semibold text-white shadow-sm shadow-blue-500/25 hover:bg-blue-700 active:scale-95 disabled:opacity-50 transition-all"
               disabled={disabled}
             >
               {mode === "create" ? "Crear producto" : "Guardar cambios"}

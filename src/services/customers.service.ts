@@ -14,6 +14,10 @@ export type UpdateCustomerInput = UpdateEntityInput<Customer>;
 export const customersService = {
   getAllByTenant: (tenantId: string) => crud.getAllByTenant(tenantId),
   getById: (tenantId: string, id: string) => crud.getById(tenantId, id),
+  getByIds: async (tenantId: string, ids: string[]): Promise<Customer[]> => {
+    if (ids.length === 0) return [];
+    return crud.query(tenantId, { in: { id: ids } });
+  },
   create: (tenantId: string, input: CreateCustomerInput) => {
     const rawDoc = input.document_number?.trim();
     const docNumber = rawDoc || `SD-${input.code || Date.now().toString().slice(-6)}`;

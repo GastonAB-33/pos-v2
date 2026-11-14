@@ -59,7 +59,7 @@ export const SubscriptionPaywallModal: React.FC<SubscriptionPaywallModalProps> =
   const currentPlan = plans[selectedPlan];
   const whatsappPhone = import.meta.env.VITE_SUPPORT_WHATSAPP_PHONE || "5492664689173";
   const whatsappMsg = encodeURIComponent(
-    `Hola Jireh POS! Soy ${user?.fullName || "usuario"} del comercio "${tenant?.tradeName || "mi negocio"}" (ID: ${tenant?.id}). Quiero activar la suscripción del ${currentPlan.name} (${currentPlan.price} ARS/mes).`
+    `¡Hola equipo de Jireh! Soy ${user?.fullName || "usuario"} del comercio "${tenant?.tradeName || "mi negocio"}" (ID: ${tenant?.id}). Quiero activar la suscripción del ${currentPlan.name} (${currentPlan.price} ARS/mes).`
   );
 
   return (

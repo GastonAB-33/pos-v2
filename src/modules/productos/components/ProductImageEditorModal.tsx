@@ -146,7 +146,7 @@ export const ProductImageEditorModal = ({
 
   return (
     <section className="fixed inset-0 z-[70] flex items-center justify-center bg-[var(--ui-overlay)] p-4">
-      <div className="w-full max-w-3xl rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
+      <div className="w-full max-w-3xl rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
         <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-2">
           <div>
             <h3 className="text-base font-semibold text-slate-900">Editar fotografía del producto</h3>
@@ -156,16 +156,16 @@ export const ProductImageEditorModal = ({
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <div className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-800/40 flex items-center justify-center">
             <canvas
               ref={canvasRef}
               width={OUTPUT_SIZE}
               height={OUTPUT_SIZE}
-              className="h-[300px] w-[300px] rounded-md border border-slate-200 bg-white object-cover"
+              className="h-[300px] w-[300px] rounded-2xl border border-slate-200 bg-white object-cover shadow-xs"
             />
           </div>
 
-          <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <div className="space-y-4 rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-800/40">
             <div>
               <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
                 Zoom
@@ -223,12 +223,12 @@ export const ProductImageEditorModal = ({
         </div>
 
         <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
-          <button type="button" className="ui-btn-ghost" onClick={onClose} disabled={isExporting}>
+          <button type="button" className="rounded-xl border border-slate-200/90 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 transition-all" onClick={onClose} disabled={isExporting}>
             Cancelar
           </button>
           <button
             type="button"
-            className="ui-btn-primary"
+            className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-500/25 hover:bg-blue-700 active:scale-95 disabled:opacity-50 transition-all"
             disabled={!canConfirm}
             onClick={() => {
               if (!canvasRef.current) return;

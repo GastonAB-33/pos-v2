@@ -82,6 +82,23 @@ export const normalizePermissionProfile = (profile: PermissionProfile): Permissi
   if (profile.compras && profile.compras_margen === undefined) {
     base.compras_margen = { ...profile.compras };
   }
+  if (profile.compras && profile.compras_doble_confirmacion === undefined) {
+    base.compras_doble_confirmacion = { ...profile.compras };
+  }
+  if (profile.caja && profile.caja_movimientos_manuales === undefined) {
+    base.caja_movimientos_manuales = { ...profile.caja };
+  }
+  if (profile.stock && profile.stock_ajustes_manuales === undefined) {
+    base.stock_ajustes_manuales = { ...profile.stock };
+  }
+
+  // Sincronización bidireccional entre configuracion general y configuracion_sistema
+  if (profile.configuracion && !profile.configuracion_sistema) {
+    base.configuracion_sistema = { ...base.configuracion_sistema, ...profile.configuracion };
+  }
+  if (profile.configuracion_sistema && !profile.configuracion) {
+    base.configuracion = { ...base.configuracion, ...profile.configuracion_sistema };
+  }
 
   return base;
 };
@@ -94,8 +111,19 @@ export const hasModulePermission = (
   const directPermission = Boolean(profile[requirement.module]?.[level]);
   if (directPermission) return true;
 
+  // Acceso unificado a configuración del sistema
+  if (requirement.module === "configuracion" || requirement.module === "configuracion_sistema") {
+    return Boolean(profile.configuracion?.[level] || profile.configuracion_sistema?.[level]);
+  }
+
   // Fallbacks de compatibilidad hacia atrás para módulos contables añadidos
   if (requirement.module === "caja_general") {
+    return Boolean(profile.caja?.[level]);
+  }
+  if (requirement.module === "caja_movimientos_manuales") {
+    if (profile.caja_movimientos_manuales?.[level] !== undefined) {
+      return Boolean(profile.caja_movimientos_manuales[level]);
+    }
     return Boolean(profile.caja?.[level]);
   }
   if (requirement.module === "cuentas_corrientes_proveedores") {
@@ -125,11 +153,23 @@ export const hasModulePermission = (
     }
     return Boolean(profile.compras?.[level]);
   }
+  if (requirement.module === "compras_doble_confirmacion") {
+    if (profile.compras_doble_confirmacion?.[level] !== undefined) {
+      return Boolean(profile.compras_doble_confirmacion[level]);
+    }
+    return Boolean(profile.compras?.[level]);
+  }
+  if (requirement.module === "stock_ajustes_manuales") {
+    if (profile.stock_ajustes_manuales?.[level] !== undefined) {
+      return Boolean(profile.stock_ajustes_manuales[level]);
+    }
+    return Boolean(profile.stock?.[level]);
+  }
 
   const isScopedConfigModule = requirement.module.startsWith("configuracion_");
   if (!isScopedConfigModule) return false;
 
   // Compatibilidad: si el perfil aun no tiene los permisos nuevos por submodulo
-  // pero si tiene el permiso legacy de configuracion, se habilita el acceso.
-  return Boolean(profile.configuracion?.[level]);
+  // pero si tiene el permiso unificado de configuracion, se habilita el acceso.
+  return Boolean(profile.configuracion?.[level] || profile.configuracion_sistema?.[level]);
 };

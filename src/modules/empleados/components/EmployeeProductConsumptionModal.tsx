@@ -6,6 +6,7 @@ import { settingsService } from "@/services/settings.service";
 import { useProductsStore } from "@/features/products/store/products.store";
 import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
 import { PosQuickProductModal } from "@/modules/pos/components/PosQuickProductModal";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import type { PosQuickProductInput } from "@/modules/pos/hooks/usePosSale";
 import type { Employee, Product } from "@/types/entities";
 import { Search, ShoppingBag, Plus, Minus, Trash2, Barcode, Tag, X } from "lucide-react";
@@ -41,6 +42,7 @@ export const EmployeeProductConsumptionModal = ({
   onClose,
   onSubmit,
 }: EmployeeProductConsumptionModalProps) => {
+  useBodyScrollLock(open);
   const toast = useToast();
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -523,30 +525,31 @@ export const EmployeeProductConsumptionModal = ({
   const isDropdownOpen = isSearchFocused && search.trim().length > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="w-full max-w-5xl rounded-2xl bg-white shadow-2xl border border-slate-300 dark:border-slate-700 overflow-hidden dark:bg-slate-900 flex flex-col max-h-[90vh]">
+    <>
+      <section className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/75 p-2 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="w-full max-w-5xl rounded-2xl sm:rounded-3xl bg-white shadow-2xl border border-slate-200/90 dark:border-slate-800 overflow-hidden dark:bg-slate-900 flex flex-col max-h-[92dvh] sm:max-h-[90vh]">
         {/* Encabezado del Modal */}
-        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-6 py-4 bg-slate-50 dark:bg-slate-900">
-          <div>
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-50 dark:bg-slate-900 shrink-0">
+          <div className="min-w-0 pr-2">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300">
+              <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 shrink-0">
                 <ShoppingBag size={18} />
               </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
                 Registrar Retiro de Productos
               </h3>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 ml-10">
-              Empleado: <strong className="text-slate-700 dark:text-slate-200">{employee.full_name}</strong> • Saldo adeudado actual: <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{currency.format(employee.current_balance ?? 0)}</span>
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1 truncate">
+              Empleado: <strong className="text-slate-700 dark:text-slate-200">{employee.full_name}</strong> • Saldo adeudado: <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{currency.format(employee.current_balance ?? 0)}</span>
             </p>
           </div>
           <ModalCloseButton label="Cerrar modal" onClick={onClose} disabled={isSubmitting} />
         </div>
 
         {/* Buscador Único Superior con Autocomplete y Lector Activo */}
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-950/70">
-          <div ref={searchContainerRef} className="relative flex items-center gap-3">
-            <div className="relative flex-1">
+        <div className="p-3 sm:p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-950/70 shrink-0">
+          <div ref={searchContainerRef} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+            <div className="relative flex-1 min-w-0">
               <Search
                 size={16}
                 className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none"
@@ -562,16 +565,16 @@ export const EmployeeProductConsumptionModal = ({
                 }}
                 onFocus={() => setIsSearchFocused(true)}
                 onKeyDown={handleSearchKeyDown}
-                placeholder="Buscar producto por nombre o código de barras (o escaneá directamente con el lector)..."
+                placeholder="Buscar producto por nombre o código (o escanear)..."
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
                 spellCheck={false}
                 data-lpignore="true"
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 py-2.5 pl-10 pr-28 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent font-medium shadow-2xs"
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 py-2.5 pl-10 pr-14 sm:pr-28 text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent font-medium shadow-2xs"
               />
 
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+              <div className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 sm:gap-2">
                 {search.trim() ? (
                   <button
                     type="button"
@@ -585,11 +588,72 @@ export const EmployeeProductConsumptionModal = ({
                     <X size={14} />
                   </button>
                 ) : null}
-                <span className="flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 select-none">
+                <span
+                  className="flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 sm:px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 select-none"
+                  title="Lector de código de barras activo"
+                >
                   <Barcode size={12} className="text-indigo-600 dark:text-indigo-400" />
-                  <span>Lector activo</span>
+                  <span className="hidden sm:inline">Lector activo</span>
                 </span>
               </div>
+
+              {/* Dropdown de Resultados cuando se tipea */}
+              {isDropdownOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1.5 z-50 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-2 max-h-72 overflow-y-auto space-y-1 animate-in fade-in duration-100">
+                  {filteredProducts.length === 0 ? (
+                    <div className="p-4 text-center">
+                      <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                        No se encontraron productos para &quot;{search.trim()}&quot;
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuickProductInitialName(search.trim());
+                          setIsSearchFocused(false);
+                          setIsQuickProductModalOpen(true);
+                        }}
+                        className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow hover:bg-indigo-700 cursor-pointer"
+                      >
+                        <Plus size={13} />
+                        <span>Cargar &quot;{search.trim()}&quot; como no registrado</span>
+                      </button>
+                    </div>
+                  ) : (
+                    filteredProducts.map((p) => (
+                      <div
+                        key={p.id}
+                        onClick={() => {
+                          addToCart(p);
+                          setSearch("");
+                          setIsSearchFocused(false);
+                          toast.success(`"${p.name}" agregado`);
+                        }}
+                        className="flex items-center justify-between p-2.5 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950/50 cursor-pointer transition border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800"
+                      >
+                        <div className="min-w-0 pr-3">
+                          <p className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+                            {p.name}
+                          </p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+                            {primaryBarcodes[p.id] || p.code || "Sin código"}
+                            {p.brand ? ` • ${p.brand}` : ""}
+                            {p.stock_current != null ? ` • Stock: ${p.stock_current}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="font-mono font-bold text-xs sm:text-sm text-slate-900 dark:text-white">
+                            {currency.format(p.price)}
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs">
+                            <Plus size={12} />
+                            Agregar
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
 
             <button
@@ -598,213 +662,153 @@ export const EmployeeProductConsumptionModal = ({
                 setQuickProductInitialName(search.trim());
                 setIsQuickProductModalOpen(true);
               }}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/80 px-3.5 py-2.5 text-xs font-bold text-indigo-700 dark:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition cursor-pointer shrink-0 shadow-2xs"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/80 px-3.5 py-2.5 text-xs font-bold text-indigo-700 dark:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition cursor-pointer shrink-0 shadow-2xs w-full sm:w-auto"
               title="Cargar producto no registrado en el catálogo"
             >
               <Plus size={15} />
-              <span>+ No registrado</span>
+              <span>No registrado</span>
             </button>
-
-            {/* Dropdown de Resultados cuando se tipea */}
-            {isDropdownOpen && (
-              <div className="absolute top-full left-0 right-0 mt-1.5 z-40 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-2 max-h-72 overflow-y-auto space-y-1 animate-in fade-in duration-100">
-                {filteredProducts.length === 0 ? (
-                  <div className="p-4 text-center">
-                    <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      No se encontraron productos para &quot;{search.trim()}&quot;
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setQuickProductInitialName(search.trim());
-                        setIsSearchFocused(false);
-                        setIsQuickProductModalOpen(true);
-                      }}
-                      className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow hover:bg-indigo-700 cursor-pointer"
-                    >
-                      <Plus size={13} />
-                      <span>Cargar &quot;{search.trim()}&quot; como no registrado</span>
-                    </button>
-                  </div>
-                ) : (
-                  filteredProducts.map((p) => (
-                    <div
-                      key={p.id}
-                      onClick={() => {
-                        addToCart(p);
-                        setSearch("");
-                        setIsSearchFocused(false);
-                        toast.success(`"${p.name}" agregado`);
-                      }}
-                      className="flex items-center justify-between p-2.5 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950/50 cursor-pointer transition border border-transparent hover:border-indigo-200 dark:hover:border-indigo-800"
-                    >
-                      <div className="min-w-0 pr-3">
-                        <p className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
-                          {p.name}
-                        </p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                          {primaryBarcodes[p.id] || p.code || "Sin código"}
-                          {p.brand ? ` • ${p.brand}` : ""}
-                          {p.stock_current != null ? ` • Stock: ${p.stock_current}` : ""}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="font-mono font-bold text-xs sm:text-sm text-slate-900 dark:text-white">
-                          {currency.format(p.price)}
-                        </span>
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs">
-                          <Plus size={12} />
-                          Agregar
-                        </span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
           </div>
         </div>
 
-        {/* Cuerpo Principal: Carrito (Izquierda) + Resumen de Retiro (Derecha) */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-full items-start">
-            {/* Columna Izquierda: Carrito de Retiro (Artículos que se está llevando) */}
-            <div className="lg:col-span-7 flex flex-col space-y-3 min-h-[350px]">
-              <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                    Carrito de Retiro
-                  </h4>
-                  <span className="rounded-full bg-slate-200 dark:bg-slate-800 px-2 py-0.2 text-[11px] font-mono font-bold text-slate-700 dark:text-slate-300">
-                    {cart.length} {cart.length === 1 ? "producto" : "productos"}
+        {/* Formulario Principal con Scroll Interno y Footer Fijo */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          {/* Área con scroll para Carrito y Detalle */}
+          <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-5">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start">
+              {/* Columna Izquierda: Carrito de Retiro */}
+              <div className="lg:col-span-7 flex flex-col space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                      Carrito de Retiro
+                    </h4>
+                    <span className="rounded-full bg-slate-200 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-mono font-bold text-slate-700 dark:text-slate-300">
+                      {cart.length} {cart.length === 1 ? "producto" : "productos"}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:inline">
+                    Tildá o destildá el descuento en cada ítem
                   </span>
                 </div>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:inline">
-                  Tildá o destildá el descuento en cada ítem
-                </span>
-              </div>
 
-              {isLoading ? (
-                <div className="py-16 text-center text-xs text-slate-500 dark:text-slate-400">
-                  Cargando catálogo...
-                </div>
-              ) : cart.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-center space-y-2">
-                  <div className="h-12 w-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
-                    <ShoppingBag size={24} />
+                {isLoading ? (
+                  <div className="py-12 text-center text-xs text-slate-500 dark:text-slate-400">
+                    Cargando catálogo...
                   </div>
-                  <p className="font-bold text-sm text-slate-700 dark:text-slate-200">
-                    El carrito de retiro está vacío
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm">
-                    Escaneá con la pistola de código de barras desde cualquier lugar o buscá en el campo superior para cargar productos.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-                  {cart.map((item) => (
-                    <div
-                      key={item.product.id}
-                      className={`flex items-center justify-between gap-3 rounded-xl border p-3 transition shadow-2xs ${
-                        item.applyDiscount
-                          ? "border-indigo-300 dark:border-indigo-800/80 bg-indigo-50/50 dark:bg-indigo-950/30"
-                          : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
-                      }`}
-                    >
-                      {/* Checkbox de Descuento de Empleado (Tildar / Destildar) */}
-                      <div className="flex items-center shrink-0">
-                        <label
-                          className="flex items-center gap-1.5 cursor-pointer select-none"
-                          title={
-                            item.applyDiscount
-                              ? "Desmarcar para cobrar a precio regular sin descuento"
-                              : "Marcar para aplicar descuento de empleado"
-                          }
-                        >
-                          <input
-                            type="checkbox"
-                            checked={item.applyDiscount}
-                            onChange={() => toggleItemDiscount(item.product.id)}
-                            className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                          />
-                          <span
-                            className={`rounded px-1.5 py-0.5 text-[10px] font-bold flex items-center gap-1 ${
+                ) : cart.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center p-6 sm:p-8 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-center space-y-2 bg-slate-50/50 dark:bg-slate-900/50">
+                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                      <ShoppingBag size={22} />
+                    </div>
+                    <p className="font-bold text-xs sm:text-sm text-slate-700 dark:text-slate-200">
+                      El carrito de retiro está vacío
+                    </p>
+                    <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 max-w-sm">
+                      Buscá en el campo superior o escaneá con el lector para cargar productos.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-[380px] sm:max-h-[420px] overflow-y-auto pr-1">
+                    {cart.map((item) => (
+                      <div
+                        key={item.product.id}
+                        className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 rounded-xl sm:rounded-2xl border p-3 transition shadow-2xs ${
+                          item.applyDiscount
+                            ? "border-indigo-300 dark:border-indigo-800/80 bg-indigo-50/50 dark:bg-indigo-950/30"
+                            : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
+                        }`}
+                      >
+                        {/* Checkbox de Descuento de Empleado e Información */}
+                        <div className="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
+                          <label
+                            className="flex items-center gap-1.5 cursor-pointer select-none shrink-0 mt-0.5 sm:mt-0"
+                            title={
                               item.applyDiscount
-                                ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800"
-                                : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
-                            }`}
+                                ? "Desmarcar para cobrar a precio regular sin descuento"
+                                : "Marcar para aplicar descuento de empleado"
+                            }
                           >
-                            <Tag size={10} />
-                            {item.applyDiscount ? `${discountPercent}% OFF` : "Sin desc."}
-                          </span>
-                        </label>
-                      </div>
+                            <input
+                              type="checkbox"
+                              checked={item.applyDiscount}
+                              onChange={() => toggleItemDiscount(item.product.id)}
+                              className="h-4 w-4 rounded border-slate-300 dark:border-slate-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                            />
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-bold flex items-center gap-1 ${
+                                item.applyDiscount
+                                  ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800"
+                                  : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+                              }`}
+                            >
+                              <Tag size={10} />
+                              {item.applyDiscount ? `${discountPercent}% OFF` : "Sin desc."}
+                            </span>
+                          </label>
 
-                      {/* Información del Producto */}
-                      <div className="min-w-0 flex-1">
-                        <p className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
-                          {item.product.name}
-                        </p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                          {currency.format(item.product.price)}{" "}
-                          {item.product.sale_mode === "weight" ? "/kg" : "c/u"}
-                          {item.product.stock_current != null ? ` • Stock: ${item.product.stock_current}` : ""}
-                        </p>
-                      </div>
-
-                      {/* Controles de Cantidad */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="flex items-center rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 p-0.5 shadow-2xs">
-                          <button
-                            type="button"
-                            onClick={() => updateQuantity(item.product.id, -1)}
-                            className="h-6 w-6 flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white cursor-pointer"
-                            title="Disminuir cantidad"
-                          >
-                            <Minus size={12} />
-                          </button>
-                          <input
-                            type="number"
-                            step="any"
-                            min="0.001"
-                            value={item.quantity}
-                            onChange={(e) => setItemExactQuantity(item.product.id, parseFloat(e.target.value))}
-                            className="w-12 text-center text-xs font-bold font-mono bg-transparent outline-none text-slate-900 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => updateQuantity(item.product.id, 1)}
-                            className="h-6 w-6 flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white cursor-pointer"
-                            title="Aumentar cantidad"
-                          >
-                            <Plus size={12} />
-                          </button>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+                              {item.product.name}
+                            </p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">
+                              {currency.format(item.product.price)}{" "}
+                              {item.product.sale_mode === "weight" ? "/kg" : "c/u"}
+                              {item.product.stock_current != null ? ` • Stock: ${item.product.stock_current}` : ""}
+                            </p>
+                          </div>
                         </div>
 
-                        {/* Subtotal del Renglón */}
-                        <span className="w-20 text-right font-bold text-xs sm:text-sm font-mono text-slate-900 dark:text-slate-100">
-                          {currency.format(item.product.price * item.quantity)}
-                        </span>
+                        {/* Controles de Cantidad, Subtotal y Quitar */}
+                        <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-1.5 sm:pt-0 border-t border-slate-100 dark:border-slate-800 sm:border-0">
+                          <div className="flex items-center rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 p-0.5 shadow-2xs">
+                            <button
+                              type="button"
+                              onClick={() => updateQuantity(item.product.id, -1)}
+                              className="h-6 w-6 flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white cursor-pointer"
+                              title="Disminuir cantidad"
+                            >
+                              <Minus size={12} />
+                            </button>
+                            <input
+                              type="number"
+                              step="any"
+                              min="0.001"
+                              value={item.quantity}
+                              onChange={(e) => setItemExactQuantity(item.product.id, parseFloat(e.target.value))}
+                              className="w-12 text-center text-xs font-bold font-mono bg-transparent outline-none text-slate-900 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => updateQuantity(item.product.id, 1)}
+                              className="h-6 w-6 flex items-center justify-center text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white cursor-pointer"
+                              title="Aumentar cantidad"
+                            >
+                              <Plus size={12} />
+                            </button>
+                          </div>
 
-                        {/* Botón Quitar */}
-                        <button
-                          type="button"
-                          onClick={() => removeFromCart(item.product.id)}
-                          className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition cursor-pointer"
-                          title="Quitar producto"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                          <span className="min-w-16 sm:w-20 text-right font-bold text-xs sm:text-sm font-mono text-slate-900 dark:text-slate-100">
+                            {currency.format(item.product.price * item.quantity)}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => removeFromCart(item.product.id)}
+                            className="!rounded-full p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30 dark:hover:text-rose-400 transition cursor-pointer"
+                            title="Quitar producto"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            {/* Columna Derecha: Detalle del Importe Total y Descuento */}
-            <div className="lg:col-span-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/70 p-4 flex flex-col justify-between space-y-4 shadow-sm">
-              <div className="space-y-3">
+              {/* Columna Derecha: Detalle del Importe y Nota */}
+              <div className="lg:col-span-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/70 p-4 space-y-3.5 shadow-xs">
                 <div className="border-b border-slate-200 dark:border-slate-800 pb-2 flex items-center justify-between">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
                     Detalle del Importe
@@ -851,7 +855,7 @@ export const EmployeeProductConsumptionModal = ({
                 </div>
 
                 {/* Campo de Notas */}
-                <div className="pt-2">
+                <div className="pt-2 border-t border-slate-200/70 dark:border-slate-800/70">
                   <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 mb-1">
                     Nota o motivo del retiro (opcional):
                   </label>
@@ -860,51 +864,57 @@ export const EmployeeProductConsumptionModal = ({
                     value={customNotes}
                     onChange={(e) => setCustomNotes(e.target.value)}
                     placeholder="Ej: almuerzo de turno, adelanto mercadería..."
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-lpignore="true"
                     className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none"
                   />
                 </div>
               </div>
+            </div>
+          </div>
 
-              {/* Importe Total Neto a Cargar y Botones de Acción */}
-              <div className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
-                      Total Neto a Cargar:
-                    </span>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                      Se cargará a la cuenta corriente del empleado
-                    </p>
-                  </div>
-                  <span className="text-2xl font-black font-mono text-indigo-600 dark:text-indigo-400">
-                    {currency.format(totalAmount)}
-                  </span>
-                </div>
-
-                <div className="space-y-2">
-                  <button
-                    type="submit"
-                    disabled={isSubmitting || cart.length === 0}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition disabled:opacity-50 cursor-pointer dark:bg-indigo-600 dark:hover:bg-indigo-500"
-                  >
-                    <ShoppingBag size={15} />
-                    <span>{isSubmitting ? "Registrando retiro..." : "Confirmar Retiro a Cuenta Corriente"}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    disabled={isSubmitting}
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer"
-                  >
-                    Cancelar
-                  </button>
-                </div>
+          {/* Footer Fijo / Sticky en la base del Modal */}
+          <div className="shrink-0 border-t border-slate-200 dark:border-slate-800 p-3 sm:p-4 bg-white dark:bg-slate-900 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+            <div className="flex items-center justify-between w-full sm:w-auto sm:justify-start gap-4">
+              <div>
+                <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Total a Cargar:
+                </span>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 hidden sm:block">
+                  Cta. corriente ({cart.length} {cart.length === 1 ? "ítem" : "ítems"})
+                </p>
               </div>
+              <span className="text-xl sm:text-2xl font-black font-mono text-indigo-600 dark:text-indigo-400">
+                {currency.format(totalAmount)}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isSubmitting}
+                className="flex-1 sm:flex-initial rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="submit"
+                disabled={isSubmitting || cart.length === 0}
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 px-5 py-2.5 text-xs font-bold text-white shadow-xs transition disabled:opacity-50 cursor-pointer active:scale-[0.98]"
+              >
+                <ShoppingBag size={15} />
+                <span>{isSubmitting ? "Registrando..." : "Confirmar Retiro"}</span>
+              </button>
             </div>
           </div>
         </form>
       </div>
+    </section>
 
       {isQuickProductModalOpen && (
         <PosQuickProductModal
@@ -923,6 +933,6 @@ export const EmployeeProductConsumptionModal = ({
           onCreateAndAdd={handleCreateAndAddProduct}
         />
       )}
-    </div>
+    </>
   );
 };

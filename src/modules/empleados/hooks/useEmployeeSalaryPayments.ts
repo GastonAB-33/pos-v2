@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { employeeSalaryPaymentsService } from "@/services/employee-salary-payments.service";
+import { cashService } from "@/services/cash.service";
+import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
 import type { EmployeeSalaryPayment } from "@/types/entities";
 
 export type SalaryPaymentFilterType = "all" | "salary" | "advance";
@@ -206,7 +208,7 @@ export const useEmployeeSalaryPayments = (
 
     setIsSubmitting(true);
     try {
-      await employeeSalaryPaymentsService.registerSalaryPayment(tenantId, {
+      const payment = await employeeSalaryPaymentsService.registerSalaryPayment(tenantId, {
         employee_id: values.employee_id,
         period: values.period,
         gross_amount: values.gross_amount,
@@ -221,6 +223,30 @@ export const useEmployeeSalaryPayments = (
         created_by: userId,
         payment_type: "salary",
       });
+
+      // Impacto contable en Caja Diaria si el sueldo neto se abonó en efectivo
+      const normSalaryMethod = normalizePaymentMethodCode(values.payment_method_code);
+      if (normSalaryMethod === "cash" && values.net_amount_paid > 0) {
+        try {
+          const openSession =
+            (userId ? await cashService.getOpenSessionByUser(tenantId, userId) : null) ??
+            (await cashService.getOpenSession(tenantId));
+          if (openSession) {
+            await cashService.createMovement(tenantId, {
+              cash_session_id: openSession.id,
+              movement_type: "expense",
+              amount: values.net_amount_paid,
+              currency_code: "ARS",
+              reference_type: "salary_payment",
+              reference_id: payment.id,
+              notes: `Pago de sueldo neto (${values.period})`,
+              created_by: userId,
+            });
+          }
+        } catch (cashErr) {
+          console.warn("No se pudo registrar egreso de sueldo en caja diaria:", cashErr);
+        }
+      }
 
       setFeedback({
         type: "success",
@@ -256,7 +282,7 @@ export const useEmployeeSalaryPayments = (
         ? `[ADELANTO] ${values.notes.trim()}`
         : `[ADELANTO] Anticipo de sueldo`;
 
-      await employeeSalaryPaymentsService.registerSalaryPayment(tenantId, {
+      const payment = await employeeSalaryPaymentsService.registerSalaryPayment(tenantId, {
         employee_id: values.employee_id,
         period: values.period?.trim() || `Adelanto - ${values.payment_date}`,
         gross_amount: values.amount,
@@ -270,6 +296,30 @@ export const useEmployeeSalaryPayments = (
         created_by: userId,
         payment_type: "advance",
       });
+
+      // Impacto contable en Caja Diaria si el adelanto se abonó en efectivo
+      const normAdvanceMethod = normalizePaymentMethodCode(values.payment_method_code);
+      if (normAdvanceMethod === "cash" && values.amount > 0) {
+        try {
+          const openSession =
+            (userId ? await cashService.getOpenSessionByUser(tenantId, userId) : null) ??
+            (await cashService.getOpenSession(tenantId));
+          if (openSession) {
+            await cashService.createMovement(tenantId, {
+              cash_session_id: openSession.id,
+              movement_type: "expense",
+              amount: values.amount,
+              currency_code: "ARS",
+              reference_type: "salary_advance",
+              reference_id: payment.id,
+              notes: `Adelanto de sueldo (${values.period || values.payment_date})`,
+              created_by: userId,
+            });
+          }
+        } catch (cashErr) {
+          console.warn("No se pudo registrar egreso de adelanto en caja diaria:", cashErr);
+        }
+      }
 
       setFeedback({
         type: "success",

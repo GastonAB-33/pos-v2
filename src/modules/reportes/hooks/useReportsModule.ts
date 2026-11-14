@@ -8,6 +8,7 @@ import { purchasesService } from "@/services/purchases.service";
 import { salesService } from "@/services/sales.service";
 import { stockService } from "@/services/stock.service";
 import { suppliersService } from "@/services/suppliers.service";
+import { useProductsStore } from "@/features/products/store/products.store";
 import { isStockTrackingEnabled } from "@/utils/stock-tracking";
 import type {
   CashMovement,
@@ -223,7 +224,7 @@ const buildCsvFilename = (prefix: string) => `${prefix}-${todayStamp()}.csv`;
 export const useReportsModule = (tenantId: string | null) => {
   const [reportType, setReportType] = useState<ReportType>("ventas");
   const [filters, setFilters] = useState<ReportsFiltersState>(initialFilters);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<ReportsDataState>(initialData);
 
@@ -248,48 +249,74 @@ export const useReportsModule = (tenantId: string | null) => {
     setError(null);
 
     try {
-      // Consultas optimizadas con limites y filtros por rango de fecha
+      // Reutilizar catalogo de productos en memoria para ahorrar trafico de red y CPU
+      const cachedProducts = useProductsStore.getState().products;
+      const productsPromise =
+        cachedProducts.length > 0 && useProductsStore.getState().loadedTenantId === tenantId
+          ? Promise.resolve(cachedProducts)
+          : useProductsStore
+              .getState()
+              .loadCatalog(tenantId)
+              .then(() => useProductsStore.getState().products)
+              .catch(() => productsService.getAllByTenant(tenantId));
+
+      // Consultas optimizadas con limites acotados y Promise.allSettled resiliente
       const [
-        sales,
-        purchases,
-        cashSessions,
-        cashMovements,
-        stockMovements,
-        currentAccountMovements,
-        products,
-        customers,
-        paymentMethods,
-        suppliers,
-      ] = await Promise.all([
+        salesRes,
+        purchasesRes,
+        cashSessionsRes,
+        cashMovementsRes,
+        stockMovementsRes,
+        currentAccountsRes,
+        productsRes,
+        customersRes,
+        paymentMethodsRes,
+        suppliersRes,
+      ] = await Promise.allSettled([
         filters.dateFrom
           ? salesService.getSalesSince(tenantId, filters.dateFrom)
-          : salesService.getRecentSales(tenantId, 300),
+          : salesService.getRecentSales(tenantId, 150),
         filters.dateFrom
           ? purchasesService.getPurchasesSince(tenantId, filters.dateFrom)
-          : purchasesService.getRecentByTenant(tenantId, 200),
-        cashService.getRecentSessions(tenantId, 100),
+          : purchasesService.getRecentByTenant(tenantId, 100),
+        cashService.getRecentSessions(tenantId, 50),
         filters.dateFrom
           ? cashService.getMovementsSince(tenantId, filters.dateFrom)
-          : cashService.getRecentMovements(tenantId, 300),
+          : cashService.getRecentMovements(tenantId, 150),
         filters.dateFrom
           ? stockService.getMovementsSince(tenantId, filters.dateFrom)
-          : stockService.getRecentByTenant(tenantId, 300),
-        currentAccountsService.getRecentByTenant(tenantId, 300),
-        productsService.getAllByTenant(tenantId),
+          : stockService.getRecentByTenant(tenantId, 150),
+        currentAccountsService.getRecentByTenant(tenantId, 150),
+        productsPromise,
         customersService.getAllByTenant(tenantId),
         paymentMethodsService.getAllByTenant(tenantId),
         suppliersService.getAllByTenant(tenantId),
       ]);
 
-      const saleIds = sales.map((s) => s.id);
-      const purchaseIds = purchases.map((p) => p.id);
+      const sales = salesRes.status === "fulfilled" ? salesRes.value : [];
+      const purchases = purchasesRes.status === "fulfilled" ? purchasesRes.value : [];
+      const cashSessions = cashSessionsRes.status === "fulfilled" ? cashSessionsRes.value : [];
+      const cashMovements = cashMovementsRes.status === "fulfilled" ? cashMovementsRes.value : [];
+      const stockMovements = stockMovementsRes.status === "fulfilled" ? stockMovementsRes.value : [];
+      const currentAccountMovements = currentAccountsRes.status === "fulfilled" ? currentAccountsRes.value : [];
+      const products = productsRes.status === "fulfilled" ? productsRes.value : [];
+      const customers = customersRes.status === "fulfilled" ? customersRes.value : [];
+      const paymentMethods = paymentMethodsRes.status === "fulfilled" ? paymentMethodsRes.value : [];
+      const suppliers = suppliersRes.status === "fulfilled" ? suppliersRes.value : [];
 
-      // Cargar items y pagos unicamente asociados a las ventas y compras recuperadas
-      const [saleItems, salePayments, purchaseItems] = await Promise.all([
-        saleIds.length ? salesService.getItemsBySaleIds(tenantId, saleIds) : [],
-        saleIds.length ? salesService.getPaymentsBySaleIds(tenantId, saleIds) : [],
-        purchaseIds.length ? purchasesService.getItemsByPurchaseIds(tenantId, purchaseIds) : [],
+      // Cargar items y pagos unicamente asociados a las ventas y compras recuperadas (acotado para consumo minimo)
+      const saleIds = sales.slice(0, 100).map((s) => s.id);
+      const purchaseIds = purchases.slice(0, 80).map((p) => p.id);
+
+      const [saleItemsRes, salePaymentsRes, purchaseItemsRes] = await Promise.allSettled([
+        saleIds.length ? salesService.getItemsBySaleIds(tenantId, saleIds) : Promise.resolve([]),
+        saleIds.length ? salesService.getPaymentsBySaleIds(tenantId, saleIds) : Promise.resolve([]),
+        purchaseIds.length ? purchasesService.getItemsByPurchaseIds(tenantId, purchaseIds) : Promise.resolve([]),
       ]);
+
+      const saleItems = saleItemsRes.status === "fulfilled" ? saleItemsRes.value : [];
+      const salePayments = salePaymentsRes.status === "fulfilled" ? salePaymentsRes.value : [];
+      const purchaseItems = purchaseItemsRes.status === "fulfilled" ? purchaseItemsRes.value : [];
 
       setData({
         sales,
@@ -306,7 +333,8 @@ export const useReportsModule = (tenantId: string | null) => {
         cashSessions,
         cashMovements,
       });
-    } catch {
+    } catch (err) {
+      console.error("[useReportsModule] Error cargando reportes:", err);
       setError("No se pudieron cargar los reportes");
       setData(initialData);
     } finally {
@@ -781,3 +809,4 @@ export const useReportsModule = (tenantId: string | null) => {
     },
   };
 };
+

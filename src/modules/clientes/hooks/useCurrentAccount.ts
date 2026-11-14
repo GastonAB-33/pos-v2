@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { auditService } from "@/services/audit.service";
+import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
 import { bankAccountsService } from "@/services/bank-accounts.service";
 import { cashService } from "@/services/cash.service";
 import { currentAccountsService } from "@/services/current-accounts.service";
@@ -31,6 +32,12 @@ interface AccountFeedback {
 }
 
 const roundAmount = (value: number): number => Number(value.toFixed(2));
+
+const currency = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  maximumFractionDigits: 2,
+});
 
 const paymentMethodPriority = (method: PaymentMethod): number => {
   const code = normalizePaymentMethodCode(method.code);
@@ -83,11 +90,24 @@ export interface CurrentAccountPricingRule {
   updated_at: string | null;
 }
 
+export interface PendingDebtAllocation {
+  movementId: string;
+  saleId: string | null;
+  createdAt: string;
+  originalAmount: number;
+  paidAmount: number;
+  pendingAmount: number;
+  pendingRatio: number;
+  saleDetail: CurrentAccountSaleDetail | null;
+  updatedAmount: number;
+}
+
 export interface CurrentAccountSummary {
   initialDebtTotal: number;
   paymentsTotal: number;
   adjustmentsTotal: number;
   accountingBalance: number;
+  pendingDebtTotal: number;
   updatedDebtTotal: number;
   updatedBalance: number;
   pricingRule: CurrentAccountPricingRule;
@@ -97,8 +117,16 @@ export interface RegisterCurrentAccountPaymentValues {
   amount: number;
   payment_method_id: string;
   notes?: string;
+  bank_account_id?: string | null;
   payment_details?: Record<string, unknown> | null;
   pricing_rule?: RegisterCurrentAccountAdjustmentValues | null;
+  split_payments?: Array<{
+    payment_method_id: string;
+    amount: number;
+    bank_account_id?: string | null;
+    payment_details?: Record<string, unknown> | null;
+    notes?: string;
+  }>;
 }
 
 export type CurrentAccountAdjustmentMode =
@@ -122,79 +150,273 @@ const adjustmentModeToPricingMode = (
   return mode;
 };
 
-const resolveCustomerPricingRule = (customer: Customer | null): CurrentAccountPricingRule => ({
+export const resolveCustomerPricingRule = (customer: Customer | null): CurrentAccountPricingRule => ({
   mode: customer?.current_account_pricing_mode ?? "original",
   surcharge_percent: customer?.current_account_surcharge_percent ?? null,
   surcharge_amount: customer?.current_account_surcharge_amount ?? null,
   updated_at: customer?.current_account_pricing_updated_at ?? null,
 });
 
-const calculateUpdatedDebtTotal = (
-  debtMovements: CurrentAccountMovement[],
+export interface FifoCalculationResult {
+  allocations: PendingDebtAllocation[];
+  allocationsByMovementId: Record<string, PendingDebtAllocation>;
+  initialDebtTotal: number;
+  paymentsTotal: number;
+  adjustmentsTotal: number;
+  accountingBalance: number;
+  pendingDebtTotal: number;
+  updatedDebtTotal: number;
+  updatedBalance: number;
+  debtSales: CurrentAccountDebtSaleOption[];
+}
+
+export const calculatePendingDebtsFIFO = (
+  movements: CurrentAccountMovement[],
   saleDetailsById: Record<string, CurrentAccountSaleDetail>,
   pricingRule: CurrentAccountPricingRule
-): number => {
-  const initialDebtTotal = roundAmount(
-    debtMovements.reduce((sum, movement) => sum + Math.abs(movement.amount), 0)
-  );
-
-  if (pricingRule.mode === "today_prices") {
-    return roundAmount(
-      debtMovements.reduce((sum, movement) => {
-        const saleDetail = movement.sale_id ? saleDetailsById[movement.sale_id] : null;
-        return sum + (saleDetail?.current_total ?? Math.abs(movement.amount));
-      }, 0)
-    );
-  }
-
-  if (pricingRule.mode === "surcharge_percentage") {
-    const percent = Number(pricingRule.surcharge_percent ?? 0);
-    if (!Number.isFinite(percent) || percent <= 0) return initialDebtTotal;
-    return roundAmount(initialDebtTotal * (1 + percent / 100));
-  }
-
-  if (pricingRule.mode === "surcharge_fixed") {
-    const amount = Number(pricingRule.surcharge_amount ?? 0);
-    if (!Number.isFinite(amount) || amount <= 0) return initialDebtTotal;
-    return roundAmount(initialDebtTotal + amount);
-  }
-
-  return initialDebtTotal;
-};
-
-const buildAccountSummary = (
-  customer: Customer | null,
-  movements: CurrentAccountMovement[],
-  saleDetailsById: Record<string, CurrentAccountSaleDetail>
-): CurrentAccountSummary => {
-  const pricingRule = resolveCustomerPricingRule(customer);
-  const debtMovements = movements.filter((movement) => movement.type === "debt");
-  const paymentMovements = movements.filter((movement) => movement.type === "payment");
-  const adjustmentMovements = movements.filter((movement) => movement.type === "adjustment");
+): FifoCalculationResult => {
+  const debtMovements = movements.filter((m) => m.type === "debt");
+  const paymentMovements = movements.filter((m) => m.type === "payment");
+  const adjustmentMovements = movements.filter((m) => m.type === "adjustment");
 
   const initialDebtTotal = roundAmount(
-    debtMovements.reduce((sum, movement) => sum + Math.abs(movement.amount), 0)
+    debtMovements.reduce((sum, m) => sum + Math.abs(m.amount), 0)
   );
   const paymentsTotal = roundAmount(
-    paymentMovements.reduce((sum, movement) => sum + Math.abs(movement.amount), 0)
+    paymentMovements.reduce((sum, m) => sum + Math.abs(m.amount), 0)
   );
   const adjustmentsTotal = roundAmount(
-    adjustmentMovements.reduce((sum, movement) => sum + movement.amount, 0)
+    adjustmentMovements.reduce((sum, m) => sum + m.amount, 0)
   );
+
+  // Saldo contable exacto en libro mayor:
   const accountingBalance = roundAmount(initialDebtTotal + adjustmentsTotal - paymentsTotal);
-  const updatedDebtTotal = calculateUpdatedDebtTotal(debtMovements, saleDetailsById, pricingRule);
-  const updatedBalance = roundAmount(updatedDebtTotal + adjustmentsTotal - paymentsTotal);
+
+  // Si el cliente no debe nada (saldo <= 0), no hay recargos ni actualización que aplicar
+  if (accountingBalance <= 0) {
+    const allocations: PendingDebtAllocation[] = debtMovements.map((m) => ({
+      movementId: m.id,
+      saleId: m.sale_id ?? null,
+      createdAt: m.created_at,
+      originalAmount: Math.abs(m.amount),
+      paidAmount: Math.abs(m.amount),
+      pendingAmount: 0,
+      pendingRatio: 0,
+      saleDetail: m.sale_id ? (saleDetailsById[m.sale_id] ?? null) : null,
+      updatedAmount: 0,
+    }));
+    const allocationsByMovementId = allocations.reduce<Record<string, PendingDebtAllocation>>(
+      (acc, a) => {
+        acc[a.movementId] = a;
+        return acc;
+      },
+      {}
+    );
+
+    return {
+      allocations,
+      allocationsByMovementId,
+      initialDebtTotal,
+      paymentsTotal,
+      adjustmentsTotal,
+      accountingBalance,
+      pendingDebtTotal: 0,
+      updatedDebtTotal: 0,
+      updatedBalance: accountingBalance,
+      debtSales: [],
+    };
+  }
+
+  // Imputación cronológica FIFO: los pagos cancelan deudas de más antigua a más reciente
+  const sortedDebts = [...debtMovements].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const negativeAdjustments = roundAmount(
+    adjustmentMovements.filter((a) => a.amount < 0).reduce((sum, a) => sum + Math.abs(a.amount), 0)
+  );
+  let availableCredit = roundAmount(paymentsTotal + negativeAdjustments);
+
+  const allocations: PendingDebtAllocation[] = [];
+  for (const debt of sortedDebts) {
+    const originalAmount = roundAmount(Math.abs(debt.amount));
+    if (originalAmount <= 0) continue;
+
+    let paidAmount = 0;
+    if (availableCredit >= originalAmount) {
+      paidAmount = originalAmount;
+      availableCredit = roundAmount(availableCredit - originalAmount);
+    } else if (availableCredit > 0) {
+      paidAmount = availableCredit;
+      availableCredit = 0;
+    } else {
+      paidAmount = 0;
+    }
+
+    const pendingAmount = roundAmount(originalAmount - paidAmount);
+    const pendingRatio = originalAmount > 0 ? pendingAmount / originalAmount : 0;
+    const saleDetail = debt.sale_id ? (saleDetailsById[debt.sale_id] ?? null) : null;
+
+    allocations.push({
+      movementId: debt.id,
+      saleId: debt.sale_id ?? null,
+      createdAt: debt.created_at,
+      originalAmount,
+      paidAmount,
+      pendingAmount,
+      pendingRatio,
+      saleDetail,
+      updatedAmount: pendingAmount,
+    });
+  }
+
+  const pendingDebtTotal = roundAmount(
+    allocations.reduce((sum, a) => sum + a.pendingAmount, 0)
+  );
+
+  let totalUpdatedDebt = pendingDebtTotal;
+  let updatedBalance = accountingBalance;
+
+  if (pricingRule.mode === "today_prices") {
+    totalUpdatedDebt = 0;
+    for (const alloc of allocations) {
+      if (alloc.pendingAmount <= 0) {
+        alloc.updatedAmount = 0;
+        continue;
+      }
+
+      if (alloc.saleDetail && alloc.saleDetail.items.length > 0) {
+        // Calcular total actual sumando el precio actual de cada producto
+        const todaySaleTotal = roundAmount(
+          alloc.saleDetail.items.reduce((sum, item) => {
+            const currentUnit = item.current_unit_price ?? item.unit_price;
+            return sum + currentUnit * item.quantity;
+          }, 0)
+        );
+        alloc.updatedAmount = roundAmount(todaySaleTotal * alloc.pendingRatio);
+      } else {
+        // Deuda manual sin items de venta: se preserva su importe pendiente original
+        alloc.updatedAmount = alloc.pendingAmount;
+      }
+      totalUpdatedDebt = roundAmount(totalUpdatedDebt + alloc.updatedAmount);
+    }
+
+    // Diferencia por actualización de precios sobre los productos pendientes
+    const priceDiff = roundAmount(totalUpdatedDebt - pendingDebtTotal);
+    updatedBalance = roundAmount(accountingBalance + priceDiff);
+
+  } else if (pricingRule.mode === "surcharge_percentage") {
+    const percent = Number(pricingRule.surcharge_percent ?? 0);
+    if (Number.isFinite(percent) && percent > 0) {
+      const surcharge = roundAmount(accountingBalance * (percent / 100));
+      updatedBalance = roundAmount(accountingBalance + surcharge);
+
+      for (const alloc of allocations) {
+        if (alloc.pendingAmount <= 0) {
+          alloc.updatedAmount = 0;
+        } else {
+          alloc.updatedAmount = roundAmount(alloc.pendingAmount * (1 + percent / 100));
+        }
+      }
+      totalUpdatedDebt = roundAmount(pendingDebtTotal * (1 + percent / 100));
+    }
+
+  } else if (pricingRule.mode === "surcharge_fixed") {
+    const fixedAmount = Number(pricingRule.surcharge_amount ?? 0);
+    if (Number.isFinite(fixedAmount) && fixedAmount > 0) {
+      updatedBalance = roundAmount(accountingBalance + fixedAmount);
+
+      for (const alloc of allocations) {
+        if (alloc.pendingAmount <= 0) {
+          alloc.updatedAmount = 0;
+        } else if (pendingDebtTotal > 0) {
+          alloc.updatedAmount = roundAmount(
+            alloc.pendingAmount + fixedAmount * (alloc.pendingAmount / pendingDebtTotal)
+          );
+        } else {
+          alloc.updatedAmount = alloc.pendingAmount;
+        }
+      }
+      totalUpdatedDebt = roundAmount(pendingDebtTotal + fixedAmount);
+    }
+  }
+
+  const allocationsByMovementId = allocations.reduce<Record<string, PendingDebtAllocation>>(
+    (acc, a) => {
+      acc[a.movementId] = a;
+      return acc;
+    },
+    {}
+  );
+
+  // Construir opciones de ventas para el modal (sólo ventas con deuda pendiente real):
+  const debtSales: CurrentAccountDebtSaleOption[] = allocations
+    .filter((alloc) => alloc.saleId && alloc.saleDetail && alloc.pendingAmount > 0)
+    .map((alloc) => {
+      const detail = alloc.saleDetail!;
+      const ratio = alloc.pendingRatio;
+
+      const proratedItems: CurrentAccountSaleItemDetail[] = detail.items.map((item) => {
+        const proratedQty = Number((item.quantity * ratio).toFixed(2));
+        const proratedLineTotal = roundAmount(item.line_total * ratio);
+        const currentPrice = item.current_unit_price ?? item.unit_price;
+        const proratedCurrentLineTotal = roundAmount(currentPrice * proratedQty);
+
+        return {
+          product_id: item.product_id,
+          product_name: item.product_name,
+          quantity: proratedQty,
+          unit_price: item.unit_price,
+          line_total: proratedLineTotal,
+          current_unit_price: item.current_unit_price,
+          current_line_total: proratedCurrentLineTotal,
+        };
+      });
+
+      const currentTotal = roundAmount(
+        proratedItems.reduce((sum, item) => sum + (item.current_line_total ?? item.line_total), 0)
+      );
+
+      return {
+        movement_id: alloc.movementId,
+        sale_id: detail.sale_id,
+        sale_number: detail.sale_number,
+        receipt_number: detail.receipt_number,
+        debt_amount: alloc.pendingAmount,
+        movement_date: alloc.createdAt,
+        sale_total: alloc.pendingAmount,
+        current_total: currentTotal,
+        items: proratedItems,
+      };
+    })
+    .sort((a, b) => b.movement_date.localeCompare(a.movement_date));
 
   return {
+    allocations,
+    allocationsByMovementId,
     initialDebtTotal,
     paymentsTotal,
     adjustmentsTotal,
     accountingBalance,
-    updatedDebtTotal,
+    pendingDebtTotal,
+    updatedDebtTotal: totalUpdatedDebt,
     updatedBalance,
-    pricingRule,
+    debtSales,
   };
 };
+
+const createEmptySummary = (rule?: CurrentAccountPricingRule): CurrentAccountSummary => ({
+  initialDebtTotal: 0,
+  paymentsTotal: 0,
+  adjustmentsTotal: 0,
+  accountingBalance: 0,
+  pendingDebtTotal: 0,
+  updatedDebtTotal: 0,
+  updatedBalance: 0,
+  pricingRule: rule ?? {
+    mode: "original",
+    surcharge_percent: null,
+    surcharge_amount: null,
+    updated_at: null,
+  },
+});
 
 export const useCurrentAccount = (
   tenantId: string | null,
@@ -209,10 +431,13 @@ export const useCurrentAccount = (
   const [installmentPlans, setInstallmentPlans] = useState<InstallmentPlan[]>([]);
   const [saleDetailsById, setSaleDetailsById] = useState<Record<string, CurrentAccountSaleDetail>>({});
   const [debtSales, setDebtSales] = useState<CurrentAccountDebtSaleOption[]>([]);
+  const [pendingAllocationsByMovementId, setPendingAllocationsByMovementId] = useState<
+    Record<string, PendingDebtAllocation>
+  >({});
   const [accountSummary, setAccountSummary] = useState<CurrentAccountSummary>(() =>
-    buildAccountSummary(null, [], {})
+    createEmptySummary()
   );
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasOpenCashSession, setHasOpenCashSession] = useState(false);
   const [openCashSessionId, setOpenCashSessionId] = useState<string | null>(null);
@@ -230,7 +455,8 @@ export const useCurrentAccount = (
       setInstallmentPlans([]);
       setSaleDetailsById({});
       setDebtSales([]);
-      setAccountSummary(buildAccountSummary(null, [], {}));
+      setPendingAllocationsByMovementId({});
+      setAccountSummary(createEmptySummary());
       setHasOpenCashSession(false);
       setOpenCashSessionId(null);
       return;
@@ -343,26 +569,8 @@ export const useCurrentAccount = (
         );
       }
 
-      const nextDebtSales = list
-        .filter((movement) => movement.type === "debt" && movement.sale_id)
-        .map((movement) => {
-          const detail = movement.sale_id ? nextSaleDetailsById[movement.sale_id] : null;
-          if (!detail) return null;
-
-          return {
-            movement_id: movement.id,
-            sale_id: detail.sale_id,
-            sale_number: detail.sale_number,
-            receipt_number: detail.receipt_number,
-            debt_amount: movement.amount,
-            movement_date: movement.created_at,
-            sale_total: detail.sale_total,
-            current_total: detail.current_total,
-            items: detail.items,
-          } satisfies CurrentAccountDebtSaleOption;
-        })
-        .filter((item): item is CurrentAccountDebtSaleOption => Boolean(item))
-        .sort((a, b) => b.movement_date.localeCompare(a.movement_date));
+      const customerRule = resolveCustomerPricingRule(effectiveCustomer);
+      const fifoResult = calculatePendingDebtsFIFO(list, nextSaleDetailsById, customerRule);
 
       setMovements(list);
       setBalance(currentBalance);
@@ -378,8 +586,18 @@ export const useCurrentAccount = (
         })
       );
       setSaleDetailsById(nextSaleDetailsById);
-      setDebtSales(nextDebtSales);
-      setAccountSummary(buildAccountSummary(effectiveCustomer, list, nextSaleDetailsById));
+      setDebtSales(fifoResult.debtSales);
+      setPendingAllocationsByMovementId(fifoResult.allocationsByMovementId);
+      setAccountSummary({
+        initialDebtTotal: fifoResult.initialDebtTotal,
+        paymentsTotal: fifoResult.paymentsTotal,
+        adjustmentsTotal: fifoResult.adjustmentsTotal,
+        accountingBalance: fifoResult.accountingBalance,
+        pendingDebtTotal: fifoResult.pendingDebtTotal,
+        updatedDebtTotal: fifoResult.updatedDebtTotal,
+        updatedBalance: fifoResult.updatedBalance,
+        pricingRule: customerRule,
+      });
       setHasOpenCashSession(Boolean(openSession));
       setOpenCashSessionId(openSession?.id ?? null);
     } catch (err) {
@@ -393,7 +611,8 @@ export const useCurrentAccount = (
       setInstallmentPlans([]);
       setSaleDetailsById({});
       setDebtSales([]);
-      setAccountSummary(buildAccountSummary(customer, [], {}));
+      setPendingAllocationsByMovementId({});
+      setAccountSummary(createEmptySummary(resolveCustomerPricingRule(customer)));
       setHasOpenCashSession(false);
       setOpenCashSessionId(null);
     } finally {
@@ -505,10 +724,9 @@ export const useCurrentAccount = (
       return false;
     }
     const accountingBalanceToPay = Math.max(0, accountSummary.accountingBalance);
-    const accountPaymentAmount = Math.min(chargedAmount, accountingBalanceToPay);
 
-    if (accountPaymentAmount <= 0) {
-      setFeedback({ type: "error", message: "La cuenta corriente no tiene saldo contable para cancelar" });
+    if (accountingBalanceToPay <= 0) {
+      setFeedback({ type: "error", message: "La cuenta corriente no tiene saldo pendiente para cancelar" });
       return false;
     }
 
@@ -517,10 +735,26 @@ export const useCurrentAccount = (
       const openSession =
         (userId ? await cashService.getOpenSessionByUser(tenantId, userId) : null) ??
         (await cashService.getOpenSession(tenantId));
-      if (!openSession) {
+
+      const hasCashComponent =
+        values.split_payments && values.split_payments.length > 0
+          ? values.split_payments.some((p) => {
+              const m = paymentMethods.find((meth) => meth.id === p.payment_method_id);
+              return (
+                !p.bank_account_id &&
+                (m
+                  ? normalizePaymentMethodCode(m.code) === "cash" ||
+                    m.affects_cash !== false
+                  : true)
+              );
+            })
+          : normalizedMethodCode === "cash" ||
+            (paymentMethod.affects_cash !== false && !values.bank_account_id);
+
+      if (hasCashComponent && !openSession) {
         setFeedback({
           type: "error",
-          message: "Debes abrir caja para registrar movimientos contables",
+          message: "Debes abrir caja para registrar cobros en efectivo",
         });
         return false;
       }
@@ -530,25 +764,141 @@ export const useCurrentAccount = (
         if (!ruleSaved) return false;
       }
 
+      // Si el monto cobrado supera la deuda contable histórica (por recargo o precio de hoy),
+      // registramos la diferencia como un movimiento de ajuste contable legítimo en CC
+      // para que el saldo de Cuenta Corriente y la Caja Diaria cuadren exactamente al centavo.
+      const adjustmentAmount = roundAmount(Math.max(0, chargedAmount - accountingBalanceToPay));
+      let adjustmentMovement: CurrentAccountMovement | null = null;
+
+      if (adjustmentAmount > 0) {
+        adjustmentMovement = await currentAccountsService.createMovement(tenantId, {
+          customer_id: customer.id,
+          sale_id: null,
+          type: "adjustment",
+          amount: adjustmentAmount,
+          notes: values.notes?.trim() || `Recargo / Ajuste por saldo actualizado (+${currency.format(adjustmentAmount)})`,
+          created_by: userId,
+        });
+
+        await auditService.createSafe(tenantId, {
+          user_id: userId,
+          module: "cuentas_corrientes",
+          action: "adjustment",
+          entity_type: "current_account_movement",
+          entity_id: adjustmentMovement.id,
+          description: `Ajuste contable por recargo de saldo actualizado: ${customer.full_name} (+${currency.format(adjustmentAmount)})`,
+          metadata: {
+            customer_id: customer.id,
+            adjustment_amount: adjustmentAmount,
+            charged_amount: chargedAmount,
+            accounting_balance_before: accountingBalanceToPay,
+          },
+        });
+      }
+
+      // Registramos el pago en cuenta corriente por el monto total efectivamente cobrado
       const movement = await currentAccountsService.createMovement(tenantId, {
         customer_id: customer.id,
         sale_id: null,
         type: "payment",
-        amount: accountPaymentAmount,
+        amount: chargedAmount,
         notes: values.notes?.trim() || null,
         created_by: userId,
       });
-      const cashMovement = await cashService.createMovement(tenantId, {
-        cash_session_id: openSession.id,
-        movement_type: "income",
-        amount: chargedAmount,
-        currency_code: "ARS",
-        reference_type: normalizedMethodCode,
-        reference_id: movement.id,
-        notes:
-          values.notes?.trim() || `Pago de cuenta corriente - ${customer.full_name} (${paymentMethod.name})`,
-        created_by: userId,
-      });
+
+      // Registramos los ingresos según corresponda (efectivo / banco / split)
+      let primaryCashMovementId: string | null = null;
+
+      if (values.split_payments && values.split_payments.length > 0) {
+        for (const split of values.split_payments) {
+          const splitMethod = paymentMethods.find((m) => m.id === split.payment_method_id);
+          const splitCode = splitMethod ? normalizePaymentMethodCode(splitMethod.code) : "other";
+
+          if (split.bank_account_id) {
+            try {
+              await bankAccountMovementsService.createMovement(tenantId, {
+                bank_account_id: split.bank_account_id,
+                type: "income",
+                origin_type: "customer_collection",
+                concept: `Cobro cuenta corriente - ${customer.full_name}`,
+                amount: split.amount,
+                reference_id: movement.id,
+                voucher_number: null,
+                notes: split.notes || values.notes || null,
+                created_by: userId,
+              });
+            } catch (bankErr) {
+              console.error("Error al registrar ingreso en cuenta bancaria:", bankErr);
+            }
+          } else if (openSession && (splitCode === "cash" || splitMethod?.affects_cash !== false)) {
+            const cm = await cashService.createMovement(tenantId, {
+              cash_session_id: openSession.id,
+              movement_type: "income",
+              amount: split.amount,
+              currency_code: "ARS",
+              reference_type: splitCode,
+              reference_id: movement.id,
+              notes:
+                values.notes?.trim() ||
+                `Pago de cuenta corriente - ${customer.full_name} (${splitMethod?.name || "Efectivo"})`,
+              created_by: userId,
+            });
+            if (!primaryCashMovementId) primaryCashMovementId = cm.id;
+          }
+        }
+      } else {
+        if (values.bank_account_id) {
+          try {
+            await bankAccountMovementsService.createMovement(tenantId, {
+              bank_account_id: values.bank_account_id,
+              type: "income",
+              origin_type: "customer_collection",
+              concept: `Cobro cuenta corriente - ${customer.full_name}`,
+              amount: chargedAmount,
+              reference_id: movement.id,
+              voucher_number: null,
+              notes: values.notes || null,
+              created_by: userId,
+            });
+          } catch (bankErr) {
+            console.error("Error al registrar ingreso en cuenta bancaria:", bankErr);
+          }
+        }
+
+        if (
+          openSession &&
+          (normalizedMethodCode === "cash" ||
+            paymentMethod.affects_cash !== false ||
+            !values.bank_account_id)
+        ) {
+          const cm = await cashService.createMovement(tenantId, {
+            cash_session_id: openSession.id,
+            movement_type: "income",
+            amount: chargedAmount,
+            currency_code: "ARS",
+            reference_type: normalizedMethodCode,
+            reference_id: movement.id,
+            notes:
+              values.notes?.trim() ||
+              `Pago de cuenta corriente - ${customer.full_name} (${paymentMethod.name})`,
+            created_by: userId,
+          });
+          primaryCashMovementId = cm.id;
+        }
+      }
+
+      // Si la deuda quedó totalmente cancelada, reseteamos la regla a 'original'
+      // para que las próximas compras del cliente no nazcan con recargos viejos
+      const remainingBalance = roundAmount(accountingBalanceToPay + adjustmentAmount - chargedAmount);
+      if (remainingBalance <= 0) {
+        await customersService.update(tenantId, customer.id, {
+          current_account_pricing_mode: "original",
+          current_account_surcharge_percent: null,
+          current_account_surcharge_amount: null,
+          current_account_pricing_updated_at: new Date().toISOString(),
+        });
+      }
+
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "cuentas_corrientes",
@@ -558,39 +908,40 @@ export const useCurrentAccount = (
         description: `Pago registrado en cuenta corriente: ${customer.full_name}`,
         metadata: {
           customer_id: customer.id,
-          amount: accountPaymentAmount,
-          charged_amount: chargedAmount,
-          updated_balance_reference: accountSummary.updatedBalance,
-          updated_amount_difference: roundAmount(chargedAmount - accountPaymentAmount),
+          amount: chargedAmount,
+          adjustment_applied: adjustmentAmount,
           balance_after: movement.balance_after,
           payment_method_id: paymentMethod.id,
           payment_method_code: normalizedMethodCode,
           payment_method_name: paymentMethod.name,
           payment_details: values.payment_details ?? null,
-          cash_session_id: openSession.id,
-          cash_movement_id: cashMovement.id,
-        },
-      });
-      await auditService.createSafe(tenantId, {
-        user_id: userId,
-        module: "caja",
-        action: "income",
-        entity_type: "cash_movement",
-        entity_id: cashMovement.id,
-        description: `Ingreso por pago de cuenta corriente: ${customer.full_name}`,
-        metadata: {
-          customer_id: customer.id,
-          current_account_movement_id: movement.id,
-          amount: chargedAmount,
-          account_payment_amount: accountPaymentAmount,
-          updated_amount_difference: roundAmount(chargedAmount - accountPaymentAmount),
-          payment_method_code: normalizedMethodCode,
-          payment_method_name: paymentMethod.name,
-          payment_details: values.payment_details ?? null,
+          cash_session_id: openSession?.id ?? null,
+          cash_movement_id: primaryCashMovementId,
         },
       });
 
-      setFeedback({ type: "success", message: "Pago registrado" });
+      if (primaryCashMovementId) {
+        await auditService.createSafe(tenantId, {
+          user_id: userId,
+          module: "caja",
+          action: "income",
+          entity_type: "cash_movement",
+          entity_id: primaryCashMovementId,
+          description: `Ingreso por pago de cuenta corriente: ${customer.full_name}`,
+          metadata: {
+            customer_id: customer.id,
+            current_account_movement_id: movement.id,
+            amount: chargedAmount,
+            account_payment_amount: chargedAmount,
+            adjustment_amount: adjustmentAmount,
+            payment_method_code: normalizedMethodCode,
+            payment_method_name: paymentMethod.name,
+            payment_details: values.payment_details ?? null,
+          },
+        });
+      }
+
+      setFeedback({ type: "success", message: "Pago registrado correctamente" });
       await loadCurrentAccount();
       return true;
     } catch {
@@ -616,6 +967,7 @@ export const useCurrentAccount = (
     installmentPlans,
     saleDetailsById,
     debtSales,
+    pendingAllocationsByMovementId,
     accountSummary,
     isLoading,
     isSubmitting,

@@ -11,6 +11,7 @@ import { LandingFaq } from "./components/LandingFaq";
 import { LandingFooter } from "./components/LandingFooter";
 import { FreeTrialModal } from "./components/FreeTrialModal";
 import { PaymentGatewayModal, type PlanDetails } from "./components/PaymentGatewayModal";
+import { FloatingWhatsAppButton } from "./components/FloatingWhatsAppButton";
 
 export const App: React.FC = () => {
   const [isFreeTrialOpen, setIsFreeTrialOpen] = useState(false);
@@ -79,6 +80,9 @@ export const App: React.FC = () => {
         onClose={() => setIsFreeTrialOpen(false)}
         selectedPlanName={selectedPlanForTrial}
       />
+
+      {/* Botón flotante de WhatsApp de asistencia */}
+      <FloatingWhatsAppButton />
 
       <PaymentGatewayModal
         isOpen={isPaymentOpen}

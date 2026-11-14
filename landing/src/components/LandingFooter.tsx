@@ -98,7 +98,7 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ onOpenFreeTrial })
               <li className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-emerald-400 shrink-0" />
                 <a
-                  href={`https://wa.me/${SUPPORT_WHATSAPP_PHONE}?text=${encodeURIComponent("Hola Jireh POS! Deseo información comercial.")}`}
+                  href={`https://wa.me/${SUPPORT_WHATSAPP_PHONE}?text=${encodeURIComponent("¡Hola equipo de Jireh! Deseo información comercial.")}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-white transition"

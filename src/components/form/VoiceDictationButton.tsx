@@ -86,7 +86,7 @@ export const VoiceDictationButton = ({
         onClick={handleToggle}
         onKeyDown={handleKeyDown}
         className={[
-          "group relative inline-flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-all select-none focus:outline-none focus:ring-2 focus:ring-blue-500/30",
+          "group relative inline-flex h-7 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-all select-none focus:outline-none focus:ring-2 focus:ring-blue-500/30",
           isRecording
             ? "border-red-400 bg-red-50 text-red-700 shadow-sm animate-pulse dark:border-red-600 dark:bg-red-950/40 dark:text-red-300"
             : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800",
@@ -140,7 +140,7 @@ export const VoiceDictationButton = ({
         <div
           role="status"
           aria-live="polite"
-          className="absolute left-0 bottom-full mb-1.5 z-50 min-w-[220px] max-w-[320px] rounded-lg border border-slate-200 bg-white p-2.5 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+          className="absolute left-0 bottom-full mb-1.5 z-50 min-w-[220px] max-w-[320px] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900"
         >
           <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-1.5 dark:border-slate-800">
             <div className="flex items-center gap-1.5">

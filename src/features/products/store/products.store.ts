@@ -73,11 +73,19 @@ export const useProductsStore = create<ProductsCatalogState>()(
           return;
         }
 
+        const CATALOG_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutos de vigencia de cache
         const state = get();
         const isSameTenant = state.loadedTenantId === tenantId;
         const hasData = state.products.length > 0;
+        const isFresh = Boolean(state.lastLoadedAt && Date.now() - state.lastLoadedAt < CATALOG_CACHE_TTL_MS);
 
-        // Si ya tenemos datos del mismo tenant y no se forzó recarga: mantener UI instantánea pero revalidar en segundo plano
+        // Si ya tenemos datos en memoria para el mismo tenant, estan vigentes y no se forzo recarga:
+        // CERO consumo de red / egress
+        if (isSameTenant && hasData && !force && isFresh) {
+          return;
+        }
+
+        // Si ya tenemos datos pero expiro la ventana de frescura: revalidar en segundo plano
         if (isSameTenant && hasData && !force) {
           set({ isBackgroundRefreshing: true });
         } else {

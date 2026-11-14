@@ -280,7 +280,7 @@ export const PurchaseCheckoutPanel = ({
   };
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-3.5 sm:p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <section className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2.5 dark:border-slate-800">
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-100">
           <FileText className="h-4 w-4 text-brand-600 dark:text-brand-400" />
@@ -321,7 +321,7 @@ export const PurchaseCheckoutPanel = ({
 
             {/* Si ya hay un proveedor seleccionado, mostrar tarjeta de confirmación visual */}
             {currentSelectedSupplier ? (
-              <div className="flex items-center justify-between rounded-lg border border-emerald-300 bg-emerald-50/90 p-2 dark:border-emerald-800 dark:bg-emerald-950/40">
+              <div className="flex items-center justify-between rounded-xl border border-emerald-300 bg-emerald-50/90 p-2.5 dark:border-emerald-800 dark:bg-emerald-950/40">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
                     <Check className="h-3.5 w-3.5" />
@@ -347,7 +347,7 @@ export const PurchaseCheckoutPanel = ({
                       type="button"
                       onClick={() => onEditSupplier(currentSelectedSupplier)}
                       disabled={disabled || !canWrite}
-                      className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-white px-2 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-slate-800 shadow-2xs transition"
+                      className="inline-flex items-center gap-1 rounded-xl border border-emerald-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-slate-800 shadow-2xs transition"
                       title="Editar proveedor para asignarle CUIT u otros datos fiscales"
                     >
                       <Pencil className="h-3 w-3" />
@@ -358,7 +358,7 @@ export const PurchaseCheckoutPanel = ({
                     type="button"
                     onClick={handleClearSupplier}
                     disabled={disabled || !canWrite}
-                    className="shrink-0 rounded px-2 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-900/60 transition"
+                    className="shrink-0 rounded-xl px-2.5 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 dark:text-emerald-300 dark:hover:bg-emerald-900/60 transition"
                   >
                     Cambiar
                   </button>
@@ -377,7 +377,7 @@ export const PurchaseCheckoutPanel = ({
                   onChange={(e) => handleSearchChange(e.target.value)}
                   onFocus={() => setIsSupplierDropdownOpen(true)}
                   disabled={disabled || !canWrite}
-                  className={`w-full rounded-lg border py-2.5 pl-8 pr-10 text-xs font-medium transition focus:outline-none focus:ring-1 ${
+                  className={`w-full rounded-xl border py-2.5 pl-8 pr-10 text-xs font-medium transition focus:outline-none focus:ring-1 ${
                     errors.supplierId
                       ? "border-red-400 bg-red-50/30 text-slate-800 dark:border-red-500 dark:bg-red-950/20 dark:text-slate-100"
                       : "border-slate-300 bg-white text-slate-800 focus:border-brand-500 focus:ring-brand-500 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-brand-400"

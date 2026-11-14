@@ -147,7 +147,7 @@ export const EmployeeExcludedCategoriesSelector = ({
               autoCapitalize="off"
               spellCheck={false}
               data-lpignore="true"
-              className="w-full h-8 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 pl-8 pr-7 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/20 outline-none transition"
+              className="w-full h-9 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 pl-8 pr-7 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-1 focus:ring-blue-500/20 outline-none transition"
             />
             {searchQuery && (
               <button
@@ -216,7 +216,7 @@ export const EmployeeExcludedCategoriesSelector = ({
             {excludedCategories.map((cat) => (
               <span
                 key={cat}
-                className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold bg-rose-50 dark:bg-rose-950/70 text-rose-900 dark:text-rose-200 border border-rose-300 dark:border-rose-800 shadow-2xs select-none"
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold bg-rose-50 dark:bg-rose-950/70 text-rose-900 dark:text-rose-200 border border-rose-300 dark:border-rose-800 shadow-2xs select-none"
               >
                 <Ban size={12} className="text-rose-600 dark:text-rose-400 shrink-0" />
                 <span>{cat}</span>
@@ -237,7 +237,7 @@ export const EmployeeExcludedCategoriesSelector = ({
             ))}
           </div>
         ) : (
-          <div className="flex items-center gap-2 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 p-3 text-xs text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-900/20">
+          <div className="flex items-center gap-2 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 p-3.5 text-xs text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-900/20">
             <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
             <span>
               No hay categorías excluidas. El porcentaje de descuento aplica a <strong>todos los productos</strong> del comercio.

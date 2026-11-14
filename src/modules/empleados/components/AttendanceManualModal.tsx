@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import {
   Clock,
   User,
@@ -40,7 +41,7 @@ const STATUS_OPTIONS: {
     activeClass:
       "bg-emerald-600 text-white border-emerald-600 dark:bg-emerald-600 dark:border-emerald-500 shadow-xs",
     inactiveClass:
-      "border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800/80 hover:bg-emerald-50 dark:hover:bg-emerald-950/30",
+      "border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800/80 hover:bg-emerald-50 dark:hover:bg-emerald-950/30",
   },
   {
     id: "late",
@@ -49,7 +50,7 @@ const STATUS_OPTIONS: {
     activeClass:
       "bg-amber-600 text-white border-amber-600 dark:bg-amber-600 dark:border-amber-500 shadow-xs",
     inactiveClass:
-      "border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800/80 hover:bg-amber-50 dark:hover:bg-amber-950/30",
+      "border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800/80 hover:bg-amber-50 dark:hover:bg-amber-950/30",
   },
   {
     id: "early_leave",
@@ -58,7 +59,7 @@ const STATUS_OPTIONS: {
     activeClass:
       "bg-orange-600 text-white border-orange-600 dark:bg-orange-600 dark:border-orange-500 shadow-xs",
     inactiveClass:
-      "border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800/80 hover:bg-orange-50 dark:hover:bg-orange-950/30",
+      "border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800/80 hover:bg-orange-50 dark:hover:bg-orange-950/30",
   },
   {
     id: "justified",
@@ -67,7 +68,7 @@ const STATUS_OPTIONS: {
     activeClass:
       "bg-blue-600 text-white border-blue-600 dark:bg-blue-600 dark:border-blue-500 shadow-xs",
     inactiveClass:
-      "border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800/80 hover:bg-blue-50 dark:hover:bg-blue-950/30",
+      "border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800/80 hover:bg-blue-50 dark:hover:bg-blue-950/30",
   },
   {
     id: "absent",
@@ -76,7 +77,7 @@ const STATUS_OPTIONS: {
     activeClass:
       "bg-rose-600 text-white border-rose-600 dark:bg-rose-600 dark:border-rose-500 shadow-xs",
     inactiveClass:
-      "border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800/80 hover:bg-rose-50 dark:hover:bg-rose-950/30",
+      "border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800/80 hover:bg-rose-50 dark:hover:bg-rose-950/30",
   },
 ];
 
@@ -88,6 +89,7 @@ export const AttendanceManualModal = ({
   onClose,
   onSubmit,
 }: AttendanceManualModalProps) => {
+  useBodyScrollLock(open);
   const [employeeId, setEmployeeId] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [checkIn, setCheckIn] = useState("08:00");
@@ -154,11 +156,11 @@ export const AttendanceManualModal = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 sm:p-4 backdrop-blur-xs overflow-y-auto animate-in fade-in">
-      <div className="relative w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-300 dark:border-slate-700 overflow-hidden my-auto flex flex-col max-h-[90vh]">
+      <div className="relative w-full max-w-lg rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border border-slate-200/90 dark:border-slate-800 overflow-hidden my-auto flex flex-col max-h-[90vh]">
         {/* Encabezado */}
-        <header className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 px-5 py-4 bg-slate-50 dark:bg-slate-800/70 shrink-0">
+        <header className="flex items-center justify-between border-b border-slate-200/90 dark:border-slate-800 px-6 py-4 bg-slate-50 dark:bg-slate-800/70 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 shrink-0">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 shrink-0">
               <Clock className="h-5 w-5" />
             </div>
             <div>
@@ -175,7 +177,7 @@ export const AttendanceManualModal = ({
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+            className="!rounded-full p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
             aria-label="Cerrar modal"
           >
             <X size={18} />
@@ -183,7 +185,7 @@ export const AttendanceManualModal = ({
         </header>
 
         {/* Formulario */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
+        <form onSubmit={handleSubmit} autoComplete="off" className="flex-1 overflow-y-auto p-6 space-y-4">
           {/* Bloque 1: Empleado y Fecha */}
           <div className="space-y-3">
             <div>
@@ -192,13 +194,13 @@ export const AttendanceManualModal = ({
               </label>
 
               {attendance && selectedEmployee ? (
-                <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 shadow-xs">
-                  <div className="flex items-center gap-2.5">
-                    <div className="h-9 w-9 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 flex items-center justify-center font-bold text-xs shrink-0 border border-blue-200 dark:border-blue-800/60">
+                <div className="flex items-center justify-between p-3.5 rounded-2xl border border-slate-200/90 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/60 shadow-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-2xl bg-blue-100 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 flex items-center justify-center font-bold text-sm shrink-0 border border-blue-200 dark:border-blue-800/60">
                       <User size={16} />
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
                         {selectedEmployee.full_name}
                       </p>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
@@ -207,7 +209,7 @@ export const AttendanceManualModal = ({
                       </p>
                     </div>
                   </div>
-                  <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 bg-slate-200/80 dark:bg-slate-700/80 px-2 py-0.5 rounded">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 bg-slate-200/80 dark:bg-slate-700/80 px-2 py-0.5 rounded-md">
                     Registro Existente
                   </span>
                 </div>
@@ -215,7 +217,7 @@ export const AttendanceManualModal = ({
                 <select
                   value={employeeId}
                   onChange={(e) => setEmployeeId(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm font-medium shadow-xs focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                  className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 text-slate-900 dark:text-slate-100 px-3.5 py-2 text-sm font-medium shadow-xs focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
                   required
                 >
                   <option value="" disabled>
@@ -239,7 +241,7 @@ export const AttendanceManualModal = ({
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm font-mono font-medium shadow-xs focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                  className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 text-slate-900 dark:text-slate-100 px-3.5 py-2 text-sm font-mono font-medium shadow-xs focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
                   required
                 />
               </div>
@@ -247,7 +249,7 @@ export const AttendanceManualModal = ({
           </div>
 
           {/* Bloque 2: Turno de Trabajo (Ingreso y Egreso) */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40 p-4 space-y-3 shadow-xs">
+          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40 p-4 space-y-3 shadow-xs">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700/80 pb-2.5">
               <span className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider flex items-center gap-1.5">
                 <Clock size={14} className="text-blue-600 dark:text-blue-400" />
@@ -276,7 +278,7 @@ export const AttendanceManualModal = ({
                   type="time"
                   value={checkIn}
                   onChange={(e) => setCheckIn(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm font-mono font-bold text-center shadow-xs focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                  className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm font-mono font-bold text-center shadow-xs focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
                   required
                 />
               </div>
@@ -303,7 +305,7 @@ export const AttendanceManualModal = ({
                   value={checkOut}
                   onChange={(e) => setCheckOut(e.target.value)}
                   placeholder="--:--"
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm font-mono font-bold text-center shadow-xs focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+                  className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-3 py-2 text-sm font-mono font-bold text-center shadow-xs focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
                 />
               </div>
             </div>
@@ -314,21 +316,21 @@ export const AttendanceManualModal = ({
               <button
                 type="button"
                 onClick={() => handleApplyPreset("08:00", "16:00")}
-                className="px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-mono text-[10px] font-semibold transition cursor-pointer"
+                className="px-2.5 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-mono text-[10px] font-semibold transition cursor-pointer"
               >
                 08-16 (8h)
               </button>
               <button
                 type="button"
                 onClick={() => handleApplyPreset("09:00", "18:00")}
-                className="px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-mono text-[10px] font-semibold transition cursor-pointer"
+                className="px-2.5 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-mono text-[10px] font-semibold transition cursor-pointer"
               >
                 09-18 (9h)
               </button>
               <button
                 type="button"
                 onClick={() => handleApplyPreset("14:00", "22:00")}
-                className="px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-mono text-[10px] font-semibold transition cursor-pointer"
+                className="px-2.5 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-mono text-[10px] font-semibold transition cursor-pointer"
               >
                 14-22 (8h)
               </button>
@@ -340,7 +342,7 @@ export const AttendanceManualModal = ({
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5 uppercase tracking-wider">
               Estado de la Asistencia
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {STATUS_OPTIONS.map((opt) => {
                 const isSelected = status === opt.id;
                 return (
@@ -370,17 +372,22 @@ export const AttendanceManualModal = ({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Detalle o justificación (ej: cambio de turno, horas extras, permiso particular)..."
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 text-slate-900 dark:text-slate-100 p-3 text-xs shadow-xs focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              data-lpignore="true"
+              className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 text-slate-900 dark:text-slate-100 p-3 text-xs shadow-xs focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none"
             />
           </div>
 
           {/* Pie de Acciones */}
-          <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-800 pt-4 shrink-0">
+          <div className="flex items-center justify-between border-t border-slate-200/90 dark:border-slate-800 pt-4 shrink-0">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition cursor-pointer"
+              className="px-4 py-2 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition cursor-pointer"
             >
               Cancelar
             </button>
@@ -388,7 +395,7 @@ export const AttendanceManualModal = ({
             <button
               type="submit"
               disabled={isSubmitting || !employeeId || !checkIn}
-              className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              className="px-5 py-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-[0.98]"
             >
               <CheckCircle2 size={14} />
               <span>{isSubmitting ? "Guardando..." : attendance ? "Guardar Cambios" : "Registrar Horario"}</span>

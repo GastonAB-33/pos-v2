@@ -2,6 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { PermissionMatrix, type ModuleGroup } from "@/modules/usuarios/components/PermissionMatrix";
+import type { SystemModuleGroup } from "@/modules/usuarios/constants/module-groups";
 import {
   permissionProfileFormSchema,
   type PermissionProfileFormValues,
@@ -12,7 +13,7 @@ import type { PermissionProfileRecord } from "@/types/entities";
 interface PermissionProfileFormProps {
   mode: "create" | "edit";
   profile?: PermissionProfileRecord;
-  moduleGroups: ModuleGroup[];
+  moduleGroups?: (ModuleGroup | SystemModuleGroup)[];
   disabled?: boolean;
   onCancel: () => void;
   onSubmit: (values: PermissionProfileFormValues, permissions: PermissionProfile) => Promise<void>;
@@ -62,41 +63,68 @@ export const PermissionProfileForm = ({
   return (
     <form
       className="space-y-4"
+      autoComplete="off"
       onSubmit={handleSubmit(async (values) => {
         await onSubmit(values, permissions);
       })}
     >
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Nombre</label>
+          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+            Nombre del perfil
+          </label>
           <input
             {...register("name")}
-            className="ui-input"
+            className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-2xs focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-blue-400"
             disabled={disabled}
+            placeholder="Ej: Cajero Turno Mañana"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
           />
-          {errors.name ? <p className="mt-1 text-xs text-red-600">{errors.name.message}</p> : null}
+          {errors.name ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.name.message}</p> : null}
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Descripcion</label>
+          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+            Descripción del rol
+          </label>
           <input
             {...register("description")}
-            className="ui-input"
+            className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 shadow-2xs focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-blue-400"
             disabled={disabled}
+            placeholder="Ej: Operación en POS y cobro sin acceso a costos ni configuración"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
           />
         </div>
       </div>
 
-      <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-        <input
-          type="checkbox"
-          {...register("isActive")}
-          disabled={disabled}
-        />
-        Perfil activo
-      </label>
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200 cursor-pointer">
+          <input
+            type="checkbox"
+            {...register("isActive")}
+            disabled={disabled}
+            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 cursor-pointer"
+          />
+          <span>Perfil activo (disponible para asignar a usuarios)</span>
+        </label>
+      </div>
 
-      <div className="space-y-2">
-        <p className="text-sm font-medium text-slate-700">Permisos por modulos y submodulos</p>
+      <div className="space-y-2 pt-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+            Matriz de Permisos por Áreas y Módulos
+          </p>
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            Selecciona el nivel de acceso para cada área del negocio
+          </span>
+        </div>
         <PermissionMatrix
           groups={moduleGroups}
           value={permissions}
@@ -105,16 +133,21 @@ export const PermissionProfileForm = ({
         />
       </div>
 
-      <p className="text-xs text-slate-500">
-        Cada modulo puede quedar sin acceso, con acceso o con acceso y edicion para usuarios del perfil.
-      </p>
-
-      <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4">
-        <button type="button" className="ui-btn-ghost" onClick={onCancel} disabled={disabled}>
+      <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5 border-t border-slate-200 dark:border-slate-800 pt-4">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={disabled}
+          className="w-full sm:w-auto rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 sm:py-2 text-xs sm:text-sm font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 active:scale-95 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer text-center"
+        >
           Cancelar
         </button>
-        <button type="submit" className="ui-btn-primary" disabled={disabled}>
-          {mode === "create" ? "Crear perfil" : "Guardar perfil"}
+        <button
+          type="submit"
+          disabled={disabled}
+          className="w-full sm:w-auto rounded-xl bg-blue-600 px-5 py-2.5 sm:py-2 text-xs sm:text-sm font-semibold text-white shadow-sm shadow-blue-500/25 hover:bg-blue-700 active:scale-95 disabled:opacity-50 transition-all cursor-pointer text-center"
+        >
+          {mode === "create" ? "Crear perfil" : "Guardar cambios"}
         </button>
       </div>
     </form>

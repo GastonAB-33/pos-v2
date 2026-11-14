@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { LoadingState } from "@/components/ui/UiStates";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -213,13 +214,16 @@ export const ProductsPage = () => {
       />
 
       {products.feedback ? (
-        <div className={products.feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>
+        <div className={`rounded-2xl ${products.feedback.type === "success" ? "ui-success-state" : "ui-error-state"}`}>
           {products.feedback.message}
         </div>
       ) : null}
 
       {products.isLoading ? (
-        <div className="ui-loading">Cargando productos...</div>
+        <LoadingState
+          message="Cargando catálogo de productos..."
+          description="Sincronizando precios, costos, códigos de barra y stock..."
+        />
       ) : (
         <ProductTable
           products={paginatedProducts.pageItems}
@@ -324,3 +328,4 @@ export const ProductsPage = () => {
     </section>
   );
 };
+

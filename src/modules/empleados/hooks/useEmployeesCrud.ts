@@ -13,7 +13,7 @@ interface Feedback {
 export const useEmployeesCrud = (tenantId: string | null, _userId: string | null) => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [search, setSearch] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
 
@@ -262,3 +262,4 @@ export const useEmployeesCrud = (tenantId: string | null, _userId: string | null
     toggleEmployeeActive,
   };
 };
+
