@@ -3,6 +3,7 @@ import { auditService } from "@/services/audit.service";
 import { bankAccountMovementsService } from "@/services/bank-account-movements.service";
 import { cashService } from "@/services/cash.service";
 import { generalCashService } from "@/services/general-cash.service";
+import { offlineService } from "@/services/offline.service";
 import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
 import { useCashStore } from "@/modules/caja/store/cash.store";
 import { useAuthStore } from "@/features/auth/store/auth.store";
@@ -1155,6 +1156,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         },
       });
 
+      offlineService.updateCachedCashSession(tenantId, createdSession);
+
       if (values.openingAmount > 0) {
         try {
           await generalCashService.createMovement(tenantId, {
@@ -1241,6 +1244,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
           bill_counts: values.billCounts,
         },
       });
+
+      offlineService.updateCachedCashSession(tenantId, null);
 
       if (values.realAmount > 0) {
         try {

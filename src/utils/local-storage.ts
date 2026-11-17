@@ -13,4 +13,5 @@ export const storageKeys = {
   topbarTasks: "pos-v2-topbar-tasks",
   topbarChatMessages: "pos-v2-topbar-chat-messages",
   topbarPresence: "pos-v2-topbar-presence",
+  activeCashSession: "pos-v2-active-cash-session",
 } as const;

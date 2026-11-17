@@ -39,6 +39,7 @@ export interface SupportTicket {
   routePath: string;
   deviceInfo: SupportDeviceInfo;
   screenshotDataUrl: string | null;
+  screenshotUrl?: string | null;
   adminNotes?: string;
   createdAt: string;
   updatedAt: string;
@@ -61,6 +62,7 @@ export interface CreateTicketInput {
   routePath?: string;
   deviceInfo?: SupportDeviceInfo;
   screenshotDataUrl?: string | null;
+  screenshotUrl?: string | null;
 }
 
 export interface AppendMessageInput {
@@ -227,9 +229,13 @@ export const formatWhatsAppSupportMessage = (ticket: SupportTicket): string => {
     `📍 *Módulo:* ${ticket.moduleName}`,
     ``,
     `📝 *Asunto:* ${ticket.subject}`,
-    `💬 *Detalle:*`,
+    `💬 *¿Qué estabas haciendo cuando sucedió?:*`,
     ticket.messages[0]?.body || ticket.subject,
   ];
+
+  if (ticket.screenshotUrl) {
+    lines.push('', '📸 *Captura de pantalla adjunta:*', ticket.screenshotUrl);
+  }
 
   return lines.join("\n");
 };
@@ -279,6 +285,7 @@ export const supportCenterStorage = {
       routePath: input.routePath || "/",
       deviceInfo: input.deviceInfo || detectDeviceInfo(),
       screenshotDataUrl: input.screenshotDataUrl || null,
+      screenshotUrl: input.screenshotUrl || null,
       createdAt,
       updatedAt: createdAt,
       messages: [],
@@ -309,6 +316,7 @@ export const supportCenterStorage = {
           status: ticket.status,
           createdAt,
           messages: ticket.messages,
+          screenshotUrl: ticket.screenshotUrl || null,
         },
       });
     } catch {

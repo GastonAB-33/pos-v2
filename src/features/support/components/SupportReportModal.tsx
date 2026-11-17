@@ -23,6 +23,11 @@ import {
 import { SupportAnnotationCanvas } from "@/features/support/components/SupportAnnotationCanvas";
 import { compressScreenshotCanvas } from "@/features/support/utils/screenshot-compression";
 import { useToast } from "@/components/ui/useToast";
+import { env } from "@/config/env";
+import {
+  copyImageToClipboard,
+  uploadSupportScreenshot,
+} from "@/features/support/utils/screenshot-upload";
 
 interface SupportReportModalProps {
   isOpen: boolean;
@@ -30,7 +35,7 @@ interface SupportReportModalProps {
   adminWhatsAppNumber?: string;
 }
 
-const DEFAULT_SUPPORT_WHATSAPP = "5493413628499"; // Número de soporte por defecto
+const DEFAULT_SUPPORT_WHATSAPP = env.supportWhatsappPhone || "5492664689173";
 
 const getFriendlyModuleName = (pathname: string): string => {
   if (pathname.startsWith("/pos")) return "Punto de Venta (POS)";
@@ -256,6 +261,19 @@ export const SupportReportModal = ({
     setIsSubmitting(true);
 
     try {
+      let uploadedScreenshotUrl: string | null = null;
+      let copiedToClipboard = false;
+
+      // Si hay captura anotada o capturada, subir a Supabase Storage y copiar al portapapeles
+      const imageToProcess = annotatedImage || capturedImage;
+      if (imageToProcess) {
+        uploadedScreenshotUrl = await uploadSupportScreenshot(
+          imageToProcess,
+          tenantId,
+        );
+        copiedToClipboard = await copyImageToClipboard(imageToProcess);
+      }
+
       const ticket = supportCenterStorage.createTicket({
         tenantId,
         tenantName,
@@ -269,15 +287,24 @@ export const SupportReportModal = ({
         moduleName,
         routePath: location.pathname,
         deviceInfo,
-        screenshotDataUrl: annotatedImage,
+        screenshotDataUrl: imageToProcess || null,
+        screenshotUrl: uploadedScreenshotUrl,
       });
 
       // Formatear mensaje para WhatsApp
       const waMessage = formatWhatsAppSupportMessage(ticket);
-      const cleanPhone = adminWhatsAppNumber.replace(/\D/g, "");
-      const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(waMessage)}`;
+      const cleanPhone = (adminWhatsAppNumber || DEFAULT_SUPPORT_WHATSAPP).replace(/\D/g, "");
+      // Usar api.whatsapp.com directamente para preservar caracteres UTF-8 y emojis sin que wa.me los rompa
+      const waUrl = `https://api.whatsapp.com/send/?phone=${cleanPhone}&text=${encodeURIComponent(waMessage)}`;
 
-      toast.success(`Reporte #${ticket.ticketNumber} registrado con éxito.`);
+      if (copiedToClipboard) {
+        toast.success(
+          `Reporte #${ticket.ticketNumber} enviado. ¡Captura copiada! Pegala en WhatsApp con Ctrl+V.`,
+          6000
+        );
+      } else {
+        toast.success(`Reporte #${ticket.ticketNumber} registrado con éxito.`);
+      }
 
       // Abrir WhatsApp en una nueva pestaña
       window.open(waUrl, "_blank", "noopener,noreferrer");
@@ -448,14 +475,14 @@ export const SupportReportModal = ({
 
             <div>
               <label htmlFor="support-description" className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                ¿Qué estabas haciendo cuando ocurrió el problema? <span className="text-red-500">*</span>
+                ¿Qué estabas haciendo cuando sucedió? <span className="text-red-500">*</span>
               </label>
               <textarea
                 id="support-description"
                 rows={3}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Explicá brevemente lo que sucedió para poder ayudarte más rápido..."
+                placeholder="Explicá qué estabas haciendo cuando sucedió para poder ayudarte más rápido..."
                 className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                 required
                 minLength={5}
@@ -470,12 +497,12 @@ export const SupportReportModal = ({
             {strokesCount > 0 ? (
               <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
                 <CheckCircle2 size={14} />
-                <span>Captura con {strokesCount} marca(s) lista.</span>
+                <span>Captura con {strokesCount} marca(s) lista (enlace en WhatsApp y copiada para Ctrl+V).</span>
               </span>
             ) : annotatedImage || capturedImage ? (
               <span className="flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-400">
                 <CheckCircle2 size={14} />
-                <span>Captura de pantalla adjunta.</span>
+                <span>Captura adjunta (enlace en WhatsApp y copiada para Ctrl+V).</span>
               </span>
             ) : null}
           </div>
@@ -501,7 +528,7 @@ export const SupportReportModal = ({
               ) : (
                 <Send size={14} />
               )}
-              <span>Enviar reporte y abrir WhatsApp</span>
+              <span>{isSubmitting ? "Subiendo captura y abriendo WhatsApp..." : "Enviar reporte y abrir WhatsApp"}</span>
             </button>
           </div>
         </div>

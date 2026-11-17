@@ -1,4 +1,5 @@
 import { storageKeys } from "@/utils/local-storage";
+import { supabase } from "@/lib/supabase/client";
 import type { MercadoPagoMode, MercadoPagoSettings } from "@/types/entities";
 
 export type MercadoPagoProviderStatus =
@@ -171,7 +172,7 @@ const getOnlineStatus = (): boolean => {
 };
 
 const hasCredentials = (settings: MercadoPagoSettings): boolean =>
-  Boolean(settings.access_token && settings.public_key);
+  Boolean(settings.access_token || settings.public_key || (settings as unknown as { is_configured?: boolean }).is_configured || Boolean(import.meta.env.VITE_SUPABASE_URL));
 
 const resolveOperationalStatus = (input?: {
   settings?: MercadoPagoSettings | null;
@@ -199,7 +200,7 @@ const resolveOperationalStatus = (input?: {
       available: false,
       can_start_payment: false,
       requires_backend: settings.mode !== "mock",
-      backend_ready: settings.mode === "mock" || Boolean(backendBaseUrl),
+      backend_ready: settings.mode === "mock" || Boolean(backendBaseUrl || import.meta.env.VITE_SUPABASE_URL),
       reason: "Mercado Pago deshabilitado temporalmente",
     };
   }
@@ -211,7 +212,7 @@ const resolveOperationalStatus = (input?: {
       available: false,
       can_start_payment: false,
       requires_backend: settings.mode !== "mock",
-      backend_ready: settings.mode === "mock" || Boolean(backendBaseUrl),
+      backend_ready: settings.mode === "mock" || Boolean(backendBaseUrl || import.meta.env.VITE_SUPABASE_URL),
       reason: "Sin conexion",
     };
   }
@@ -235,12 +236,14 @@ const resolveOperationalStatus = (input?: {
       available: false,
       can_start_payment: false,
       requires_backend: true,
-      backend_ready: Boolean(backendBaseUrl),
+      backend_ready: Boolean(backendBaseUrl || import.meta.env.VITE_SUPABASE_URL),
       reason: "Mercado Pago no configurado: faltan credenciales",
     };
   }
 
-  if (!backendBaseUrl) {
+  const isBackendAvailable = Boolean(backendBaseUrl || import.meta.env.VITE_SUPABASE_URL);
+
+  if (!isBackendAvailable) {
     return {
       mode: settings.mode,
       configured: true,
@@ -360,53 +363,101 @@ const createIntentFromBackend = async (
   input: CreatePaymentIntentInput,
   mode: Exclude<MercadoPagoMode, "mock">
 ): Promise<MercadoPagoPaymentIntent> => {
-  const payload = await requestBackend<Record<string, unknown>>(
-    "/mercadopago/intents",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        tenant_id: input.tenantId,
-        amount: roundAmount(input.amount),
-        currency_code: input.currencyCode,
-        description: input.description ?? null,
-        customer_id: input.customerId ?? null,
-        sale_number_hint: input.saleNumberHint ?? null,
-        mode,
-        metadata: input.metadata ?? null,
-      }),
-    }
-  );
+  if (backendBaseUrl) {
+    const payload = await requestBackend<Record<string, unknown>>(
+      "/mercadopago/intents",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          tenant_id: input.tenantId,
+          amount: roundAmount(input.amount),
+          currency_code: input.currencyCode,
+          description: input.description ?? null,
+          customer_id: input.customerId ?? null,
+          sale_number_hint: input.saleNumberHint ?? null,
+          mode,
+          metadata: input.metadata ?? null,
+        }),
+      }
+    );
+    return buildIntentFromBackend(payload, input.tenantId, input.amount, input.currencyCode);
+  }
 
-  return buildIntentFromBackend(payload, input.tenantId, input.amount, input.currencyCode);
+  const { data, error } = await supabase.functions.invoke("mercadopago-checkout", {
+    body: {
+      action: "create-payment-intent",
+      amount: roundAmount(input.amount),
+      currency_code: input.currencyCode,
+      description: input.description ?? null,
+      customer_id: input.customerId ?? null,
+      sale_number_hint: input.saleNumberHint ?? null,
+      mode,
+      metadata: input.metadata ?? null,
+    },
+  });
+
+  if (error || !data) {
+    throw new Error(error?.message || "Error al invocar edge function de Mercado Pago");
+  }
+
+  return buildIntentFromBackend(data as Record<string, unknown>, input.tenantId, input.amount, input.currencyCode);
 };
 
 const getIntentFromBackend = async (
   tenantId: string,
   intentId: string
 ): Promise<MercadoPagoPaymentIntent> => {
-  const payload = await requestBackend<Record<string, unknown>>(
-    `/mercadopago/intents/${intentId}?tenant_id=${encodeURIComponent(tenantId)}`,
-    {
-      method: "GET",
-    }
-  );
+  if (backendBaseUrl) {
+    const payload = await requestBackend<Record<string, unknown>>(
+      `/mercadopago/intents/${intentId}?tenant_id=${encodeURIComponent(tenantId)}`,
+      {
+        method: "GET",
+      }
+    );
+    return buildIntentFromBackend(payload, tenantId, 0, "ARS");
+  }
 
-  return buildIntentFromBackend(payload, tenantId, 0, "ARS");
+  const { data, error } = await supabase.functions.invoke("mercadopago-checkout", {
+    body: {
+      action: "get-payment-status",
+      payment_id: intentId,
+    },
+  });
+
+  if (error || !data) {
+    throw new Error(error?.message || "Error al consultar estado en Mercado Pago");
+  }
+
+  return buildIntentFromBackend(data as Record<string, unknown>, tenantId, 0, "ARS");
 };
 
 const cancelIntentFromBackend = async (
   tenantId: string,
   intentId: string
 ): Promise<MercadoPagoPaymentIntent> => {
-  const payload = await requestBackend<Record<string, unknown>>(
-    `/mercadopago/intents/${intentId}/cancel`,
-    {
-      method: "POST",
-      body: JSON.stringify({ tenant_id: tenantId }),
-    }
-  );
+  if (backendBaseUrl) {
+    const payload = await requestBackend<Record<string, unknown>>(
+      `/mercadopago/intents/${intentId}/cancel`,
+      {
+        method: "POST",
+        body: JSON.stringify({ tenant_id: tenantId }),
+      }
+    );
+    return buildIntentFromBackend(payload, tenantId, 0, "ARS");
+  }
 
-  return buildIntentFromBackend(payload, tenantId, 0, "ARS");
+  const { data, error } = await supabase.functions.invoke("mercadopago-checkout", {
+    body: {
+      action: "cancel-payment-intent",
+      intent_id: intentId,
+    },
+  });
+
+  if (error || !data) {
+    throw new Error(error?.message || "Error al cancelar pago en Mercado Pago");
+  }
+
+  return buildIntentFromBackend(data as Record<string, unknown>, tenantId, 0, "ARS");
 };
 
 const resolveModeFromSettings = (settings?: MercadoPagoSettings | null): MercadoPagoRuntimeMode =>

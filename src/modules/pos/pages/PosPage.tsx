@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/utils/cn";
-import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
+import { PosContinuousScannerModal } from "@/modules/pos/components/PosContinuousScannerModal";
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { LoadingState } from "@/components/ui/UiStates";
 import { IconButton } from "@/components/ui/IconButton";
@@ -27,6 +27,7 @@ import { PosSmartView } from "@/modules/pos/components/PosSmartView";
 import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
 import { usePosSale, type PosCartItemComputed, getBackendErrorMessage } from "@/modules/pos/hooks/usePosSale";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
+import type { CashSession } from "@/types/entities";
 import { useProductsStore } from "@/features/products/store/products.store";
 import type { OpenCashValues } from "@/modules/caja/schemas/cash.schemas";
 import { computePricingBackward, roundMoney } from "@/modules/productos/utils/product-pricing";
@@ -584,7 +585,9 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
       return;
     }
 
-    if (!resolvedOperatorUserId) {
+    const effectiveOperatorId = resolvedOperatorUserId || user?.id || null;
+
+    if (!effectiveOperatorId) {
       if (!hasResolvedOperatorUser || isResolvingOperatorUser || isLoading) {
         setCashGateFeedback(null);
         setHasResolvedCashGate(false);
@@ -604,9 +607,17 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
 
     if (!navigator.onLine) {
       await offlineService.hydrate();
-      const cachedSession = offlineService.getPosSnapshot(tenantId)?.open_cash_session ?? null;
-      setOpenCashSessionId(cachedSession?.status === "open" ? cachedSession.id : null);
-      setCashGateFeedback(cachedSession?.status === "open" ? "Caja local disponible sin conexion." : "No hay una caja local abierta para operar sin conexion.");
+      const cachedSession =
+        offlineService.getCachedCashSession(tenantId) ??
+        (openCashSessionId ? { id: openCashSessionId, status: "open" as const } : null);
+
+      if (cachedSession?.status === "open" || cachedSession?.id) {
+        setOpenCashSessionId(cachedSession.id);
+        setCashGateFeedback("Caja activa preservada en modo sin conexión.");
+      } else {
+        setOpenCashSessionId(null);
+        setCashGateFeedback("No hay una caja local abierta para operar sin conexión.");
+      }
       setHasResolvedCashGate(true);
       return;
     }
@@ -622,13 +633,34 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
         setCashDefaultOpeningAmount(tenantSettings.caja?.default_opening_amount ?? 0);
         setHasLoadedCashDefaults(true);
       }
-      setOpenCashSessionId(openSession?.id ?? null);
-      offlineService.updateCachedCashSession(tenantId, openSession);
+
+      const activeSession =
+        openSession ??
+        offlineService.getCachedCashSession(tenantId) ??
+        (openCashSessionId ? { id: openCashSessionId, status: "open" as const } : null);
+
+      if (activeSession && (activeSession.status === "open" || activeSession.id)) {
+        setOpenCashSessionId(activeSession.id);
+        offlineService.updateCachedCashSession(tenantId, activeSession as CashSession);
+      } else {
+        setOpenCashSessionId(null);
+        offlineService.updateCachedCashSession(tenantId, null);
+      }
       setCashGateFeedback(null);
       setHasResolvedCashGate(true);
     } catch {
-      setOpenCashSessionId(null);
-      setCashGateFeedback("No se pudo validar la caja abierta del comercio.");
+      // Si la consulta a Supabase falla por corte de internet o timeout, mantener la caja activa
+      const fallbackSession =
+        offlineService.getCachedCashSession(tenantId) ??
+        (openCashSessionId ? { id: openCashSessionId, status: "open" as const } : null);
+
+      if (fallbackSession && (fallbackSession.status === "open" || fallbackSession.id)) {
+        setOpenCashSessionId(fallbackSession.id);
+        setCashGateFeedback("Conexión interrumpida: continuando con la caja abierta previa.");
+      } else {
+        setOpenCashSessionId(null);
+        setCashGateFeedback("No se pudo validar la caja abierta del comercio.");
+      }
       setHasResolvedCashGate(true);
     } finally {
       setIsCheckingCashSession(false);
@@ -638,6 +670,7 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
     hasResolvedOperatorUser,
     isLoading,
     isResolvingOperatorUser,
+    openCashSessionId,
     resolvedOperatorUserId,
     tenantId,
     user,
@@ -716,8 +749,9 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
 
       persistResolvedUser(null);
     } catch {
-      window.sessionStorage.removeItem(cacheKey);
-      setResolvedOperatorUserId(null);
+      // En modo offline o ante fallos de red, NUNCA vaciar la identidad del operador
+      const fallbackUserId = cachedResolvedUserId || user.id || null;
+      setResolvedOperatorUserId(fallbackUserId);
     } finally {
       setIsResolvingOperatorUser(false);
       setHasResolvedOperatorUser(true);
@@ -831,6 +865,7 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
         const existingOpen = await cashService.getOpenSession(tenantId);
         if (existingOpen) {
           setOpenCashSessionId(existingOpen.id);
+          offlineService.updateCachedCashSession(tenantId, existingOpen);
           setCashGateFeedback(null);
           setHasResolvedCashGate(true);
           return;
@@ -877,6 +912,7 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
         });
 
         setOpenCashSessionId(createdSession.id);
+        offlineService.updateCachedCashSession(tenantId, createdSession);
         setCashGateFeedback(null);
         setHasResolvedCashGate(true);
         toastSuccess("Caja abierta correctamente.");
@@ -941,6 +977,47 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
       addProductByBarcode,
       canWritePos,
       focusScannerCapture,
+      isCashGateBlocking,
+      isCheckoutModalOpen,
+      isSubmitting,
+      triggerCartSuccessHighlight,
+    ]
+  );
+
+  const handleContinuousCameraScan = useCallback(
+    async (barcode: string): Promise<{ ok: boolean; name?: string; price?: number; error?: string }> => {
+      if (!canWritePos || isSubmitting || isCashGateBlocking || isCheckoutModalOpen) {
+        return { ok: false, error: "POS bloqueado" };
+      }
+
+      const cleanBarcode = barcode.trim();
+      try {
+        const result = await addProductByBarcode(cleanBarcode);
+        if (!result.ok || (!result.product && !result.promotion)) {
+          setLastNotFoundBarcode(cleanBarcode);
+          return { ok: false, error: result.error || `No encontrado: ${cleanBarcode}` };
+        }
+
+        const scannedProduct = result.product;
+        const scannedPromo = result.promotion as { name?: string } | undefined;
+
+        setLastNotFoundBarcode("");
+        triggerCartSuccessHighlight();
+        return {
+          ok: true,
+          name: scannedProduct?.name || scannedPromo?.name || "Producto agregado",
+          price: scannedProduct?.price,
+        };
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Error al procesar",
+        };
+      }
+    },
+    [
+      addProductByBarcode,
+      canWritePos,
       isCashGateBlocking,
       isCheckoutModalOpen,
       isSubmitting,
@@ -1718,6 +1795,7 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
             void loadRecentReceipts();
           }}
           onOpenQuickProduct={() => setIsQuickProductModalOpen(true)}
+          onOpenScanner={() => setIsCameraScannerOpen(true)}
         />
 
       {shouldShowCashOpeningModal ? (
@@ -2002,20 +2080,17 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
         }}
       />
 
-      <BarcodeScannerModal
+      <PosContinuousScannerModal
         open={isCameraScannerOpen && !isCheckoutModalOpen}
-        title="Escanear producto con camara"
-        description="Escanea un codigo para agregar el producto al carrito."
         onClose={() => {
           setIsCameraScannerOpen(false);
           window.setTimeout(() => {
             focusScannerCapture();
           }, 0);
         }}
-        onDetected={(barcode) => {
-          setIsCameraScannerOpen(false);
-          void handleBarcodeScan(barcode);
-        }}
+        onScan={handleContinuousCameraScan}
+        cartItemsCount={cart.length}
+        cartTotal={checkoutSummary.total}
       />
 
       {isReceiptsListModalOpen ? (

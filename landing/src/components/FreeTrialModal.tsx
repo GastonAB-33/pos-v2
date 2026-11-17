@@ -19,14 +19,21 @@ interface FreeTrialModalProps {
   isOpen: boolean;
   onClose: () => void;
   selectedPlanName?: string;
+  onOpenTerms?: () => void;
+  onOpenPrivacy?: () => void;
 }
 
 export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
   isOpen,
   onClose,
   selectedPlanName = 'Plan "Me Estoy Formalizando"',
+  onOpenTerms,
+  onOpenPrivacy,
 }) => {
   const [step, setStep] = useState<"form" | "loading" | "success">("form");
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  const [acceptMarketing, setAcceptMarketing] = useState(false);
+  const [hpCompany, setHpCompany] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     businessName: "",
@@ -52,6 +59,15 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!acceptTerms) {
+      setErrorMessage("Debés aceptar los Términos de Servicio y la Política de Privacidad para continuar.");
+      return;
+    }
+    if (hpCompany) {
+      // Bot detectado silenciosamente
+      setStep("success");
+      return;
+    }
     setErrorMessage(null);
     setStep("loading");
 
@@ -291,8 +307,64 @@ export const FreeTrialModal: React.FC<FreeTrialModalProps> = ({
                   />
                 </div>
 
-                <button
-                  type="submit"
+                
+                {/* Trampa anti-bot oculta */}
+                <div className="hidden" aria-hidden="true">
+                  <input
+                    type="text"
+                    name="hp_company"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={hpCompany}
+                    onChange={(e) => setHpCompany(e.target.value)}
+                  />
+                </div>
+
+                {/* Consentimiento Legal y Términos */}
+                <div className="space-y-2 pt-1 border-t border-slate-100">
+                  <label className="flex items-start gap-2.5 cursor-pointer text-xs text-slate-600 select-none">
+                    <input
+                      type="checkbox"
+                      checked={acceptTerms}
+                      onChange={(e) => setAcceptTerms(e.target.checked)}
+                      className="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span>
+                      Declaro ser mayor de edad y acepto los{" "}
+                      <button
+                        type="button"
+                        onClick={onOpenTerms}
+                        className="text-emerald-700 font-semibold underline underline-offset-2 hover:text-emerald-800"
+                      >
+                        Términos de Servicio
+                      </button>{" "}
+                      y la{" "}
+                      <button
+                        type="button"
+                        onClick={onOpenPrivacy}
+                        className="text-emerald-700 font-semibold underline underline-offset-2 hover:text-emerald-800"
+                      >
+                        Política de Privacidad
+                      </button>
+                      . *
+                    </span>
+                  </label>
+
+                  <label className="flex items-start gap-2.5 cursor-pointer text-xs text-slate-500 select-none">
+                    <input
+                      type="checkbox"
+                      checked={acceptMarketing}
+                      onChange={(e) => setAcceptMarketing(e.target.checked)}
+                      className="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span>
+                      Acepto recibir novedades, actualizaciones y consejos de gestión por WhatsApp o correo (opcional).
+                    </span>
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
                   className="w-full mt-2 flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-[#25D366] via-[#10B981] to-[#059669] px-6 py-3.5 text-base font-extrabold text-white shadow-lg shadow-emerald-600/30 hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all"
                 >
                   <WhatsAppIcon className="h-5 w-5 text-white" />

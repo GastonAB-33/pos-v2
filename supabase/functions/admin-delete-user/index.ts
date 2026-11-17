@@ -36,13 +36,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    await requireUsuariosWrite(req.headers.get("Authorization"));
+    // 1. Validar permisos y extraer contexto seguro del llamador
+    const caller = await requireUsuariosWrite(req.headers.get("Authorization"));
 
     const body = (await req.json()) as Partial<DeleteUserPayload>;
     const userId = normalizeText(body.user_id);
 
     if (!userId) {
       return jsonResponse({ error: "Falta user_id" }, 400);
+    }
+
+    // 2. Prevenir auto-eliminación
+    if (userId === caller.userId) {
+      return jsonResponse({ error: "No podés eliminar tu propio usuario activo en sesión" }, 400);
     }
 
     const { data: existing, error: existingError } = await serviceClient
@@ -56,6 +62,14 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Usuario no encontrado" }, 404);
     }
 
+    // 3. BLINDAJE CONTRA BOLA / IDOR: Prohibir eliminar usuarios de otro comercio
+    if (existing.tenant_id !== caller.tenantId) {
+      return jsonResponse(
+        { error: "Acceso denegado: no tenés autorización para eliminar usuarios de otro comercio" },
+        403
+      );
+    }
+
     if (existing.auth_user_id) {
       const { error: authError } = await serviceClient.auth.admin.deleteUser(existing.auth_user_id);
       if (authError) throw authError;
@@ -64,7 +78,8 @@ Deno.serve(async (req) => {
     const { error: userError } = await serviceClient
       .from("users")
       .delete()
-      .eq("id", userId);
+      .eq("id", userId)
+      .eq("tenant_id", caller.tenantId);
 
     if (userError) throw userError;
 

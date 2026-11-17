@@ -11,6 +11,31 @@ interface OnboardTrialRequest {
   password?: string;
   selectedPlanName?: string;
   leadId?: string;
+  // Campos Honeypot anti-bot (deben venir vacíos desde formularios humanos)
+  hp_company?: string;
+  website?: string;
+}
+
+// Rate Limiter en memoria para mitigación anti-abuso / anti-bot
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutos
+const MAX_REQUESTS_PER_WINDOW = 5;
+
+function isRateLimited(clientIp: string): boolean {
+  const now = Date.now();
+  const record = rateLimitMap.get(clientIp);
+
+  if (!record || now > record.resetAt) {
+    rateLimitMap.set(clientIp, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+
+  if (record.count >= MAX_REQUESTS_PER_WINDOW) {
+    return true;
+  }
+
+  record.count += 1;
+  return false;
 }
 
 const normalizeSlug = (value: string): string =>
@@ -53,10 +78,39 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  // 1. Obtener IP y aplicar Rate Limiting defensivo
+  const clientIp =
+    req.headers.get("cf-connecting-ip") ||
+    req.headers.get("x-real-ip") ||
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "unknown-origin";
+
+  if (isRateLimited(clientIp)) {
+    return new Response(
+      JSON.stringify({
+        error: "Has superado el límite de intentos de registro. Por seguridad, aguardá unos minutos antes de reintentar.",
+      }),
+      { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "900" } }
+    );
+  }
+
   try {
     const payload: OnboardTrialRequest = await req.json();
-    const { businessName, fullName, email, phone, category, password, selectedPlanName, leadId } = payload;
+    const { businessName, fullName, email, phone, category, password, selectedPlanName, leadId, hp_company, website } = payload;
 
+    // 2. Trampa anti-bot (Honeypot): Si un bot automatizado llena campos invisibles, descartar silenciosamente
+    if (hp_company || website) {
+      console.warn(`[Security Alert] Bot detectado en onboard-trial desde IP: ${clientIp}`);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: "Solicitud procesada correctamente.",
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // 3. Validación y saneamiento de entradas
     if (!businessName || !fullName || !email || !password) {
       return new Response(
         JSON.stringify({ error: "Nombre de comercio, titular, email y contraseña son obligatorios." }),
@@ -64,9 +118,16 @@ serve(async (req: Request) => {
       );
     }
 
-    if (password.length < 6) {
+    if (password.length < 6 || password.length > 72) {
       return new Response(
-        JSON.stringify({ error: "La contraseña debe tener al menos 6 caracteres." }),
+        JSON.stringify({ error: "La contraseña debe tener entre 6 y 72 caracteres." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (businessName.length > 100 || fullName.length > 100 || email.length > 150) {
+      return new Response(
+        JSON.stringify({ error: "Uno o más campos exceden la longitud máxima permitida." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -75,7 +136,7 @@ serve(async (req: Request) => {
     let baseSlug = normalizeSlug(businessName);
     if (!baseSlug) baseSlug = `comercio-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    // 1. Verificar si el slug ya existe, si es así agregar sufijo numérico
+    // 4. Verificar si el slug ya existe, si es así agregar sufijo numérico
     const { data: existingTenants } = await serviceClient
       .from("tenants")
       .select("slug")
@@ -86,7 +147,7 @@ serve(async (req: Request) => {
       finalSlug = `${baseSlug}-${existingTenants.length + 1}`;
     }
 
-    // 2. Crear o reutilizar usuario en Supabase Auth
+    // 5. Crear o reutilizar usuario en Supabase Auth
     let authUserId = "";
     const { data: authData, error: authError } = await serviceClient.auth.admin.createUser({
       email: cleanEmail,
@@ -108,152 +169,145 @@ serve(async (req: Request) => {
 
       if (isAlreadyRegistered) {
         const { data: listData } = await serviceClient.auth.admin.listUsers();
-        const matchedAuthUser = listData?.users?.find(
-          (u: { email?: string }) => u.email?.toLowerCase() === cleanEmail
+        const existingAuthUser = listData?.users?.find(
+          (u) => u.email?.toLowerCase() === cleanEmail
         );
-        if (!matchedAuthUser) {
+        if (existingAuthUser) {
+          authUserId = existingAuthUser.id;
+          await serviceClient.auth.admin.updateUserById(authUserId, {
+            password: password,
+            email_confirm: true,
+          });
+        } else {
           return new Response(
-            JSON.stringify({ error: `El email ya está registrado pero no se pudo recuperar: ${authError.message}` }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            JSON.stringify({ error: "Este correo ya está registrado en la plataforma. Iniciá sesión con tus credenciales." }),
+            { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        authUserId = matchedAuthUser.id;
-        // Actualizar contraseña y metadata para la nueva prueba
-        await serviceClient.auth.admin.updateUserById(authUserId, {
-          password: password,
-          user_metadata: {
-            full_name: fullName.trim(),
-            business_name: businessName.trim(),
-            role: "admin",
-          },
-        });
-        // Limpiar filas anteriores de public.users vinculadas a este authUserId
-        await serviceClient.from("users").delete().eq("auth_user_id", authUserId);
       } else {
         return new Response(
-          JSON.stringify({ error: `Error creando credenciales: ${authError.message}` }),
+          JSON.stringify({ error: `Error en autenticación: ${authError.message}` }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-    } else {
+    } else if (authData?.user) {
       authUserId = authData.user.id;
     }
 
-    // 3. Crear el Tenant
-    const tenantId = `tenant-${finalSlug}`;
-    const randomCuitSuffix = Math.floor(10000000 + Math.random() * 90000000);
-    const tempCuit = `30-${randomCuitSuffix}-0`;
-
-    const { error: tenantError } = await serviceClient.from("tenants").insert({
-      id: tenantId,
-      legal_name: businessName.trim(),
-      trade_name: businessName.trim(),
-      slug: finalSlug,
-      cuit: tempCuit,
-      is_active: true,
-    });
-
-    if (tenantError) {
+    if (!authUserId) {
       return new Response(
-        JSON.stringify({ error: `Error creando comercio: ${tenantError.message}` }),
+        JSON.stringify({ error: "No se pudo vincular la cuenta de usuario." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // 4. Crear configuración del comercio (tenant_settings)
-    await serviceClient.from("tenant_settings").insert({
-      tenant_id: tenantId,
-      allow_negative_stock: false,
-      require_open_session_for_sale: false,
-      scale_enabled: false,
-      scale_mode: "total_price",
-      scale_prefix: "20",
-    });
+    // 6. Crear el registro en public.tenants con 7 días de prueba
+    const trialDays = 7;
+    const now = new Date();
+    const trialEndsAt = new Date();
+    trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
 
-    // 5. Crear perfil de permisos Admin completo
-    const adminProfileId = `profile-admin-${finalSlug}`;
-    const adminPermissions: Record<string, { read: boolean; write: boolean }> = {};
-    for (const mod of ALL_SYSTEM_MODULES) {
-      adminPermissions[mod] = { read: true, write: true };
+    const { data: tenantData, error: tenantError } = await serviceClient
+      .from("tenants")
+      .insert({
+        name: businessName.trim(),
+        slug: finalSlug,
+        email: cleanEmail,
+        phone: phone ? phone.trim() : null,
+        is_active: true,
+        plan: selectedPlanName || "trial",
+        trial_ends_at: trialEndsAt.toISOString(),
+      })
+      .select("id")
+      .single();
+
+    if (tenantError || !tenantData) {
+      return new Response(
+        JSON.stringify({ error: `Error al crear el comercio: ${tenantError?.message || "Error desconocido"}` }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    await serviceClient.from("permission_profiles").insert({
-      id: adminProfileId,
-      tenant_id: tenantId,
-      name: "Administrador General",
-      description: "Perfil completo de administración",
-      is_active: true,
-      permissions: adminPermissions,
-    });
+    const tenantId = tenantData.id;
 
-    // 6. Crear el registro en public.users
-    const userId = `user-${finalSlug}-admin`;
-    const username = cleanEmail.split("@")[0] || "admin";
-    const { error: userError } = await serviceClient.from("users").insert({
-      id: userId,
-      tenant_id: tenantId,
-      auth_user_id: authUserId,
-      email: cleanEmail,
-      username: username,
-      full_name: fullName.trim(),
-      role_code: "admin",
-      permission_profile_id: adminProfileId,
-      is_active: true,
-    });
+    // 7. Crear perfil de permisos completo 'Administrador'
+    const fullPermissions = ALL_SYSTEM_MODULES.reduce((acc, mod) => {
+      acc[mod] = { read: true, write: true };
+      return acc;
+    }, {} as Record<string, { read: boolean; write: boolean }>);
+
+    const { data: profileData, error: profileError } = await serviceClient
+      .from("permission_profiles")
+      .insert({
+        tenant_id: tenantId,
+        name: "Administrador General",
+        description: "Acceso total a todos los módulos del sistema",
+        permissions: fullPermissions,
+        is_active: true,
+      })
+      .select("id")
+      .single();
+
+    if (profileError || !profileData) {
+      console.warn("No se pudo crear perfil de permisos personalizado:", profileError?.message);
+    }
+
+    const permissionProfileId = profileData?.id || null;
+
+    // 8. Crear o vincular el registro en public.users
+    const usernameBase = cleanEmail.split("@")[0].replace(/[^a-z0-9]/g, "");
+    const username = `${usernameBase}-${finalSlug.slice(0, 6)}`;
+
+    const { error: userError } = await serviceClient.from("users").upsert(
+      {
+        tenant_id: tenantId,
+        auth_user_id: authUserId,
+        email: cleanEmail,
+        username: username,
+        full_name: fullName.trim(),
+        role_code: "admin",
+        permission_profile_id: permissionProfileId,
+        is_active: true,
+      },
+      { onConflict: "auth_user_id" }
+    );
 
     if (userError) {
-      console.error("Error creando public.users:", userError);
-      return new Response(
-        JSON.stringify({ error: `Error asociando usuario administrador: ${userError.message}` }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      console.warn("Aviso al vincular public.users:", userError.message);
     }
 
-    // 7. Medios de pago iniciales estándar
+    // 9. Crear medios de pago básicos predeterminados
     await serviceClient.from("payment_methods").insert([
       {
         tenant_id: tenantId,
-        code: "EFECTIVO",
+        code: "cash",
         name: "Efectivo",
         type: "cash",
-        affects_cash: true,
         is_active: true,
         surcharge_percent: 0,
         discount_percent: 0,
       },
       {
         tenant_id: tenantId,
-        code: "DEBITO",
-        name: "Tarjeta Débito",
-        type: "card_debit",
-        affects_cash: false,
+        code: "debit",
+        name: "Tarjeta de Débito",
+        type: "card",
         is_active: true,
         surcharge_percent: 0,
         discount_percent: 0,
       },
       {
         tenant_id: tenantId,
-        code: "TRANSFERENCIA",
-        name: "Transferencia / QR",
+        code: "transfer",
+        name: "Transferencia Bancaria",
         type: "transfer",
-        affects_cash: false,
-        is_active: true,
-        surcharge_percent: 0,
-        discount_percent: 0,
-      },
-      {
-        tenant_id: tenantId,
-        code: "CUENTA_CORRIENTE",
-        name: "Cuenta Corriente",
-        type: "current_account",
-        affects_cash: false,
         is_active: true,
         surcharge_percent: 0,
         discount_percent: 0,
       },
     ]);
 
-    // 8. Si vino un leadId de CRM o encontramos el lead por email, actualizar su etapa a 'trial'
+    // 10. Si vino un leadId de CRM o encontramos el lead por email, actualizar su etapa a 'trial'
     const targetLeadId = leadId;
     if (targetLeadId) {
       await serviceClient
@@ -277,12 +331,7 @@ serve(async (req: Request) => {
         .eq("email", cleanEmail);
     }
 
-    // 9. Responder con éxito y datos de acceso directo
-    const trialDays = 7;
-    const now = new Date();
-    const trialEndsAt = new Date();
-    trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
-
+    // 11. Responder con éxito y datos de acceso directo
     return new Response(
       JSON.stringify({
         success: true,
@@ -298,8 +347,9 @@ serve(async (req: Request) => {
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error("Error en onboard-trial:", errorMsg);
+    // Error genérico para no filtrar detalles técnicos internos
     return new Response(
-      JSON.stringify({ error: errorMsg }),
+      JSON.stringify({ error: "Ocurrió un error al procesar el alta de la prueba. Por favor contactá a soporte." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

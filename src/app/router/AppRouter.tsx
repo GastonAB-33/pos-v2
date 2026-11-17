@@ -8,6 +8,8 @@ import { useLandingPath } from "@/features/auth/hooks/useLandingPath";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { LoginPage } from "@/modules/usuarios/pages/LoginPage";
 import { UnauthorizedPage } from "@/modules/usuarios/pages/UnauthorizedPage";
+import { PrivacyPolicyPage } from "@/modules/legal/pages/PrivacyPolicyPage";
+import { TermsConditionsPage } from "@/modules/legal/pages/TermsConditionsPage";
 import { isTenantMatchingInput, normalizeTenantSlug } from "@/utils/tenant-slug";
 
 const RootRedirect = () => {
@@ -60,6 +62,10 @@ export const AppRouter = () => {
       {/* 1. Entrada directa al sistema POS (aislado por seguridad de la landing page) */}
       <Route path={routePaths.home} element={<RootRedirect />} />
       <Route path={routePaths.landing} element={<Navigate to={routePaths.login} replace />} />
+
+      {/* 1.1 Cumplimiento normativo y privacidad pública */}
+      <Route path={routePaths.privacidad} element={<PrivacyPolicyPage />} />
+      <Route path={routePaths.terminos} element={<TermsConditionsPage />} />
 
       {/* 2. Acceso y autenticación */}
       <Route path={routePaths.login} element={<LoginPage />} />

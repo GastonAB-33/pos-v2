@@ -13,6 +13,7 @@ import {
   Sparkles,
   Receipt,
   FileCheck,
+  Shield,
 } from "lucide-react";
 import { JirehLogo } from "./brand/JirehLogo";
 import { POS_LOGIN_URL, SUPPORT_WHATSAPP_PHONE } from "../config/app-urls";
@@ -51,14 +52,6 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
     phone: "",
   });
 
-  // Datos de tarjeta
-  const [cardData, setCardData] = useState({
-    cardNumber: "",
-    cardHolder: "",
-    expiry: "",
-    cvv: "",
-    installments: "1",
-  });
 
   if (!isOpen) return null;
 
@@ -282,48 +275,17 @@ export const PaymentGatewayModal: React.FC<PaymentGatewayModalProps> = ({
                   )}
 
                   {paymentMethod === "card" && (
-                    <div className="space-y-2.5">
-                      <div className="relative">
-                        <input
-                          type="text"
-                          required
-                          placeholder="Número de Tarjeta (16 dígitos)"
-                          maxLength={19}
-                          value={cardData.cardNumber}
-                          onChange={(e) => setCardData({ ...cardData, cardNumber: e.target.value })}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-sky-500 focus:outline-none"
-                        />
-                        <CreditCard className="absolute right-3 top-2 h-4 w-4 text-slate-400" />
+                    <div className="space-y-3 text-xs text-slate-600">
+                      <div className="flex items-center gap-2 text-slate-800 font-semibold">
+                        <CreditCard className="h-4 w-4 text-emerald-600" />
+                        <span>Cobro Seguro con Tarjeta (Cumplimiento PCI-DSS Nivel 1)</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="text"
-                          required
-                          placeholder="Nombre en la Tarjeta"
-                          value={cardData.cardHolder}
-                          onChange={(e) => setCardData({ ...cardData, cardHolder: e.target.value })}
-                          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-sky-500 focus:outline-none"
-                        />
-                        <div className="grid grid-cols-2 gap-1.5">
-                          <input
-                            type="text"
-                            required
-                            placeholder="MM/AA"
-                            maxLength={5}
-                            value={cardData.expiry}
-                            onChange={(e) => setCardData({ ...cardData, expiry: e.target.value })}
-                            className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-center text-slate-900 focus:border-sky-500 focus:outline-none"
-                          />
-                          <input
-                            type="password"
-                            required
-                            placeholder="CVV"
-                            maxLength={4}
-                            value={cardData.cvv}
-                            onChange={(e) => setCardData({ ...cardData, cvv: e.target.value })}
-                            className="rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs text-center text-slate-900 focus:border-sky-500 focus:outline-none"
-                          />
-                        </div>
+                      <p>
+                        Por normativas internacionales de seguridad y protección contra el fraude bancario, los cobros con tarjeta de crédito o débito se procesan dentro de la infraestructura tokenizada y certificada de Mercado Pago.
+                      </p>
+                      <div className="rounded-lg bg-emerald-50 border border-emerald-200/80 p-2.5 text-[11px] text-emerald-900 flex items-start gap-2">
+                        <Shield className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <span>Tus números de tarjeta y códigos de seguridad nunca son almacenados en nuestros servidores ni expuestos en el navegador.</span>
                       </div>
                     </div>
                   )}

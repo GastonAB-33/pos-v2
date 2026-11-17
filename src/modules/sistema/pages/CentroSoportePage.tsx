@@ -370,7 +370,7 @@ export const CentroSoportePage = () => {
                       <span className="font-mono">{formattedDate}</span>
                     </div>
 
-                    {ticket.screenshotDataUrl ? (
+                    {(ticket.screenshotDataUrl || ticket.screenshotUrl) ? (
                       <div className="mt-1.5 flex items-center gap-1 text-[10px] font-semibold text-blue-600 dark:text-blue-400">
                         <ImageIcon size={12} />
                         <span>Captura con anotaciones</span>
@@ -468,7 +468,7 @@ export const CentroSoportePage = () => {
               </div>
 
               {/* Captura de pantalla con indicaciones */}
-              {selectedTicket.screenshotDataUrl ? (
+              {(selectedTicket.screenshotUrl || selectedTicket.screenshotDataUrl) ? (
                 <div className="space-y-2 rounded-xl sm:rounded-2xl border border-slate-200/80 bg-slate-50/50 p-3.5 dark:border-slate-700/80 dark:bg-slate-800/40">
                   <div className="flex items-center justify-between">
                     <p className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
@@ -477,7 +477,7 @@ export const CentroSoportePage = () => {
                     </p>
                     <button
                       type="button"
-                      onClick={() => setPreviewImage(selectedTicket.screenshotDataUrl)}
+                      onClick={() => setPreviewImage(selectedTicket.screenshotUrl || selectedTicket.screenshotDataUrl)}
                       className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 cursor-pointer"
                     >
                       <Eye size={13} />
@@ -486,11 +486,11 @@ export const CentroSoportePage = () => {
                   </div>
 
                   <div
-                    onClick={() => setPreviewImage(selectedTicket.screenshotDataUrl)}
+                    onClick={() => setPreviewImage(selectedTicket.screenshotUrl || selectedTicket.screenshotDataUrl)}
                     className="group relative cursor-pointer overflow-hidden rounded-xl border border-slate-300 bg-black/5 text-center transition hover:border-blue-400 dark:border-slate-700"
                   >
                     <img
-                      src={selectedTicket.screenshotDataUrl}
+                      src={selectedTicket.screenshotUrl || selectedTicket.screenshotDataUrl || ""}
                       alt="Captura de soporte"
                       className="mx-auto max-h-72 w-auto object-contain transition duration-200 group-hover:scale-[1.01]"
                     />
