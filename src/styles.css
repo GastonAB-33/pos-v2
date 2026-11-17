@@ -209,19 +209,15 @@ html[data-sidebar-theme="light"] .app-sidebar-brand,
   }
 
   .app-topbar {
-    @apply flex min-h-16 flex-wrap items-center justify-between gap-3 border-b px-6 py-2;
+    @apply sticky top-0 z-30 flex min-h-14 sm:min-h-16 flex-nowrap items-center justify-between gap-2 sm:gap-3 border-b px-3 sm:px-6 py-2 shadow-sm;
     background-color: var(--ui-topbar);
     border-color: var(--ui-border);
   }
 
   .app-menu-button {
-    display: none;
-    min-height: 2.5rem;
-    min-width: 2.5rem;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding-inline: 0.75rem;
-    font-size: 1rem;
   }
 
   .bg-slate-100 {
@@ -456,10 +452,31 @@ html[data-sidebar-theme="light"] .app-sidebar-brand,
   }
 
   .ui-loading {
-    @apply rounded-lg border p-8 text-center text-sm;
+    @apply rounded-2xl border p-8 text-center text-sm font-medium flex flex-col items-center justify-center gap-3;
     border-color: var(--ui-border);
-    color: var(--ui-muted);
+    color: var(--ui-text);
     background-color: var(--ui-surface-2);
+  }
+
+  .ui-loading::before {
+    content: "";
+    display: inline-block;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 3px solid #3b82f6;
+    border-top-color: transparent;
+    border-radius: 9999px;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes routeProgress {
+    0% { transform: scaleX(0); transform-origin: left; }
+    60% { transform: scaleX(0.75); transform-origin: left; }
+    100% { transform: scaleX(1); transform-origin: left; }
+  }
+
+  .animate-route-progress {
+    animation: routeProgress 0.35s ease-out forwards;
   }
 
   .ui-error-state {
@@ -1364,7 +1381,7 @@ tbody td {
 }
 
 .app-mobile-nav {
-  display: none;
+  display: none !important;
 }
 
 .current-accounts-toolbar {
@@ -1865,14 +1882,18 @@ html.midnight section.fixed.inset-0 > .relative.z-10 {
   }
 
   .app-topbar {
-    @apply min-h-14 gap-2 px-3 py-2;
+    @apply sticky top-0 z-30 min-h-14 gap-2 px-3 py-2 flex-nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 35;
   }
 
   .app-topbar-actions {
-    width: 100%;
-    justify-content: flex-start;
-    overflow-x: auto;
-    padding-bottom: 0.1rem;
+    width: auto;
+    margin-left: auto;
+    justify-content: flex-end;
+    overflow-x: visible;
+    padding-bottom: 0;
   }
 
   .app-topbar-actions > * {
@@ -1934,11 +1955,14 @@ html.midnight section.fixed.inset-0 > .relative.z-10 {
   }
 
   .app-topbar {
-    align-items: flex-start;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 35;
   }
 
   .app-content {
-    padding-bottom: 4.75rem;
+    padding-bottom: 0;
   }
 
   .current-accounts-layout,
@@ -1964,18 +1988,7 @@ html.midnight section.fixed.inset-0 > .relative.z-10 {
   }
 
   .app-mobile-nav {
-    position: fixed;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 35;
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    min-height: 4.35rem;
-    border-top: 1px solid var(--ui-border);
-    background: var(--ui-sidebar);
-    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
-    padding-bottom: env(safe-area-inset-bottom);
+    display: none !important;
   }
 
   .app-mobile-nav__item {
@@ -2112,9 +2125,8 @@ html.midnight section.fixed.inset-0 > .relative.z-10 {
 }
 
 @media (min-width: 1025px) {
-  .app-sidebar,
-  .app-shell--desktop .app-sidebar,
-  .app-shell:not(.app-shell--drawer) .app-sidebar {
+  .app-shell.is-sidebar-pinned .app-sidebar,
+  .app-shell:not(.is-sidebar-unpinned):not(.app-shell--drawer) .app-sidebar {
     position: sticky;
     top: 0;
     height: 100dvh;
@@ -2124,6 +2136,27 @@ html.midnight section.fixed.inset-0 > .relative.z-10 {
     overscroll-behavior: contain;
     flex-shrink: 0;
     transform: none;
+  }
+
+  .app-shell.is-sidebar-unpinned .app-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    height: 100dvh;
+    max-height: 100dvh;
+    z-index: 50;
+    width: 18rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    transform: translateX(-100%);
+    transition: transform 250ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 250ms ease;
+    box-shadow: none;
+  }
+
+  .app-shell.is-sidebar-unpinned.is-sidebar-open .app-sidebar {
+    transform: translateX(0);
+    box-shadow: var(--shadow-panel), 0 25px 50px -12px rgba(0, 0, 0, 0.35);
   }
 
   .pos-mobile-dock {
@@ -2253,6 +2286,9 @@ html.dark .app-sidebar-group-btn--active .app-sidebar-group-chevron {
 }
 
 .app-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   min-height: 3.35rem;
   padding: 0.45rem 1.1rem;
   border-bottom: 1px solid var(--ui-border);
@@ -2261,7 +2297,8 @@ html.dark .app-sidebar-group-btn--active .app-sidebar-group-chevron {
 }
 
 .app-main {
-  max-width: none;
+  min-width: 0;
+  max-width: 100%;
   padding: 1.1rem 1.25rem 1.5rem;
 }
 
@@ -2378,7 +2415,7 @@ html.dark .app-sidebar-group-btn--active .app-sidebar-group-chevron {
 .ui-btn-ghost,
 .cash-close-action {
   min-height: 2.15rem;
-  border-radius: 6px !important;
+  border-radius: 6px;
   font-size: 0.78rem;
 }
 
@@ -2463,10 +2500,17 @@ html.dark .ui-table-wrap thead {
 }
 
 /* Bloqueo de scroll de fondo cuando hay un modal o panel abierto mediante clase activa */
-body.modal-open {
+html.modal-open,
+html:has(body.modal-open),
+body.modal-open,
+html.modal-open .app-shell,
+html.modal-open .app-content,
+html.modal-open .app-main,
+body.modal-open .app-shell,
+body.modal-open .app-content,
+body.modal-open .app-main {
   overflow: hidden !important;
   overscroll-behavior: none !important;
-  touch-action: none !important;
 }
 
 .workspace-action-menu,
@@ -2482,28 +2526,32 @@ section.fixed.inset-0 {
 
 section.fixed.inset-0 > div:not(.absolute) {
   border: 1px solid var(--ui-border);
-  border-radius: 8px !important;
+  border-radius: 1.25rem;
   background: var(--ui-surface) !important;
   box-shadow: 0 18px 40px rgba(16, 24, 40, 0.18) !important;
 }
 
-/* Productos: encabezado, filtros y tabla conforman una unica superficie operativa. */
+/* Productos: encabezado, filtros y tabla conforman una superficie moderna y redondeada */
 .product-catalog-page {
-  display: grid;
-  gap: 0.75rem;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1rem !important;
 }
 
+.product-catalog-page > .product-toolbar,
 .product-catalog-page > .workspace-toolbar {
-  grid-row: 1;
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  box-shadow: none !important;
 }
 
-.product-catalog-page > .ui-table-wrap {
-  grid-row: 2;
-}
-
-.product-catalog-page > nav,
-.product-catalog-page > .pagination-controls {
-  grid-row: 3;
+.product-catalog-page .ui-table-wrap {
+  border-radius: 1.25rem !important;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
+  overflow: hidden;
 }
 
 .product-audit-disclosure[open] .product-audit-disclosure__chevron {
@@ -2694,13 +2742,16 @@ section.fixed.inset-0 > div:not(.absolute) {
 
 @media (max-width: 767px) {
   .app-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 35;
     min-height: 3.1rem;
     padding: 0.38rem 0.65rem;
   }
 
   .app-main,
   .app-main--pos {
-    padding: 0.6rem 0.55rem 6rem !important;
+    padding: 0.6rem 0.55rem 1.5rem !important;
   }
 
   .ui-page-header {
@@ -2755,10 +2806,32 @@ section.fixed.inset-0 > div:not(.absolute) {
   .app-main,
   .ui-page,
   .operational-page,
-  .workspace-toolbar {
+  .workspace-toolbar,
+  .caja-daily-page,
+  .caja-daily-workspace,
+  .caja-general-page,
+  .caja-general-workspace {
     min-width: 0 !important;
     max-width: 100% !important;
     overflow-x: clip !important;
+    box-sizing: border-box !important;
+  }
+
+  .caja-daily-page,
+  .caja-daily-workspace,
+  .caja-general-page,
+  .caja-general-workspace {
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  .caja-daily-page article,
+  .caja-daily-workspace article,
+  .caja-general-page article,
+  .caja-general-workspace article {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
     box-sizing: border-box !important;
   }
 
@@ -2777,256 +2850,6 @@ section.fixed.inset-0 > div:not(.absolute) {
     min-width: 32rem;
   }
 
-  .product-catalog-page .ui-table-wrap {
-    overflow: visible !important;
-    border: 0;
-    background: transparent;
-    padding: 0 1px;
-    width: 100% !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-  }
-
-  .product-catalog-page .ui-table-wrap table,
-  .product-catalog-page .ui-table-wrap tbody {
-    display: block;
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-  }
-
-  .product-catalog-page .ui-table-wrap thead {
-    display: none;
-  }
-
-  .product-catalog-page .ui-table-wrap tbody {
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-    width: 100%;
-  }
-
-  .product-catalog-page .ui-table-wrap tbody tr {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
-    padding: 0.75rem 0.85rem;
-    border: 1px solid var(--ui-border);
-    border-radius: 12px;
-    background: var(--ui-surface);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    box-sizing: border-box;
-    width: 100%;
-    margin-inline: 0;
-  }
-
-  .product-catalog-page .ui-table-wrap tbody td {
-    padding: 0 !important;
-    border: 0 !important;
-    width: 100%;
-  }
-
-  /* Checkbox de selección en esquina superior izquierda */
-  .product-catalog-page .ui-table-wrap tbody td:first-child {
-    position: absolute;
-    top: 0.75rem;
-    left: 0.75rem;
-    width: auto;
-    z-index: 2;
-  }
-
-  /* Nombre y código del producto */
-  .product-catalog-page .ui-table-wrap tbody td:nth-child(2) {
-    padding-left: 1.85rem !important;
-    padding-right: 5.5rem !important;
-  }
-
-  .product-catalog-page .ui-table-wrap tbody td:nth-child(2) p:first-child {
-    font-size: 0.92rem;
-    font-weight: 600;
-    color: var(--ui-text);
-  }
-
-  .product-catalog-page .ui-table-wrap tbody td:nth-child(2) p:last-child {
-    font-size: 0.78rem;
-    color: var(--ui-muted);
-    margin-top: 0.1rem;
-  }
-
-  /* Categoría como Badge pill elegante en esquina superior derecha */
-  .product-catalog-page .ui-table-wrap tbody td:nth-child(3) {
-    position: absolute;
-    top: 0.75rem;
-    right: 0.75rem;
-    width: auto;
-    max-width: 5.2rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 0.68rem;
-    font-weight: 600;
-    color: #1d4ed8;
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
-    border-radius: 9999px;
-    padding: 0.1rem 0.45rem !important;
-  }
-
-  /* Subcategoría */
-  .product-catalog-page .ui-table-wrap tbody td:nth-child(4) {
-    display: none;
-  }
-
-  /* Precio final destacado */
-  .product-catalog-page .ui-table-wrap tbody td:nth-child(5) {
-    font-size: 1.22rem;
-    font-weight: 800;
-    color: var(--ui-text);
-    padding-top: 0.2rem !important;
-    padding-right: 7.5rem !important;
-  }
-
-  /* Stock disponible (debajo del precio) */
-  .product-catalog-page .ui-table-wrap tbody td:nth-child(6) {
-    font-size: 0.8rem;
-    color: var(--ui-muted);
-    font-weight: 500;
-    margin-top: -0.1rem;
-  }
-
-  /* Favorito & Estado */
-  .product-catalog-page .ui-table-wrap tbody td:nth-child(7) {
-    display: none;
-  }
-
-  /* Botones de acción subidos a la fila del precio a la derecha */
-  .product-catalog-page .ui-table-wrap tbody td:nth-child(8) {
-    position: absolute;
-    right: 0.75rem;
-    bottom: 0.65rem;
-    width: auto;
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    border: 0 !important;
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-
-  /* Tarjetas móviles para Clientes */
-  .customers-page .ui-table-wrap {
-    overflow: visible !important;
-    border: 0;
-    background: transparent;
-    padding: 0 1px;
-    width: 100% !important;
-    max-width: 100% !important;
-    box-sizing: border-box !important;
-  }
-
-  .customers-page .ui-table-wrap table,
-  .customers-page .ui-table-wrap tbody {
-    display: block;
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-  }
-
-  .customers-page .ui-table-wrap thead {
-    display: none;
-  }
-
-  .customers-page .ui-table-wrap tbody {
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-    width: 100%;
-  }
-
-  .customers-page .ui-table-wrap tbody tr {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
-    padding: 0.75rem 0.85rem;
-    border: 1px solid var(--ui-border);
-    border-radius: 12px;
-    background: var(--ui-surface);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-    box-sizing: border-box;
-    width: 100%;
-    margin-inline: 0;
-  }
-
-  .customers-page .ui-table-wrap tbody td {
-    padding: 0 !important;
-    border: 0 !important;
-    width: 100%;
-  }
-
-  /* Nombre del cliente */
-  .customers-page .ui-table-wrap tbody td:nth-child(1) {
-    padding-right: 5rem !important;
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--ui-text);
-  }
-
-  /* Documento */
-  .customers-page .ui-table-wrap tbody td:nth-child(2) {
-    font-size: 0.78rem;
-    color: var(--ui-muted);
-  }
-
-  /* Telefono */
-  .customers-page .ui-table-wrap tbody td:nth-child(3) {
-    font-size: 0.78rem;
-    color: var(--ui-muted);
-  }
-
-  /* Email */
-  .customers-page .ui-table-wrap tbody td:nth-child(4) {
-    display: none;
-  }
-
-  /* Saldo Cta Cte */
-  .customers-page .ui-table-wrap tbody td:nth-child(5) {
-    font-size: 1.15rem;
-    font-weight: 700;
-    color: var(--ui-text);
-    padding-top: 0.15rem !important;
-    padding-right: 8.5rem !important;
-  }
-
-  /* Lista de precios */
-  .customers-page .ui-table-wrap tbody td:nth-child(6) {
-    font-size: 0.75rem;
-    color: var(--ui-muted);
-    margin-top: -0.1rem;
-  }
-
-  /* Estado (Badge activo/inactivo arriba a la derecha) */
-  .customers-page .ui-table-wrap tbody td:nth-child(7) {
-    position: absolute;
-    top: 0.75rem;
-    right: 0.75rem;
-    width: auto;
-  }
-
-  /* Acciones (alineadas a la derecha a la misma altura del saldo) */
-  .customers-page .ui-table-wrap tbody td:nth-child(8) {
-    position: absolute;
-    right: 0.75rem;
-    bottom: 0.65rem;
-    width: auto;
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    border: 0 !important;
-    padding: 0 !important;
-    margin: 0 !important;
-  }
 
   .cash-daily-workspace > div.grid {
     grid-template-columns: repeat(1, minmax(0, 1fr));
@@ -3059,8 +2882,7 @@ section.fixed.inset-0 > div:not(.absolute) {
   }
 
   .app-mobile-nav {
-    min-height: 3.85rem;
-    box-shadow: none;
+    display: none !important;
   }
 
   .app-mobile-nav__item {

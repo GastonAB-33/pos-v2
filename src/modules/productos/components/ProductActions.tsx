@@ -16,9 +16,22 @@ export const ProductActions = ({
   onEdit,
   onDelete,
 }: ProductActionsProps) => (
-  <div className="flex items-center gap-2">
-    <IconButton size="sm" icon={Barcode} label="Generar código de barras" onClick={onBarcode} />
-    <IconButton size="sm" icon={Pencil} label="Editar producto" onClick={onEdit} disabled={!canWrite} />
+  <div className="flex items-center gap-1.5">
+    <IconButton
+      size="sm"
+      icon={Barcode}
+      label="Generar código de barras"
+      onClick={onBarcode}
+      className="!rounded-full hover:scale-105 transition-transform"
+    />
+    <IconButton
+      size="sm"
+      icon={Pencil}
+      label="Editar producto"
+      onClick={onEdit}
+      disabled={!canWrite}
+      className="!rounded-full hover:scale-105 transition-transform"
+    />
     <IconButton
       size="sm"
       icon={Trash2}
@@ -26,6 +39,7 @@ export const ProductActions = ({
       tone="danger"
       onClick={onDelete}
       disabled={!canWrite || !canDelete}
+      className="!rounded-full hover:scale-105 transition-transform"
     />
   </div>
 );

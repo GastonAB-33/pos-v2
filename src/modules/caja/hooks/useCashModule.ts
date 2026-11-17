@@ -5,6 +5,7 @@ import { cashService } from "@/services/cash.service";
 import { generalCashService } from "@/services/general-cash.service";
 import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
 import { useCashStore } from "@/modules/caja/store/cash.store";
+import { useAuthStore } from "@/features/auth/store/auth.store";
 import {
   formatLocalDateKey,
   getShiftLabel,
@@ -1318,8 +1319,9 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       return false;
     }
 
-    if (!cashSettings.allow_manual_movements) {
-      setFeedback({ type: "error", message: "Los movimientos manuales estan desactivados" });
+    const canWriteManual = useAuthStore.getState().hasPermission("caja_movimientos_manuales", "write");
+    if (!canWriteManual) {
+      setFeedback({ type: "error", message: "No posees permisos para registrar movimientos manuales de caja" });
       return false;
     }
 
@@ -1440,8 +1442,9 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       return false;
     }
 
-    if (!cashSettings.allow_manual_movements) {
-      setFeedback({ type: "error", message: "Los movimientos manuales estan desactivados" });
+    const canWriteManual = useAuthStore.getState().hasPermission("caja_movimientos_manuales", "write");
+    if (!canWriteManual) {
+      setFeedback({ type: "error", message: "No posees permisos para registrar movimientos manuales de caja" });
       return false;
     }
 

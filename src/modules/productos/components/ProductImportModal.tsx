@@ -82,7 +82,7 @@ export const ProductImportModal = ({
 
   return (
     <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-4">
-      <div className="w-full max-w-5xl rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
+      <div className="w-full max-w-5xl rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
           <div>
             <h3 className="text-base font-semibold text-slate-900">Importación masiva de productos (XLSX)</h3>
@@ -92,7 +92,7 @@ export const ProductImportModal = ({
         </div>
 
         <div className="mt-4 space-y-4">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
             <p className="font-semibold text-slate-800">Formato esperado</p>
             <p className="mt-1">Obligatorios: <strong>nombre</strong> y <strong>categoría</strong>.</p>
             <p>Numéricos (si se informan): stock, precio costo, % ganancia, % IVA, precio final.</p>
@@ -236,7 +236,7 @@ export const ProductImportModal = ({
           )}
 
           {preview ? (
-            <div className="rounded-lg border border-slate-200 bg-white">
+            <div className="rounded-xl border border-slate-200 bg-white">
               <div className="flex items-center gap-2 border-b border-slate-200 p-2">
                 <button
                   type="button"
@@ -325,8 +325,8 @@ export const ProductImportModal = ({
             <div
               className={
                 importResult.errors > 0
-                  ? "rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-200"
-                  : "rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-200"
+                  ? "rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800/80 dark:bg-amber-950/40 dark:text-amber-200"
+                  : "rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-200"
               }
             >
               Resultado: creados {importResult.created} | actualizados {importResult.updated} | saltados {importResult.skipped} | errores {importResult.errors}

@@ -39,6 +39,12 @@ const defaultValues: CustomerFormValues = {
   currentAccountLimit: "",
 };
 
+const inputClass =
+  "w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-400 transition-all";
+
+const selectClass =
+  "w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-blue-400 transition-all";
+
 export const CustomerForm = ({
   mode,
   customer,
@@ -98,11 +104,14 @@ export const CustomerForm = ({
   return (
     <form autoComplete="off" className="grid gap-4" onSubmit={handleSubmit(onSubmit)}>
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Nombre</label>
+        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+          Nombre y apellido / Razón social <span className="text-red-500 dark:text-red-400 ml-1">*</span>
+        </label>
         <input
           {...register("fullName")}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+          className={inputClass}
           disabled={disabled}
+          placeholder="Ej: Juan Pérez o Distribuidora SRL"
           autoComplete="off"
           autoCorrect="off"
           autoCapitalize="off"
@@ -114,10 +123,10 @@ export const CustomerForm = ({
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Tipo doc</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Tipo documento</label>
           <select
             {...register("documentType")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"
+            className={selectClass}
             disabled={disabled}
           >
             <option value="dni">DNI</option>
@@ -126,18 +135,19 @@ export const CustomerForm = ({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-            Documento{" "}
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+            Número documento{" "}
             {activeReq.document_number ? (
-              <span className="text-red-500">*</span>
+              <span className="text-red-500 dark:text-red-400 ml-1">*</span>
             ) : (
               <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
             )}
           </label>
           <input
             {...register("documentNumber")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+            className={inputClass}
             disabled={disabled}
+            placeholder="Sin puntos ni guiones"
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="off"
@@ -152,11 +162,14 @@ export const CustomerForm = ({
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Razon social (fiscal)</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+            Razón social (fiscal) <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
+          </label>
           <input
             {...register("fiscalBusinessName")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+            className={inputClass}
             disabled={disabled}
+            placeholder="Nombre registrado ante AFIP / ARCA"
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="off"
@@ -166,11 +179,13 @@ export const CustomerForm = ({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Condicion fiscal</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+            Condición fiscal <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
+          </label>
           <input
             {...register("fiscalCondition")}
-            placeholder="Consumidor final, Responsable inscripto..."
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+            placeholder="Consumidor Final, Resp. Inscripto, Monotributo..."
+            className={inputClass}
             disabled={disabled}
             autoComplete="off"
             autoCorrect="off"
@@ -182,13 +197,13 @@ export const CustomerForm = ({
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Lista de precios</label>
+        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Lista de precios</label>
         <select
           {...register("priceListId")}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"
+          className={selectClass}
           disabled={disabled}
         >
-          <option value="">Precio base</option>
+          <option value="">Precio base (general)</option>
           {priceLists.map((priceList) => (
             <option key={priceList.id} value={priceList.id}>
               {priceList.name}
@@ -200,18 +215,19 @@ export const CustomerForm = ({
 
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-            Telefono{" "}
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+            Teléfono{" "}
             {activeReq.phone ? (
-              <span className="text-red-500">*</span>
+              <span className="text-red-500 dark:text-red-400 ml-1">*</span>
             ) : (
               <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
             )}
           </label>
           <input
             {...register("phone")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+            className={inputClass}
             disabled={disabled}
+            placeholder="Ej: 11 1234-5678"
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="off"
@@ -222,10 +238,10 @@ export const CustomerForm = ({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
             Email{" "}
             {activeReq.email ? (
-              <span className="text-red-500">*</span>
+              <span className="text-red-500 dark:text-red-400 ml-1">*</span>
             ) : (
               <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
             )}
@@ -233,8 +249,9 @@ export const CustomerForm = ({
           <input
             type="email"
             {...register("email")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+            className={inputClass}
             disabled={disabled}
+            placeholder="cliente@ejemplo.com"
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="off"
@@ -246,18 +263,19 @@ export const CustomerForm = ({
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-          Direccion{" "}
+        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+          Dirección{" "}
           {activeReq.address ? (
-            <span className="text-red-500">*</span>
+            <span className="text-red-500 dark:text-red-400 ml-1">*</span>
           ) : (
             <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
           )}
         </label>
         <input
           {...register("address")}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+          className={inputClass}
           disabled={disabled}
+          placeholder="Calle, número, piso o localidad"
           autoComplete="off"
           autoCorrect="off"
           autoCapitalize="off"
@@ -268,11 +286,14 @@ export const CustomerForm = ({
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Domicilio fiscal</label>
+        <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+          Domicilio fiscal <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
+        </label>
         <input
           {...register("fiscalAddress")}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+          className={inputClass}
           disabled={disabled}
+          placeholder="Dirección legal o fiscal para comprobantes"
           autoComplete="off"
           autoCorrect="off"
           autoCapitalize="off"
@@ -281,36 +302,47 @@ export const CustomerForm = ({
         />
       </div>
 
-      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/40">
-        <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+      {/* Tarjeta de Cuenta Corriente */}
+      <div className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-4 dark:border-slate-700/80 dark:bg-slate-800/50">
+        <label className="flex items-center gap-2.5 text-sm font-semibold text-slate-800 dark:text-slate-200 cursor-pointer">
           <input
             type="checkbox"
             {...register("currentAccountEnabled")}
-            className="h-4 w-4"
+            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900"
             disabled={disabled}
           />
-          Habilitar cuenta corriente
+          Habilitar cuenta corriente para este cliente
         </label>
-        <div className="mt-3">
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Limite autorizado</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            {...register("currentAccountLimit")}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
-            disabled={disabled || !currentAccountEnabled}
-            placeholder="Sin limite si se deja vacio"
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-        </div>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 ml-6.5">
+          Permite realizar ventas a crédito o fiadas y gestionar saldos deudores.
+        </p>
+
+        {currentAccountEnabled && (
+          <div className="mt-3.5 pt-3 border-t border-slate-200/80 dark:border-slate-700/60">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              Límite de crédito autorizado ($) <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400 lowercase">(opcional)</span>
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              {...register("currentAccountLimit")}
+              className={inputClass}
+              disabled={disabled || !currentAccountEnabled}
+              placeholder="Dejar vacío para crédito sin límite de tope"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+          </div>
+        )}
       </div>
 
       <div>
         <div className="mb-1 flex items-center justify-between gap-2">
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Observaciones</label>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+            Observaciones <span className="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span>
+          </label>
           <VoiceDictationButton
             value={observationsValue ?? ""}
             onValueChange={(nextValue) =>
@@ -323,26 +355,28 @@ export const CustomerForm = ({
         </div>
         <textarea
           {...register("observations")}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:ring-slate-400"
+          className={inputClass}
           rows={3}
           disabled={disabled}
+          placeholder="Notas internas sobre preferencias de entrega, horarios de atención, etc."
           autoComplete="off"
           spellCheck={false}
         />
       </div>
 
-      <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-4 dark:border-slate-800">
+      {/* Footer de Acciones del Modal */}
+      <div className="flex items-center justify-end gap-2 border-t border-slate-200/80 pt-4 dark:border-slate-800">
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          className="rounded-xl border border-slate-200/90 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-750 transition-all cursor-pointer"
           disabled={disabled}
         >
           Cancelar
         </button>
         <button
           type="submit"
-          className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+          className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-semibold text-white shadow-sm shadow-blue-500/25 hover:bg-blue-700 active:scale-95 disabled:opacity-60 transition-all cursor-pointer"
           disabled={disabled}
         >
           {mode === "create" ? "Crear cliente" : "Guardar cambios"}

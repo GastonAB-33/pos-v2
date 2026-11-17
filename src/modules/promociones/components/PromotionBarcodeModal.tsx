@@ -47,8 +47,8 @@ export const PromotionBarcodeModal = ({ promotion, onClose }: PromotionBarcodeMo
 
   return (
     <section className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-      <div className="w-full max-w-2xl rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-2xl md:p-5">
-        <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+      <div className="w-full max-w-2xl rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-200/80 dark:border-slate-800 pb-3">
           <div>
             <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Código de barras</h3>
             <p className="font-mono text-xs text-slate-500 dark:text-slate-400">{promotion.name} - {promotion.code}</p>
@@ -56,16 +56,16 @@ export const PromotionBarcodeModal = ({ promotion, onClose }: PromotionBarcodeMo
           <ModalCloseButton label="Cerrar código de barras" onClick={onClose} />
         </div>
 
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white p-4">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white p-5 shadow-inner">
           <div className="mx-auto flex w-full max-w-xl justify-center overflow-x-auto">
             <svg ref={svgRef} role="img" aria-label={`Codigo de barras ${barcode}`} />
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-2.5">
           <button
             type="button"
-            className="ui-btn-ghost"
+            className="rounded-xl border border-slate-200/90 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition-all"
             onClick={() => {
               if (!svgRef.current) return;
               downloadSvg(svgRef.current.outerHTML, `promo-${promotion.code}.svg`);
@@ -75,7 +75,7 @@ export const PromotionBarcodeModal = ({ promotion, onClose }: PromotionBarcodeMo
           </button>
           <button
             type="button"
-            className="ui-btn-primary"
+            className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-500/25 hover:bg-blue-700 active:scale-95 transition-all"
             onClick={() => {
               if (!svgRef.current) return;
 

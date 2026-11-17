@@ -360,7 +360,7 @@ export const PromotionForm = ({
   return (
     <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
       {/* 1. Datos Principales: Nombre, Código y Código de Barras */}
-      <div className="rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/50 p-4 space-y-4">
+      <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 p-4 sm:p-5 space-y-4">
         <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <Tag size={16} className="text-blue-500" />
           <span>Información de la promoción</span>
@@ -375,7 +375,7 @@ export const PromotionForm = ({
               value={watchedName}
               onChange={(e) => handleNameChange(e.target.value)}
               placeholder="Ej: Pack Corona 3x1 o Combo Fernet + Coca"
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               disabled={disabled}
               autoComplete="off"
               autoCorrect="off"
@@ -393,7 +393,7 @@ export const PromotionForm = ({
             <input
               {...register("code")}
               placeholder="promo_pack_corona"
-              className="w-full font-mono text-sm rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 py-2 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full font-mono text-sm rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 py-2 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               disabled={disabled}
               autoComplete="off"
               autoCorrect="off"
@@ -411,7 +411,7 @@ export const PromotionForm = ({
             <input
               {...register("barcode")}
               placeholder="PROMO-CORONA-3X1"
-              className="w-full font-mono text-sm uppercase rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 py-2 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full font-mono text-sm uppercase rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 py-2 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               disabled={disabled}
               autoComplete="off"
               autoCorrect="off"
@@ -432,7 +432,7 @@ export const PromotionForm = ({
           <input
             {...register("description")}
             placeholder="Detalles visibles para el cajero o en reportes"
-            className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             disabled={disabled}
             autoComplete="off"
           />
@@ -440,7 +440,7 @@ export const PromotionForm = ({
       </div>
 
       {/* 2. Selector de Artículos y Tabla de Componentes */}
-      <div className="rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/50 p-4 space-y-4">
+      <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 p-4 sm:p-5 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -459,7 +459,7 @@ export const PromotionForm = ({
             <button
               type="button"
               onClick={onRequestCreateProduct}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800 dark:hover:bg-blue-900/60 transition shadow-2xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800 dark:hover:bg-blue-900/60 transition shadow-2xs cursor-pointer"
             >
               <PlusCircle size={14} />
               <span>+ Crear nuevo artículo</span>
@@ -473,7 +473,7 @@ export const PromotionForm = ({
             <select
               value={selectedProductToAdd}
               onChange={(e) => setSelectedProductToAdd(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               disabled={disabled}
             >
               <option value="">Seleccionar artículo del sistema para agregar...</option>
@@ -488,7 +488,7 @@ export const PromotionForm = ({
             type="button"
             onClick={handleAddProduct}
             disabled={!selectedProductToAdd || disabled}
-            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg bg-blue-600 hover:bg-blue-700 text-white dark:bg-sky-600 dark:hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-2xs shrink-0 cursor-pointer"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white dark:bg-sky-600 dark:hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-2xs shrink-0 cursor-pointer"
           >
             <Plus size={16} />
             <span>Agregar</span>
@@ -505,7 +505,7 @@ export const PromotionForm = ({
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/90 shadow-2xs">
+          <div className="overflow-x-auto rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs overflow-hidden">
             <table className="w-full text-left text-sm divide-y divide-slate-200 dark:divide-slate-800">
               <thead className="bg-slate-50 dark:bg-slate-800/80 text-xs font-semibold text-slate-600 dark:text-slate-300">
                 <tr>
@@ -539,7 +539,7 @@ export const PromotionForm = ({
                       <td className="px-3 py-2.5">
                         <span
                           className={cn(
-                            "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold",
+                            "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold",
                             (prod?.stock_current ?? 0) > 0
                               ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
                               : "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
@@ -561,7 +561,7 @@ export const PromotionForm = ({
                           {...register(`bundleItems.${index}.quantity`, {
                             valueAsNumber: true,
                           })}
-                          className="w-20 text-center rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-2 py-1 text-sm font-bold text-slate-900 dark:text-slate-100 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                          className="w-20 text-center rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-2 py-1 text-sm font-bold text-slate-900 dark:text-slate-100 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                           disabled={disabled}
                         />
                       </td>
@@ -609,7 +609,7 @@ export const PromotionForm = ({
               <span className="font-bold text-sm text-slate-900 dark:text-slate-100">
                 {promoAnalysis.title}
               </span>
-              <span className={cn("text-xs font-bold px-2 py-0.5 rounded-md", promoAnalysis.badgeColor)}>
+              <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full", promoAnalysis.badgeColor)}>
                 {promoAnalysis.badge}
               </span>
             </div>
@@ -621,7 +621,7 @@ export const PromotionForm = ({
       </div>
 
       {/* 4. Asignación de Precios y Cálculo en Vivo */}
-      <div className="rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/50 p-4 space-y-4">
+      <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 p-4 sm:p-5 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-700/80 pb-3">
           <div>
             <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -694,7 +694,7 @@ export const PromotionForm = ({
                   step="0.01"
                   {...register("comboPrice")}
                   placeholder="Ej: 7500"
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 pl-7 pr-3 py-2 text-base font-bold text-emerald-600 dark:text-emerald-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 pl-7 pr-3 py-2 text-base font-bold text-emerald-600 dark:text-emerald-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                   disabled={disabled}
                 />
               </div>
@@ -718,7 +718,7 @@ export const PromotionForm = ({
                   step="0.1"
                   {...register("discountPercent")}
                   placeholder="Ej: 20"
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 pr-7 py-2 text-base font-bold text-blue-600 dark:text-sky-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 pr-7 py-2 text-base font-bold text-blue-600 dark:text-sky-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   disabled={disabled}
                 />
               </div>
@@ -741,7 +741,7 @@ export const PromotionForm = ({
                   step="0.01"
                   {...register("discountAmount")}
                   placeholder="Ej: 2000"
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 pl-7 pr-3 py-2 text-base font-bold text-indigo-600 dark:text-indigo-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 pl-7 pr-3 py-2 text-base font-bold text-indigo-600 dark:text-indigo-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                   disabled={disabled}
                 />
               </div>
@@ -753,7 +753,7 @@ export const PromotionForm = ({
 
           {/* 3 KPI Live Cards */}
           <div className="sm:col-span-2 grid grid-cols-3 gap-2">
-            <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/90 p-2.5">
+            <div className="rounded-xl border border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-900/90 p-2.5">
               <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">
                 Precio Regular Total
               </span>
@@ -762,7 +762,7 @@ export const PromotionForm = ({
               </span>
             </div>
 
-            <div className="rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/30 p-2.5">
+            <div className="rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/30 p-2.5">
               <span className="block text-[11px] font-bold text-emerald-800 dark:text-emerald-400">
                 Precio Promoción Final
               </span>
@@ -771,7 +771,7 @@ export const PromotionForm = ({
               </span>
             </div>
 
-            <div className="rounded-lg border border-blue-200 dark:border-sky-800 bg-blue-50/60 dark:bg-sky-950/30 p-2.5">
+            <div className="rounded-xl border border-blue-200 dark:border-sky-800 bg-blue-50/60 dark:bg-sky-950/30 p-2.5">
               <span className="block text-[11px] font-bold text-blue-800 dark:text-sky-300">
                 Ahorro del Cliente
               </span>
@@ -785,7 +785,7 @@ export const PromotionForm = ({
       </div>
 
       {/* 5. Vigencia de la Promoción */}
-      <div className="rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/50 p-4 space-y-3">
+      <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 p-4 sm:p-5 space-y-3">
         <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
           <span>Vigencia de la promoción</span>
           <span className="text-xs text-slate-400 font-normal">(opcional)</span>
@@ -799,7 +799,7 @@ export const PromotionForm = ({
             <input
               type="datetime-local"
               {...register("startsAt")}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               disabled={disabled}
             />
           </div>
@@ -811,7 +811,7 @@ export const PromotionForm = ({
             <input
               type="datetime-local"
               {...register("endsAt")}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               disabled={disabled}
             />
             {errors.endsAt ? <p className="mt-1 text-xs text-red-500">{errors.endsAt.message}</p> : null}
@@ -820,11 +820,11 @@ export const PromotionForm = ({
       </div>
 
       {/* 6. Footer con Botones */}
-      <div className="flex items-center justify-end gap-3 border-t border-slate-200 dark:border-slate-700 pt-4">
+      <div className="flex items-center justify-end gap-3 border-t border-slate-200/90 dark:border-slate-800 pt-4">
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 text-sm font-semibold rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+          className="px-4 py-2 text-sm font-semibold rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
           disabled={disabled}
         >
           Cancelar
@@ -832,7 +832,7 @@ export const PromotionForm = ({
         <button
           type="submit"
           disabled={disabled || fields.length === 0}
-          className="ui-btn-primary px-5 py-2 text-sm font-bold shadow-panel disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-500/25 hover:bg-blue-700 active:scale-95 disabled:opacity-50 transition-all"
         >
           {mode === "create" ? "Guardar y activar promoción" : "Guardar cambios"}
         </button>

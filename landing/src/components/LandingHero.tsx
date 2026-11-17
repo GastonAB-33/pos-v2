@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { WhatsAppIcon } from "./brand/WhatsAppIcon";
 import {
   Sparkles,
   ArrowRight,
@@ -54,11 +55,11 @@ export const LandingHero: React.FC<LandingHeroProps> = ({ onOpenFreeTrial }) => 
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
             <button
               onClick={onOpenFreeTrial}
-              className="w-full sm:w-auto flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-[#00B5C8] via-[#10B981] to-[#FF7800] px-8 py-4 text-base font-extrabold text-white shadow-xl shadow-teal-600/25 hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition-all"
+              className="w-full sm:w-auto max-w-xl flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#25D366] via-[#10B981] to-[#059669] px-6 sm:px-8 py-4 text-sm sm:text-base font-black text-white shadow-xl shadow-emerald-600/30 hover:shadow-2xl hover:scale-[1.02] active:scale-[0.98] transition-all border border-emerald-300/40 text-center"
             >
-              <Sparkles className="h-5 w-5 text-amber-200" />
-              <span>Iniciar Prueba Gratuita (7 días)</span>
-              <ArrowRight className="h-5 w-5" />
+              <WhatsAppIcon className="h-6 w-6 text-white shrink-0" />
+              <span className="leading-snug">Contactate con tu agente personal de soporte para iniciar tu período de prueba gratis</span>
+
             </button>
 
             <a

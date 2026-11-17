@@ -56,11 +56,11 @@ export const LibroIvaView: FC<Props> = ({ tenantId }) => {
   return (
     <div className="space-y-4">
       {/* HEADER & PERIOD SELECTOR */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center rounded-md bg-blue-100 px-2 py-0.5 text-xs font-bold text-blue-800 dark:bg-blue-900/60 dark:text-blue-300">
+              <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-800 dark:bg-blue-900/60 dark:text-blue-300">
                 AFIP / ARCA
               </span>
               <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
@@ -75,7 +75,7 @@ export const LibroIvaView: FC<Props> = ({ tenantId }) => {
           {/* CONTROLES DE PERÍODO Y ACCIONES */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Selector de Mes */}
-            <div className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+            <div className="flex items-center gap-1.5 rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200">
               <Calendar className="h-3.5 w-3.5 text-slate-400" />
               <label htmlFor="libro-iva-period-select" className="sr-only">Período Fiscal</label>
               <select
@@ -101,7 +101,7 @@ export const LibroIvaView: FC<Props> = ({ tenantId }) => {
               onClick={() => void reload()}
               disabled={isLoading}
               title="Actualizar comprobantes"
-              className="inline-flex items-center justify-center rounded-lg border border-slate-300 p-2 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="inline-flex items-center justify-center rounded-full border border-slate-300 p-2 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 transition"
             >
               <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin text-blue-600" : ""}`} />
             </button>
@@ -110,7 +110,7 @@ export const LibroIvaView: FC<Props> = ({ tenantId }) => {
             <button
               type="button"
               onClick={printOfficialReport}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700/60"
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700/60 transition"
             >
               <Printer className="h-3.5 w-3.5" />
               <span>Imprimir F. 2083 (PDF)</span>
@@ -122,7 +122,7 @@ export const LibroIvaView: FC<Props> = ({ tenantId }) => {
                 type="button"
                 onClick={() => setShowExportMenu((prev) => !prev)}
                 disabled={isExporting}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-blue-700 transition"
+                className="inline-flex items-center gap-1.5 rounded-2xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-blue-700 transition"
               >
                 <FileSpreadsheet className="h-3.5 w-3.5" />
                 <span>{isExporting ? "Exportando..." : "Descargar Libros"}</span>
@@ -135,14 +135,14 @@ export const LibroIvaView: FC<Props> = ({ tenantId }) => {
                     className="fixed inset-0 z-20"
                     onClick={() => setShowExportMenu(false)}
                   />
-                  <div className="absolute right-0 z-30 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-800 dark:bg-slate-900">
+                  <div className="absolute right-0 z-30 mt-1 w-64 rounded-2xl border border-slate-200/90 bg-white p-2 shadow-xl dark:border-slate-800 dark:bg-slate-900">
                     <button
                       type="button"
                       onClick={() => {
                         setShowExportMenu(false);
                         void exportConsolidadoExcel();
                       }}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 transition"
                     >
                       <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
                       <div>
@@ -157,7 +157,7 @@ export const LibroIvaView: FC<Props> = ({ tenantId }) => {
                         setShowExportMenu(false);
                         void exportVentasExcel();
                       }}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 transition"
                     >
                       <ArrowUpRight className="h-4 w-4 text-blue-600" />
                       <div>
@@ -172,7 +172,7 @@ export const LibroIvaView: FC<Props> = ({ tenantId }) => {
                         setShowExportMenu(false);
                         void exportComprasExcel();
                       }}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 transition"
                     >
                       <ArrowDownLeft className="h-4 w-4 text-purple-600" />
                       <div>
@@ -189,7 +189,7 @@ export const LibroIvaView: FC<Props> = ({ tenantId }) => {
                         setShowExportMenu(false);
                         exportArcaTxtFiles();
                       }}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40"
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/40 transition"
                     >
                       <FileCode2 className="h-4 w-4" />
                       <div>
@@ -208,7 +208,7 @@ export const LibroIvaView: FC<Props> = ({ tenantId }) => {
             <button
               type="button"
               onClick={() => setShowHelp(true)}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              className="inline-flex items-center gap-1 rounded-2xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition"
             >
               <HelpCircle className="h-3.5 w-3.5 text-blue-600" />
               <span>¿Cómo funciona?</span>
@@ -218,7 +218,7 @@ export const LibroIvaView: FC<Props> = ({ tenantId }) => {
       </div>
 
       {error ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">
           ⚠️ {error}
         </div>
       ) : null}
@@ -226,52 +226,54 @@ export const LibroIvaView: FC<Props> = ({ tenantId }) => {
       {/* KPI CARDS */}
       <LibroIvaKpiCards consolidado={consolidado} />
 
-      {/* SUB-TABS */}
-      <div className="flex border-b border-slate-200 dark:border-slate-800">
-        <button
-          type="button"
-          onClick={() => setActiveSubTab("resumen")}
-          className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition ${
-            activeSubTab === "resumen"
-              ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
-              : "border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
-          }`}
-        >
-          <Layers className="h-4 w-4" />
-          <span>Resumen Oficial F. 2083</span>
-        </button>
+      {/* SUB-TABS SEGMENTADOS */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-2xl border border-slate-200/90 bg-white p-1.5 shadow-sm dark:border-slate-800 dark:bg-slate-900 gap-1">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("resumen")}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+              activeSubTab === "resumen"
+                ? "bg-slate-900 text-white shadow-sm dark:bg-slate-800 dark:text-slate-100"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+            }`}
+          >
+            <Layers className="h-4 w-4" />
+            <span>Resumen Oficial F. 2083</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveSubTab("ventas")}
-          className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition ${
-            activeSubTab === "ventas"
-              ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
-              : "border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
-          }`}
-        >
-          <ArrowUpRight className="h-4 w-4 text-blue-500" />
-          <span>Libro IVA Ventas</span>
-          <span className="rounded-full bg-slate-100 px-1.5 py-0.2 text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-            {totalVentasCount}
-          </span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("ventas")}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+              activeSubTab === "ventas"
+                ? "bg-slate-900 text-white shadow-sm dark:bg-slate-800 dark:text-slate-100"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+            }`}
+          >
+            <ArrowUpRight className="h-4 w-4 text-blue-500" />
+            <span>Libro IVA Ventas</span>
+            <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300">
+              {totalVentasCount}
+            </span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveSubTab("compras")}
-          className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition ${
-            activeSubTab === "compras"
-              ? "border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400"
-              : "border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
-          }`}
-        >
-          <ArrowDownLeft className="h-4 w-4 text-purple-500" />
-          <span>Libro IVA Compras</span>
-          <span className="rounded-full bg-slate-100 px-1.5 py-0.2 text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-            {totalComprasCount}
-          </span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("compras")}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition ${
+              activeSubTab === "compras"
+                ? "bg-slate-900 text-white shadow-sm dark:bg-slate-800 dark:text-slate-100"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+            }`}
+          >
+            <ArrowDownLeft className="h-4 w-4 text-purple-500" />
+            <span>Libro IVA Compras</span>
+            <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-[10px] font-bold text-slate-700 dark:text-slate-300">
+              {totalComprasCount}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* SUB-TAB CONTENTS */}

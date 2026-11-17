@@ -31,3 +31,4 @@ export { employeeAttendanceService } from "@/services/employee-attendance.servic
 export { employeeCurrentAccountsService } from "@/services/employee-current-accounts.service";
 export { employeeSalaryPaymentsService } from "@/services/employee-salary-payments.service";
 
+export { masterProductsService } from "@/services/master-products.service";

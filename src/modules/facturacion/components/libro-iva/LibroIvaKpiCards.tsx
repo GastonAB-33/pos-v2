@@ -11,14 +11,14 @@ export const LibroIvaKpiCards: FC<Props> = ({ consolidado }) => {
   const { ventas, compras, posicion } = consolidado;
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
       {/* 1. DÉBITO FISCAL (VENTAS) */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition dark:border-slate-800 dark:bg-slate-900">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-sm transition dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             Débito Fiscal (IVA Ventas)
           </span>
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
             <ArrowUpRight className="h-4 w-4" />
           </span>
         </div>
@@ -37,12 +37,12 @@ export const LibroIvaKpiCards: FC<Props> = ({ consolidado }) => {
       </div>
 
       {/* 2. CRÉDITO FISCAL (COMPRAS) */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition dark:border-slate-800 dark:bg-slate-900">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-sm transition dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             Crédito Fiscal (IVA Compras)
           </span>
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-600 dark:bg-purple-950/60 dark:text-purple-400">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-purple-50 text-purple-600 dark:bg-purple-950/60 dark:text-purple-400">
             <ArrowDownLeft className="h-4 w-4" />
           </span>
         </div>
@@ -62,10 +62,10 @@ export const LibroIvaKpiCards: FC<Props> = ({ consolidado }) => {
 
       {/* 3. POSICIÓN TÉCNICA ESTIMADA (F. 2002) */}
       <div
-        className={`rounded-xl border p-4 shadow-sm transition ${
+        className={`rounded-2xl border p-4 sm:p-5 shadow-sm transition ${
           posicion.esSaldoAFavor
-            ? "border-emerald-200 bg-emerald-50/40 dark:border-emerald-900/40 dark:bg-emerald-950/20"
-            : "border-amber-200 bg-amber-50/40 dark:border-amber-900/40 dark:bg-amber-950/20"
+            ? "border-emerald-200/90 bg-emerald-50/40 dark:border-emerald-900/40 dark:bg-emerald-950/20"
+            : "border-amber-200/90 bg-amber-50/40 dark:border-amber-900/40 dark:bg-amber-950/20"
         }`}
       >
         <div className="flex items-center justify-between">
@@ -73,7 +73,7 @@ export const LibroIvaKpiCards: FC<Props> = ({ consolidado }) => {
             Saldo Técnico Estimado
           </span>
           <span
-            className={`inline-flex h-7 w-7 items-center justify-center rounded-lg ${
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ${
               posicion.esSaldoAFavor
                 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300"
                 : "bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300"
@@ -93,7 +93,7 @@ export const LibroIvaKpiCards: FC<Props> = ({ consolidado }) => {
         </p>
         <div className="mt-2 flex items-center justify-between text-xs">
           <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
               posicion.esSaldoAFavor
                 ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/80 dark:text-emerald-200"
                 : "bg-amber-100 text-amber-800 dark:bg-amber-900/80 dark:text-amber-200"
@@ -111,12 +111,12 @@ export const LibroIvaKpiCards: FC<Props> = ({ consolidado }) => {
       </div>
 
       {/* 4. COMPRAS NO COMPUTABLES (MONOTRIBUTO / FACTURA C) */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition dark:border-slate-800 dark:bg-slate-900">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-sm transition dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
             Compras Monotributo (No Computable)
           </span>
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             <Receipt className="h-4 w-4" />
           </span>
         </div>

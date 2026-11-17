@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import type { ModuleGroup } from "@/modules/usuarios/components/PermissionMatrix";
+import { defaultSystemModuleGroups } from "@/modules/usuarios/constants/module-groups";
 import { auditService } from "@/services/audit.service";
 import { authAdminService } from "@/services/auth-admin.service";
 import { dataProvider } from "@/services/config/data-provider";
 import { permissionProfilesService } from "@/services/permission-profiles.service";
 import { usersService } from "@/services/users.service";
 import type { PermissionProfileRecord, UserRecord } from "@/types/entities";
-import { appModuleLabels, appModules } from "@/types/modules";
+import { appModules } from "@/types/modules";
 import {
   createDefaultPermissionProfile,
   normalizePermissionProfile,
@@ -104,7 +105,7 @@ export const useUsersModule = (tenantId: string | null) => {
   const [profiles, setProfiles] = useState<PermissionProfileRecord[]>([]);
   const [userSearch, setUserSearch] = useState("");
   const [profileSearch, setProfileSearch] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<CrudFeedback | null>(null);
   const auditUserId = sessionUser?.id ?? null;
@@ -193,42 +194,7 @@ export const useUsersModule = (tenantId: string | null) => {
     );
   }, [profileSearch, profiles]);
 
-  const moduleGroups = useMemo<ModuleGroup[]>(() => {
-    const generalModules = appModules.filter(
-      (module) => module !== "configuracion" && !module.startsWith("configuracion_")
-    );
-    const settingsSubmodules = appModules.filter((module) => module.startsWith("configuracion_"));
-
-    return [
-      {
-        id: "general",
-        label: "Modulos generales",
-        description: "Secciones principales operativas del sistema",
-        modules: generalModules.map((module) => ({
-          module,
-          label: appModuleLabels[module],
-          isSubmodule: module === "compras_margen",
-        })),
-      },
-      {
-        id: "configuracion",
-        label: "Configuracion",
-        description: "Permisos globales y submodulos de configuracion",
-        modules: [
-          {
-            module: "configuracion",
-            label: appModuleLabels.configuracion,
-            isSubmodule: false,
-          },
-          ...settingsSubmodules.map((module) => ({
-            module,
-            label: appModuleLabels[module],
-            isSubmodule: true,
-          })),
-        ],
-      },
-    ];
-  }, []);
+  const moduleGroups = useMemo<ModuleGroup[]>(() => defaultSystemModuleGroups, []);
 
   const createProfile = async (
     values: PermissionProfileFormValues,
@@ -625,3 +591,4 @@ export const useUsersModule = (tenantId: string | null) => {
     getProfilePermissions,
   };
 };
+

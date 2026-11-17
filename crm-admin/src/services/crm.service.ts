@@ -323,6 +323,70 @@ export const crmService = {
     return tenant;
   },
 
+  updateTenantNotes(tenantId: string, notes: string): TenantAccount {
+    const tenants = this.getTenants();
+    const tenant = tenants.find((t) => t.id === tenantId);
+    if (!tenant) throw new Error("Comercio no encontrado");
+    tenant.notes = notes;
+    localStorage.setItem(STORAGE_KEYS.tenants, JSON.stringify(tenants));
+    return tenant;
+  },
+
+  async fetchTenantTelemetry(tenant: TenantAccount): Promise<{
+    productsCount: number;
+    salesCount: number;
+    tenantId: string;
+    slug: string;
+    found: boolean;
+  }> {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://qfquvyxyodmnyqlchpbf.supabase.co";
+    const anonKey =
+      import.meta.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_NmP-WEg3k_lNF-p005-Teg_p3Hnrn49";
+
+    const res = await fetch(`${supabaseUrl}/rest/v1/rpc/get_tenant_telemetry`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+      },
+      body: JSON.stringify({
+        p_tenant_id: tenant.id,
+        p_slug: tenant.slug,
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Error ${res.status} al consultar métricas del servidor`);
+    }
+
+    const data = await res.json();
+    return {
+      productsCount: Number(data.products_count) || 0,
+      salesCount: Number(data.sales_count) || 0,
+      tenantId: data.tenant_id || tenant.id,
+      slug: data.slug || tenant.slug,
+      found: Boolean(data.found),
+    };
+  },
+
+  updateTenantMetrics(
+    tenantId: string,
+    metrics: { productsCount: number; salesCount: number; slug?: string }
+  ): TenantAccount {
+    const tenants = this.getTenants();
+    const tenant = tenants.find((t) => t.id === tenantId);
+    if (!tenant) throw new Error("Comercio no encontrado");
+
+    tenant.productsCount = metrics.productsCount;
+    tenant.salesCount = metrics.salesCount;
+    if (metrics.slug) {
+      tenant.slug = metrics.slug;
+    }
+    localStorage.setItem(STORAGE_KEYS.tenants, JSON.stringify(tenants));
+    return tenant;
+  },
+
   updateLeadStage(leadId: string, stage: LeadStage): CrmLead {
     const leads = this.getLeads();
     const lead = leads.find((l) => l.id === leadId);

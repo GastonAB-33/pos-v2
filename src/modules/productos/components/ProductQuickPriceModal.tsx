@@ -756,7 +756,7 @@ export const ProductQuickPriceModal = ({
       aria-modal="true"
       role="dialog"
     >
-      <div className="relative w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-3.5 sm:p-5 md:p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 max-h-[92dvh] sm:max-h-[92vh] flex flex-col overflow-hidden">
+      <div className="relative w-full max-w-3xl rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-3.5 sm:p-5 md:p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 max-h-[92dvh] sm:max-h-[92vh] flex flex-col overflow-hidden">
         {/* Encabezado */}
         <div className="mb-3 sm:mb-4 flex items-center justify-between gap-2 sm:gap-3 border-b border-slate-200 pb-2.5 sm:pb-3 dark:border-slate-800 flex-shrink-0">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -782,9 +782,6 @@ export const ProductQuickPriceModal = ({
                   </span>
                 )}
               </div>
-              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 truncate hidden sm:block">
-                Escaneá con lector de barra o buscá para actualizar precios al instante.
-              </p>
             </div>
           </div>
 
@@ -793,7 +790,7 @@ export const ProductQuickPriceModal = ({
               <button
                 type="button"
                 onClick={() => attemptCreateNew()}
-                className="ui-btn-ghost text-xs inline-flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 py-1.5 px-2.5 text-slate-700 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 rounded-xl"
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200/90 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition-all"
                 title="Crear un nuevo producto en el catálogo"
               >
                 <Plus size={16} />
@@ -853,7 +850,7 @@ export const ProductQuickPriceModal = ({
               {/* Tarjeta de Información del Producto Seleccionado (Panel de Vista Previa) */}
               <div
                 ref={productInfoCardRef}
-                className={`rounded-2xl border p-4 transition-all duration-300 ${
+                className={`rounded-2xl sm:rounded-3xl border p-4 sm:p-5 shadow-xs transition-all duration-300 ${
                   flashStatus === "success"
                     ? "border-emerald-500 ring-4 ring-emerald-500/30 bg-emerald-50/80 dark:border-emerald-400 dark:bg-emerald-950/40 shadow-lg shadow-emerald-500/20"
                     : flashStatus === "error"
@@ -864,16 +861,16 @@ export const ProductQuickPriceModal = ({
                 {/* Etiquetas superiores y botón de edición */}
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                    <span className="rounded bg-slate-200/80 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                    <span className="inline-flex items-center rounded-full bg-slate-200/80 px-2.5 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
                       {selectedProduct.categoria || "Sin categoría"}
                     </span>
                     {selectedProduct.codigoProducto && (
-                      <span className="font-mono text-xs text-slate-500 bg-white/80 dark:bg-slate-850 px-1.5 py-0.5 rounded border border-slate-200/80 dark:border-slate-700">
+                      <span className="inline-flex items-center font-mono text-xs text-slate-500 bg-white/80 dark:bg-slate-850 px-2 py-0.5 rounded-full border border-slate-200/80 dark:border-slate-700">
                         Cód: {selectedProduct.codigoProducto}
                       </span>
                     )}
                     {selectedProduct.codigoBarras && (
-                      <span className="font-mono text-xs text-slate-600 bg-white dark:bg-slate-850 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                      <span className="inline-flex items-center font-mono text-xs text-slate-600 bg-white dark:bg-slate-850 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
                         {selectedProduct.codigoBarras}
                       </span>
                     )}
@@ -886,7 +883,7 @@ export const ProductQuickPriceModal = ({
                       onClick={handleOpenScanner}
                       title="Escanear el siguiente producto con la cámara"
                       aria-label="Escanear siguiente producto con cámara"
-                      className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 shadow-2xs transition hover:border-emerald-500 hover:bg-emerald-100 active:scale-95 dark:border-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 shadow-xs transition hover:border-emerald-500 hover:bg-emerald-100 active:scale-95 dark:border-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
                     >
                       <Camera className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
                       <span className="text-[11px]">Escanear otro</span>
@@ -899,7 +896,7 @@ export const ProductQuickPriceModal = ({
                         disabled={!canWrite}
                         title="Editar ficha completa (nombre, categoría, códigos, etc.)"
                         aria-label="Editar ficha completa del producto"
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 shadow-2xs transition hover:border-brand-500 hover:bg-slate-100 hover:text-brand-600 active:scale-95 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-brand-400 dark:hover:bg-slate-700 dark:hover:text-brand-300"
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-xs transition hover:border-blue-500 hover:bg-slate-100 hover:text-blue-600 active:scale-95 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-blue-400 dark:hover:bg-slate-700 dark:hover:text-blue-300"
                       >
                         <Pencil className="h-3 w-3 text-slate-500 dark:text-slate-400" />
                         <span className="text-[11px]">Editar ficha</span>
@@ -944,7 +941,7 @@ export const ProductQuickPriceModal = ({
               {/* Editor de Precios Rápido */}
               <form onSubmit={handleSave} className="space-y-4">
                 <div
-                  className={`rounded-xl border p-4 shadow-sm space-y-4 transition-all duration-300 ${
+                  className={`rounded-2xl sm:rounded-3xl border p-4 sm:p-5 shadow-xs space-y-4 transition-all duration-300 ${
                     flashStatus === "error"
                       ? "border-red-300 ring-2 ring-red-500/10 bg-red-50/10 dark:border-red-800 dark:bg-red-950/10"
                       : "border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
@@ -1196,7 +1193,7 @@ export const ProductQuickPriceModal = ({
                     <button
                       type="button"
                       onClick={handleResetForNextProduct}
-                      className="ui-btn-ghost text-xs inline-flex items-center gap-1.5"
+                      className="rounded-xl border border-slate-200/90 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-200 transition-all inline-flex items-center gap-1.5"
                       disabled={isSaving}
                     >
                       <RotateCcw size={14} />
@@ -1206,7 +1203,7 @@ export const ProductQuickPriceModal = ({
                     <button
                       type="button"
                       onClick={handleOpenScanner}
-                      className="ui-btn-secondary text-xs inline-flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/40 hover:bg-emerald-100"
+                      className="rounded-xl border border-emerald-300 bg-emerald-50/80 px-4 py-2 text-xs font-bold text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 hover:bg-emerald-100 shadow-xs transition-all active:scale-95 inline-flex items-center gap-1.5"
                       disabled={isSaving}
                       title="Abrir cámara para escanear el próximo producto"
                     >
@@ -1219,7 +1216,7 @@ export const ProductQuickPriceModal = ({
                     <button
                       type="submit"
                       disabled={!canWrite || isSaving}
-                      className={`font-semibold text-sm inline-flex items-center gap-2 shadow-sm transition-all duration-200 ${
+                      className={`font-semibold text-sm inline-flex items-center gap-2 rounded-xl px-5 py-2.5 shadow-sm shadow-blue-500/25 active:scale-95 transition-all duration-200 ${
                         flashStatus === "success"
                           ? "ui-btn-primary bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-400 ring-offset-1"
                           : flashStatus === "error"

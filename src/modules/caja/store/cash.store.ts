@@ -71,7 +71,7 @@ export const useCashStore = create<CashStoreState>()((set, get) => ({
   cashSettings: defaultCashSettings,
   loadedTenantId: null,
   lastLoadedAt: null,
-  isLoading: false,
+  isLoading: true,
   isBackgroundRefreshing: false,
   error: null,
 
@@ -91,7 +91,7 @@ export const useCashStore = create<CashStoreState>()((set, get) => ({
       cashSettings: defaultCashSettings,
       loadedTenantId: null,
       lastLoadedAt: null,
-      isLoading: false,
+      isLoading: true,
       isBackgroundRefreshing: false,
       error: null,
     });
@@ -122,7 +122,6 @@ export const useCashStore = create<CashStoreState>()((set, get) => ({
         tenantSettings,
         allUsers,
         allPaymentMethods,
-        allCustomers,
         allBankAccounts,
         recentCurrentAccountMovements,
       ] = await Promise.all([
@@ -130,7 +129,6 @@ export const useCashStore = create<CashStoreState>()((set, get) => ({
         settingsService.getByTenant(tenantId),
         usersService.getAllByTenant(tenantId),
         paymentMethodsService.getAllByTenant(tenantId),
-        customersService.getAllByTenant(tenantId),
         bankAccountsService.getActiveByTenant(tenantId).catch(() => []),
         currentAccountsService.getRecentByTenant(tenantId, 200).catch(() => []),
       ]);
@@ -152,10 +150,16 @@ export const useCashStore = create<CashStoreState>()((set, get) => ({
         ])
       );
 
-      const [allSales, allSalePayments, allInvoices] = await Promise.all([
+      // Cargar unicamente los clientes referenciados en los movimientos recientes para evitar descargar toda la tabla
+      const referencedCustomerIds = Array.from(
+        new Set(recentCurrentAccountMovements.map((m) => m.customer_id).filter(Boolean))
+      ) as string[];
+
+      const [allSales, allSalePayments, allInvoices, relevantCustomers] = await Promise.all([
         saleIds.length ? salesService.getByIds(tenantId, saleIds).catch(() => []) : [],
         saleIds.length ? salesService.getPaymentsBySaleIds(tenantId, saleIds).catch(() => []) : [],
         saleIds.length ? invoicesService.getBySaleIds(tenantId, saleIds).catch(() => []) : [],
+        referencedCustomerIds.length ? customersService.getByIds(tenantId, referencedCustomerIds).catch(() => []) : [],
       ]);
 
       const sortedSessions = recentSessions.sort((a, b) => b.opened_at.localeCompare(a.opened_at));
@@ -164,7 +168,7 @@ export const useCashStore = create<CashStoreState>()((set, get) => ({
         b.created_at.localeCompare(a.created_at)
       );
 
-      const customersMap = allCustomers.reduce<Record<string, Customer>>((acc, customer) => {
+      const customersMap = relevantCustomers.reduce<Record<string, Customer>>((acc, customer) => {
         acc[customer.id] = customer;
         return acc;
       }, {});
@@ -229,3 +233,5 @@ export const useCashStore = create<CashStoreState>()((set, get) => ({
     }
   },
 }));
+
+

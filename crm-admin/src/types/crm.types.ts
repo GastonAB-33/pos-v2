@@ -9,6 +9,7 @@ export interface TenantAccount {
   slug: string;
   cuit: string;
   phone: string;
+  clientPassword?: string;
   email: string;
   category: string;
   subscriptionStatus: SubscriptionStatus;
@@ -29,6 +30,7 @@ export interface CrmLead {
   contactName: string;
   email: string;
   phone: string;
+  clientPassword?: string;
   category: string;
   stage: LeadStage;
   selectedPlan: string;

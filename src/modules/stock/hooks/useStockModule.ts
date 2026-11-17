@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAuthStore } from "@/features/auth/store/auth.store";
 import { useProductsStore } from "@/features/products/store/products.store";
 import { auditService } from "@/services/audit.service";
 import { productsService } from "@/services/products.service";
@@ -37,6 +38,16 @@ const defaultStockSettings: StockSettings = {
   allow_negative_stock: false,
 };
 
+const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    clearTimeout(timer);
+  });
+};
+
 export const useStockModule = (tenantId: string | null, userId: string | null) => {
   // Conectar con el store global en memoria para carga instantánea (0ms)
   const products = useProductsStore((state) => state.products);
@@ -49,9 +60,20 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
   const [movementTypeFilter, setMovementTypeFilter] = useState<StockMovementFilter>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<StockFeedback | null>(null);
+
+  const isMountedRef = useRef(true);
+  const isLoadingRef = useRef(false);
+  const hasLoadedTenantRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const clearFeedback = () => setFeedback(null);
 
@@ -73,45 +95,80 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
       return;
     }
 
+    if (isLoadingRef.current) return;
+    isLoadingRef.current = true;
     setIsLoading(true);
+
     try {
-      const [movementsResult, settingsResult] = await Promise.allSettled([
-        stockService.getAllByTenant(tenantId),
-        settingsService.getByTenant(tenantId),
+      // 1. Cargar catálogo de productos con timeout seguro (8s)
+      const catalogPromise = withTimeout(
         loadCatalog(tenantId, force),
+        8000,
+        undefined
+      );
+
+      // 2. Cargar movimientos recientes de stock (500 registros) con timeout seguro (8s)
+      const movementsPromise = withTimeout(
+        stockService.getRecentByTenant(tenantId, 500),
+        8000,
+        [] as StockMovement[]
+      );
+
+      // 3. Cargar configuración de stock con timeout seguro (5s)
+      const settingsPromise = withTimeout(
+        settingsService.getByTenant(tenantId),
+        5000,
+        null
+      );
+
+      const [movementsResult, settingsResult] = await Promise.allSettled([
+        movementsPromise,
+        settingsPromise,
+        catalogPromise,
       ]);
 
-      if (movementsResult.status === "fulfilled") {
+      if (!isMountedRef.current) return;
+
+      if (movementsResult.status === "fulfilled" && Array.isArray(movementsResult.value)) {
         setMovements(sortMovementsDesc(movementsResult.value));
       } else {
         setMovements([]);
       }
 
-      if (settingsResult.status === "fulfilled") {
+      if (settingsResult.status === "fulfilled" && settingsResult.value) {
         setStockSettings(settingsResult.value.stock ?? defaultStockSettings);
       } else {
         setStockSettings(defaultStockSettings);
       }
     } catch {
-      setFeedback({ type: "error", message: "No se pudieron cargar datos de stock" });
+      if (isMountedRef.current) {
+        setFeedback({ type: "error", message: "No se pudieron cargar datos de stock" });
+      }
     } finally {
-      setIsLoading(false);
+      isLoadingRef.current = false;
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [loadCatalog, tenantId]);
 
   useEffect(() => {
+    if (!tenantId) return;
+    if (hasLoadedTenantRef.current === tenantId) return;
+    hasLoadedTenantRef.current = tenantId;
     void loadStockData(false);
-  }, [loadStockData]);
+  }, [tenantId, loadStockData]);
 
   const applyManualAdjustmentsBulk = async (
     values: StockBatchAdjustmentValues
   ): Promise<boolean> => {
     if (!tenantId) return false;
 
-    if (!stockSettings.allow_manual_adjustments) {
+    const canWriteManual = useAuthStore.getState().hasPermission("stock_ajustes_manuales", "write");
+    if (!canWriteManual) {
       setFeedback({
         type: "error",
-        message: "Los ajustes manuales están desactivados en configuración",
+        message: "No posees permisos para registrar ajustes manuales de stock",
       });
       return false;
     }
@@ -453,3 +510,4 @@ export const useStockModule = (tenantId: string | null, userId: string | null) =
     categoryOptions,
   };
 };
+

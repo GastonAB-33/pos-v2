@@ -125,77 +125,82 @@ export const EmployeeCurrentAccountsSection = ({
   }, [employees, filterMode, search]);
 
   return (
-    <div className="space-y-4">
-      {/* 3 Paneles KPI Superiores (mismo estilo que Cuentas Corrientes Clientes) */}
+    <div className="space-y-5">
+      {/* 3 Paneles KPI Superiores */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <article className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 shadow-sm dark:border-rose-900/60 dark:bg-rose-950/20">
+        <article className="rounded-2xl sm:rounded-3xl border border-rose-200/90 bg-rose-50/70 p-5 shadow-xs dark:border-rose-900/60 dark:bg-rose-950/20">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-rose-800 dark:text-rose-300">
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-800 dark:text-rose-300">
               Deuda Total Empleados
             </span>
             <ShoppingBag className="h-5 w-5 text-rose-600 dark:text-rose-400" />
           </div>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-rose-900 dark:text-rose-100">
+          <p className="mt-3 text-2xl sm:text-3xl font-black font-mono tracking-tight text-rose-900 dark:text-rose-100">
             {currency.format(totalDebt)}
           </p>
-          <p className="mt-1 text-xs text-rose-700 dark:text-rose-400">
+          <p className="mt-1 text-xs text-rose-700 dark:text-rose-400 font-medium">
             Consumos y retiros a descontar del sueldo
           </p>
         </article>
 
-        <article className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/20">
+        <article className="rounded-2xl sm:rounded-3xl border border-amber-200/90 bg-amber-50/70 p-5 shadow-xs dark:border-amber-900/60 dark:bg-amber-950/20">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
               Empleados con Saldo Pendiente
             </span>
             <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
           </div>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-amber-900 dark:text-amber-100">
+          <p className="mt-3 text-2xl sm:text-3xl font-black tracking-tight text-amber-900 dark:text-amber-100">
             {employeesWithDebtCount}
           </p>
-          <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+          <p className="mt-1 text-xs text-amber-700 dark:text-amber-400 font-medium">
             De {employees.length} empleados registrados
           </p>
         </article>
 
-        <article className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/20">
+        <article className="rounded-2xl sm:rounded-3xl border border-emerald-200/90 bg-emerald-50/70 p-5 shadow-xs dark:border-emerald-900/60 dark:bg-emerald-950/20">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
               Empleados al Día
             </span>
             <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
           </div>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-900 dark:text-emerald-100">
+          <p className="mt-3 text-2xl sm:text-3xl font-black tracking-tight text-emerald-900 dark:text-emerald-100">
             {employeesUpToDateCount}
           </p>
-          <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">
+          <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400 font-medium">
             Sin consumos pendientes de descuento
           </p>
         </article>
       </div>
 
       {/* Barra de Filtros y Buscador */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
         <div className="relative flex-1 min-w-[240px] max-w-md">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por empleado, legajo, DNI..."
-            className="w-full rounded-xl border border-slate-300 pl-9 pr-3 py-1.5 text-xs focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
+            className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/90 pl-10 pr-4 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-2xl bg-slate-100/90 p-1 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700/60">
             <button
               type="button"
               onClick={() => setFilterMode("all")}
-              className={`rounded-lg px-3 py-1 text-xs font-semibold transition cursor-pointer ${
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
                 filterMode === "all"
-                  ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100"
-                  : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-100"
+                  ? "bg-white text-slate-900 shadow-xs dark:bg-slate-900 dark:text-slate-100"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
               }`}
             >
               Todos ({employees.length})
@@ -203,10 +208,10 @@ export const EmployeeCurrentAccountsSection = ({
             <button
               type="button"
               onClick={() => setFilterMode("debt")}
-              className={`rounded-lg px-3 py-1 text-xs font-semibold transition cursor-pointer ${
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
                 filterMode === "debt"
-                  ? "bg-white text-rose-700 shadow-sm dark:bg-slate-700 dark:text-rose-300"
-                  : "text-slate-500 hover:text-rose-700 dark:hover:text-rose-300"
+                  ? "bg-white text-rose-700 shadow-xs dark:bg-slate-900 dark:text-rose-300"
+                  : "text-slate-600 hover:text-rose-700 dark:text-slate-400 dark:hover:text-rose-300"
               }`}
             >
               Con Deuda ({employeesWithDebtCount})
@@ -214,10 +219,10 @@ export const EmployeeCurrentAccountsSection = ({
             <button
               type="button"
               onClick={() => setFilterMode("upToDate")}
-              className={`rounded-lg px-3 py-1 text-xs font-semibold transition cursor-pointer ${
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
                 filterMode === "upToDate"
-                  ? "bg-white text-emerald-700 shadow-sm dark:bg-slate-700 dark:text-emerald-300"
-                  : "text-slate-500 hover:text-emerald-700 dark:hover:text-emerald-300"
+                  ? "bg-white text-emerald-700 shadow-xs dark:bg-slate-900 dark:text-emerald-300"
+                  : "text-slate-600 hover:text-emerald-700 dark:text-slate-400 dark:hover:text-emerald-300"
               }`}
             >
               Al Día ({employeesUpToDateCount})
@@ -234,10 +239,10 @@ export const EmployeeCurrentAccountsSection = ({
                   setEmployeePickerOpen(true);
                 }
               }}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 cursor-pointer shrink-0"
+              className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-xs transition dark:bg-indigo-600 dark:hover:bg-indigo-500 cursor-pointer shrink-0 active:scale-[0.98]"
               title="Cargar productos a cuenta corriente de empleado"
             >
-              <ShoppingBag size={14} />
+              <ShoppingBag size={15} />
               <span>+ Cargar Productos</span>
             </button>
           )}
@@ -245,10 +250,10 @@ export const EmployeeCurrentAccountsSection = ({
       </div>
 
       {/* Tabla de Empleados y Cuentas Corrientes */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="border-b border-slate-200 bg-slate-50 font-bold uppercase tracking-wider text-slate-600 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-400">
+            <thead className="border-b border-slate-200/90 bg-slate-50/90 font-semibold uppercase tracking-wider text-slate-600 dark:border-slate-800 dark:bg-slate-800/70 dark:text-slate-300">
               <tr>
                 <th className="py-3 px-4">Empleado / Legajo</th>
                 <th className="py-3 px-4">Documento</th>
@@ -262,7 +267,7 @@ export const EmployeeCurrentAccountsSection = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-700 dark:text-slate-300">
               {filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-500">
+                  <td colSpan={7} className="py-10 text-center text-slate-500 dark:text-slate-400 font-medium">
                     No se encontraron empleados con los criterios de búsqueda.
                   </td>
                 </tr>
@@ -277,9 +282,9 @@ export const EmployeeCurrentAccountsSection = ({
                       key={emp.id}
                       className="transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
                     >
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2.5">
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 font-bold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 font-bold text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/60">
                             {emp.full_name.charAt(0).toUpperCase()}
                           </span>
                           <div>
@@ -293,26 +298,26 @@ export const EmployeeCurrentAccountsSection = ({
                         </div>
                       </td>
 
-                      <td className="py-3 px-4 font-mono">
+                      <td className="py-3.5 px-4 font-mono">
                         <span className="uppercase text-slate-500 mr-1 text-[10px]">
                           {emp.document_type}
                         </span>
                         {emp.document_number}
                       </td>
 
-                      <td className="py-3 px-4 font-medium">{emp.position}</td>
+                      <td className="py-3.5 px-4 font-medium">{emp.position || "Empleado"}</td>
 
-                      <td className="py-3 px-4 font-semibold text-slate-800 dark:text-slate-200">
+                      <td className="py-3.5 px-4 font-semibold text-slate-800 dark:text-slate-200">
                         {currency.format(emp.base_salary || 0)}
                       </td>
 
-                      <td className="py-3 px-4 text-slate-500">
+                      <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">
                         {emp.current_account_limit
                           ? currency.format(emp.current_account_limit)
                           : "Ilimitado"}
                       </td>
 
-                      <td className="py-3 px-4 text-right font-mono">
+                      <td className="py-3.5 px-4 text-right font-mono">
                         <span
                           className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold ${
                             hasDebt
@@ -326,13 +331,13 @@ export const EmployeeCurrentAccountsSection = ({
                         </span>
                       </td>
 
-                      <td className="py-3 px-4 text-right">
+                      <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           {canWrite && (
                             <button
                               type="button"
                               onClick={() => setProductModalEmployee(emp)}
-                              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition dark:bg-indigo-600 dark:hover:bg-indigo-500 cursor-pointer"
+                              className="inline-flex items-center gap-1.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition dark:bg-indigo-600 dark:hover:bg-indigo-500 cursor-pointer active:scale-[0.98]"
                               title={`Cargar productos a cuenta corriente de ${emp.full_name}`}
                             >
                               <ShoppingBag size={13} />
@@ -342,7 +347,7 @@ export const EmployeeCurrentAccountsSection = ({
                           <button
                             type="button"
                             onClick={() => onSelectEmployee(emp)}
-                            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
+                            className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-800 px-3.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-xs transition cursor-pointer active:scale-[0.98]"
                           >
                             <CreditCard size={13} />
                             <span>Ver Cuenta</span>
@@ -366,14 +371,14 @@ export const EmployeeCurrentAccountsSection = ({
           aria-modal="true"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150"
         >
-          <div className="flex flex-col w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 shadow-2xl overflow-hidden p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300">
-                  <ShoppingBag size={16} />
+          <div className="flex flex-col w-full max-w-md rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-700 shadow-2xl overflow-hidden p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200/90 dark:border-slate-800 pb-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60">
+                  <ShoppingBag size={18} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
                     Cargar Productos a Empleado
                   </h3>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -384,7 +389,7 @@ export const EmployeeCurrentAccountsSection = ({
               <button
                 type="button"
                 onClick={() => setEmployeePickerOpen(false)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                className="!rounded-full p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
               >
                 <X size={18} />
               </button>
@@ -399,11 +404,11 @@ export const EmployeeCurrentAccountsSection = ({
                     setProductModalEmployee(emp);
                     setEmployeePickerOpen(false);
                   }}
-                  className="w-full flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 hover:border-indigo-300 dark:hover:border-indigo-600 transition text-left cursor-pointer"
+                  className="w-full flex items-center justify-between p-3.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 hover:border-indigo-300 dark:hover:border-indigo-600 transition text-left cursor-pointer"
                 >
                   <div>
                     <p className="font-bold text-sm text-slate-900 dark:text-white">{emp.full_name}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
                       {emp.code} • {emp.position}
                     </p>
                   </div>

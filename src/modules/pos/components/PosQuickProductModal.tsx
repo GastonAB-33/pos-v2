@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Sparkles } from "lucide-react";
 import type { PosQuickProductInput } from "@/modules/pos/hooks/usePosSale";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { handleNumericInputFocus } from "@/utils/input-helpers";
+import { masterProductsService, type MasterProduct } from "@/services/master-products.service";
 
 interface PosQuickProductModalProps {
   open: boolean;
@@ -61,6 +63,13 @@ export const PosQuickProductModal = ({
   const [barcode, setBarcode] = useState(initialBarcode ?? "");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [masterMatch, setMasterMatch] = useState<MasterProduct | null>(null);
+
+  // Categorías combinadas (del comercio + catálogo estándar del sistema)
+  const mergedCategories = useMemo(() => {
+    const set = new Set([...categories, ...masterProductsService.getDefaultCategories()]);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [categories]);
 
   // Referencias para navegación secuencial tipo Excel/POS
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -106,6 +115,35 @@ export const PosQuickProductModal = ({
     }
   }, []);
 
+  const lookupMaster = useCallback(
+    async (codeToLookup: string) => {
+      const clean = codeToLookup.trim().replace(/\s+/g, "");
+      if (!clean || clean.length < 6) {
+        setMasterMatch(null);
+        return;
+      }
+      try {
+        const found = await masterProductsService.getByBarcode(clean);
+        if (found) {
+          setMasterMatch(found);
+          setName(found.name);
+          setCategory(found.category);
+          setSaveMode("catalog");
+          setErrorMessage(null);
+          // Autofoco inmediato en precio de venta ya que el resto viene precompletado
+          window.setTimeout(() => {
+            focusField(unitPriceInputRef.current);
+          }, 80);
+        } else {
+          setMasterMatch(null);
+        }
+      } catch {
+        setMasterMatch(null);
+      }
+    },
+    [focusField]
+  );
+
   useEffect(() => {
     if (!open) return;
     const cleanInitialBarcode = initialBarcode?.trim() ?? "";
@@ -119,7 +157,12 @@ export const PosQuickProductModal = ({
     setBarcode(cleanInitialBarcode);
     setIsSubmitting(false);
     setErrorMessage(null);
-  }, [categories, defaultSaveMode, initialBarcode, initialName, open]);
+    setMasterMatch(null);
+
+    if (cleanInitialBarcode && cleanInitialBarcode.length >= 6) {
+      void lookupMaster(cleanInitialBarcode);
+    }
+  }, [categories, defaultSaveMode, initialBarcode, initialName, open, lookupMaster]);
 
   // Autofoco inicial en el primer campo (Nombre) al abrir modal
   useEffect(() => {
@@ -213,7 +256,16 @@ export const PosQuickProductModal = ({
           ? await onCreateAndAdd(values)
           : onAddManual(values);
 
-      if (ok) onClose();
+      if (ok) {
+        if (saveMode === "catalog" && values.barcode) {
+          void masterProductsService.contribute({
+            barcode: values.barcode,
+            name: values.name,
+            category: values.category,
+          });
+        }
+        onClose();
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -306,6 +358,27 @@ export const PosQuickProductModal = ({
         {errorMessage && (
           <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300">
             {errorMessage}
+          </div>
+        )}
+
+        {masterMatch && (
+          <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-2xl bg-blue-50/90 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/80 p-3 text-xs text-blue-950 dark:text-blue-100 min-w-0 overflow-hidden">
+            <div className="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-xs mt-0.5 sm:mt-0">
+                <Sparkles size={14} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-blue-800 dark:text-blue-300">
+                  ¡Producto encontrado en el Catálogo Maestro Global!
+                </p>
+                <p className="truncate text-slate-600 dark:text-slate-300 text-[11.5px]">
+                  <strong>{masterMatch.name}</strong> · Categoría: <strong>{masterMatch.category}</strong>
+                </p>
+              </div>
+            </div>
+            <span className="self-start sm:self-auto shrink-0 rounded-full bg-blue-100 dark:bg-blue-900/70 px-2.5 py-1 text-[10.5px] font-bold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 whitespace-nowrap">
+              Datos precargados
+            </span>
           </div>
         )}
 
@@ -426,12 +499,12 @@ export const PosQuickProductModal = ({
                   data-lpignore="true"
                 />
                 <datalist id="pos-quick-product-categories">
-                  {categories.map((item) => (
+                  {mergedCategories.map((item) => (
                     <option key={item} value={item} />
                   ))}
                 </datalist>
                 {category.trim() ? (
-                  categories.some((c) => c.toLowerCase() === category.trim().toLowerCase()) ? (
+                  mergedCategories.some((c) => c.toLowerCase() === category.trim().toLowerCase()) ? (
                     <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
                       <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
                       Categoría existente
@@ -476,7 +549,15 @@ export const PosQuickProductModal = ({
                   data-lpignore="true"
                   data-form-type="other"
                   value={barcode}
-                  onChange={(event) => setBarcode(event.target.value)}
+                  onChange={(event) => {
+                    const val = event.target.value;
+                    setBarcode(val);
+                    if (val.trim().length >= 6) {
+                      void lookupMaster(val);
+                    } else {
+                      setMasterMatch(null);
+                    }
+                  }}
                   placeholder="Opcional o escaneado"
                   className="ui-input"
                 />
@@ -497,7 +578,15 @@ export const PosQuickProductModal = ({
                     data-lpignore="true"
                     data-form-type="other"
                     value={barcode}
-                    onChange={(event) => setBarcode(event.target.value)}
+                    onChange={(event) => {
+                      const val = event.target.value;
+                      setBarcode(val);
+                      if (val.trim().length >= 6) {
+                        void lookupMaster(val);
+                      } else {
+                        setMasterMatch(null);
+                      }
+                    }}
                     placeholder="Opcional o escaneado"
                     className="ui-input"
                   />

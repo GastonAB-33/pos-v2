@@ -147,7 +147,7 @@ export const ReturnablePackagesModal: FC<Props> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-      <div className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+      <div className="relative w-full max-w-lg rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
         {/* HEADER */}
         <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
@@ -189,7 +189,7 @@ export const ReturnablePackagesModal: FC<Props> = ({
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="Ej: ENVASE DE COCA, Bidón 20L..."
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:border-amber-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:border-amber-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                   required
                 />
               </div>
@@ -208,14 +208,14 @@ export const ReturnablePackagesModal: FC<Props> = ({
                     setNewPrice(v === "" ? "" : Number(v));
                   }}
                   placeholder="0.00"
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:border-amber-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:border-amber-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={isSaving || !newName.trim()}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-amber-700 transition disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 px-3 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-amber-700 transition disabled:opacity-50"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Agregar</span>
@@ -301,7 +301,7 @@ export const ReturnablePackagesModal: FC<Props> = ({
                         type="button"
                         onClick={() => void handleRemovePackage(pkg.name)}
                         title={`Eliminar ${pkg.name}`}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition"
+                        className="rounded-full p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>

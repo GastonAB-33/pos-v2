@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Ban, Check, Edit2, Eraser, MoveRight, RotateCcw, Square, Type } from "lucide-react";
 import { compressScreenshotCanvas } from "@/features/support/utils/screenshot-compression";
 import { cn } from "@/utils/cn";
+import { generateUuid } from "@/utils/uuid";
 
 export type AnnotationTool = "pencil" | "arrow" | "rectangle" | "censor" | "text";
 
@@ -197,7 +198,7 @@ export const SupportAnnotationCanvas = ({
       const text = window.prompt("Escribí el texto que querés agregar en este punto:");
       if (text && text.trim()) {
         const newShape: Shape = {
-          id: crypto.randomUUID(),
+          id: generateUuid(),
           tool: "text",
           color: activeColor,
           strokeWidth: activeStrokeWidth,
@@ -214,7 +215,7 @@ export const SupportAnnotationCanvas = ({
 
     if (activeTool === "pencil") {
       setCurrentShape({
-        id: crypto.randomUUID(),
+        id: generateUuid(),
         tool: "pencil",
         color: activeColor,
         strokeWidth: activeStrokeWidth,
@@ -222,7 +223,7 @@ export const SupportAnnotationCanvas = ({
       });
     } else {
       setCurrentShape({
-        id: crypto.randomUUID(),
+        id: generateUuid(),
         tool: activeTool,
         color: activeColor,
         strokeWidth: activeStrokeWidth,

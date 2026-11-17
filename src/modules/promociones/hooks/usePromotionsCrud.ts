@@ -71,7 +71,7 @@ export const usePromotionsCrud = (tenantId: string | null, userId: string | null
   const [promotions, setPromotions] = useState<PromotionWithDetails[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<CrudFeedback | null>(null);
 
@@ -270,3 +270,4 @@ export const usePromotionsCrud = (tenantId: string | null, userId: string | null
     togglePromotionActive,
   };
 };
+

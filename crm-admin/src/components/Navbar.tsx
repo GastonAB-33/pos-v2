@@ -1,6 +1,6 @@
 import React from "react";
 import { JirehLogo } from "./brand/JirehLogo";
-import { LayoutDashboard, Users, Store, CreditCard, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Users, Store, CreditCard, ShieldCheck, Lock } from "lucide-react";
 
 export type NavTab = "dashboard" | "crm" | "tenants" | "billing";
 
@@ -8,9 +8,17 @@ interface NavbarProps {
   currentTab: NavTab;
   onSelectTab: (tab: NavTab) => void;
   expiringCount: number;
+  newLeadsCount?: number;
+  onLock?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab, expiringCount }) => {
+export const Navbar: React.FC<NavbarProps> = ({
+  currentTab,
+  onSelectTab,
+  expiringCount,
+  newLeadsCount = 0,
+  onLock,
+}) => {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-900/90 backdrop-blur-md px-4 sm:px-6 py-3">
       <div className="mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-4">
@@ -46,6 +54,11 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab, expirin
           >
             <Users className="h-4 w-4" />
             <span>Pipeline CRM</span>
+            {newLeadsCount > 0 && (
+              <span className="flex items-center justify-center px-1.5 py-0.5 rounded-full bg-emerald-500 text-[10px] text-white font-extrabold animate-pulse">
+                {newLeadsCount}
+              </span>
+            )}
           </button>
 
           <button
@@ -84,6 +97,16 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab, expirin
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
             <span className="font-semibold">Modo Maestro Activo</span>
           </div>
+          {onLock && (
+            <button
+              onClick={onLock}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 text-xs font-semibold transition"
+              title="Bloquear acceso al CRM"
+            >
+              <Lock className="h-3 w-3" />
+              <span>Bloquear</span>
+            </button>
+          )}
         </div>
 
       </div>

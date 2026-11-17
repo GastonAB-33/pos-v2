@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, Navigate, useLocation, useParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { routePaths } from "@/config/routes";
 import { isDevAuthBypassEnabled } from "@/features/auth/config/dev-auth";
 import { useLandingPath } from "@/features/auth/hooks/useLandingPath";
@@ -17,6 +17,8 @@ export const LoginPage = () => {
   const sessionTenantId = useAuthStore((state) => state.tenantId);
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const emailParam = searchParams.get("email") || "";
   const landingPath = useLandingPath();
   const normalizedTenantSlug = normalizeTenantSlug(tenantSlug);
   const [publicTenantName, setPublicTenantName] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export const LoginPage = () => {
     canSubmit,
     hasTenants,
     hasUsers,
-  } = useMockLogin(normalizedTenantSlug);
+  } = useMockLogin(normalizedTenantSlug, emailParam);
 
   const hasValidSession = Boolean(isAuthenticated && user && user.isActive && sessionTenantId);
 
@@ -106,13 +108,22 @@ export const LoginPage = () => {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-100 p-4">
-      <section className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-panel">
-        <div className="mb-5 flex items-center justify-between border-b border-slate-100 pb-4">
-          <Link to="/" title="Ir a la página principal">
-            <JirehLogo size="md" />
+    <main className="flex min-h-screen items-center justify-center bg-slate-100 dark:bg-slate-950 p-3 sm:p-4">
+      <section className="w-full max-w-lg rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-4 sm:p-6 shadow-panel dark:border-slate-800 dark:bg-slate-900">
+        <div className="mb-5 flex items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
+          <Link to="/" title="Ir a la página principal" className="shrink-0 flex items-center">
+            <JirehLogo size="sm" className="sm:hidden" />
+            <JirehLogo size="md" className="hidden sm:flex" />
           </Link>
-          <a href={import.meta.env.VITE_LANDING_URL || "https://jirehpos.com"} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition"><Sparkles className="h-3.5 w-3.5 text-amber-500" /><span>Prueba 7 Días</span></a>
+          <a
+            href={import.meta.env.VITE_LANDING_URL || "https://jirehpos.com"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-200/90 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 shadow-2xs hover:bg-emerald-100 transition-all active:scale-95 dark:border-emerald-700/60 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900/60 whitespace-nowrap"
+          >
+            <Sparkles className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            <span>Prueba 7 Días</span>
+          </a>
         </div>
 
         <h1 className="text-2xl font-semibold text-slate-900">

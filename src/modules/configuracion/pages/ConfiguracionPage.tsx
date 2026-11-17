@@ -1,27 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { LoadingState } from "@/components/ui/UiStates";
 import { useToast } from "@/components/ui/useToast";
-import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
-import { IconButton } from "@/components/ui/IconButton";
 import {
   Activity,
   AlertTriangle,
-  Ban,
   Building2,
-  Calculator,
   CheckCircle2,
+  ChevronDown,
+  Clock,
   Coins,
   CreditCard,
   Download,
-  FileCheck2,
   FileText,
   Key,
   Landmark,
-  Lock,
   Package,
   Palette,
   Plus,
-  QrCode,
   RefreshCw,
   Save,
   Scale,
@@ -31,16 +27,14 @@ import {
   ShoppingCart,
   Sparkles,
   Store,
-  Tag,
-  Type,
   Trash2,
   Users,
   Wallet,
 } from "lucide-react";
 import { ArcaCertificateWizardModal } from "@/modules/configuracion/components/ArcaCertificateWizardModal";
 import { ArcaAccountantGuideModal } from "@/modules/configuracion/components/ArcaAccountantGuideModal";
+import { PaymentMethodConfigCard } from "@/modules/configuracion/components/PaymentMethodConfigCard";
 import { EmployeeExcludedCategoriesSelector } from "@/modules/configuracion/components/EmployeeExcludedCategoriesSelector";
-import { downloadFile } from "@/modules/configuracion/utils/arca-certificate-helper";
 import { arcaService } from "@/services/arca.service";
 import { productsService } from "@/services/products.service";
 import { parseReturnableConfig, COMMON_RETURNABLE_PACKAGES } from "@/utils/returnable-packages";
@@ -53,14 +47,11 @@ import { useAccountingCatalogs } from "@/modules/configuracion/hooks/useAccounti
 import { useConfiguracionModule } from "@/modules/configuracion/hooks/useConfiguracionModule";
 import { useUiStore, type UiFontSize } from "@/store/ui.store";
 import { cn } from "@/utils/cn";
-import { calculatePosRounding } from "@/utils/pos-rounding";
 import type { AppModule } from "@/types/modules";
 import type {
   AppearanceSettings,
   BarcodeScaleMode,
   FacturacionSettings,
-  MercadoPagoMode,
-  BankAccount,
   PosRoundingMode,
   PosRoundingRule,
   PosRoundingTarget,
@@ -79,144 +70,170 @@ const toNumber = (value: string, fallback: number): number => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const bankAccountTypeOptions: Array<{
-  value: BankAccount["account_type"];
+const systemCurrencyOptions: Array<{
+  code: string;
   label: string;
+  description: string;
 }> = [
-  { value: "caja_ahorro", label: "Caja de ahorro" },
-  { value: "cuenta_corriente", label: "Cuenta corriente" },
-  { value: "billetera_virtual", label: "Billetera virtual" },
-  { value: "otro", label: "Otro" },
+  { code: "ARS", label: "ARS ($) — Peso Argentino", description: "Moneda de curso legal en Argentina (Predeterminada)" },
+  { code: "USD", label: "USD (US$) — Dólar Estadounidense", description: "Divisa de referencia internacional" },
+  { code: "EUR", label: "EUR (€) — Euro", description: "Moneda de la Unión Europea" },
+  { code: "BRL", label: "BRL (R$) — Real Brasileño", description: "Moneda oficial de Brasil" },
+  { code: "CLP", label: "CLP ($) — Peso Chileno", description: "Moneda oficial de Chile" },
+  { code: "UYU", label: "UYU ($) — Peso Uruguayo", description: "Moneda oficial de Uruguay" },
+  { code: "PYG", label: "PYG (₲) — Guaraní Paraguayo", description: "Moneda oficial de Paraguay" },
+  { code: "BOB", label: "BOB (Bs) — Boliviano", description: "Moneda oficial de Bolivia" },
+  { code: "COP", label: "COP ($) — Peso Colombiano", description: "Moneda oficial de Colombia" },
+  { code: "PEN", label: "PEN (S/) — Sol Peruano", description: "Moneda oficial de Perú" },
+  { code: "MXN", label: "MXN ($) — Peso Mexicano", description: "Moneda oficial de México" },
 ];
 
-type ConfiguracionModuleScope = "all" | "agenda" | "catalogo" | "analisis" | "sistema" | "contable";
+const systemTimezoneOptions: Array<{
+  value: string;
+  label: string;
+  offset: string;
+}> = [
+  { value: "America/Argentina/Buenos_Aires", label: "Argentina — Buenos Aires, CABA, Rosario", offset: "UTC-3 (Predeterminado)" },
+  { value: "America/Argentina/Cordoba", label: "Argentina — Córdoba, Santa Fe", offset: "UTC-3" },
+  { value: "America/Argentina/Mendoza", label: "Argentina — Mendoza, Cuyo", offset: "UTC-3" },
+  { value: "America/Argentina/Salta", label: "Argentina — Salta, Jujuy, NOA", offset: "UTC-3" },
+  { value: "America/Argentina/Tucuman", label: "Argentina — Tucumán", offset: "UTC-3" },
+  { value: "America/Argentina/Ushuaia", label: "Argentina — Ushuaia, Tierra del Fuego, Patagonia", offset: "UTC-3" },
+  { value: "America/Montevideo", label: "Uruguay — Montevideo", offset: "UTC-3" },
+  { value: "America/Santiago", label: "Chile — Santiago", offset: "UTC-3 / UTC-4" },
+  { value: "America/Asuncion", label: "Paraguay — Asunción", offset: "UTC-3 / UTC-4" },
+  { value: "America/Sao_Paulo", label: "Brasil — São Paulo, Río de Janeiro", offset: "UTC-3" },
+  { value: "America/La_Paz", label: "Bolivia — La Paz, Santa Cruz", offset: "UTC-4" },
+  { value: "America/Lima", label: "Perú — Lima", offset: "UTC-5" },
+  { value: "America/Bogota", label: "Colombia — Bogotá, Medellín", offset: "UTC-5" },
+  { value: "America/Mexico_City", label: "México — Ciudad de México", offset: "UTC-6" },
+  { value: "America/Madrid", label: "España — Madrid, Barcelona", offset: "UTC+1 / UTC+2" },
+  { value: "America/New_York", label: "Estados Unidos — Nueva York, Miami (Hora del Este)", offset: "UTC-5" },
+];
+
+export type ConfiguracionModuleScope =
+  | "all"
+  | "agenda"
+  | "catalogo"
+  | "analisis"
+  | "sistema"
+  | "contable";
 
 interface ConfiguracionScopePreset {
   title: string;
   description: string;
   permissionModule: AppModule;
   allowSaveAll: boolean;
-  visibleSections: {
-    negocio: boolean;
-    pos: boolean;
-    stock: boolean;
-    caja: boolean;
-    facturacion: boolean;
-    contableCatalogos: boolean;
-    codigos_balanza: boolean;
-    apariencia: boolean;
-    sistema: boolean;
-    empleados: boolean;
-  };
+  visibleSections: Record<TenantSettingsSectionKey | "contableCatalogos" | "empleados", boolean>;
 }
 
 const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionScopePreset> = {
   all: {
-    title: "Configuración del Sistema",
-    description: "Parámetros centrales del negocio, apariencia, accesibilidad e integraciones",
+    title: "Configuración General",
+    description: "Gestión unificada de parámetros operativos, comerciales y fiscales del comercio",
     permissionModule: "configuracion",
     allowSaveAll: true,
     visibleSections: {
       negocio: true,
       pos: true,
-      stock: true,
+      empleados: true,
+      apariencia: true,
       caja: true,
+      stock: true,
       facturacion: true,
       contableCatalogos: true,
       codigos_balanza: true,
-      apariencia: true,
       sistema: true,
-      empleados: true,
     },
   },
   agenda: {
-    title: "Configuración de Agenda y Personal",
-    description: "Configuraciones del negocio, beneficios y cuenta corriente de empleados",
-    permissionModule: "configuracion_agenda",
+    title: "Configuración de Agenda & Empleados",
+    description: "Gestión unificada de parámetros de empleados y cuentas corrientes",
+    permissionModule: "configuracion",
     allowSaveAll: false,
     visibleSections: {
       negocio: true,
-      pos: false,
-      stock: false,
-      caja: false,
-      facturacion: false,
-      contableCatalogos: false,
-      codigos_balanza: false,
-      apariencia: false,
-      sistema: false,
+      pos: true,
       empleados: true,
+      apariencia: true,
+      caja: true,
+      stock: true,
+      facturacion: true,
+      contableCatalogos: true,
+      codigos_balanza: true,
+      sistema: true,
     },
   },
   catalogo: {
-    title: "Configuración de Catálogo",
-    description: "Configuraciones operativas para catálogo, stock y códigos",
-    permissionModule: "configuracion_catalogo",
+    title: "Configuración de Catálogo & Stock",
+    description: "Configuraciones operativas para catálogo, inventario y códigos de balanza",
+    permissionModule: "configuracion",
     allowSaveAll: false,
     visibleSections: {
-      negocio: false,
+      negocio: true,
       pos: true,
+      empleados: true,
+      apariencia: true,
+      caja: true,
       stock: true,
-      caja: false,
-      facturacion: false,
-      contableCatalogos: false,
+      facturacion: true,
+      contableCatalogos: true,
       codigos_balanza: true,
-      apariencia: false,
-      sistema: false,
-      empleados: false,
+      sistema: true,
     },
   },
   analisis: {
-    title: "Configuración de Análisis",
-    description: "Configuraciones del módulo de análisis",
-    permissionModule: "configuracion_analisis",
+    title: "Configuración del Sistema",
+    description: "Centro de control general del comercio",
+    permissionModule: "configuracion",
     allowSaveAll: false,
     visibleSections: {
-      negocio: false,
-      pos: false,
-      stock: false,
-      caja: false,
-      facturacion: false,
-      contableCatalogos: false,
-      codigos_balanza: false,
-      apariencia: false,
-      sistema: false,
-      empleados: false,
+      negocio: true,
+      pos: true,
+      empleados: true,
+      apariencia: true,
+      caja: true,
+      stock: true,
+      facturacion: true,
+      contableCatalogos: true,
+      codigos_balanza: true,
+      sistema: true,
     },
   },
   sistema: {
-    title: "Configuración de Sistema",
-    description: "Preferencias de sistema, integraciones y apariencia",
-    permissionModule: "configuracion_sistema",
-    allowSaveAll: false,
+    title: "Configuración del Sistema",
+    description: "Parámetros comerciales, facturación ARCA, caja, stock, apariencia y terminales",
+    permissionModule: "configuracion",
+    allowSaveAll: true,
     visibleSections: {
-      negocio: false,
-      pos: false,
-      stock: false,
-      caja: false,
-      facturacion: false,
-      contableCatalogos: false,
-      codigos_balanza: false,
+      negocio: true,
+      pos: true,
+      empleados: true,
       apariencia: true,
+      caja: true,
+      stock: true,
+      facturacion: true,
+      contableCatalogos: true,
+      codigos_balanza: true,
       sistema: true,
-      empleados: false,
     },
   },
   contable: {
-    title: "Configuración Contable",
-    description: "Configuraciones de caja, facturación y catálogos contables",
-    permissionModule: "configuracion_contable",
+    title: "Configuración Fiscal y Facturación",
+    description: "Configuraciones de ARCA AFIP, facturación electrónica y planes de cuotas",
+    permissionModule: "configuracion",
     allowSaveAll: false,
     visibleSections: {
-      negocio: false,
-      pos: false,
-      stock: false,
+      negocio: true,
+      pos: true,
+      empleados: true,
+      apariencia: true,
       caja: true,
+      stock: true,
       facturacion: true,
       contableCatalogos: true,
-      codigos_balanza: false,
-      apariencia: false,
-      sistema: false,
-      empleados: false,
+      codigos_balanza: true,
+      sistema: true,
     },
   },
 };
@@ -243,15 +260,15 @@ interface ConfigTabDefinition {
 
 const configTabs: ConfigTabDefinition[] = [
   { id: "negocio", label: "Negocio", icon: Store, description: "Datos comerciales y de contacto" },
-  { id: "pos", label: "Punto de Venta", icon: ShoppingCart, description: "Comportamiento de caja y scanner" },
-  { id: "empleados", label: "Empleados y Cta. Cte.", icon: Users, badge: "Personal", description: "Descuento en compras y categorías excluidas" },
-  { id: "apariencia", label: "Apariencia y Letra", icon: Palette, badge: "Accesibilidad", description: "Tema y tamaño de letra/interfaz" },
-  { id: "caja", label: "Caja y Tesorería", icon: Wallet, description: "Sesiones y movimientos iniciales" },
-  { id: "stock", label: "Stock e Inventario", icon: Package, description: "Alertas y umbrales de stock" },
-  { id: "facturacion", label: "Facturación & ARCA", icon: FileText, description: "Emisión fiscal y comprobantes" },
-  { id: "contableCatalogos", label: "Bancos y Cobros", icon: Building2, description: "Cuentas bancarias y planes de cuotas" },
+  { id: "pos", label: "Punto de Venta", icon: ShoppingCart, description: "Comportamiento de cobro y redondeo" },
+  { id: "empleados", label: "Empleados y Cta. Cte.", icon: Users, description: "Descuento en compras y categorías excluidas" },
+  { id: "apariencia", label: "Apariencia y Letra", icon: Palette, description: "Tema y tamaño de letra/interfaz" },
+  { id: "caja", label: "Caja y Tesorería", icon: Wallet, description: "Reglas de control y arqueo a ciegas" },
+  { id: "stock", label: "Stock e Inventario", icon: Package, description: "Alertas, compras y envases retornables" },
+  { id: "facturacion", label: "Facturación & ARCA", icon: FileText, description: "Emisión electrónica oficial y certificados" },
+  { id: "contableCatalogos", label: "Medios de Pago", icon: CreditCard, description: "Cobros, recargos/descuentos y planes de cuotas" },
   { id: "codigos_balanza", label: "Balanza & Códigos", icon: Scale, description: "Formatos PLU y códigos de peso/monto" },
-  { id: "sistema", label: "Integraciones & Sistema", icon: Settings, description: "MercadoPago y parámetros avanzados" },
+  { id: "sistema", label: "Integraciones & Sistema", icon: Settings, description: "Conectividad y plataforma" },
 ];
 
 const fontSizeOptions: Array<{
@@ -316,12 +333,26 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
   const fontSize = useUiStore((state) => state.fontSize);
   const setFontSize = useUiStore((state) => state.setFontSize);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab") as ConfigTabKey | null;
+
   const [activeTab, setActiveTab] = useState<ConfigTabKey>(() => {
-    if (scopePreset.visibleSections.apariencia && scope === "sistema") return "apariencia";
+    if (tabParam && configTabs.some((t) => t.id === tabParam)) {
+      return tabParam;
+    }
     if (scopePreset.visibleSections.negocio) return "negocio";
     const firstVisible = configTabs.find((tab) => scopePreset.visibleSections[tab.id]);
     return firstVisible ? firstVisible.id : "negocio";
   });
+
+  const handleSelectTab = (tabId: ConfigTabKey) => {
+    setActiveTab(tabId);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("tab", tabId);
+      return next;
+    });
+  };
 
   const {
     draft,
@@ -339,36 +370,17 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
   } = useConfiguracionModule(tenantId, user?.id ?? null);
 
   const {
-    bankAccounts,
-    originBanks,
     installmentPlans,
+    paymentMethods: accountingPaymentMethods,
     isLoading: isAccountingLoading,
     feedback: accountingFeedback,
     clearFeedback: clearAccountingFeedback,
-    upsertBankAccount,
-    toggleBankAccount,
-    upsertOriginBank,
-    toggleOriginBank,
     upsertInstallmentPlan,
     toggleInstallmentPlan,
-  } = useAccountingCatalogs(tenantId, user?.id ?? null, canReadConfiguracion);
-
-  const [bankAccountForm, setBankAccountForm] = useState({
-    bank_name: "",
-    account_type: "caja_ahorro" as BankAccount["account_type"],
-    holder_name: "",
-    cbu: "",
-    alias: "",
-    currency_code: "ARS",
-    notes: "",
-    is_active: true,
-  });
-
-  const [originBankForm, setOriginBankForm] = useState({
-    code: "",
-    name: "",
-    is_active: true,
-  });
+    deleteInstallmentPlan,
+    togglePaymentMethod,
+    updatePaymentMethod,
+  } = useAccountingCatalogs(tenantId, user?.id ?? null, true);
 
   const [installmentPlanForm, setInstallmentPlanForm] = useState({
     code: "",
@@ -386,7 +398,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     return parseScaleBarcode(scaleTesterBarcode, draft.codigos_balanza);
   }, [scaleTesterBarcode, draft?.codigos_balanza]);
 
-    const [newPackageName, setNewPackageName] = useState("");
+  const [newPackageName, setNewPackageName] = useState("");
   const [newPackagePrice, setNewPackagePrice] = useState<number | "">("");
 
   const handleAddReturnablePackage = () => {
@@ -399,39 +411,45 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
       return;
     }
 
-    const price = typeof newPackagePrice === "number" ? Math.max(0, newPackagePrice) : 0;
-    const updated = [...currentList, { name: trimmed, suggestedPrice: price }];
+    const priceNum = typeof newPackagePrice === "number" && !isNaN(newPackagePrice) && newPackagePrice >= 0
+      ? newPackagePrice
+      : undefined;
+
+    const updated = [...currentList, { name: trimmed, suggestedPrice: priceNum }];
     updateSection("stock", { returnable_packages: updated });
     setNewPackageName("");
     setNewPackagePrice("");
-    toast.success(`Envase "${trimmed}" agregado a la lista`);
+    toast.success(`Envase "${trimmed}" agregado a la configuración.`);
   };
 
-  const handleRemoveReturnablePackage = (packageName: string) => {
+  const handleRemoveReturnablePackage = (nameToRemove: string) => {
     if (!draft) return;
     const currentList = draft.stock.returnable_packages || [];
-    const updated = currentList.filter((p) => p.name !== packageName);
+    const updated = currentList.filter((p) => p.name.toLowerCase() !== nameToRemove.toLowerCase());
     updateSection("stock", { returnable_packages: updated });
-    toast.success(`Envase "${packageName}" eliminado`);
+    toast.info(`Envase "${nameToRemove}" eliminado de la lista.`);
   };
+
+  const [isDetectingPackages, setIsDetectingPackages] = useState(false);
 
   const handleDetectPackagesFromProducts = async () => {
     if (!tenantId || !draft) return;
+    setIsDetectingPackages(true);
     try {
       const products = await productsService.getAllByTenant(tenantId);
+      const existingNames = new Set((draft.stock.returnable_packages || []).map((p) => p.name.toLowerCase()));
       const currentList = [...(draft.stock.returnable_packages || [])];
-      const existingNames = new Set(currentList.map((p) => p.name.toLowerCase()));
       let addedCount = 0;
 
-      for (const p of products) {
-        const config = parseReturnableConfig(p.description);
-        if (config && config.enabled && config.packageName.trim()) {
-          const lower = config.packageName.trim().toLowerCase();
+      for (const prod of products) {
+        const cfg = parseReturnableConfig(prod.description);
+        if (cfg && cfg.enabled && cfg.packageName.trim()) {
+          const lower = cfg.packageName.trim().toLowerCase();
           if (!existingNames.has(lower)) {
             existingNames.add(lower);
             currentList.push({
-              name: config.packageName.trim(),
-              suggestedPrice: config.packagePrice,
+              name: cfg.packageName.trim(),
+              suggestedPrice: cfg.packagePrice,
             });
             addedCount++;
           }
@@ -440,19 +458,21 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
 
       if (addedCount > 0) {
         updateSection("stock", { returnable_packages: currentList });
-        toast.success(`Se detectaron y agregaron ${addedCount} envases desde tus productos`);
+        toast.success(`Se detectaron e importaron ${addedCount} tipos de envases desde el catálogo de productos`);
       } else {
-        toast.info("No se encontraron envases nuevos en los productos actuales");
+        toast.info("No se encontraron nuevos tipos de envases configurados en tus productos");
       }
     } catch {
-      toast.error("Error al detectar envases desde productos");
+      toast.error("Error al inspeccionar productos para detectar envases");
+    } finally {
+      setIsDetectingPackages(false);
     }
   };
 
   const handleLoadCommonPackages = () => {
     if (!draft) return;
+    const existingNames = new Set((draft.stock.returnable_packages || []).map((p) => p.name.toLowerCase()));
     const currentList = [...(draft.stock.returnable_packages || [])];
-    const existingNames = new Set(currentList.map((p) => p.name.toLowerCase()));
     let addedCount = 0;
 
     for (const pkg of COMMON_RETURNABLE_PACKAGES) {
@@ -480,52 +500,35 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
   } | null>(null);
 
   const handleTestArcaConnection = async () => {
-    if (!draft?.facturacion?.arca) return;
-    const { cuit_emisor, punto_venta } = draft.facturacion.arca;
-    const cleanCuit = (cuit_emisor || draft.facturacion.issuer_cuit || "").replace(/\D/g, "");
-
-    if (!cleanCuit || cleanCuit.length < 11) {
-      setArcaTestFeedback({
-        status: "error",
-        message: "Ingresá un CUIT emisor válido de 11 dígitos para probar la conexión.",
-      });
-      return;
-    }
-
-    if (!punto_venta || punto_venta < 1) {
-      setArcaTestFeedback({
-        status: "error",
-        message: "Ingresá un Punto de Venta fiscal válido (mayor o igual a 1).",
-      });
-      return;
-    }
-
+    if (!draft) return;
     setIsTestingArcaConnection(true);
     setArcaTestFeedback(null);
-
-    const result = await arcaService.testConnection(draft.facturacion.arca, cleanCuit, punto_venta);
-    setIsTestingArcaConnection(false);
-    setArcaTestFeedback({
-      status: result.success ? "success" : "error",
-      message: result.message,
-    });
-
-    if (result.success) {
-      const updatedFacturacion: FacturacionSettings = {
-        ...draft.facturacion,
-        issuer_cuit: cleanCuit,
-        arca: {
-          ...draft.facturacion.arca,
-          enabled: true,
-          cuit_emisor: cleanCuit,
-          punto_venta,
-        },
-      };
-      await handleSaveSection("facturacion", updatedFacturacion);
+    try {
+      const cuit = draft.facturacion.issuer_cuit || draft.facturacion.arca.cuit_emisor || draft.negocio.cuit || "";
+      const puntoVenta = draft.facturacion.arca.punto_venta || 1;
+      const result = await arcaService.testConnection(draft.facturacion.arca, cuit, puntoVenta);
+      if (result.success) {
+        setArcaTestFeedback({
+          status: "success",
+          message: result.message || "Conexión exitosa con los servidores de ARCA (AFIP).",
+        });
+      } else {
+        setArcaTestFeedback({
+          status: "error",
+          message: result.message || "No se pudo autenticar con el servidor de AFIP/ARCA",
+        });
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Error inesperado de comunicación con ARCA";
+      setArcaTestFeedback({
+        status: "error",
+        message,
+      });
+    } finally {
+      setIsTestingArcaConnection(false);
     }
   };
 
-  // Permiso para modificar beneficios de empleados (solo administradores del sistema)
   const isAdminUser = useMemo(() => {
     if (!user) return false;
     const role = (user.role || "").toLowerCase();
@@ -543,7 +546,6 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
 
   const canModifyEmployeeBenefits = canWriteConfiguracion && isAdminUser;
 
-  // Categorías de productos del comercio para exclusión rápida
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
 
   useEffect(() => {
@@ -573,311 +575,123 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     [scopePreset]
   );
 
-  const updateSection = <TSection extends TenantSettingsSectionKey>(
-    section: TSection,
-    patch: Partial<TenantSettings[TSection]>
+  const applyAppearance = useCallback(
+    (apariencia: AppearanceSettings) => {
+      setTheme(apariencia.default_theme);
+      if (apariencia.sidebar_theme) {
+        setSidebarTheme(apariencia.sidebar_theme);
+      }
+      setAccentColor(apariencia.accent_color);
+      setDensity(apariencia.density);
+      if (apariencia.font_size) {
+        setFontSize(apariencia.font_size);
+      }
+    },
+    [setTheme, setSidebarTheme, setAccentColor, setDensity, setFontSize]
+  );
+
+  useEffect(() => {
+    if (draft) {
+      applyAppearance(draft.apariencia);
+    }
+  }, [draft, applyAppearance]);
+
+  const updateSection = <K extends TenantSettingsSectionKey>(
+    section: K,
+    patch: Partial<TenantSettings[K]>
   ) => {
-    setDraft((current) => {
-      if (!current) return current;
-      return {
-        ...current,
-        [section]: {
-          ...current[section],
-          ...patch,
-        },
-      };
+    if (!draft) return;
+    setDraft({
+      ...draft,
+      [section]: {
+        ...draft[section],
+        ...patch,
+      },
     });
   };
 
-  const updateDocumentSequence = (
-    key: keyof FacturacionSettings["document_sequences"],
-    value: number
-  ) => {
-    setDraft((current) => {
-      if (!current) return current;
-
-      return {
-        ...current,
-        facturacion: {
-          ...current.facturacion,
-          document_sequences: {
-            ...current.facturacion.document_sequences,
-            [key]: value,
-          },
-        },
-      };
+  const updateFacturacionSettings = (patch: Partial<FacturacionSettings>) => {
+    if (!draft) return;
+    setDraft({
+      ...draft,
+      facturacion: {
+        ...draft.facturacion,
+        ...patch,
+      },
     });
   };
-
-  const updateArca = useCallback((patch: Partial<FacturacionSettings["arca"]>) => {
-    setDraft((current) => {
-      if (!current) return current;
-      return {
-        ...current,
-        facturacion: {
-          ...current.facturacion,
-          arca: {
-            ...current.facturacion.arca,
-            ...patch,
-          },
-        },
-      };
-    });
-  }, []);
 
   const updateEntityRequirements = (
-    entity: "customer" | "supplier",
+    entityType: "customer" | "supplier",
     field: string,
     value: boolean
   ) => {
-    setDraft((current) => {
-      if (!current) return current;
-
-      const currentReqs = current.facturacion.entity_requirements ?? {
-        customer: { document_number: true, phone: false, email: false, address: false },
-        supplier: { tax_id: false, phone: false, email: false, address: false },
-      };
-
-      return {
-        ...current,
-        facturacion: {
-          ...current.facturacion,
-          entity_requirements: {
-            ...currentReqs,
-            [entity]: {
-              ...currentReqs[entity],
-              [field]: value,
-            },
-          },
-        },
-      };
-    });
-  };
-
-  const togglePaymentMethodInvoiceRule = (
-    key: string,
-    ruleType: "mandatory" | "disabled"
-  ) => {
-    setDraft((current) => {
-      if (!current) return current;
-
-      const currentRules = current.facturacion.payment_method_rules || {
-        mandatory_methods: [],
-        disabled_methods: [],
-      };
-
-      const currentMandatory = new Set(currentRules.mandatory_methods || []);
-      const currentDisabled = new Set(currentRules.disabled_methods || []);
-
-      if (ruleType === "mandatory") {
-        if (currentMandatory.has(key)) {
-          currentMandatory.delete(key);
-        } else {
-          currentMandatory.add(key);
-          currentDisabled.delete(key); // Mutuamente excluyente
-        }
-      } else {
-        if (currentDisabled.has(key)) {
-          currentDisabled.delete(key);
-        } else {
-          currentDisabled.add(key);
-          currentMandatory.delete(key); // Mutuamente excluyente
-        }
-      }
-
-      return {
-        ...current,
-        facturacion: {
-          ...current.facturacion,
-          payment_method_rules: {
-            mandatory_methods: Array.from(currentMandatory),
-            disabled_methods: Array.from(currentDisabled),
-          },
-        },
-      };
-    });
-  };
-
-  const standardPaymentMethodOptions = useMemo(
-    () => [
-      {
-        key: "cash",
-        label: "Efectivo",
-        subtitle: "Cobro inmediato en caja física",
-        icon: Coins,
-      },
-      {
-        key: "card_debit",
-        label: "Tarjeta de Débito",
-        subtitle: "Cobro posnet / terminal de débito",
-        icon: CreditCard,
-      },
-      {
-        key: "card_credit",
-        label: "Tarjeta de Crédito",
-        subtitle: "Cobro financiado / tarjeta de crédito",
-        icon: CreditCard,
-      },
-      {
-        key: "transfer",
-        label: "Transferencias (Generales / Sin banco)",
-        subtitle: "Acreditaciones bancarias genéricas",
-        icon: Landmark,
-      },
-      {
-        key: "mercado_pago",
-        label: "Mercado Pago",
-        subtitle: "Cobro vía QR o link de pago",
-        icon: QrCode,
-      },
-      {
-        key: "cheque",
-        label: "Cheque",
-        subtitle: "Cheques físicos o eCheq",
-        icon: FileText,
-      },
-      {
-        key: "current_account",
-        label: "Cuenta Corriente",
-        subtitle: "Ventas a crédito de clientes o empleados",
-        icon: Wallet,
-      },
-    ],
-    []
-  );
-
-  const activeBankAccounts = useMemo(() => {
-    return (bankAccounts || []).filter((b) => b.is_active);
-  }, [bankAccounts]);
-
-  const updateMercadoPagoSettings = (
-    patch: Partial<TenantSettings["sistema"]["mercado_pago"]>
-  ) => {
-    setDraft((current) => {
-      if (!current) return current;
-
-      return {
-        ...current,
-        sistema: {
-          ...current.sistema,
-          mercado_pago: {
-            ...current.sistema.mercado_pago,
-            ...patch,
-          },
-        },
-      };
-    });
-  };
-
-  const applyAppearance = (appearance: AppearanceSettings) => {
-    setTheme(appearance.default_theme);
-    if (appearance.sidebar_theme) {
-      setSidebarTheme(appearance.sidebar_theme);
-    }
-    setAccentColor(appearance.accent_color);
-    setDensity(appearance.density);
-    if (appearance.font_size) {
-      setFontSize(appearance.font_size);
-    }
-  };
-
-  const handleSaveSection = async (
-    section: TenantSettingsSectionKey,
-    customSectionData?: TenantSettings[TenantSettingsSectionKey]
-  ) => {
     if (!draft) return;
+    const currentReqs = draft.facturacion.entity_requirements ?? {
+      customer: { document_number: true, phone: false, email: false, address: false },
+      supplier: { tax_id: false, phone: false, email: false, address: false },
+    };
 
-    const appearanceBeforeSave = draft.apariencia;
-    await saveSection(section, customSectionData);
+    const updated = {
+      ...currentReqs,
+      [entityType]: {
+        ...currentReqs[entityType],
+        [field]: value,
+      },
+    };
 
-    if (section === "apariencia") {
-      applyAppearance(appearanceBeforeSave);
+    updateFacturacionSettings({ entity_requirements: updated });
+    if (tenantId) broadcastEntityRequirementsChanged(tenantId, updated);
+  };
+
+  const handleCreateInstallmentPlan = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!canWriteConfiguracion) return;
+
+    const ok = await upsertInstallmentPlan({
+      code: installmentPlanForm.code.trim() || `plan_${Date.now()}`,
+      name: installmentPlanForm.name.trim(),
+      installments: Math.max(1, Math.floor(installmentPlanForm.installments)),
+      interest_percent: Math.max(0, installmentPlanForm.interest_percent),
+      card_brand: installmentPlanForm.card_brand.trim() || null,
+      notes: installmentPlanForm.notes.trim() || null,
+      is_active: installmentPlanForm.is_active,
+    });
+
+    if (ok) {
+      setInstallmentPlanForm({
+        code: "",
+        name: "",
+        installments: 1,
+        interest_percent: 0,
+        card_brand: "",
+        notes: "",
+        is_active: true,
+      });
+      toast.success("Plan de cuotas guardado exitosamente");
     }
+  };
 
-    if (section === "facturacion" && draft.facturacion.entity_requirements && tenantId) {
-      broadcastEntityRequirementsChanged(tenantId, draft.facturacion.entity_requirements);
-    }
+  const handleSaveSection = async (section: TenantSettingsSectionKey) => {
+    await saveSection(section);
   };
 
   const handleSaveAll = async () => {
-    if (!draft) return;
-
-    const appearanceBeforeSave = draft.apariencia;
     await saveAll();
-    applyAppearance(appearanceBeforeSave);
-
-    if (draft.facturacion.entity_requirements && tenantId) {
-      broadcastEntityRequirementsChanged(tenantId, draft.facturacion.entity_requirements);
-    }
   };
-
-  const mercadoPagoModeLabel: Record<MercadoPagoMode, string> = {
-    mock: "Mock",
-    sandbox: "Sandbox",
-    real: "Real",
-  };
-
-  if (!tenantId) {
-    return (
-      <PagePlaceholder
-        title={scopePreset.title}
-        description="No hay un comercio activo"
-      />
-    );
-  }
 
   if (!canReadConfiguracion) {
     return (
-      <PagePlaceholder
-        title={scopePreset.title}
-        description="No tenés permisos de lectura para este módulo"
-      />
+      <div className="rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-6 text-sm text-amber-900 dark:text-amber-200">
+        <h2 className="text-base font-bold">Acceso restringido</h2>
+        <p className="mt-1">No tienes permisos para consultar la configuración del sistema.</p>
+      </div>
     );
   }
 
-  if (isLoading) {
-    return (
-      <PagePlaceholder
-        title={scopePreset.title}
-        description={scopePreset.description}
-      >
-        <LoadingState message="Cargando configuración del sistema..." />
-      </PagePlaceholder>
-    );
+  if (isLoading || !draft) {
+    return <LoadingState message="Cargando configuración general del sistema..." />;
   }
-
-  if (!draft) {
-    return (
-      <PagePlaceholder
-        title={scopePreset.title}
-        description={scopePreset.description}
-      >
-        <div className="ui-card space-y-4 text-center py-10">
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-            No se pudo obtener la configuración del comercio actual.
-          </p>
-          <button
-            type="button"
-            className="ui-btn-primary mx-auto gap-2"
-            onClick={() => void reload()}
-          >
-            <RefreshCw size={16} />
-            <span>Reintentar carga</span>
-          </button>
-        </div>
-      </PagePlaceholder>
-    );
-  }
-
-  const mercadoPagoConfig = draft.sistema.mercado_pago;
-  const hasMercadoPagoCredentials = Boolean(
-    mercadoPagoConfig.access_token.trim() && mercadoPagoConfig.public_key.trim()
-  );
-  const mercadoPagoConfigured =
-    mercadoPagoConfig.enabled &&
-    (mercadoPagoConfig.mode === "mock" || hasMercadoPagoCredentials) &&
-    !mercadoPagoConfig.force_unavailable;
-  const hasVisibleSettings = Object.values(scopePreset.visibleSections).some(Boolean);
 
   const customerReqs = draft.facturacion.entity_requirements?.customer ?? {
     document_number: true,
@@ -885,6 +699,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     email: false,
     address: false,
   };
+
   const supplierReqs = draft.facturacion.entity_requirements?.supplier ?? {
     tax_id: false,
     phone: false,
@@ -892,95 +707,104 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
     address: false,
   };
 
-  const selectedFontSizeObj =
-    fontSizeOptions.find((opt) => opt.id === (draft.apariencia.font_size ?? fontSize)) ??
-    fontSizeOptions[1];
-
   return (
-    <PagePlaceholder title={scopePreset.title} description={scopePreset.description}>
-      <div className="space-y-6">
-        {/* Encabezado Principal y Acciones */}
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
-              <Store size={22} />
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                {draft.negocio.trade_name || "Configuración del comercio"}
-              </h1>
-              <p className="text-xs text-slate-500">
-                {draft.negocio.cuit ? `CUIT: ${draft.negocio.cuit} · ` : ""}
-                {draft.negocio.email || "Configuración general"}
-              </p>
-            </div>
-          </div>
+    <div className="space-y-6">
+      {/* HEADER FLOTANTE MODERNO */}
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <nav className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            SISTEMA › CONFIGURACIÓN
+          </nav>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-3xl">
+            {scopePreset.title}
+          </h1>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            {scopePreset.description}
+          </p>
+        </div>
 
-          <div className="flex items-center gap-2">
-            <IconButton
-              icon={RefreshCw}
-              label="Recargar"
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => {
+              clearFeedback();
+              void reload();
+            }}
+            disabled={isLoading || isSavingAll}
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200/90 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-xs transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 cursor-pointer active:scale-95"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+            <span>Actualizar</span>
+          </button>
+
+          {scopePreset.allowSaveAll ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-500/25 transition hover:bg-blue-700 active:scale-95 disabled:opacity-50 cursor-pointer"
               onClick={() => {
-                clearFeedback();
-                void reload();
+                void handleSaveAll();
               }}
-              loading={isLoading}
-              disabled={isSavingAll}
-            />
+              disabled={!canWriteConfiguracion || isSavingAll}
+            >
+              <CheckCircle2 size={16} />
+              <span>{isSavingAll ? "Guardando todo..." : "Guardar todo"}</span>
+            </button>
+          ) : null}
+        </div>
+      </header>
 
-            {scopePreset.allowSaveAll ? (
-              <button
-                type="button"
-                className="ui-btn-primary gap-2"
-                onClick={() => {
-                  void handleSaveAll();
-                }}
-                disabled={!canWriteConfiguracion || isSavingAll}
-              >
-                <CheckCircle2 size={16} />
-                <span>{isSavingAll ? "Guardando todo..." : "Guardar todo"}</span>
-              </button>
-            ) : null}
+      {/* TARJETA RESUMEN DEL COMERCIO */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
+            <Store size={22} />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              {draft.negocio.trade_name || "Configuración del comercio"}
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {draft.negocio.cuit ? `CUIT: ${draft.negocio.cuit} · ` : ""}
+              {draft.negocio.email || "Configuración general del sistema"}
+            </p>
           </div>
         </div>
 
-        {/* Notificaciones y Feedbacks */}
-        {feedback ? (
-          <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>
-            {feedback.message}
+        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+          <span className="h-2 w-2 rounded-full bg-emerald-500" />
+          <span>Comercio Activo · POS Inteligente</span>
+        </div>
+      </div>
+
+      {/* FEEDBACKS Y ALERTAS */}
+      {feedback ? (
+        <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>
+          {feedback.message}
+        </div>
+      ) : null}
+
+      {scopePreset.visibleSections.contableCatalogos && accountingFeedback ? (
+        <div className={accountingFeedback.type === "success" ? "ui-success-state" : "ui-error-state"}>
+          <div className="flex items-center justify-between gap-2">
+            <span>{accountingFeedback.message}</span>
+            <button
+              type="button"
+              className="inline-flex items-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition cursor-pointer"
+              onClick={clearAccountingFeedback}
+            >
+              Cerrar
+            </button>
           </div>
-        ) : null}
+        </div>
+      ) : null}
 
-        {scopePreset.visibleSections.contableCatalogos && accountingFeedback ? (
-          <div
-            className={
-              accountingFeedback.type === "success" ? "ui-success-state" : "ui-error-state"
-            }
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span>{accountingFeedback.message}</span>
-              <button
-                type="button"
-                className="ui-btn-ghost px-2 py-1 text-xs"
-                onClick={clearAccountingFeedback}
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {!hasVisibleSettings ? (
-          <section className="ui-card">
-            <p className="text-sm text-slate-600">
-              Este módulo todavía no tiene configuraciones disponibles.
-            </p>
-          </section>
-        ) : null}
-
-        {/* Navegación por Pestañas / Menú Horizontal de Categorías */}
-        {visibleTabs.length > 1 ? (
-          <nav aria-label="Categorías de configuración" className="flex flex-wrap gap-2 border-b border-slate-200 pb-2 dark:border-slate-800">
+      {/* NAVEGACIÓN POR PESTAÑAS: Modern Rounded Grid Simétrico 5x2 */}
+      {visibleTabs.length > 1 ? (
+        <nav
+          aria-label="Categorías de configuración"
+          className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-2.5 sm:p-3 shadow-xs dark:border-slate-800 dark:bg-slate-900"
+        >
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-5 gap-2 sm:gap-2.5">
             {visibleTabs.map((tab) => {
               const IconComp = tab.icon;
               const isActive = activeTab === tab.id;
@@ -988,66 +812,81 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={[
-                    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all",
+                  onClick={() => handleSelectTab(tab.id)}
+                  className={cn(
+                    "group relative flex items-center justify-between gap-2 rounded-2xl px-3 py-2.5 text-xs font-semibold transition-all cursor-pointer select-none text-left min-h-[46px]",
                     isActive
-                      ? "bg-blue-600 text-white shadow-sm dark:bg-blue-600"
-                      : "bg-white text-slate-700 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800",
-                  ].join(" ")}
+                      ? "bg-blue-600 text-white shadow-md shadow-blue-500/25 ring-2 ring-blue-500/20 active:scale-95"
+                      : "border border-slate-200/90 bg-slate-50/70 hover:bg-slate-100 hover:border-slate-300 text-slate-700 dark:border-slate-800 dark:bg-slate-800/50 dark:hover:bg-slate-800 dark:text-slate-200 active:scale-95 shadow-2xs"
+                  )}
                 >
-                  <IconComp size={16} />
-                  <span>{tab.label}</span>
-                  {tab.badge ? (
-                    <span
-                      className={[
-                        "rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
-                        isActive ? "bg-white/20 text-white" : "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-                      ].join(" ")}
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div
+                      className={cn(
+                        "flex h-7 w-7 items-center justify-center rounded-xl shrink-0 transition-colors",
+                        isActive
+                          ? "bg-white/20 text-white"
+                          : "bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 group-hover:scale-105"
+                      )}
                     >
-                      {tab.badge}
-                    </span>
-                  ) : null}
+                      <IconComp size={15} />
+                    </div>
+                    <span className="truncate">{tab.label}</span>
+                  </div>
+                  
                 </button>
               );
             })}
-          </nav>
-        ) : null}
+          </div>
+        </nav>
+      ) : null}
 
-        {/* SECCIÓN: NEGOCIO */}
-        <section
-          className="ui-card space-y-4"
-          hidden={!scopePreset.visibleSections.negocio || (visibleTabs.length > 1 && activeTab !== "negocio")}
-        >
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-              <Store className="text-blue-600 dark:text-blue-400" size={20} />
-              <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Datos del Negocio</h2>
-                <p className="text-xs text-slate-500">Información comercial, razón social y datos de contacto de tu comercio</p>
-              </div>
+      {/* SECCIÓN 1: DATOS DEL NEGOCIO */}
+      <section
+        className="space-y-6"
+        hidden={!scopePreset.visibleSections.negocio || (visibleTabs.length > 1 && activeTab !== "negocio")}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
+              <Store size={22} />
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="ui-btn-ghost"
-                onClick={() => { void resetSection("negocio"); }}
-                disabled={!canWriteConfiguracion || savingSection.negocio}
-              >
-                Restablecer
-              </button>
-              <button
-                type="button"
-                className="ui-btn-primary"
-                onClick={() => { void handleSaveSection("negocio"); }}
-                disabled={!canWriteConfiguracion || savingSection.negocio}
-              >
-                {savingSection.negocio ? "Guardando..." : "Guardar Negocio"}
-              </button>
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                CONFIGURACIÓN › NEGOCIO
+              </span>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                Datos del Negocio
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Información comercial, razón social y datos de contacto de tu comercio.
+              </p>
             </div>
           </div>
 
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-xs hover:border-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => { void resetSection("negocio"); }}
+              disabled={!canWriteConfiguracion || savingSection.negocio}
+            >
+              <RefreshCw size={14} />
+              <span>Restablecer</span>
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-2xl bg-blue-600 hover:bg-blue-700 px-5 py-2 text-xs font-semibold text-white shadow-sm shadow-blue-500/25 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => { void handleSaveSection("negocio"); }}
+              disabled={!canWriteConfiguracion || savingSection.negocio}
+            >
+              <Save size={14} />
+              <span>{savingSection.negocio ? "Guardando..." : "Guardar Negocio"}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-6">
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Nombre Comercial</label>
@@ -1079,123 +918,188 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               <input className="ui-input" type="email" value={draft.negocio.email} onChange={(event) => updateSection("negocio", { email: event.target.value })} placeholder="contacto@comercio.com" disabled={!canWriteConfiguracion} />
             </div>
 
+            {/* MONEDA DEL SISTEMA */}
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Moneda del Sistema</label>
-              <input className="ui-input" value={draft.negocio.currency_code} onChange={(event) => updateSection("negocio", { currency_code: event.target.value.toUpperCase() })} placeholder="ARS" disabled={!canWriteConfiguracion} />
+              <label className="mb-1.5 flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-200">
+                <span className="flex items-center gap-1.5">
+                  <Coins size={14} className="text-amber-500" />
+                  Moneda del Sistema
+                </span>
+                <span className="text-[10px] font-normal text-slate-500 dark:text-slate-400">
+                  Principal para precios y cobros
+                </span>
+              </label>
+              <div className="relative">
+                <select
+                  value={draft.negocio.currency_code || "ARS"}
+                  onChange={(event) =>
+                    updateSection("negocio", { currency_code: event.target.value.toUpperCase() })
+                  }
+                  disabled={!canWriteConfiguracion}
+                  className="w-full appearance-none rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 pr-10 text-sm font-medium text-slate-900 shadow-2xs transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-blue-400 cursor-pointer"
+                >
+                  {systemCurrencyOptions.map((opt) => (
+                    <option key={opt.code} value={opt.code} className="dark:bg-slate-900 dark:text-slate-100 py-1">
+                      {opt.label} ({opt.code})
+                    </option>
+                  ))}
+                  {draft.negocio.currency_code &&
+                  !systemCurrencyOptions.some((o) => o.code === draft.negocio.currency_code) ? (
+                    <option value={draft.negocio.currency_code} className="dark:bg-slate-900 dark:text-slate-100 py-1">
+                      {draft.negocio.currency_code} (Personalizada)
+                    </option>
+                  ) : null}
+                </select>
+                <ChevronDown
+                  size={16}
+                  className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
+                />
+              </div>
+              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                Moneda predeterminada para tickets, listas de precios, arqueos y reportes.
+              </p>
             </div>
 
+            {/* ZONA HORARIA */}
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Zona Horaria</label>
-              <input className="ui-input" value={draft.negocio.timezone} onChange={(event) => updateSection("negocio", { timezone: event.target.value })} placeholder="America/Argentina/Buenos_Aires" disabled={!canWriteConfiguracion} />
+              <label className="mb-1.5 flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-200">
+                <span className="flex items-center gap-1.5">
+                  <Clock size={14} className="text-blue-500" />
+                  Zona Horaria
+                </span>
+                <span className="text-[10px] font-normal text-slate-500 dark:text-slate-400">
+                  Hora oficial de tickets y turnos
+                </span>
+              </label>
+              <div className="relative">
+                <select
+                  value={draft.negocio.timezone || "America/Argentina/Buenos_Aires"}
+                  onChange={(event) =>
+                    updateSection("negocio", { timezone: event.target.value })
+                  }
+                  disabled={!canWriteConfiguracion}
+                  className="w-full appearance-none rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 pr-10 text-sm font-medium text-slate-900 shadow-2xs transition focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:focus:border-blue-400 cursor-pointer"
+                >
+                  {systemTimezoneOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value} className="dark:bg-slate-900 dark:text-slate-100 py-1">
+                      {opt.label} — {opt.offset}
+                    </option>
+                  ))}
+                  {draft.negocio.timezone &&
+                  !systemTimezoneOptions.some((o) => o.value === draft.negocio.timezone) ? (
+                    <option value={draft.negocio.timezone} className="dark:bg-slate-900 dark:text-slate-100 py-1">
+                      {draft.negocio.timezone} (Personalizada)
+                    </option>
+                  ) : null}
+                </select>
+                <ChevronDown
+                  size={16}
+                  className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
+                />
+              </div>
+              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                Asegura que las ventas, turnos de caja y auditorías tengan la hora local exacta.
+              </p>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* SECCIÓN: BENEFICIOS Y CUENTA CORRIENTE DE EMPLEADOS */}
-        <section
-          className="ui-card space-y-5"
-          hidden={!scopePreset.visibleSections.empleados || (visibleTabs.length > 1 && activeTab !== "empleados")}
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400">
-                <Users size={20} />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                    Descuento y Beneficios para Empleados
-                  </h2>
-                  <span className="rounded-full bg-indigo-100 dark:bg-indigo-950 px-2 py-0.5 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                    Cta. Cte. Personal
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Porcentaje fijo de bonificación para retiros a cuenta corriente y exclusión de categorías
-                </p>
-              </div>
+      {/* SECCIÓN 2: EMPLEADOS Y CUENTA CORRIENTE */}
+      <section
+        className="space-y-6"
+        hidden={!scopePreset.visibleSections.empleados || (visibleTabs.length > 1 && activeTab !== "empleados")}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400">
+              <Users size={22} />
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="ui-btn-ghost"
-                onClick={() => { void resetSection("pos"); }}
-                disabled={!canModifyEmployeeBenefits || savingSection.pos}
-              >
-                Restablecer
-              </button>
-              <button
-                type="button"
-                className="ui-btn-primary bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white"
-                onClick={() => { void handleSaveSection("pos"); }}
-                disabled={!canModifyEmployeeBenefits || savingSection.pos}
-              >
-                {savingSection.pos ? "Guardando..." : "Guardar Beneficios"}
-              </button>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                  CONFIGURACIÓN › EMPLEADOS
+                </span>
+                <span className="rounded-full bg-indigo-100 dark:bg-indigo-950 px-2 py-0.5 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                  Cta. Cte. Personal
+                </span>
+              </div>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                Descuento y Beneficios para Empleados
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Porcentaje fijo de bonificación para retiros a cuenta corriente y exclusión de categorías.
+              </p>
             </div>
           </div>
 
-          {/* Banner si el usuario actual NO es administrador */}
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-xs hover:border-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => { void resetSection("pos"); }}
+              disabled={!canModifyEmployeeBenefits || savingSection.pos}
+            >
+              <RefreshCw size={14} />
+              <span>Restablecer</span>
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 px-5 py-2 text-xs font-semibold text-white shadow-sm shadow-indigo-500/25 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => { void handleSaveSection("pos"); }}
+              disabled={!canModifyEmployeeBenefits || savingSection.pos}
+            >
+              <Save size={14} />
+              <span>{savingSection.pos ? "Guardando..." : "Guardar Beneficios"}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-6">
           {!isAdminUser && (
-            <div className="flex items-center gap-2.5 rounded-xl border border-amber-300 dark:border-amber-800/80 bg-amber-50 dark:bg-amber-950/40 p-3.5 text-xs text-amber-900 dark:text-amber-200">
+            <div className="flex items-center gap-2.5 rounded-2xl border border-amber-300 dark:border-amber-800/80 bg-amber-50 dark:bg-amber-950/40 p-4 text-xs text-amber-900 dark:text-amber-200">
               <ShieldAlert size={18} className="shrink-0 text-amber-600 dark:text-amber-400" />
               <div>
                 <p className="font-bold">Acceso en modo solo lectura</p>
                 <p className="text-amber-800 dark:text-amber-300">
-                  Solo los usuarios con rol de <strong>Administrador</strong> pueden modificar el porcentaje de descuento fijo y las categorías excluidas de empleados.
+                  Solo los usuarios con rol Administrador o Propietario pueden modificar los beneficios y categorías excluidas de empleados.
                 </p>
               </div>
             </div>
           )}
 
-          {/* Tarjeta 1: Porcentaje Fijo de Descuento */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Tag size={16} className="text-indigo-600 dark:text-indigo-400" />
-                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                    Porcentaje Fijo de Descuento para Empleados (%)
-                  </label>
-                  {!canModifyEmployeeBenefits && (
-                    <span className="flex items-center gap-1 rounded bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-400">
-                      <Lock size={10} /> Solo Admins
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl">
-                  Se aplica automáticamente cuando un empleado compra o retira productos a su cuenta corriente (ej. 10%). Si un empleado tiene un porcentaje particular cargado en su ficha, prevalecerá su porcentaje individual.
-                </p>
+          <div className="grid gap-6 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Porcentaje de Bonificación / Descuento para Empleados (%)
+              </label>
+              <div className="relative">
+                <input
+                  className="ui-input pr-10 font-bold text-slate-900 dark:text-slate-100"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  value={draft.pos.employee_discount_percent ?? 0}
+                  onChange={(event) =>
+                    updateSection("pos", {
+                      employee_discount_percent: Math.min(100, Math.max(0, toNumber(event.target.value, 0))),
+                    })
+                  }
+                  placeholder="0"
+                  disabled={!canModifyEmployeeBenefits}
+                />
+                <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">
+                  %
+                </span>
               </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="relative w-36">
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.5}
-                    value={draft.pos.employee_discount_percent ?? 10}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value);
-                      updateSection("pos", {
-                        employee_discount_percent: isNaN(val) ? 0 : Math.max(0, Math.min(100, val)),
-                      });
-                    }}
-                    disabled={!canModifyEmployeeBenefits}
-                    className="ui-input pr-8 text-right font-bold font-mono text-base border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900"
-                  />
-                  <span className="absolute right-3.5 top-2.5 text-sm font-bold text-slate-400 dark:text-slate-500 pointer-events-none">
-                    %
-                  </span>
-                </div>
-              </div>
+              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                Al cargar compras con cuenta corriente para un empleado en el POS, este descuento se aplicará automáticamente.
+              </p>
             </div>
           </div>
 
-          {/* Tarjeta 2: Categorías Excluidas del Descuento */}
-          <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4">
+          <div className="border-t border-slate-100 dark:border-slate-800 pt-5">
             <EmployeeExcludedCategoriesSelector
               excludedCategories={draft.pos.employee_discount_excluded_categories ?? []}
               availableCategories={availableCategories}
@@ -1207,28 +1111,55 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               disabled={!canModifyEmployeeBenefits}
             />
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* SECCIÓN: PUNTO DE VENTA (POS) */}
-        <section
-          className="ui-card space-y-4"
-          hidden={!scopePreset.visibleSections.pos || (visibleTabs.length > 1 && activeTab !== "pos")}
-        >
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-              <ShoppingCart className="text-blue-600 dark:text-blue-400" size={20} />
-              <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Punto de Venta (POS)</h2>
-                <p className="text-xs text-slate-500">Parámetros operativos de cobro, impresión y comportamiento de la caja</p>
-              </div>
+      {/* SECCIÓN 3: PUNTO DE VENTA (POS) */}
+      <section
+        className="space-y-6"
+        hidden={!scopePreset.visibleSections.pos || (visibleTabs.length > 1 && activeTab !== "pos")}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
+              <ShoppingCart size={22} />
             </div>
-
-            <div className="flex items-center gap-2">
-              <button type="button" className="ui-btn-ghost" onClick={() => { void resetSection("pos"); }} disabled={!canWriteConfiguracion || savingSection.pos}>Restablecer</button>
-              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("pos"); }} disabled={!canWriteConfiguracion || savingSection.pos}>{savingSection.pos ? "Guardando..." : "Guardar POS"}</button>
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                CONFIGURACIÓN › PUNTO DE VENTA
+              </span>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                Punto de Venta (POS)
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Parámetros operativos de cobro, redondeo comercial y comportamiento de la terminal.
+              </p>
             </div>
           </div>
 
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-xs hover:border-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => { void resetSection("pos"); }}
+              disabled={!canWriteConfiguracion || savingSection.pos}
+            >
+              <RefreshCw size={14} />
+              <span>Restablecer</span>
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-2xl bg-blue-600 hover:bg-blue-700 px-5 py-2 text-xs font-semibold text-white shadow-sm shadow-blue-500/25 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => { void handleSaveSection("pos"); }}
+              disabled={!canWriteConfiguracion || savingSection.pos}
+            >
+              <Save size={14} />
+              <span>{savingSection.pos ? "Guardando..." : "Guardar POS"}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-6">
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Medio de pago por defecto</label>
@@ -1240,435 +1171,264 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               </select>
             </div>
 
-            <div className="md:col-span-2 space-y-3 rounded-xl border border-fuchsia-200/80 bg-gradient-to-r from-fuchsia-50/60 via-purple-50/40 to-white p-4.5 dark:border-fuchsia-900/40 dark:from-fuchsia-950/20 dark:via-purple-950/10 dark:to-slate-900/60 shadow-2xs">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-950/80 dark:text-fuchsia-300 shadow-2xs">
-                    <Sparkles size={20} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                        Terminal de Venta: POS Inteligente
-                      </h3>
-                      <span className="rounded-full bg-fuchsia-100 px-2.5 py-0.5 text-[10px] font-bold tracking-wide text-fuchsia-700 dark:bg-fuchsia-900/60 dark:text-fuchsia-300">
-                        ACTIVO Y EXCLUSIVO
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                      Modo estándar y definitivo del sistema. Combina el catálogo interactivo de 2 columnas al centro, buscador superior inteligente y cobro ergonómico en pantalla unificada.
-                    </p>
-                  </div>
-                </div>
-              </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Comportamiento del Carrito</label>
+              <select className="ui-input" value={draft.pos.cart_behavior} onChange={(event) => updateSection("pos", { cart_behavior: event.target.value as TenantSettings["pos"]["cart_behavior"] })} disabled={!canWriteConfiguracion}>
+                <option value="stack_or_increment">Incrementar cantidad si ya existe</option>
+                <option value="stack_always">Agregar como nueva línea siempre</option>
+              </select>
             </div>
 
-            {/* SECCIÓN ERGONÓMICA Y MINIMALISTA: REDONDEO FINAL DE PRECIO / TICKET */}
-            <div className="md:col-span-2 space-y-4 rounded-xl border border-slate-200/90 bg-white dark:border-slate-800 dark:bg-slate-900/60 p-4 shadow-2xs">
+            {/* SECCIÓN REDONDEO FINAL DE PRECIO / TICKET */}
+            <div className="md:col-span-2 space-y-4 rounded-2xl border border-slate-200/90 bg-white dark:border-slate-800 dark:bg-slate-900/60 p-5 shadow-2xs">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-3 dark:border-slate-800">
                 <div className="flex items-center gap-2.5">
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
                     <Coins size={18} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                      Redondeo de Precios y Cobro en Caja
-                      <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-600 dark:text-slate-300">
-                        {draft.pos.rounding_enabled ? "Activo" : "Desactivado"}
-                      </span>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                      Redondeo Comercial de Cambio y Monedas
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Evita centavos o monedas pequeñas redondeando el total de la venta a múltiplos de $10, $50, $100 o $1.000.
+                      Ajuste automático para evitar centavos y billetes fraccionarios que ya no circulan
                     </p>
                   </div>
                 </div>
 
-                {/* Switch de activación */}
-                <label className="pos-switch relative inline-flex shrink-0 cursor-pointer items-center self-start sm:self-auto">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    {draft.pos.rounding_enabled ? "Activo en cobros" : "Desactivado"}
+                  </span>
                   <input
                     type="checkbox"
+                    className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
                     checked={draft.pos.rounding_enabled ?? false}
                     onChange={(e) =>
                       updateSection("pos", {
                         rounding_enabled: e.target.checked,
-                        rounding_rule: e.target.checked && (!draft.pos.rounding_rule || draft.pos.rounding_rule === "none") ? "100" : draft.pos.rounding_rule,
+                        rounding_rule: e.target.checked && (!draft.pos.rounding_rule || draft.pos.rounding_rule === "none") ? "10" : draft.pos.rounding_rule,
                       })
                     }
-                    className="peer sr-only"
                     disabled={!canWriteConfiguracion}
                   />
-                  <span className="pos-switch-track">
-                    <span className="pos-switch-thumb" />
-                  </span>
                 </label>
               </div>
 
               {draft.pos.rounding_enabled ? (
-                <div className="space-y-4 animate-in fade-in-50 duration-200">
-                  {/* Selector 1: Múltiplo / Magnitud de redondeo */}
+                <div className="grid gap-4 sm:grid-cols-3 pt-2">
                   <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">
-                      Múltiplo de Redondeo
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Monto a Redondear
                     </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-                      {[
-                        { id: "integer", label: "Al entero", desc: "$1 (Sin centavos)" },
-                        { id: "10", label: "Decena", desc: "A los $10" },
-                        { id: "50", label: "Cincuenta", desc: "A los $50" },
-                        { id: "100", label: "Centena", desc: "A los $100 (Sugerido)" },
-                        { id: "500", label: "Quinientos", desc: "A los $500" },
-                        { id: "1000", label: "Mil", desc: "A los $1.000" },
-                      ].map((opt) => {
-                        const isSelected = (draft.pos.rounding_rule ?? "100") === opt.id;
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => updateSection("pos", { rounding_rule: opt.id as PosRoundingRule })}
-                            disabled={!canWriteConfiguracion}
-                            className={cn(
-                              "flex flex-col rounded-lg border p-2.5 text-left transition text-xs",
-                              isSelected
-                                ? "border-amber-500 bg-amber-50/40 dark:border-amber-500 dark:bg-amber-950/30 text-amber-950 dark:text-amber-100 ring-2 ring-amber-500/20 font-bold"
-                                : "border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600"
-                            )}
-                          >
-                            <span className="flex items-center justify-between">
-                              <span className="font-bold">{opt.label}</span>
-                              {isSelected ? <CheckCircle2 size={13} className="text-amber-600 dark:text-amber-400" /> : null}
-                            </span>
-                            <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400 mt-0.5">
-                              {opt.desc}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <select
+                      className="ui-input"
+                      value={draft.pos.rounding_rule || "10"}
+                      onChange={(e) =>
+                        updateSection("pos", {
+                          rounding_rule: e.target.value as PosRoundingRule,
+                        })
+                      }
+                      disabled={!canWriteConfiguracion}
+                    >
+                      <option value="1">Al entero ($1) — Sin centavos</option>
+                      <option value="10">A decenas ($10) — Recomendado efectivo</option>
+                      <option value="50">A múltiplos de $50</option>
+                      <option value="100">A múltiplos de $100</option>
+                    </select>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {/* Selector 2: Criterio / Dirección matemática */}
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
-                        Criterio de Redondeo
-                      </label>
-                      <select
-                        className="ui-input"
-                        value={draft.pos.rounding_mode ?? "nearest"}
-                        onChange={(e) => updateSection("pos", { rounding_mode: e.target.value as PosRoundingMode })}
-                        disabled={!canWriteConfiguracion}
-                      >
-                        <option value="nearest">Al más cercano (Estándar comercial)</option>
-                        <option value="up">Hacia arriba / Techo (A favor del comercio)</option>
-                        <option value="down">Hacia abajo / Piso (A favor del cliente)</option>
-                      </select>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-1">
-                        Determina si los importes intermedios van al múltiplo superior, inferior o más próximo.
-                      </span>
-                    </div>
-
-                    {/* Selector 3: Medios de pago alcanzados */}
-                    <div>
-                      <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
-                        Aplicación por Medio de Pago
-                      </label>
-                      <select
-                        className="ui-input"
-                        value={draft.pos.rounding_target ?? "cash_only"}
-                        onChange={(e) => updateSection("pos", { rounding_target: e.target.value as PosRoundingTarget })}
-                        disabled={!canWriteConfiguracion}
-                      >
-                        <option value="cash_only">Solo Efectivo (Recomendado para dar vuelto)</option>
-                        <option value="all_methods">Todos los medios de pago (Efectivo, Tarjetas, MP, Transferencias)</option>
-                      </select>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-1">
-                        En transferencias y tarjetas el cobro digital puede ser exacto al centavo.
-                      </span>
-                    </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Criterio de Ajuste
+                    </label>
+                    <select
+                      className="ui-input"
+                      value={draft.pos.rounding_mode || "nearest"}
+                      onChange={(e) =>
+                        updateSection("pos", {
+                          rounding_mode: e.target.value as PosRoundingMode,
+                        })
+                      }
+                      disabled={!canWriteConfiguracion}
+                    >
+                      <option value="nearest">Al más cercano (Estándar matemático)</option>
+                      <option value="up">Siempre hacia arriba (A favor del comercio)</option>
+                      <option value="down">Siempre hacia abajo (A favor del cliente)</option>
+                    </select>
                   </div>
 
-                  {/* VISTA PREVIA SIMULADA EN TIEMPO REAL */}
-                  {(() => {
-                    const sampleAmount = 4347.5;
-                    const preview = calculatePosRounding(sampleAmount, {
-                      enabled: true,
-                      rule: draft.pos.rounding_rule ?? "100",
-                      mode: draft.pos.rounding_mode ?? "nearest",
-                      target: "all_methods",
-                      isCashPayment: true,
-                    });
-
-                    return (
-                      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/40 p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
-                        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                          <Calculator size={16} className="text-amber-500 shrink-0" />
-                          <span>
-                            Ejemplo en vivo: Total calculado: <strong className="font-mono text-slate-900 dark:text-white">$4.347,50</strong>
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3 font-mono">
-                          <span className="text-slate-500">
-                            Ajuste: {preview.adjustmentAmount > 0 ? `+$${preview.adjustmentAmount.toFixed(2)}` : `-$${Math.abs(preview.adjustmentAmount).toFixed(2)}`}
-                          </span>
-                          <span className="text-slate-400">➔</span>
-                          <span className="rounded-lg bg-emerald-100 dark:bg-emerald-950/70 px-2 py-1 font-bold text-emerald-800 dark:text-emerald-300 text-sm">
-                            Cobro final: ${preview.roundedAmount.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })()}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Aplicar en
+                    </label>
+                    <select
+                      className="ui-input"
+                      value={draft.pos.rounding_target || "total"}
+                      onChange={(e) =>
+                        updateSection("pos", {
+                          rounding_target: e.target.value as PosRoundingTarget,
+                        })
+                      }
+                      disabled={!canWriteConfiguracion}
+                    >
+                      <option value="total">Solo al Total Final del Ticket</option>
+                      <option value="each_item">A cada producto individualmente</option>
+                    </select>
+                  </div>
                 </div>
-              ) : (
-                <div className="rounded-lg border border-dashed border-slate-200 dark:border-slate-800 p-3 text-xs text-slate-500 dark:text-slate-400">
-                  El cobro en POS se realizará por el valor numérico exacto con dos decimales de centavos (ej: $1.234,75).
-                </div>
-              )}
+              ) : null}
             </div>
 
-            {/* DESCUENTO PARA EMPLEADOS EN CUENTA CORRIENTE */}
-            <div className="md:col-span-2 space-y-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 p-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="rounded-xl bg-indigo-100 dark:bg-indigo-950/70 p-2.5 text-indigo-700 dark:text-indigo-400">
-                    <Users size={18} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                        Descuento en compras a cuenta corriente de empleados
-                      </span>
-                      {!canModifyEmployeeBenefits && (
-                        <span className="flex items-center gap-1 rounded bg-slate-200 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-400">
-                          <Lock size={10} /> Solo Admins
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Porcentaje de bonificación que se aplica automáticamente cuando un empleado compra o retira productos a su cuenta corriente.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 self-start sm:self-auto">
-                  <div className="relative w-32">
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={0.5}
-                      value={draft.pos.employee_discount_percent ?? 10}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value);
-                        updateSection("pos", {
-                          employee_discount_percent: isNaN(val) ? 0 : Math.max(0, Math.min(100, val)),
-                        });
-                      }}
-                      className="ui-input pr-8 text-right font-bold font-mono"
-                      disabled={!canModifyEmployeeBenefits}
-                    />
-                    <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-500 dark:text-slate-400 pointer-events-none">
-                      %
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Categorías Excluidas del Descuento */}
-              <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
-                <EmployeeExcludedCategoriesSelector
-                  excludedCategories={draft.pos.employee_discount_excluded_categories ?? []}
-                  availableCategories={availableCategories}
-                  onChange={(nextList) => {
-                    updateSection("pos", {
-                      employee_discount_excluded_categories: nextList,
-                    });
-                  }}
-                  disabled={!canModifyEmployeeBenefits}
-                />
-              </div>
-
-              <div className="flex items-center gap-2 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 p-2.5 text-xs text-indigo-800 dark:text-indigo-300">
-                <CheckCircle2 size={15} className="shrink-0 text-indigo-600 dark:text-indigo-400" />
-                <span>
-                  Cada comercio puede definir su porcentaje (ej. 10%). Si un empleado tiene un porcentaje particular cargado en su ficha, prevalecerá su porcentaje individual.
-                </span>
-              </div>
+            <div className="md:col-span-2 pt-2">
+              <label className="flex items-center gap-2.5 rounded-2xl border border-slate-200/90 bg-white p-3.5 text-sm font-medium text-slate-800 shadow-2xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 cursor-pointer">
+                <input type="checkbox" className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500" checked={draft.pos.auto_print_receipt} onChange={(event) => updateSection("pos", { auto_print_receipt: event.target.checked })} disabled={!canWriteConfiguracion} />
+                <span>Imprimir ticket automáticamente tras cobrar venta</span>
+              </label>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* SECCIÓN: APARIENCIA Y ACCESIBILIDAD (NUEVO DISEÑO CON TAMAÑO DE LETRA) */}
-        <section
-          className="ui-card space-y-6"
-          hidden={!scopePreset.visibleSections.apariencia || (visibleTabs.length > 1 && activeTab !== "apariencia")}
-        >
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-              <Palette className="text-blue-600 dark:text-blue-400" size={20} />
+      {/* SECCIÓN 4: APARIENCIA Y LETRA */}
+      <section
+        className="space-y-6"
+        hidden={!scopePreset.visibleSections.apariencia || (visibleTabs.length > 1 && activeTab !== "apariencia")}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-purple-500/10 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400">
+              <Palette size={22} />
+            </div>
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                CONFIGURACIÓN › APARIENCIA
+              </span>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                Apariencia y Accesibilidad
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Tema visual, contraste y tamaño de letra/interfaz para pantallas POS.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-xs hover:border-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => { void resetSection("apariencia"); }}
+              disabled={!canWriteConfiguracion || savingSection.apariencia}
+            >
+              <RefreshCw size={14} />
+              <span>Restablecer</span>
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-2xl bg-purple-600 hover:bg-purple-700 px-5 py-2 text-xs font-semibold text-white shadow-sm shadow-purple-500/25 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => { void handleSaveSection("apariencia"); }}
+              disabled={!canWriteConfiguracion || savingSection.apariencia}
+            >
+              <Save size={14} />
+              <span>{savingSection.apariencia ? "Guardando..." : "Guardar Apariencia"}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-6">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                  Apariencia, Tema y Accesibilidad Visual
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Personalizá el tamaño de las letras, zoom de pantalla y colores para que tus cajeros operen con total comodidad
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  Tamaño de Letra e Interfaz (Accesibilidad)
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Ajusta la escala tipográfica global para mejorar la legibilidad en pantallas táctiles y mostradores.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="ui-btn-ghost"
-                onClick={() => { void resetSection("apariencia"); }}
-                disabled={!canWriteConfiguracion || savingSection.apariencia}
-              >
-                Restablecer
-              </button>
-              <button
-                type="button"
-                className="ui-btn-primary"
-                onClick={() => { void handleSaveSection("apariencia"); }}
-                disabled={!canWriteConfiguracion || savingSection.apariencia}
-              >
-                {savingSection.apariencia ? "Guardando..." : "Guardar Apariencia"}
-              </button>
-            </div>
-          </div>
-
-          {/* TARJETA DESTACADA: TAMAÑO DE FUENTE E INTERFAZ (ACCESIBILIDAD) */}
-          <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-5 dark:border-blue-900/50 dark:bg-blue-950/20">
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <div className="flex items-center gap-2">
-                <Type className="text-blue-600 dark:text-blue-400" size={20} />
-                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                  Tamaño de Letras e Interfaz (Escala de Pantalla)
-                </h3>
-              </div>
-              <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-                Escala actual: {selectedFontSizeObj.label}
-              </span>
-            </div>
-
-            <p className="mb-4 text-xs text-slate-600 dark:text-slate-400">
-              Seleccioná el tamaño en el que querés ver las pantallas del sistema. Al cambiarlo, todos los números, botones, totales de caja y listas de productos se reescalan automáticamente.
-            </p>
-
-            {/* Selector de Opciones de Tamaño */}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mb-5">
-              {fontSizeOptions.map((option) => {
-                const isSelected = (draft.apariencia.font_size ?? fontSize) === option.id;
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {fontSizeOptions.map((opt) => {
+                const isSelected = fontSize === opt.id;
                 return (
                   <button
-                    key={option.id}
+                    key={opt.id}
                     type="button"
                     onClick={() => {
-                      updateSection("apariencia", { font_size: option.id });
-                      setFontSize(option.id);
+                      setFontSize(opt.id);
+                      updateSection("apariencia", { font_size: opt.id });
                     }}
-                    disabled={!canWriteConfiguracion}
-                    className={[
-                      "flex flex-col justify-between rounded-xl border p-4 text-left transition-all",
+                    className={cn(
+                      "flex flex-col justify-between p-4 rounded-2xl border text-left transition-all cursor-pointer relative",
                       isSelected
-                        ? "border-blue-600 bg-white ring-2 ring-blue-500/30 dark:bg-slate-900 dark:border-blue-500"
-                        : "border-slate-200 bg-white/70 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900/50 dark:hover:border-slate-700",
-                    ].join(" ")}
+                        ? "border-blue-600 bg-blue-50/70 dark:bg-blue-950/40 dark:border-blue-500 ring-2 ring-blue-500/20"
+                        : "border-slate-200/90 bg-white dark:border-slate-800 dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700"
+                    )}
                   >
                     <div>
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                          {option.shortLabel}
-                        </span>
-                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
-                          {option.badge}
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100">{opt.label}</span>
+                        <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                          {opt.badge}
                         </span>
                       </div>
-                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">
-                        {option.label}
-                      </p>
-                      <p className="text-xs text-slate-500 line-clamp-2">
-                        {option.description}
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                        {opt.description}
                       </p>
                     </div>
 
-                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 dark:border-slate-800">
-                      <span className="text-[11px] text-slate-400">Base {option.pixelSize}</span>
-                      {isSelected ? (
-                        <CheckCircle2 size={16} className="text-blue-600 dark:text-blue-400" />
-                      ) : null}
+                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-2 text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
+                      <span>Muestra de texto:</span>
+                      <span style={{ fontSize: opt.pixelSize }}>Aa 123</span>
                     </div>
                   </button>
                 );
               })}
             </div>
-
-            {/* VISTA PREVIA EN TIEMPO REAL */}
-            <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 shadow-sm">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3 dark:border-slate-800">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles size={14} className="text-amber-500" />
-                  Vista Previa Interactiva de Cobro POS
-                </span>
-                <span className="text-xs text-slate-400">Escala activa: {selectedFontSizeObj.pixelSize}</span>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs text-slate-500">Producto de prueba</p>
-                  <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                    Coca-Cola 2.25L Retornable
-                  </p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="ui-badge ui-badge--success">Stock: 48 u.</span>
-                    <span className="text-xs text-slate-500">Código: 7791234567890</span>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-xs text-slate-500">Total a cobrar</p>
-                  <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                    $2.450,00
-                  </p>
-                  <button type="button" className="ui-btn-primary mt-1 text-xs py-1 px-3">
-                    Cobrar ($2.450)
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
 
-          {/* TEMA Y OTROS PARÁMETROS DE APARIENCIA */}
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 pt-2 border-t border-slate-100 dark:border-slate-800">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Tema Predeterminado</label>
-              <select className="ui-input" value={draft.apariencia.default_theme} onChange={(event) => updateSection("apariencia", { default_theme: event.target.value as AppearanceSettings["default_theme"] })} disabled={!canWriteConfiguracion}>
-                <option value="light">Modo Claro (Recomendado para día)</option>
-                <option value="midnight">Modo Azul Oscuro (Intermedio, descansado)</option>
-                <option value="dark">Modo Oscuro Profundo (Negro)</option>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Tema Visual General</label>
+              <select
+                className="ui-input"
+                value={draft.apariencia.default_theme}
+                onChange={(event) =>
+                  updateSection("apariencia", {
+                    default_theme: event.target.value as TenantSettings["apariencia"]["default_theme"],
+                  })
+                }
+                disabled={!canWriteConfiguracion}
+              >
+                <option value="light">Modo Claro (Fondo Blanco Limpio)</option>
+                <option value="midnight">Modo Medianoche (Azul Oscuro Profundo / Contraste)</option>
+                <option value="dark">Modo Oscuro Puro (Zinc / Grafito)</option>
               </select>
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Estilo del Menú Lateral</label>
-              <select className="ui-input" value={draft.apariencia.sidebar_theme ?? "auto"} onChange={(event) => updateSection("apariencia", { sidebar_theme: event.target.value as AppearanceSettings["sidebar_theme"] })} disabled={!canWriteConfiguracion}>
-                <option value="auto">Automático (Sigue el modo del sistema)</option>
-                <option value="dark">Siempre Oscuro</option>
-                <option value="light">Siempre Claro</option>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Tema del Menú Lateral (Sidebar)</label>
+              <select
+                className="ui-input"
+                value={draft.apariencia.sidebar_theme ?? "auto"}
+                onChange={(event) =>
+                  updateSection("apariencia", {
+                    sidebar_theme: event.target.value as TenantSettings["apariencia"]["sidebar_theme"],
+                  })
+                }
+                disabled={!canWriteConfiguracion}
+              >
+                <option value="auto">Automático (Adaptable al tema general)</option>
+                <option value="dark">Menú Oscuro Siempre</option>
+                <option value="light">Menú Claro Siempre</option>
               </select>
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Densidad de Filas y Tablas</label>
-              <select className="ui-input" value={draft.apariencia.density} onChange={(event) => updateSection("apariencia", { density: event.target.value as AppearanceSettings["density"] })} disabled={!canWriteConfiguracion}>
-                <option value="standard">Vista Estándar (Cómoda)</option>
-                <option value="compact">Vista Compacta (Mayor cantidad de filas)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Color de Acento de la Marca</label>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Color de Énfasis del Sistema</label>
               <div className="flex items-center gap-3">
-                <input className="h-10 w-16 cursor-pointer rounded border border-slate-200 p-1" type="color" value={draft.apariencia.accent_color} onChange={(event) => updateSection("apariencia", { accent_color: event.target.value })} disabled={!canWriteConfiguracion} />
+                <input className="h-10 w-16 cursor-pointer rounded-xl border border-slate-200 p-1" type="color" value={draft.apariencia.accent_color} onChange={(event) => updateSection("apariencia", { accent_color: event.target.value })} disabled={!canWriteConfiguracion} />
                 <span className="text-xs font-mono text-slate-600 dark:text-slate-400">{draft.apariencia.accent_color}</span>
               </div>
             </div>
@@ -1678,281 +1438,224 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               <input className="ui-input" value={draft.apariencia.display_name} onChange={(event) => updateSection("apariencia", { display_name: event.target.value })} placeholder="Ej: Sucursal Centro" disabled={!canWriteConfiguracion} />
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* SECCIÓN: CAJA Y TESORERÍA */}
-        <section
-          className="ui-card space-y-4"
-          hidden={!scopePreset.visibleSections.caja || (visibleTabs.length > 1 && activeTab !== "caja")}
-        >
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-              <Wallet className="text-blue-600 dark:text-blue-400" size={20} />
-              <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Caja y Tesorería</h2>
-                <p className="text-xs text-slate-500">Apertura, cierre y reglas de movimiento de fondos en el punto de venta</p>
-              </div>
+      {/* SECCIÓN 5: CAJA Y TESORERÍA */}
+      <section
+        className="space-y-6"
+        hidden={!scopePreset.visibleSections.caja || (visibleTabs.length > 1 && activeTab !== "caja")}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+              <Wallet size={22} />
             </div>
-
-            <div className="flex items-center gap-2">
-              <button type="button" className="ui-btn-ghost" onClick={() => { void resetSection("caja"); }} disabled={!canWriteConfiguracion || savingSection.caja}>Restablecer</button>
-              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("caja"); }} disabled={!canWriteConfiguracion || savingSection.caja}>{savingSection.caja ? "Guardando..." : "Guardar Caja"}</button>
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Monto Inicial Sugerido al Abrir Caja</label>
-              <input
-                className="ui-input"
-                type="number"
-                step="0.01"
-                min="0"
-                value={draft.caja.default_opening_amount}
-                onChange={(event) =>
-                  updateSection("caja", {
-                    default_opening_amount: Math.max(
-                      0,
-                      toNumber(event.target.value, draft.caja.default_opening_amount)
-                    ),
-                  })
-                }
-                disabled={!canWriteConfiguracion}
-              />
-            </div>
-
-            <div className="md:col-span-2 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Reglas de Control de Caja</span>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.caja.require_open_session_for_sale} onChange={(event) => updateSection("caja", { require_open_session_for_sale: event.target.checked })} disabled={!canWriteConfiguracion} />
-                  <span>Exigir caja abierta para realizar ventas</span>
-                </label>
-
-                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.caja.allow_manual_movements} onChange={(event) => updateSection("caja", { allow_manual_movements: event.target.checked })} disabled={!canWriteConfiguracion} />
-                  <span>Permitir ingresos/egresos manuales</span>
-                </label>
-
-                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.caja.require_notes_on_manual_movements} onChange={(event) => updateSection("caja", { require_notes_on_manual_movements: event.target.checked })} disabled={!canWriteConfiguracion} />
-                  <span>Exigir motivo en movimientos manuales</span>
-                </label>
-
-                <label className="flex items-start gap-2.5 rounded-lg border border-blue-200/80 bg-blue-50/40 p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-blue-800/60 dark:bg-blue-950/20 dark:text-slate-200">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 mt-0.5 rounded text-blue-600"
-                    checked={draft.caja.blind_cash_closing ?? false}
-                    onChange={(event) =>
-                      updateSection("caja", { blind_cash_closing: event.target.checked })
-                    }
-                    disabled={!canWriteConfiguracion}
-                  />
-                  <div>
-                    <span className="font-semibold block text-slate-900 dark:text-slate-100">
-                      Cierre de caja a ciegas
-                    </span>
-                    <span className="block text-xs text-slate-500 dark:text-slate-400 font-normal mt-0.5">
-                      El cajero no ve las ventas ni el efectivo esperado al cerrar. Debe contar billetes por denominación ($100 a $20.000) y los totales se revelan recién tras confirmar el cierre.
-                    </span>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            {/* Modalidad de Arqueo: Solo Efectivo vs Completo */}
-            <div className="md:col-span-2 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Modalidad de Arqueo de Caja
-                </span>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Elegí cómo calcular el total de cierre esperado y qué valores se deben rendir al cerrar cada turno.
-                </p>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label
-                  className={`flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer transition-all ${
-                    (draft.caja.cash_reconciliation_mode ?? "cash_only") === "cash_only"
-                      ? "border-emerald-500 bg-emerald-50/40 dark:bg-emerald-950/20 dark:border-emerald-600 shadow-xs"
-                      : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="cash_reconciliation_mode"
-                    className="mt-0.5 h-4 w-4 text-emerald-600 focus:ring-emerald-500"
-                    checked={(draft.caja.cash_reconciliation_mode ?? "cash_only") === "cash_only"}
-                    onChange={() => updateSection("caja", { cash_reconciliation_mode: "cash_only" })}
-                    disabled={!canWriteConfiguracion}
-                  />
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                        Arqueo solo efectivo de caja
-                      </span>
-                      <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
-                        Recomendado
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                      El cierre de caja y el saldo esperado calculan únicamente el efectivo físico en cajón (apertura + ventas en efectivo + ingresos en efectivo - egresos). Las cobranzas por tarjeta o transferencia se auditan aparte.
-                    </p>
-                  </div>
-                </label>
-
-                <label
-                  className={`flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer transition-all ${
-                    draft.caja.cash_reconciliation_mode === "full"
-                      ? "border-blue-500 bg-blue-50/40 dark:bg-blue-950/20 dark:border-blue-600 shadow-xs"
-                      : "border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="cash_reconciliation_mode"
-                    className="mt-0.5 h-4 w-4 text-blue-600 focus:ring-blue-500"
-                    checked={draft.caja.cash_reconciliation_mode === "full"}
-                    onChange={() => updateSection("caja", { cash_reconciliation_mode: "full" })}
-                    disabled={!canWriteConfiguracion}
-                  />
-                  <div>
-                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100 block">
-                      Arqueo completo (Todos los medios de cobro)
-                    </span>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                      El cierre de caja y el total esperado exigen conciliar la totalidad de cobros del turno (efectivo + tarjetas de débito/crédito + transferencias + Mercado Pago). Ideal para comercios que rinden ventas consolidadas.
-                    </p>
-                  </div>
-                </label>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* SECCIÓN: STOCK E INVENTARIO */}
-        <section
-          className="ui-card space-y-4"
-          hidden={!scopePreset.visibleSections.stock || (visibleTabs.length > 1 && activeTab !== "stock")}
-        >
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-              <Package className="text-blue-600 dark:text-blue-400" size={20} />
-              <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Stock e Inventario</h2>
-                <p className="text-xs text-slate-500">Alertas de stock mínimo y reglas de ajuste de mercadería</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button type="button" className="ui-btn-ghost" onClick={() => { void resetSection("stock"); }} disabled={!canWriteConfiguracion || savingSection.stock}>Restablecer</button>
-              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("stock"); }} disabled={!canWriteConfiguracion || savingSection.stock}>{savingSection.stock ? "Guardando..." : "Guardar Stock"}</button>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                CONFIGURACIÓN › CAJA Y TESORERÍA
+              </span>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                Caja y Tesorería
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Reglas de arqueo, movimientos y cierre de caja en el punto de venta.
+              </p>
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-xs hover:border-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => { void resetSection("caja"); }}
+              disabled={!canWriteConfiguracion || savingSection.caja}
+            >
+              <RefreshCw size={14} />
+              <span>Restablecer</span>
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2 text-xs font-semibold text-white shadow-sm shadow-emerald-500/25 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => { void handleSaveSection("caja"); }}
+              disabled={!canWriteConfiguracion || savingSection.caja}
+            >
+              <Save size={14} />
+              <span>{savingSection.caja ? "Guardando..." : "Guardar Caja"}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-6">
+          <div className="space-y-4">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Reglas de Control de Caja
+            </span>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              {/* Exigir motivo en movimientos manuales */}
+              <label className="flex items-start gap-3 rounded-2xl border border-slate-200/90 bg-white p-4 text-sm font-medium text-slate-800 shadow-2xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  checked={draft.caja.require_notes_on_manual_movements}
+                  onChange={(event) =>
+                    updateSection("caja", { require_notes_on_manual_movements: event.target.checked })
+                  }
+                  disabled={!canWriteConfiguracion}
+                />
+                <div className="flex-1">
+                  <span className="font-bold text-slate-900 dark:text-slate-100 block">
+                    Exigir motivo en movimientos manuales
+                  </span>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Obliga al operador a ingresar un concepto explicativo al asentar retiros o ingresos extraordinarios de dinero en caja.
+                  </p>
+                </div>
+              </label>
+
+              {/* Cierre de caja a ciegas */}
+              <label className="flex items-start gap-3 rounded-2xl border border-slate-200/90 bg-white p-4 text-sm font-medium text-slate-800 shadow-2xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  checked={draft.caja.blind_cash_closing ?? false}
+                  onChange={(event) =>
+                    updateSection("caja", { blind_cash_closing: event.target.checked })
+                  }
+                  disabled={!canWriteConfiguracion}
+                />
+                <div className="flex-1">
+                  <span className="font-bold text-slate-900 dark:text-slate-100 block">
+                    Cierre de caja a ciegas
+                  </span>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    El cajero no ve las ventas ni el efectivo esperado al cerrar. Debe contar billetes por denominación ($100 a $20.000) y los totales se revelan recién tras confirmar el cierre.
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECCIÓN 6: STOCK E INVENTARIO */}
+      <section
+        className="space-y-6"
+        hidden={!scopePreset.visibleSections.stock || (visibleTabs.length > 1 && activeTab !== "stock")}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400">
+              <Package size={22} />
+            </div>
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Umbral Global de Stock Bajo</label>
-              <input
-                className="ui-input"
-                type="number"
-                min="0"
-                value={draft.stock.global_low_stock_threshold}
-                onChange={(event) =>
-                  updateSection("stock", {
-                    global_low_stock_threshold: Math.max(
-                      0,
-                      Math.floor(
-                        toNumber(
-                          event.target.value,
-                          draft.stock.global_low_stock_threshold
-                        )
-                      )
-                    ),
-                  })
-                }
-                disabled={!canWriteConfiguracion}
-              />
+              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                CONFIGURACIÓN › STOCK & INVENTARIO
+              </span>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                Stock e Inventario
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Alertas de stock mínimo, doble confirmación de compras y control de envases retornables.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-xs hover:border-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => { void resetSection("stock"); }}
+              disabled={!canWriteConfiguracion || savingSection.stock}
+            >
+              <RefreshCw size={14} />
+              <span>Restablecer</span>
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-2xl bg-amber-600 hover:bg-amber-700 px-5 py-2 text-xs font-semibold text-white shadow-sm shadow-amber-500/25 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => { void handleSaveSection("stock"); }}
+              disabled={!canWriteConfiguracion || savingSection.stock}
+            >
+              <Save size={14} />
+              <span>{savingSection.stock ? "Guardando..." : "Guardar Stock"}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-6">
+          <div className="space-y-4">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Parámetros de Control
+            </span>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="flex items-center gap-2.5 rounded-2xl border border-slate-200/90 bg-white p-3.5 text-sm font-medium text-slate-800 shadow-2xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition">
+                <input type="checkbox" className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500" checked={draft.stock.use_min_max} onChange={(event) => updateSection("stock", { use_min_max: event.target.checked })} disabled={!canWriteConfiguracion} />
+                <span>Usar stock mín/máx por producto</span>
+              </label>
+
+              <label className="flex items-center gap-2.5 rounded-2xl border border-slate-200/90 bg-white p-3.5 text-sm font-medium text-slate-800 shadow-2xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition">
+                <input type="checkbox" className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500" checked={draft.stock.alerts_active} onChange={(event) => updateSection("stock", { alerts_active: event.target.checked })} disabled={!canWriteConfiguracion} />
+                <span>Activar alertas de stock en Topbar</span>
+              </label>
+
+              <label className="flex items-center gap-2.5 rounded-2xl border border-slate-200/90 bg-white p-3.5 text-sm font-medium text-slate-800 shadow-2xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition">
+                <input type="checkbox" className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500" checked={draft.stock.allow_negative_stock} onChange={(event) => updateSection("stock", { allow_negative_stock: event.target.checked })} disabled={!canWriteConfiguracion} />
+                <span>Permitir stock bajo cero</span>
+              </label>
             </div>
 
-            <div className="md:col-span-2 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Parámetros de Control</span>
-
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.stock.use_min_max} onChange={(event) => updateSection("stock", { use_min_max: event.target.checked })} disabled={!canWriteConfiguracion} />
-                  <span>Usar stock mín/máx por producto</span>
-                </label>
-
-                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.stock.alerts_active} onChange={(event) => updateSection("stock", { alerts_active: event.target.checked })} disabled={!canWriteConfiguracion} />
-                  <span>Activar alertas de stock en Topbar</span>
-                </label>
-
-                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.stock.allow_manual_adjustments} onChange={(event) => updateSection("stock", { allow_manual_adjustments: event.target.checked })} disabled={!canWriteConfiguracion} />
-                  <span>Permitir ajustes manuales</span>
-                </label>
-
-                <label className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.stock.allow_negative_stock} onChange={(event) => updateSection("stock", { allow_negative_stock: event.target.checked })} disabled={!canWriteConfiguracion} />
-                  <span>Permitir stock bajo cero</span>
-                </label>
-
-                <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 sm:col-span-2 lg:col-span-4">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 mt-0.5 rounded text-blue-600"
-                    checked={draft.stock.allow_purchases_profit_margin_adjustment ?? true}
-                    onChange={(event) =>
-                      updateSection("stock", {
-                        allow_purchases_profit_margin_adjustment: event.target.checked,
-                      })
-                    }
-                    disabled={!canWriteConfiguracion}
-                  />
-                  <div>
-                    <span className="font-semibold block text-slate-900 dark:text-slate-100">
-                      Permitir ajustar % de ganancias desde el módulo de compras a proveedores
-                    </span>
-                    <span className="block text-xs text-slate-500 dark:text-slate-400 font-normal mt-0.5">
-                      Habilita la edición libre de márgenes de ganancia (%) y precio de venta final al cargar facturas de compra. Si se desactiva, se bloquea la modificación y se mantiene el margen del catálogo.
+            {/* MODALIDAD DE CONFIRMACIÓN DE COMPRAS */}
+            {(() => {
+              const isDoubleConfirmationActive = Boolean(
+                draft.stock.purchase_double_confirmation_enabled
+              );
+              return (
+                <div className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                    <label className="flex items-start gap-3 cursor-pointer select-none flex-1">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 mt-1 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 cursor-pointer"
+                        checked={isDoubleConfirmationActive}
+                        onChange={(e) =>
+                          updateSection("stock", {
+                            purchase_double_confirmation_enabled: e.target.checked,
+                          })
+                        }
+                        disabled={!canWriteConfiguracion}
+                      />
+                      <div>
+                        <span className="text-sm font-bold text-slate-900 dark:text-slate-100 block">
+                          Carga de compras con doble confirmación (Recepción por empleados + Fijación de precios por administrador)
+                        </span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 block mt-1 leading-relaxed">
+                          Al activarse, la primera confirmación (empleado) ingresa el stock recibido y registra el egreso de dinero sin alterar los precios de venta. La compra queda en estado "Pendiente fijar precios" para que un administrador revise y apruebe las alícuotas de IVA y márgenes de venta. Si se desactiva, las compras confirman stock y precios directamente en un solo paso.
+                        </span>
+                      </div>
+                    </label>
+                    <span
+                      className={cn(
+                        "rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap self-start sm:self-auto shrink-0",
+                        isDoubleConfirmationActive
+                          ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-300 dark:border-amber-800"
+                          : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
+                      )}
+                    >
+                      {isDoubleConfirmationActive ? "Doble Confirmación Activa" : "Confirmación Directa Activa"}
                     </span>
                   </div>
-                </label>
+                </div>
+              );
+            })()}
 
-                <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-white p-3 text-sm font-medium text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 sm:col-span-2 lg:col-span-4">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 mt-0.5 rounded text-blue-600"
-                    checked={draft.stock.purchase_double_confirmation_enabled ?? false}
-                    onChange={(event) =>
-                      updateSection("stock", {
-                        purchase_double_confirmation_enabled: event.target.checked,
-                      })
-                    }
-                    disabled={!canWriteConfiguracion}
-                  />
-                  <div>
-                    <span className="font-semibold block text-slate-900 dark:text-slate-100">
-                      Carga de compras con doble confirmación (Recepción por empleados + Fijación de precios por administrador)
-                    </span>
-                    <span className="block text-xs text-slate-500 dark:text-slate-400 font-normal mt-0.5">
-                      Al activarse, la primera confirmación (empleado) ingresa el stock recibido y registra el egreso de dinero sin alterar los precios de venta. La compra queda en estado &ldquo;Pendiente fijar precios&rdquo; para que un administrador revise y apruebe las alícuotas de IVA y márgenes de venta.
-                    </span>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            {/* SECCIÓN: TIPOS DE ENVASES RETORNABLES */}
-            <div className="md:col-span-2 space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/80">
+            {/* GESTIÓN DE ENVASES RETORNABLES */}
+            <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900/80">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 dark:border-slate-800">
                 <div className="flex items-center gap-2.5">
-                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
                     <Package className="h-5 w-5" />
                   </span>
                   <div>
@@ -1960,7 +1663,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                       Tipos de Envases Retornables
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Define los envases que utiliza tu comercio (ej. Envase de Coca, Garrafa, Sifón). Solo estos envases aparecerán para prestar en Cuentas Corrientes y asociar a productos.
+                      Define los envases que utiliza tu comercio (ej. Envase de Coca, Garrafa, Sifón).
                     </p>
                   </div>
                 </div>
@@ -1968,89 +1671,89 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => void handleDetectPackagesFromProducts()}
-                    title="Buscar envases configurados en tus productos actuales"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                    onClick={handleDetectPackagesFromProducts}
+                    disabled={!canWriteConfiguracion || isDetectingPackages}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-800 transition active:scale-95 disabled:opacity-50 cursor-pointer"
                   >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    <span>Detectar desde productos</span>
+                    <RefreshCw className={cn("h-3.5 w-3.5", isDetectingPackages && "animate-spin text-blue-500")} />
+                    <span>{isDetectingPackages ? "Detectando..." : "Detectar desde productos"}</span>
                   </button>
+
                   <button
                     type="button"
                     onClick={handleLoadCommonPackages}
-                    title="Cargar sugerencias habituales (Garrafas, Bidones, Cajones)"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                    disabled={!canWriteConfiguracion}
+                    className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-800 transition active:scale-95 disabled:opacity-50 cursor-pointer"
                   >
-                    <span>+ Sugerencias habituales</span>
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Sugerencias habituales</span>
                   </button>
                 </div>
               </div>
 
-              {/* FORMULARIO AGREGAR ENVASE */}
-              <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-800/40">
-                <div className="flex-1 min-w-[200px]">
-                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Nombre del tipo de envase
-                  </label>
-                  <input
-                    type="text"
-                    value={newPackageName}
-                    onChange={(e) => setNewPackageName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleAddReturnablePackage();
+              {canWriteConfiguracion && (
+                <div className="grid gap-3 sm:grid-cols-12 items-end bg-slate-50/70 p-4 rounded-2xl border border-slate-200/80 dark:bg-slate-800/40 dark:border-slate-800">
+                  <div className="sm:col-span-6">
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                      Nombre del tipo de envase
+                    </label>
+                    <input
+                      type="text"
+                      value={newPackageName}
+                      onChange={(e) => setNewPackageName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddReturnablePackage();
+                        }
+                      }}
+                      placeholder="Ej. ENVASE DE COCA, Bidón 20L, Garrafa 10kg..."
+                      className="ui-input text-xs"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-3">
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                      Precio reposición ($)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={newPackagePrice}
+                      onChange={(e) =>
+                        setNewPackagePrice(e.target.value === "" ? "" : Number(e.target.value))
                       }
-                    }}
-                    placeholder="Ej. ENVASE DE COCA, Bidón 20L, Garrafa 10kg..."
-                    className="ui-input w-full text-xs"
-                    disabled={!canWriteConfiguracion}
-                  />
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddReturnablePackage();
+                        }
+                      }}
+                      placeholder="0.00"
+                      className="ui-input text-xs"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-3">
+                    <button
+                      type="button"
+                      onClick={handleAddReturnablePackage}
+                      className="w-full inline-flex items-center justify-center gap-1.5 rounded-2xl bg-amber-600 hover:bg-amber-700 px-4 py-2 text-xs font-semibold text-white shadow-sm transition active:scale-95 cursor-pointer"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>Agregar Envase</span>
+                    </button>
+                  </div>
                 </div>
+              )}
 
-                <div className="w-44">
-                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Precio reposición ($)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={newPackagePrice}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setNewPackagePrice(v === "" ? "" : Number(v));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleAddReturnablePackage();
-                      }
-                    }}
-                    placeholder="0.00"
-                    className="ui-input w-full text-xs"
-                    disabled={!canWriteConfiguracion}
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleAddReturnablePackage}
-                  disabled={!canWriteConfiguracion || !newPackageName.trim()}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3.5 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-amber-700 transition disabled:opacity-50"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Agregar Envase</span>
-                </button>
-              </div>
-
-              {/* LISTA DE ENVASES REGISTRADOS */}
-              {draft.stock.returnable_packages && draft.stock.returnable_packages.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+              {draft.stock.returnable_packages?.length ? (
+                <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
                   {draft.stock.returnable_packages.map((pkg) => (
                     <div
                       key={pkg.name}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-2xs dark:border-slate-700 dark:bg-slate-900"
+                      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xs dark:border-slate-700 dark:bg-slate-900"
                     >
                       <div className="min-w-0">
                         <div className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
@@ -2068,7 +1771,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                           type="button"
                           onClick={() => handleRemoveReturnablePackage(pkg.name)}
                           title={`Eliminar ${pkg.name}`}
-                          className="shrink-0 rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition"
+                          className="shrink-0 rounded-full p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 transition"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -2077,7 +1780,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                   ))}
                 </div>
               ) : (
-                <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-slate-400 dark:border-slate-800">
+                <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-slate-400 dark:border-slate-800">
                   <Package className="h-8 w-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
                   <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
                     No has registrado tipos de envases retornables aún.
@@ -2089,91 +1792,105 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               )}
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* SECCIÓN: FACTURACIÓN & ARCA */}
-        <section
-          className="ui-card space-y-4"
-          hidden={!scopePreset.visibleSections.facturacion || (visibleTabs.length > 1 && activeTab !== "facturacion")}
-        >
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-              <FileText className="text-blue-600 dark:text-blue-400" size={20} />
-              <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Facturación y ARCA (AFIP)</h2>
-                <p className="text-xs text-slate-500">Configuración de facturación electrónica, datos fiscales del emisor y correlatividad</p>
-              </div>
+      {/* SECCIÓN 7: FACTURACIÓN & ARCA (AFIP) */}
+      <section
+        className="space-y-6"
+        hidden={!scopePreset.visibleSections.facturacion || (visibleTabs.length > 1 && activeTab !== "facturacion")}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
+              <FileText size={22} />
             </div>
-
-            <div className="flex items-center gap-2">
-              <button type="button" className="ui-btn-ghost" onClick={() => { void resetSection("facturacion"); }} disabled={!canWriteConfiguracion || savingSection.facturacion}>Restablecer</button>
-              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("facturacion"); }} disabled={!canWriteConfiguracion || savingSection.facturacion}>{savingSection.facturacion ? "Guardando..." : "Guardar Facturación"}</button>
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                CONFIGURACIÓN › FACTURACIÓN & ARCA
+              </span>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                Facturación y ARCA (AFIP)
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Configuración de facturación electrónica con ARCA, certificados digitales y reglas fiscales.
+              </p>
             </div>
           </div>
 
-          <div className="space-y-4">
-            {/* BLOQUE 1: DATOS FISCALES DEL COMERCIO */}
-          <div className="rounded-xl border border-slate-200 bg-white p-4.5 dark:border-slate-800 dark:bg-slate-900 shadow-xs space-y-3">
-            <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
-              <Building2 className="text-blue-600 dark:text-blue-400 h-4 w-4" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                1. Datos Fiscales del Comercio Emisor
-              </h3>
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-xs hover:border-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => { void resetSection("facturacion"); }}
+              disabled={!canWriteConfiguracion || savingSection.facturacion}
+            >
+              <RefreshCw size={14} />
+              <span>Restablecer</span>
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-2xl bg-blue-600 hover:bg-blue-700 px-5 py-2 text-xs font-semibold text-white shadow-sm shadow-blue-500/25 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => { void handleSaveSection("facturacion"); }}
+              disabled={!canWriteConfiguracion || savingSection.facturacion}
+            >
+              <Save size={14} />
+              <span>{savingSection.facturacion ? "Guardando..." : "Guardar Facturación"}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {/* BLOQUE 1: DATOS FISCALES DEL COMERCIO */}
+          <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4">
+            <div className="flex items-center gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
+                <Building2 className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  1. Datos Fiscales del Comercio Emisor
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Información tributaria oficial que se imprimirá en comprobantes y tickets.
+                </p>
+              </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
-                  CUIT del Comercio *
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  CUIT del Titular / Comercio
                 </label>
                 <input
-                  className="ui-input font-mono font-bold"
+                  className="ui-input font-mono"
                   value={draft.facturacion.issuer_cuit}
-                  onChange={(event) => {
-                    const clean = event.target.value.replace(/\D/g, "");
-                    setDraft((current) => {
-                      if (!current) return current;
-                      return {
-                        ...current,
-                        facturacion: {
-                          ...current.facturacion,
-                          issuer_cuit: clean,
-                          arca: {
-                            ...current.facturacion.arca,
-                            cuit_emisor: clean,
-                          },
-                        },
-                      };
-                    });
-                  }}
-                  maxLength={11}
-                  placeholder="20123456789"
+                  onChange={(event) =>
+                    updateFacturacionSettings({
+                      issuer_cuit: event.target.value,
+                      arca: { ...draft.facturacion.arca, cuit_emisor: event.target.value },
+                    })
+                  }
+                  placeholder="20-12345678-9"
                   disabled={!canWriteConfiguracion}
                 />
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">
-                  11 dígitos sin guiones
-                </span>
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
-                  Razón Social / Titular *
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Razón Social / Titular Fiscal
                 </label>
                 <input
                   className="ui-input"
                   value={draft.facturacion.issuer_tax_name}
-                  onChange={(event) =>
-                    updateSection("facturacion", {
-                      issuer_tax_name: event.target.value,
-                    })
-                  }
-                  placeholder="Nombre legal del negocio"
+                  onChange={(event) => updateFacturacionSettings({ issuer_tax_name: event.target.value })}
+                  placeholder="Comercio S.R.L. o Apellido y Nombre"
                   disabled={!canWriteConfiguracion}
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
                   Condición Fiscal ante el IVA *
                 </label>
                 <select
@@ -2183,7 +1900,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                     const cond = event.target.value;
                     const suggestedDocType =
                       cond === "Monotributo" ? "C" : cond === "Responsable Inscripto" ? "B" : "B";
-                    updateSection("facturacion", {
+                    updateFacturacionSettings({
                       issuer_fiscal_condition: cond,
                       default_document_type: suggestedDocType as FacturacionSettings["default_document_type"],
                     });
@@ -2198,736 +1915,443 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               </div>
 
               <div>
-                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
-                  Comprobante por Defecto
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Punto de Venta Fiscal ARCA (1 a 99999)
+                </label>
+                <input
+                  className="ui-input font-mono"
+                  type="number"
+                  min={1}
+                  max={99999}
+                  value={draft.facturacion.arca.punto_venta}
+                  onChange={(event) =>
+                    updateFacturacionSettings({
+                      arca: {
+                        ...draft.facturacion.arca,
+                        punto_venta: Math.max(1, toNumber(event.target.value, 1)),
+                      },
+                    })
+                  }
+                  placeholder="1"
+                  disabled={!canWriteConfiguracion}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Domicilio Fiscal Oficial
+                </label>
+                <input
+                  className="ui-input"
+                  value={draft.facturacion.issuer_address}
+                  onChange={(event) => updateFacturacionSettings({ issuer_address: event.target.value })}
+                  placeholder="Av. Belgrano 1234, CABA"
+                  disabled={!canWriteConfiguracion}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Comprobante por Defecto en POS
                 </label>
                 <select
-                  className="ui-input font-semibold"
+                  className="ui-input"
                   value={draft.facturacion.default_document_type}
                   onChange={(event) =>
-                    updateSection("facturacion", {
+                    updateFacturacionSettings({
                       default_document_type: event.target.value as FacturacionSettings["default_document_type"],
                     })
                   }
                   disabled={!canWriteConfiguracion}
                 >
-                  <option value="B">Factura B (Consumidor Final / Monotributo)</option>
-                  <option value="C">Factura C (Régimen Simplificado)</option>
-                  <option value="A">Factura A (Con discriminación de IVA)</option>
-                  <option value="PRESUPUESTO">Presupuesto Interno (Sin valor fiscal)</option>
+                  <option value="C">Factura C (Monotributo)</option>
+                  <option value="B">Factura B (Consumidor Final)</option>
+                  <option value="A">Factura A (Responsable Inscripto a Responsable Inscripto)</option>
+                  <option value="PRESUPUESTO">Presupuesto / Ticket de Control Interno</option>
                 </select>
               </div>
             </div>
           </div>
 
-          {/* BLOQUE 2: PARÁMETROS ARCA Y FIRMA DIGITAL */}
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4.5 dark:border-slate-800 dark:bg-slate-800/40 space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3 dark:border-slate-700">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="text-blue-600 dark:text-blue-400 h-5 w-5" />
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                    2. Conexión Fiscal con ARCA (ex AFIP)
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Emisión electrónica de facturas con CAE y código QR oficial
-                  </p>
-                </div>
+          {/* BLOQUE 2: MODO OPERATIVO Y AMBIENTE ARCA */}
+          <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4">
+            <div className="flex items-center gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400">
+                <Activity className="h-4 w-4" />
               </div>
-
-              <div className="flex items-center gap-2">
-                <span
-                  className={[
-                    "ui-badge",
-                    draft.facturacion.arca.mode === "mock"
-                      ? "ui-badge--info"
-                      : draft.facturacion.arca.mode === "sandbox"
-                        ? "ui-badge--warn"
-                        : "ui-badge--success",
-                  ].join(" ")}
-                >
-                  {draft.facturacion.arca.mode === "mock"
-                    ? "Modo MOCK (Simulación)"
-                    : draft.facturacion.arca.mode === "sandbox"
-                      ? "Modo SANDBOX (Homologación)"
-                      : "Modo REAL (Producción)"}
-                </span>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  2. Modo de Operación y Ambiente ARCA (AFIP)
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Selecciona si operar en simulación local, entorno de homologación o facturación real en producción.
+                </p>
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {/* SWITCH DE HABILITACIÓN ARCA */}
-              <div className="sm:col-span-2 flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xs">
-                <div className="space-y-0.5 pr-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-                      Facturación con ARCA
-                    </span>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        draft.facturacion.arca.enabled
-                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-                          : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-300 dark:border-slate-700"
-                      }`}
-                    >
-                      {draft.facturacion.arca.enabled ? "Activo" : "Inactivo"}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Emitir comprobantes fiscales electrónicos con CAE y código QR
-                  </p>
-                </div>
-
-                <label className="pos-switch relative inline-flex shrink-0 cursor-pointer items-center" title="Habilitar o deshabilitar facturación electrónica con ARCA">
-                  <input
-                    type="checkbox"
-                    checked={draft.facturacion.arca.enabled}
-                    onChange={(event) => updateArca({ enabled: event.target.checked })}
-                    className="peer sr-only"
-                    disabled={!canWriteConfiguracion}
-                  />
-                  <span className="pos-switch-track">
-                    <span className="pos-switch-thumb" />
-                  </span>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Modo Operativo de Facturación
                 </label>
-              </div>
-
-              {/* ENTORNO DE FACTURACIÓN */}
-              <div className="sm:col-span-2 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xs flex flex-col justify-between">
-                <div>
-                  <label className="mb-0.5 block text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-                    Entorno de Facturación
-                  </label>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-2">
-                    Servidores fiscales a los que se enviarán las facturas
-                  </p>
-                </div>
                 <select
-                  className="ui-input font-medium"
-                  value={draft.facturacion.arca.mode}
+                  className="ui-input"
+                  value={draft.facturacion.arca.mode || "mock"}
                   onChange={(event) =>
-                    updateArca({ mode: event.target.value as FacturacionSettings["arca"]["mode"] })
+                    updateFacturacionSettings({
+                      arca: {
+                        ...draft.facturacion.arca,
+                        mode: event.target.value as "mock" | "sandbox" | "real",
+                      },
+                    })
                   }
                   disabled={!canWriteConfiguracion}
                 >
-                  <option value="mock">Modo Simulación Local (Sin internet / Mock de prueba)</option>
-                  <option value="sandbox">Modo Sandbox (Homologación / Pruebas con servidores de ARCA)</option>
-                  <option value="real">Modo Real (Producción Oficial / Facturas Reales de ARCA)</option>
+                  <option value="mock">Modo Mock (Simulación interna para capacitación / offline)</option>
+                  <option value="sandbox">Modo Homologación / Sandbox (Pruebas oficiales con AFIP)</option>
+                  <option value="real">Modo Producción Oficial (Emisión legal con CAE vinculante)</option>
                 </select>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  {draft.facturacion.arca.mode === "real"
+                    ? "ATENCIÓN: Cada factura emitida generará CAE legal en servidores de ARCA."
+                    : draft.facturacion.arca.mode === "sandbox"
+                    ? "Permite emitir comprobantes de prueba en servidores de homologación de AFIP."
+                    : "Emisión simulada para entrenamiento rápido sin conexión ni valor fiscal."}
+                </p>
               </div>
 
-              <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
-                  Punto de Venta de ARCA *
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Ambiente Fiscal de Destino
                 </label>
-                <input
-                  className="ui-input font-mono font-bold"
-                  type="number"
-                  min="1"
-                  value={draft.facturacion.arca.punto_venta}
+                <select
+                  className="ui-input"
+                  value={draft.facturacion.arca.fiscal_environment || "homologacion"}
                   onChange={(event) =>
-                    updateArca({
-                      punto_venta: Math.max(
-                        1,
-                        Math.floor(toNumber(event.target.value, draft.facturacion.arca.punto_venta))
-                      ),
+                    updateFacturacionSettings({
+                      arca: {
+                        ...draft.facturacion.arca,
+                        fiscal_environment: event.target.value as "homologacion" | "produccion",
+                      },
                     })
                   }
-                  placeholder="Ej: 1, 2, 3..."
                   disabled={!canWriteConfiguracion}
-                />
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">
-                  Número de punto de venta dado de alta en ARCA bajo "Factura Electrónica - Web Services".
-                </span>
+                >
+                  <option value="homologacion">Homologación (wshomofacturacion)</option>
+                  <option value="produccion">Producción (servicios1.afip.gov.ar)</option>
+                </select>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  Servidor WSAA/WSFE al que se envían las autorizaciones de comprobantes.
+                </p>
               </div>
+            </div>
 
-              <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">
-                  Nombre / Alias del Certificado
-                </label>
+            <div className="pt-2">
+              <label className="flex items-start gap-3 rounded-2xl border border-slate-200/90 bg-white p-3.5 text-sm font-medium text-slate-800 shadow-2xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition">
                 <input
-                  className="ui-input font-mono"
-                  value={draft.facturacion.arca.certificado_alias}
-                  onChange={(event) =>
-                    updateArca({ certificado_alias: event.target.value.trim() })
+                  type="checkbox"
+                  className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  checked={Boolean(draft.facturacion.arca.allow_internal_fallback)}
+                  onChange={(e) =>
+                    updateFacturacionSettings({
+                      arca: {
+                        ...draft.facturacion.arca,
+                        allow_internal_fallback: e.target.checked,
+                      },
+                    })
                   }
-                  placeholder="Ej: pos-v2"
                   disabled={!canWriteConfiguracion}
                 />
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 block">
-                  Identificador del alias registrado en "Administración de Certificados Digitales".
-                </span>
+                <div className="flex-1">
+                  <span className="font-bold text-slate-900 dark:text-slate-100 block">
+                    Permitir comprobante interno de contingencia ante caídas de AFIP
+                  </span>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Si los servidores de ARCA sufren una interrupción temporal de servicio, el sistema emite ticket local de contingencia para no detener la caja del negocio.
+                  </p>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* BLOQUE 3: CERTIFICADOS DIGITALES ARCA (AFIP) */}
+          <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-purple-50 text-purple-600 dark:bg-purple-950 dark:text-purple-400">
+                  <Key className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    3. Certificados Digitales ARCA & Firma Electrónica
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Asistente guiado para generar pedido CSR, cargar CRT y autorizar computador fiscal.
+                  </p>
+                </div>
               </div>
 
-              {/* TARJETA DE ESTADO DE LA FIRMA DIGITAL */}
-              <div className="sm:col-span-2 lg:col-span-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 space-y-3 shadow-xs">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-start gap-3">
-                    {draft.facturacion.arca.certificate_crt && draft.facturacion.arca.certificate_key ? (
-                      <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                        <ShieldCheck className="h-5 w-5" />
-                      </div>
-                    ) : (
-                      <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                        <ShieldAlert className="h-5 w-5" />
-                      </div>
-                    )}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-800 transition active:scale-95 cursor-pointer"
+                  onClick={() => setIsArcaGuideOpen(true)}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Guía para Contador</span>
+                </button>
 
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-2xl bg-blue-600 hover:bg-blue-700 px-4.5 py-2 text-xs font-semibold text-white shadow-sm shadow-blue-500/25 transition active:scale-95 cursor-pointer"
+                  onClick={() => setIsArcaWizardOpen(true)}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Asistente de Certificado</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Test de conexión ARCA */}
+            <div className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-800/40 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className={cn(
+                      "flex h-2.5 w-2.5 rounded-full",
+                      draft.facturacion.arca.mode === "mock"
+                        ? "bg-amber-500"
+                        : draft.facturacion.arca.certificate_crt && draft.facturacion.arca.certificate_key
+                        ? "bg-emerald-500"
+                        : "bg-slate-400"
+                    )}
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                      Diagnóstico de Comunicación en Tiempo Real con ARCA
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Verifica autenticación WSAA y habilitación de Facturación Electrónica WSFE
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleTestArcaConnection}
+                  disabled={isTestingArcaConnection}
+                  className="inline-flex items-center gap-1.5 rounded-2xl border border-blue-200 bg-white px-4 py-2 text-xs font-semibold text-blue-700 shadow-xs hover:bg-blue-50 dark:border-blue-800 dark:bg-slate-900 dark:text-blue-300 dark:hover:bg-slate-800 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", isTestingArcaConnection && "animate-spin text-blue-600")} />
+                  <span>{isTestingArcaConnection ? "Probando comunicación..." : "Probar Conexión con ARCA"}</span>
+                </button>
+              </div>
+
+              {arcaTestFeedback && (
+                <div
+                  className={cn(
+                    "rounded-xl p-3 text-xs font-medium border",
+                    arcaTestFeedback.status === "success"
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                      : "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+                  )}
+                >
+                  {arcaTestFeedback.message}
+                </div>
+              )}
+            </div>
+
+            {/* Dos tarjetas modernas para CRT y KEY */}
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* Tarjeta CRT */}
+              <div className="rounded-2xl border border-slate-200/90 bg-slate-50/60 p-4 dark:border-slate-700/80 dark:bg-slate-800/40 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className={cn(
+                        "flex h-8 w-8 items-center justify-center rounded-xl",
+                        draft.facturacion.arca.certificate_crt
+                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                          : "bg-slate-200/70 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
+                      )}
+                    >
+                      <ShieldCheck size={18} />
+                    </div>
                     <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-                          Firma Digital y Credenciales ARCA
-                        </h4>
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            draft.facturacion.arca.certificate_crt && draft.facturacion.arca.certificate_key
-                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-                              : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
-                          }`}
-                        >
-                          {draft.facturacion.arca.certificate_crt && draft.facturacion.arca.certificate_key
-                            ? "Vinculado y Activo"
-                            : "Pendiente de Carga"}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        {draft.facturacion.arca.certificate_crt && draft.facturacion.arca.certificate_key
-                          ? "Tu negocio ya tiene cargadas sus credenciales para firmar facturas directamente con ARCA."
-                          : "Para emitir comprobantes oficiales en ARCA debés vincular tu certificado digital (.crt) y clave privada."}
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                        Certificado CRT (.crt / .pem)
+                      </h4>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Certificado público emitido por AFIP
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    {draft.facturacion.arca.certificate_key && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          downloadFile(
-                            `clave_privada_${draft.facturacion.arca.cuit_emisor || "arca"}.key`,
-                            draft.facturacion.arca.certificate_key || ""
-                          )
-                        }
-                        className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-1.5 transition cursor-pointer"
-                        title="Descargar copia de seguridad de la clave privada"
-                      >
-                        <Download size={13} />
-                        Respaldo .key
-                      </button>
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                      draft.facturacion.arca.certificate_crt
+                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
+                        : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
                     )}
-
-                    <button
-                      type="button"
-                      onClick={() => setIsArcaGuideOpen(true)}
-                      className="px-3.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <FileText size={13} className="text-blue-500" />
-                      Instructivo PDF Contador
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsArcaWizardOpen(true)}
-                      disabled={!canWriteConfiguracion}
-                      className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Key size={13} />
-                      {draft.facturacion.arca.certificate_crt
-                        ? "Renovar / Reemplazar Certificado"
-                        : "Conectar con ARCA (Paso a Paso)"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* BOTÓN PROBAR CONEXIÓN CON ARCA */}
-              <div className="sm:col-span-2 lg:col-span-4 pt-3 border-t border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleTestArcaConnection}
-                    disabled={isTestingArcaConnection}
-                    className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-sky-600 dark:hover:bg-sky-500 text-white text-xs font-bold shadow-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
                   >
-                    {isTestingArcaConnection ? (
-                      <>
-                        <RefreshCw size={14} className="animate-spin" />
-                        Consultando ARCA...
-                      </>
-                    ) : (
-                      <>
-                        <Activity size={14} />
-                        Probar Conexión con ARCA
-                      </>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => { void handleSaveSection("facturacion"); }}
-                    disabled={!canWriteConfiguracion || savingSection.facturacion}
-                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Save size={14} />
-                    {savingSection.facturacion ? "Guardando..." : "Guardar Facturación"}
-                  </button>
-
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Verifica la respuesta de los servidores de ARCA para este punto de venta.
+                    {draft.facturacion.arca.certificate_crt ? "Cargado" : "Pendiente"}
                   </span>
                 </div>
 
-                {arcaTestFeedback && (
-                  <div
-                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${
-                      arcaTestFeedback.status === "success"
-                        ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-                        : "bg-rose-50 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
-                    }`}
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  {draft.facturacion.arca.certificate_crt
+                    ? "Certificado oficial activo y vinculado para la emisión de facturas electrónicas."
+                    : "No se ha cargado el certificado .crt aún. Utiliza el Asistente o sube el archivo descargado de AFIP."}
+                </p>
+
+                <div className="pt-1">
+                  <input
+                    type="file"
+                    accept=".crt,.pem,.txt"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const content = event.target?.result as string;
+                          updateFacturacionSettings({
+                            arca: {
+                              ...draft.facturacion.arca,
+                              certificate_crt: content,
+                            },
+                          });
+                          toast.success("Certificado CRT cargado correctamente");
+                        };
+                        reader.readAsText(file);
+                      }
+                    }}
+                    className="hidden"
+                    id="crt-file-input"
+                    disabled={!canWriteConfiguracion}
+                  />
+                  <label
+                    htmlFor="crt-file-input"
+                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer active:scale-95"
                   >
-                    {arcaTestFeedback.status === "success" ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
-                    <span>{arcaTestFeedback.message}</span>
+                    <Download className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                    <span>{draft.facturacion.arca.certificate_crt ? "Cambiar archivo .CRT" : "Cargar archivo .CRT"}</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Tarjeta KEY */}
+              <div className="rounded-2xl border border-slate-200/90 bg-slate-50/60 p-4 dark:border-slate-700/80 dark:bg-slate-800/40 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div
+                      className={cn(
+                        "flex h-8 w-8 items-center justify-center rounded-xl",
+                        draft.facturacion.arca.certificate_key
+                          ? "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300"
+                          : "bg-slate-200/70 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
+                      )}
+                    >
+                      <Key size={18} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                        Clave Privada Digital (.key)
+                      </h4>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Clave criptográfica privada para firma digital
+                      </p>
+                    </div>
                   </div>
-                )}
+
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                      draft.facturacion.arca.certificate_key
+                        ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border border-purple-300 dark:border-purple-800"
+                        : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+                    )}
+                  >
+                    {draft.facturacion.arca.certificate_key ? "Vinculada" : "Pendiente"}
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  {draft.facturacion.arca.certificate_key
+                    ? "Clave privada cargada y resguardada de forma segura para firmar requerimientos ante AFIP."
+                    : "No se ha configurado la clave privada .key. El asistente de certificados la genera automáticamente."}
+                </p>
+
+                <div className="pt-1">
+                  <input
+                    type="file"
+                    accept=".key,.pem,.txt"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const content = event.target?.result as string;
+                          updateFacturacionSettings({
+                            arca: {
+                              ...draft.facturacion.arca,
+                              certificate_key: content,
+                            },
+                          });
+                          toast.success("Clave privada .key cargada correctamente");
+                        };
+                        reader.readAsText(file);
+                      }
+                    }}
+                    className="hidden"
+                    id="key-file-input"
+                    disabled={!canWriteConfiguracion}
+                  />
+                  <label
+                    htmlFor="key-file-input"
+                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer active:scale-95"
+                  >
+                    <Download className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                    <span>{draft.facturacion.arca.certificate_key ? "Cambiar archivo .KEY" : "Cargar archivo .KEY"}</span>
+                  </label>
+                </div>
               </div>
             </div>
           </div>
 
-            {/* CORRELATIVIDAD DE SECUENCIAS */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4.5 dark:border-slate-800 dark:bg-slate-900 shadow-xs space-y-3">
-              <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
-                <Calculator className="text-blue-600 dark:text-blue-400 h-4 w-4" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                  3. Correlatividad y Próximos Números de Secuencia
+          {/* BLOQUE 4: REQUISITOS OBLIGATORIOS AL CREAR ENTIDADES */}
+          <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4">
+            <div className="flex items-center gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400">
+                <Users className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  4. Requisitos Obligatorios al Crear Clientes y Proveedores
                 </h3>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Próximo número correlativo a emitir por tipo de comprobante. Al facturar en modo oficial, ARCA asigna el número oficial correlativo automáticamente.
-              </p>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 pt-1">
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">Factura A</label>
-                  <input className="ui-input font-mono font-bold" type="number" min="1" value={draft.facturacion.document_sequences.A} onChange={(event) => updateDocumentSequence("A", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.A))))} disabled={!canWriteConfiguracion} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">Factura B</label>
-                  <input className="ui-input font-mono font-bold" type="number" min="1" value={draft.facturacion.document_sequences.B} onChange={(event) => updateDocumentSequence("B", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.B))))} disabled={!canWriteConfiguracion} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">Factura C</label>
-                  <input className="ui-input font-mono font-bold" type="number" min="1" value={draft.facturacion.document_sequences.C} onChange={(event) => updateDocumentSequence("C", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.C))))} disabled={!canWriteConfiguracion} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-200">Presupuesto</label>
-                  <input className="ui-input font-mono font-bold" type="number" min="1" value={draft.facturacion.document_sequences.PRESUPUESTO} onChange={(event) => updateDocumentSequence("PRESUPUESTO", Math.max(1, Math.floor(toNumber(event.target.value, draft.facturacion.document_sequences.PRESUPUESTO))))} disabled={!canWriteConfiguracion} />
-                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Establecé qué datos son mandatorios para registrar nuevas entidades en el sistema.
+                </p>
               </div>
             </div>
 
-            {/* BLOQUE 4: REGLAS FISCALES POR MEDIO DE PAGO Y BANCOS */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4.5 dark:border-slate-800 dark:bg-slate-900 shadow-xs space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <FileCheck2 className="text-blue-600 dark:text-blue-400 h-5 w-5" />
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
-                      4. Automatización y Reglas Fiscales por Medio de Pago y Bancos
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Configurá qué cobros activan automáticamente la emisión de factura fiscal y cuáles la deshabilitan por completo en el POS.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                    {(draft.facturacion.payment_method_rules?.mandatory_methods || []).length} obligatorios
-                  </span>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                    {(draft.facturacion.payment_method_rules?.disabled_methods || []).length} deshabilitados
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid gap-5 lg:grid-cols-2">
-                {/* COLUMNA 1: FACTURACIÓN OBLIGATORIA */}
-                <div className="rounded-xl border border-emerald-200/90 bg-emerald-50/20 p-4 dark:border-emerald-800/60 dark:bg-emerald-950/20 space-y-3.5">
-                  <div className="flex items-center justify-between border-b border-emerald-100 dark:border-emerald-900/40 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="text-emerald-600 dark:text-emerald-400 h-4 w-4" />
-                      <span className="text-xs font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-200">
-                        Facturación Obligatoria
-                      </span>
-                    </div>
-                    <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
-                      Auto-activa switch en POS
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-slate-600 dark:text-slate-300">
-                    Al seleccionar o asignar monto a estos medios o cuentas bancarias, el switch fiscal de facturación se activará automáticamente.
-                  </p>
-
-                  {/* Medios de Pago Estándar */}
-                  <div className="space-y-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block px-0.5">
-                      Medios de Pago Estándar
-                    </span>
-                    <div className="space-y-1.5">
-                      {standardPaymentMethodOptions.map((item) => {
-                        const Icon = item.icon;
-                        const isMandatory = (draft.facturacion.payment_method_rules?.mandatory_methods || []).includes(item.key);
-                        const isDisabled = (draft.facturacion.payment_method_rules?.disabled_methods || []).includes(item.key);
-
-                        return (
-                          <div
-                            key={item.key}
-                            onClick={() => togglePaymentMethodInvoiceRule(item.key, "mandatory")}
-                            className={cn(
-                              "flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer select-none",
-                              isMandatory
-                                ? "border-emerald-500 bg-emerald-50 dark:border-emerald-500/80 dark:bg-emerald-950/40 shadow-xs ring-1 ring-emerald-500/30"
-                                : isDisabled
-                                  ? "border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 opacity-60 hover:opacity-100"
-                                  : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-emerald-300 dark:hover:border-emerald-700/60"
-                            )}
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                              <div
-                                className={cn(
-                                  "p-1.5 rounded-md shrink-0",
-                                  isMandatory
-                                    ? "bg-emerald-600 text-white"
-                                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                                )}
-                              >
-                                <Icon className="h-3.5 w-3.5" />
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
-                                    {item.label}
-                                  </span>
-                                  {isDisabled && (
-                                    <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                                      En deshabilitados
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                                  {item.subtitle}
-                                </p>
-                              </div>
-                            </div>
-
-                            <input
-                              type="checkbox"
-                              checked={isMandatory}
-                              onChange={() => togglePaymentMethodInvoiceRule(item.key, "mandatory")}
-                              onClick={(e) => e.stopPropagation()}
-                              className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 dark:border-slate-600 dark:bg-slate-800 cursor-pointer shrink-0"
-                              disabled={!canWriteConfiguracion}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Cuentas Bancarias Receptoras Dinámicas */}
-                  <div className="space-y-1.5 pt-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block px-0.5">
-                      Bancos Receptores Registrados (Dinámicos)
-                    </span>
-                    {activeBankAccounts.length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 p-3 text-center">
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          No hay cuentas bancarias activas registradas en el catálogo contable.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {activeBankAccounts.map((account) => {
-                          const accountKey = `bank_account:${account.id}`;
-                          const isMandatory = (draft.facturacion.payment_method_rules?.mandatory_methods || []).includes(accountKey);
-                          const isDisabled = (draft.facturacion.payment_method_rules?.disabled_methods || []).includes(accountKey);
-                          const holderText = account.holder_name ? ` • Titular: ${account.holder_name}` : "";
-                          const detailText = account.alias ? `Alias: ${account.alias}` : account.cbu ? `CBU: ...${account.cbu.slice(-6)}` : account.account_type.replace("_", " ");
-
-                          return (
-                            <div
-                              key={accountKey}
-                              onClick={() => togglePaymentMethodInvoiceRule(accountKey, "mandatory")}
-                              className={cn(
-                                "flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer select-none",
-                                isMandatory
-                                  ? "border-emerald-500 bg-emerald-50 dark:border-emerald-500/80 dark:bg-emerald-950/40 shadow-xs ring-1 ring-emerald-500/30"
-                                  : isDisabled
-                                    ? "border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 opacity-60 hover:opacity-100"
-                                    : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-emerald-300 dark:hover:border-emerald-700/60"
-                              )}
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                                <div
-                                  className={cn(
-                                    "p-1.5 rounded-md shrink-0",
-                                    isMandatory
-                                      ? "bg-emerald-600 text-white"
-                                      : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                                  )}
-                                >
-                                  <Landmark className="h-3.5 w-3.5" />
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
-                                      Transferencia: {account.bank_name}
-                                    </span>
-                                    {isDisabled && (
-                                      <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                                        En deshabilitados
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                                    {detailText}{holderText}
-                                  </p>
-                                </div>
-                              </div>
-
-                              <input
-                                type="checkbox"
-                                checked={isMandatory}
-                                onChange={() => togglePaymentMethodInvoiceRule(accountKey, "mandatory")}
-                                onClick={(e) => e.stopPropagation()}
-                                className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 dark:border-slate-600 dark:bg-slate-800 cursor-pointer shrink-0"
-                                disabled={!canWriteConfiguracion}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* COLUMNA 2: FACTURACIÓN DESHABILITADA */}
-                <div className="rounded-xl border border-rose-200/90 bg-rose-50/20 p-4 dark:border-rose-800/60 dark:bg-rose-950/20 space-y-3.5">
-                  <div className="flex items-center justify-between border-b border-rose-100 dark:border-rose-900/40 pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <Ban className="text-rose-600 dark:text-rose-400 h-4 w-4" />
-                      <span className="text-xs font-bold uppercase tracking-wider text-rose-900 dark:text-rose-200">
-                        Facturación Deshabilitada
-                      </span>
-                    </div>
-                    <span className="text-[11px] font-semibold text-rose-700 dark:text-rose-300">
-                      Apaga y bloquea switch en POS
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-slate-600 dark:text-slate-300">
-                    Al cobrar con estos medios o cuentas bancarias, el switch de Facturación se apagará y bloqueará para impedir comprobantes no deseados.
-                  </p>
-
-                  {/* Medios de Pago Estándar */}
-                  <div className="space-y-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block px-0.5">
-                      Medios de Pago Estándar
-                    </span>
-                    <div className="space-y-1.5">
-                      {standardPaymentMethodOptions.map((item) => {
-                        const Icon = item.icon;
-                        const isMandatory = (draft.facturacion.payment_method_rules?.mandatory_methods || []).includes(item.key);
-                        const isDisabled = (draft.facturacion.payment_method_rules?.disabled_methods || []).includes(item.key);
-
-                        return (
-                          <div
-                            key={item.key}
-                            onClick={() => togglePaymentMethodInvoiceRule(item.key, "disabled")}
-                            className={cn(
-                              "flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer select-none",
-                              isDisabled
-                                ? "border-rose-500 bg-rose-50 dark:border-rose-500/80 dark:bg-rose-950/40 shadow-xs ring-1 ring-rose-500/30"
-                                : isMandatory
-                                  ? "border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 opacity-60 hover:opacity-100"
-                                  : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-rose-300 dark:hover:border-rose-700/60"
-                            )}
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                              <div
-                                className={cn(
-                                  "p-1.5 rounded-md shrink-0",
-                                  isDisabled
-                                    ? "bg-rose-600 text-white"
-                                    : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                                )}
-                              >
-                                <Icon className="h-3.5 w-3.5" />
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
-                                    {item.label}
-                                  </span>
-                                  {isMandatory && (
-                                    <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                      En obligatorios
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                                  {item.subtitle}
-                                </p>
-                              </div>
-                            </div>
-
-                            <input
-                              type="checkbox"
-                              checked={isDisabled}
-                              onChange={() => togglePaymentMethodInvoiceRule(item.key, "disabled")}
-                              onClick={(e) => e.stopPropagation()}
-                              className="h-4 w-4 rounded text-rose-600 focus:ring-rose-500 dark:border-slate-600 dark:bg-slate-800 cursor-pointer shrink-0"
-                              disabled={!canWriteConfiguracion}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Cuentas Bancarias Receptoras Dinámicas */}
-                  <div className="space-y-1.5 pt-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block px-0.5">
-                      Bancos Receptores Registrados (Dinámicos)
-                    </span>
-                    {activeBankAccounts.length === 0 ? (
-                      <div className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 p-3 text-center">
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          No hay cuentas bancarias activas registradas en el catálogo contable.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {activeBankAccounts.map((account) => {
-                          const accountKey = `bank_account:${account.id}`;
-                          const isMandatory = (draft.facturacion.payment_method_rules?.mandatory_methods || []).includes(accountKey);
-                          const isDisabled = (draft.facturacion.payment_method_rules?.disabled_methods || []).includes(accountKey);
-                          const holderText = account.holder_name ? ` • Titular: ${account.holder_name}` : "";
-                          const detailText = account.alias ? `Alias: ${account.alias}` : account.cbu ? `CBU: ...${account.cbu.slice(-6)}` : account.account_type.replace("_", " ");
-
-                          return (
-                            <div
-                              key={accountKey}
-                              onClick={() => togglePaymentMethodInvoiceRule(accountKey, "disabled")}
-                              className={cn(
-                                "flex items-center justify-between p-2.5 rounded-lg border transition-all cursor-pointer select-none",
-                                isDisabled
-                                  ? "border-rose-500 bg-rose-50 dark:border-rose-500/80 dark:bg-rose-950/40 shadow-xs ring-1 ring-rose-500/30"
-                                  : isMandatory
-                                    ? "border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 opacity-60 hover:opacity-100"
-                                    : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-rose-300 dark:hover:border-rose-700/60"
-                              )}
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                                <div
-                                  className={cn(
-                                    "p-1.5 rounded-md shrink-0",
-                                    isDisabled
-                                      ? "bg-rose-600 text-white"
-                                      : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                                  )}
-                                >
-                                  <Landmark className="h-3.5 w-3.5" />
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">
-                                      Transferencia: {account.bank_name}
-                                    </span>
-                                    {isMandatory && (
-                                      <span className="text-[10px] px-1.5 py-0.2 rounded font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                        En obligatorios
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                                    {detailText}{holderText}
-                                  </p>
-                                </div>
-                              </div>
-
-                              <input
-                                type="checkbox"
-                                checked={isDisabled}
-                                onChange={() => togglePaymentMethodInvoiceRule(accountKey, "disabled")}
-                                onClick={(e) => e.stopPropagation()}
-                                className="h-4 w-4 rounded text-rose-600 focus:ring-rose-500 dark:border-slate-600 dark:bg-slate-800 cursor-pointer shrink-0"
-                                disabled={!canWriteConfiguracion}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* REQUISITOS OBLIGATORIOS PARA CLIENTES Y PROVEEDORES */}
-            <div className="md:col-span-2 space-y-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-700/80 dark:bg-slate-800/40">
-              <div className="flex items-center gap-2">
-                <Users className="text-blue-600 dark:text-blue-400" size={18} />
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                    5. Requisitos de Registro de Clientes y Proveedores
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Configurá qué campos son obligatorios al crear o editar clientes y proveedores (desde POS, Clientes, Cuentas Corrientes y Proveedores).
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2 pt-1">
-                {/* Clientes */}
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                      Clientes
-                    </span>
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Alta y edición
-                    </span>
-                  </div>
-
-                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+            <div className="grid gap-6 md:grid-cols-2">
+              <div className="space-y-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 block">
+                  Requisitos de Clientes
+                </span>
+                <div className="space-y-2">
+                  <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm shadow-2xs dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition">
                     <input
                       type="checkbox"
-                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
-                      checked={customerReqs.document_number}
-                      onChange={(e) => updateEntityRequirements("customer", "document_number", e.target.checked)}
-                      disabled={!canWriteConfiguracion}
-                    />
-                    <div className="flex-1">
-                      <span className="font-medium text-slate-800 dark:text-slate-200 block">
-                        DNI / CUIT obligatorio
-                      </span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
-                        Si se desactiva, el DNI/CUIT es opcional al crear o editar clientes en POS y Cuentas Corrientes.
-                      </span>
-                    </div>
-                  </label>
-
-                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
+                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500"
                       checked={customerReqs.phone}
                       onChange={(e) => updateEntityRequirements("customer", "phone", e.target.checked)}
                       disabled={!canWriteConfiguracion}
                     />
                     <div className="flex-1">
                       <span className="font-medium text-slate-800 dark:text-slate-200 block">
-                        Teléfono obligatorio
+                        Teléfono / WhatsApp obligatorio
                       </span>
                       <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
                         Exigir número de teléfono de contacto para guardar el cliente.
@@ -2935,10 +2359,10 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                     </div>
                   </label>
 
-                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                  <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm shadow-2xs dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition">
                     <input
                       type="checkbox"
-                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
+                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500"
                       checked={customerReqs.email}
                       onChange={(e) => updateEntityRequirements("customer", "email", e.target.checked)}
                       disabled={!canWriteConfiguracion}
@@ -2953,101 +2377,78 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                     </div>
                   </label>
 
-                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                  <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm shadow-2xs dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition">
                     <input
                       type="checkbox"
-                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
+                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500"
                       checked={customerReqs.address}
                       onChange={(e) => updateEntityRequirements("customer", "address", e.target.checked)}
                       disabled={!canWriteConfiguracion}
                     />
                     <div className="flex-1">
                       <span className="font-medium text-slate-800 dark:text-slate-200 block">
-                        Dirección obligatoria
+                        Domicilio obligatorio
                       </span>
                       <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
-                        Exigir domicilio al registrar el cliente.
+                        Exigir dirección de entrega o fiscal del cliente.
                       </span>
                     </div>
                   </label>
                 </div>
+              </div>
 
-                {/* Proveedores */}
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                      Proveedores
-                    </span>
-                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Alta y edición
-                    </span>
-                  </div>
-
-                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+              <div className="space-y-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 block">
+                  Requisitos de Proveedores
+                </span>
+                <div className="space-y-2">
+                  <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm shadow-2xs dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition">
                     <input
                       type="checkbox"
-                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
+                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500"
                       checked={supplierReqs.tax_id}
                       onChange={(e) => updateEntityRequirements("supplier", "tax_id", e.target.checked)}
                       disabled={!canWriteConfiguracion}
                     />
                     <div className="flex-1">
                       <span className="font-medium text-slate-800 dark:text-slate-200 block">
-                        CUIT / Identificación Fiscal obligatoria
+                        CUIT del Proveedor obligatorio
                       </span>
                       <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
-                        Exigir CUIT o identificación tributaria para registrar proveedores.
+                        Exigir CUIT válido para poder emitir compras o registrar cuenta corriente.
                       </span>
                     </div>
                   </label>
 
-                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                  <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm shadow-2xs dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition">
                     <input
                       type="checkbox"
-                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
+                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500"
                       checked={supplierReqs.phone}
                       onChange={(e) => updateEntityRequirements("supplier", "phone", e.target.checked)}
                       disabled={!canWriteConfiguracion}
                     />
                     <div className="flex-1">
                       <span className="font-medium text-slate-800 dark:text-slate-200 block">
-                        Teléfono obligatorio
+                        Teléfono de Proveedor obligatorio
                       </span>
                       <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
-                        Exigir teléfono de contacto del proveedor.
+                        Exigir teléfono de contacto para el proveedor.
                       </span>
                     </div>
                   </label>
 
-                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                  <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm shadow-2xs dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition">
                     <input
                       type="checkbox"
-                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
-                      checked={supplierReqs.email}
-                      onChange={(e) => updateEntityRequirements("supplier", "email", e.target.checked)}
-                      disabled={!canWriteConfiguracion}
-                    />
-                    <div className="flex-1">
-                      <span className="font-medium text-slate-800 dark:text-slate-200 block">
-                        Email obligatorio
-                      </span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
-                        Exigir correo electrónico del proveedor.
-                      </span>
-                    </div>
-                  </label>
-
-                  <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800"
+                      className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500"
                       checked={supplierReqs.address}
                       onChange={(e) => updateEntityRequirements("supplier", "address", e.target.checked)}
                       disabled={!canWriteConfiguracion}
                     />
                     <div className="flex-1">
                       <span className="font-medium text-slate-800 dark:text-slate-200 block">
-                        Dirección obligatoria
+                        Domicilio del Proveedor obligatorio
                       </span>
                       <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
                         Exigir domicilio comercial o fiscal del proveedor.
@@ -3058,266 +2459,412 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* SECCIÓN: BANCOS Y COBROS */}
-        <section
-          className="ui-card space-y-4"
-          hidden={!scopePreset.visibleSections.contableCatalogos || (visibleTabs.length > 1 && activeTab !== "contableCatalogos")}
-        >
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-              <Building2 className="text-blue-600 dark:text-blue-400" size={20} />
-              <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Bancos, Cuentas y Planes de Cuotas</h2>
-                <p className="text-xs text-slate-500">Catálogos de cuentas de depósito y financiación con tarjeta en POS</p>
-              </div>
+      {/* SECCIÓN 8: MEDIOS DE PAGO Y PLANES DE CUOTAS */}
+      <section
+        className="space-y-6"
+        hidden={!scopePreset.visibleSections.contableCatalogos || (visibleTabs.length > 1 && activeTab !== "contableCatalogos")}
+      >
+        {/* Encabezado Principal Flotante Moderno */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
+              <CreditCard size={22} />
             </div>
-            {isAccountingLoading ? <span className="text-xs text-slate-500">Cargando datos contables...</span> : null}
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                CONFIGURACIÓN › MEDIOS DE PAGO
+              </span>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                Medios de Pago y Financiación
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Habilita los medios de cobro para el Punto de Venta, ajusta recargos/descuentos comerciales y gestiona los planes de cuotas con tarjeta.
+              </p>
+            </div>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* CUENTAS BANCARIAS */}
-            <article className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Cuentas Bancarias</h3>
+          <div className="flex items-center gap-2">
+            <a
+              href="/bancos"
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-900 px-4 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <Landmark size={14} className="text-slate-500 dark:text-slate-400" />
+              <span>Gestionar Cuentas Bancarias en Bancos</span>
+            </a>
+          </div>
+        </div>
 
-              <div className="space-y-2">
-                <input className="ui-input" value={bankAccountForm.bank_name} onChange={(event) => setBankAccountForm((current) => ({ ...current, bank_name: event.target.value }))} placeholder="Nombre del Banco" disabled={!canWriteConfiguracion} />
-                <select className="ui-input" value={bankAccountForm.account_type} onChange={(event) => setBankAccountForm((current) => ({ ...current, account_type: event.target.value as BankAccount["account_type"] }))} disabled={!canWriteConfiguracion}>
-                  {bankAccountTypeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-                <input className="ui-input" value={bankAccountForm.holder_name} onChange={(event) => setBankAccountForm((current) => ({ ...current, holder_name: event.target.value }))} placeholder="Titular de la Cuenta" disabled={!canWriteConfiguracion} />
-                <input className="ui-input" value={bankAccountForm.cbu} onChange={(event) => setBankAccountForm((current) => ({ ...current, cbu: event.target.value }))} placeholder="CBU / CVU (22 dígitos)" disabled={!canWriteConfiguracion} />
-                <input className="ui-input" value={bankAccountForm.alias} onChange={(event) => setBankAccountForm((current) => ({ ...current, alias: event.target.value }))} placeholder="Alias CBU" disabled={!canWriteConfiguracion} />
-                <button
-                  type="button"
-                  className="ui-btn-primary w-full"
+        {/* SUBSECCIÓN 1: CATÁLOGO DE MEDIOS DE COBRO EN POS */}
+        <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                Medios de Cobro Habilitados en Punto de Venta (POS)
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Activa o desactiva qué opciones de cobro ven los cajeros en el modal inteligente y define recargos o descuentos comerciales.
+              </p>
+            </div>
+            {isAccountingLoading ? (
+              <span className="text-xs text-slate-500 dark:text-slate-400">Sincronizando medios...</span>
+            ) : null}
+          </div>
+
+          {accountingPaymentMethods.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-xs text-slate-500 dark:text-slate-400">
+              Cargando catálogo de medios de pago...
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {accountingPaymentMethods.map((method) => (
+                <PaymentMethodConfigCard
+                  key={method.id}
+                  method={method}
                   disabled={!canWriteConfiguracion}
-                  onClick={() => {
-                    void upsertBankAccount({
-                      ...bankAccountForm,
-                      cbu: bankAccountForm.cbu || null,
-                      alias: bankAccountForm.alias || null,
-                      notes: bankAccountForm.notes || null,
-                    }).then((saved) => {
-                      if (!saved) return;
-                      setBankAccountForm({
-                        bank_name: "",
-                        account_type: "caja_ahorro",
-                        holder_name: "",
-                        cbu: "",
-                        alias: "",
-                        currency_code: "ARS",
-                        notes: "",
-                        is_active: true,
-                      });
-                    });
-                  }}
-                >
-                  Agregar Cuenta
-                </button>
-              </div>
+                  onToggle={togglePaymentMethod}
+                  onUpdate={updatePaymentMethod}
+                />
+              ))}
+            </div>
+          )}
+        </div>
 
-              <div className="max-h-48 space-y-2 overflow-auto pr-1">
-                {bankAccounts.map((account) => (
-                  <div key={account.id} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{account.bank_name}</p>
-                    <p className="text-xs text-slate-500">{account.holder_name} · {account.currency_code}</p>
-                    <p className="text-xs font-mono text-slate-500">{account.alias || "Sin alias"} · {account.cbu || "Sin CBU"}</p>
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <span className={account.is_active ? "ui-badge ui-badge--success" : "ui-badge ui-badge--warn"}>
-                        {account.is_active ? "Activa" : "Inactiva"}
-                      </span>
-                      <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => { void toggleBankAccount(account.id); }} disabled={!canWriteConfiguracion}>
-                        {account.is_active ? "Desactivar" : "Activar"}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </article>
+        {/* SUBSECCIÓN 2: PLANES DE CUOTAS Y FINANCIACIÓN CON TARJETA */}
+        <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-6">
+          <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              Planes de Cuotas y Financiación con Tarjeta
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Configuración de opciones de cuotas, coeficientes de recargo e intereses para cobros con tarjeta en POS.
+            </p>
+          </div>
 
-            {/* BANCOS DE ORIGEN */}
-            <article className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Bancos Emisores</h3>
+          {canWriteConfiguracion && (
+            <form onSubmit={handleCreateInstallmentPlan} className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-800/40 space-y-4">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 block">
+                Agregar Nuevo Plan de Cuotas
+              </span>
 
-              <div className="space-y-2">
-                <input className="ui-input" value={originBankForm.name} onChange={(event) => setOriginBankForm((current) => ({ ...current, name: event.target.value }))} placeholder="Nombre de Banco" disabled={!canWriteConfiguracion} />
-                <input className="ui-input" value={originBankForm.code} onChange={(event) => setOriginBankForm((current) => ({ ...current, code: event.target.value }))} placeholder="Código BCRA (Opcional)" disabled={!canWriteConfiguracion} />
-                <button
-                  type="button"
-                  className="ui-btn-primary w-full"
-                  disabled={!canWriteConfiguracion}
-                  onClick={() => {
-                    void upsertOriginBank(originBankForm).then((saved) => {
-                      if (!saved) return;
-                      setOriginBankForm({ code: "", name: "", is_active: true });
-                    });
-                  }}
-                >
-                  Agregar Banco
-                </button>
-              </div>
-
-              <div className="max-h-48 space-y-2 overflow-auto pr-1">
-                {originBanks.map((bank) => (
-                  <div key={bank.id} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{bank.name}</p>
-                    <p className="text-xs text-slate-500">{bank.code || "Sin código"}</p>
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <span className={bank.is_active ? "ui-badge ui-badge--success" : "ui-badge ui-badge--warn"}>
-                        {bank.is_active ? "Activo" : "Inactivo"}
-                      </span>
-                      <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => { void toggleOriginBank(bank.id); }} disabled={!canWriteConfiguracion}>
-                        {bank.is_active ? "Desactivar" : "Activar"}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </article>
-
-            {/* PLANES DE CUOTAS */}
-            <article className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Planes de Cuotas</h3>
-
-              <div className="space-y-2">
-                <input className="ui-input" value={installmentPlanForm.name} onChange={(event) => setInstallmentPlanForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ej: 3 Cuotas sin interés" disabled={!canWriteConfiguracion} />
-                <div className="grid gap-2 grid-cols-2">
-                  <input className="ui-input" type="number" min="1" value={installmentPlanForm.installments} onChange={(event) => setInstallmentPlanForm((current) => ({ ...current, installments: Math.max(1, Math.floor(toNumber(event.target.value, 1))) }))} placeholder="Cant. Cuotas" disabled={!canWriteConfiguracion} />
-                  <input className="ui-input" type="number" min="0" step="0.01" value={installmentPlanForm.interest_percent} onChange={(event) => setInstallmentPlanForm((current) => ({ ...current, interest_percent: Math.max(0, toNumber(event.target.value, 0)) }))} placeholder="Recargo %" disabled={!canWriteConfiguracion} />
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Nombre del Plan *
+                  </label>
+                  <input
+                    className="ui-input text-xs"
+                    value={installmentPlanForm.name}
+                    onChange={(event) =>
+                      setInstallmentPlanForm((prev) => ({ ...prev, name: event.target.value }))
+                    }
+                    placeholder="Ej: 3 Cuotas sin interés"
+                    required
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-lpignore="true"
+                  />
                 </div>
-                <button
-                  type="button"
-                  className="ui-btn-primary w-full"
-                  disabled={!canWriteConfiguracion}
-                  onClick={() => {
-                    void upsertInstallmentPlan({
-                      ...installmentPlanForm,
-                      code: installmentPlanForm.code || `plan_${installmentPlanForm.installments}_${Math.round(installmentPlanForm.interest_percent)}`,
-                      card_brand: installmentPlanForm.card_brand || null,
-                      notes: installmentPlanForm.notes || null,
-                    }).then((saved) => {
-                      if (!saved) return;
-                      setInstallmentPlanForm({ code: "", name: "", installments: 1, interest_percent: 0, card_brand: "", notes: "", is_active: true });
-                    });
-                  }}
-                >
-                  Agregar Plan
-                </button>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Cantidad de Cuotas *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="60"
+                    className="ui-input text-xs font-mono"
+                    value={installmentPlanForm.installments}
+                    onChange={(event) =>
+                      setInstallmentPlanForm((prev) => ({
+                        ...prev,
+                        installments: Math.max(1, Math.floor(toNumber(event.target.value, 1))),
+                      }))
+                    }
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Recargo / Interés (%) *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="ui-input text-xs font-mono"
+                    value={installmentPlanForm.interest_percent}
+                    onChange={(event) =>
+                      setInstallmentPlanForm((prev) => ({
+                        ...prev,
+                        interest_percent: Math.max(0, toNumber(event.target.value, 0)),
+                      }))
+                    }
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Marca / Tarjeta (Opcional)
+                  </label>
+                  <input
+                    className="ui-input text-xs"
+                    value={installmentPlanForm.card_brand}
+                    onChange={(event) =>
+                      setInstallmentPlanForm((prev) => ({ ...prev, card_brand: event.target.value }))
+                    }
+                    placeholder="Ej: Visa, Mastercard..."
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-lpignore="true"
+                  />
+                </div>
               </div>
 
-              <div className="max-h-48 space-y-2 overflow-auto pr-1">
+              <div className="flex justify-end pt-1">
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1.5 rounded-2xl bg-blue-600 hover:bg-blue-700 px-5 py-2 text-xs font-semibold text-white shadow-sm shadow-blue-500/25 transition active:scale-95 cursor-pointer"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Agregar Plan</span>
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div className="space-y-3">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 block">
+              Planes Registrados ({installmentPlans.length})
+            </span>
+
+            {installmentPlans.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-slate-500 dark:text-slate-400">
+                <CreditCard className="mx-auto h-8 w-8 text-slate-400 mb-2" />
+                <p className="text-sm font-medium">No hay planes de cuotas configurados.</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Agrega planes de 1, 3, 6 o 12 cuotas para ofrecer financiación con tarjeta en POS.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {installmentPlans.map((plan) => (
-                  <div key={plan.id} className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{plan.name}</p>
-                    <p className="text-xs text-slate-500">{plan.installments} cuotas · Recargo: {plan.interest_percent.toFixed(2)}%</p>
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <span className={plan.is_active ? "ui-badge ui-badge--success" : "ui-badge ui-badge--warn"}>
-                        {plan.is_active ? "Activo" : "Inactivo"}
-                      </span>
-                      <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => { void toggleInstallmentPlan(plan.id); }} disabled={!canWriteConfiguracion}>
-                        {plan.is_active ? "Desactivar" : "Activar"}
-                      </button>
+                  <div
+                    key={plan.id}
+                    className="flex flex-col justify-between gap-3 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-xs"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                          {plan.name}
+                        </h4>
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                            plan.is_active
+                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
+                              : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+                          )}
+                        >
+                          {plan.is_active ? "Activo" : "Inactivo"}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                        <div>
+                          <strong>{plan.installments}</strong> cuota{plan.installments > 1 ? "s" : ""} · Recargo:{" "}
+                          <span className={plan.interest_percent > 0 ? "text-amber-600 dark:text-amber-400 font-bold" : "text-emerald-600 font-bold"}>
+                            {plan.interest_percent}%
+                          </span>
+                        </div>
+                        {plan.card_brand ? (
+                          <div className="text-[11px] text-slate-500">
+                            Tarjeta: {plan.card_brand}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
+
+                    {canWriteConfiguracion && (
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => void toggleInstallmentPlan(plan.id)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition active:scale-95 cursor-pointer"
+                        >
+                          <span>{plan.is_active ? "Desactivar" : "Activar"}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`¿Estás seguro de eliminar el plan "${plan.name}"?`)) {
+                              void deleteInstallmentPlan(plan.id);
+                            }
+                          }}
+                          className="rounded-xl p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                          title="Eliminar plan"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
-            </article>
+            )}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* SECCIÓN: BALANZA Y CÓDIGOS */}
-        <section
-          className="ui-card space-y-4"
-          hidden={!scopePreset.visibleSections.codigos_balanza || (visibleTabs.length > 1 && activeTab !== "codigos_balanza")}
-        >
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-              <Scale className="text-blue-600 dark:text-blue-400" size={20} />
-              <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Lectura de Balanza y Códigos EAN13</h2>
-                <p className="text-xs text-slate-500">Definición de posiciones de PLU, peso o importe en etiquetas de balanzas pesables</p>
-              </div>
+      {/* SECCIÓN 9: BALANZA & CÓDIGOS */}
+      <section
+        className="space-y-6"
+        hidden={!scopePreset.visibleSections.codigos_balanza || (visibleTabs.length > 1 && activeTab !== "codigos_balanza")}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-600 dark:bg-cyan-500/20 dark:text-cyan-400">
+              <Scale size={22} />
             </div>
-
-            <div className="flex items-center gap-2">
-              <button type="button" className="ui-btn-ghost" onClick={() => { void resetSection("codigos_balanza"); }} disabled={!canWriteConfiguracion || savingSection.codigos_balanza}>Restablecer</button>
-              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("codigos_balanza"); }} disabled={!canWriteConfiguracion || savingSection.codigos_balanza}>{savingSection.codigos_balanza ? "Guardando..." : "Guardar Balanza"}</button>
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400">
+                CONFIGURACIÓN › BALANZAS
+              </span>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                Balanza y Códigos de Barras Embebidos
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Configuración del parser de tickets de balanza para fiambrería, carnicería y verdulería.
+              </p>
             </div>
           </div>
 
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/80 bg-white dark:bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-xs hover:border-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => { void resetSection("codigos_balanza"); }}
+              disabled={!canWriteConfiguracion || savingSection.codigos_balanza}
+            >
+              <RefreshCw size={14} />
+              <span>Restablecer</span>
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-2xl bg-cyan-600 hover:bg-cyan-700 px-5 py-2 text-xs font-semibold text-white shadow-sm shadow-cyan-500/25 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              onClick={() => { void handleSaveSection("codigos_balanza"); }}
+              disabled={!canWriteConfiguracion || savingSection.codigos_balanza}
+            >
+              <Save size={14} />
+              <span>{savingSection.codigos_balanza ? "Guardando..." : "Guardar Balanza"}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-xs space-y-6">
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2 flex flex-wrap gap-4 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/40">
-              <label className="flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-200">
-                <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.codigos_balanza.scale_parser_enabled} onChange={(event) => updateSection("codigos_balanza", { scale_parser_enabled: event.target.checked })} disabled={!canWriteConfiguracion} />
-                Activar Parser de Balanzas Comercial
-              </label>
-
-              <label className="flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-200">
-                <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={draft.codigos_balanza.ean13_enabled} onChange={(event) => updateSection("codigos_balanza", { ean13_enabled: event.target.checked })} disabled={!canWriteConfiguracion} />
-                Compatibilidad EAN-13 Estándar
+            <div className="md:col-span-2">
+              <label className="flex items-center gap-2.5 rounded-2xl border border-slate-200/90 bg-white p-3.5 text-sm font-medium text-slate-800 shadow-2xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded text-blue-600 focus:ring-blue-500"
+                  checked={draft.codigos_balanza.scale_parser_enabled}
+                  onChange={(event) =>
+                    updateSection("codigos_balanza", { scale_parser_enabled: event.target.checked })
+                  }
+                  disabled={!canWriteConfiguracion}
+                />
+                <span className="font-bold">Activar Parser de Balanzas Comercial</span>
               </label>
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Modo de Lectura de Balanza</label>
-              <select className="ui-input" value={draft.codigos_balanza.scale_mode} onChange={(event) => updateSection("codigos_balanza", { scale_mode: event.target.value as BarcodeScaleMode })} disabled={!canWriteConfiguracion}>
-                <option value="total_price">El código incluye IMPORTE TOTAL en pesos</option>
-                <option value="weight">El código incluye PESO en Kilogramos</option>
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Modalidad de la Balanza
+              </label>
+              <select
+                className="ui-input"
+                value={draft.codigos_balanza.scale_mode}
+                onChange={(event) =>
+                  updateSection("codigos_balanza", {
+                    scale_mode: event.target.value as BarcodeScaleMode,
+                  })
+                }
+                disabled={!canWriteConfiguracion}
+              >
+                <option value="weight">Por Peso (Etiqueta incluye Kilos / Gramos)</option>
+                <option value="total_price">Por Importe Total (Etiqueta incluye Pesos $)</option>
               </select>
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Prefijo de Balanza (Ej: 20)</label>
-              <input className="ui-input" value={draft.codigos_balanza.scale_prefix} onChange={(event) => updateSection("codigos_balanza", { scale_prefix: event.target.value })} placeholder="20" disabled={!canWriteConfiguracion} />
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Prefijo Identificador de Balanza
+              </label>
+              <input
+                className="ui-input font-mono"
+                value={draft.codigos_balanza.scale_prefix}
+                onChange={(event) =>
+                  updateSection("codigos_balanza", { scale_prefix: event.target.value.trim() })
+                }
+                placeholder="20"
+                disabled={!canWriteConfiguracion}
+              />
+              <span className="text-[11px] text-slate-500">Normalmente 20 o 2</span>
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Inicio de Posición PLU</label>
-              <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.plu_start} onChange={(event) => updateSection("codigos_balanza", { plu_start: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.plu_start))) })} placeholder="3" disabled={!canWriteConfiguracion} />
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Posición Inicial del Código PLU
+              </label>
+              <input
+                className="ui-input"
+                type="number"
+                min="1"
+                max="13"
+                value={draft.codigos_balanza.plu_start}
+                onChange={(event) =>
+                  updateSection("codigos_balanza", {
+                    plu_start: Math.max(1, Math.floor(toNumber(event.target.value, 2))),
+                  })
+                }
+                placeholder="2"
+                disabled={!canWriteConfiguracion}
+              />
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Largo del Código PLU</label>
-              <input className="ui-input" type="number" min="1" value={draft.codigos_balanza.plu_length} onChange={(event) => updateSection("codigos_balanza", { plu_length: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.plu_length))) })} placeholder="4" disabled={!canWriteConfiguracion} />
+              <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Largo del Código PLU (Dígitos)
+              </label>
+              <input
+                className="ui-input"
+                type="number"
+                min="1"
+                max="8"
+                value={draft.codigos_balanza.plu_length}
+                onChange={(event) =>
+                  updateSection("codigos_balanza", {
+                    plu_length: Math.max(1, Math.floor(toNumber(event.target.value, 4))),
+                  })
+                }
+                placeholder="4"
+                disabled={!canWriteConfiguracion}
+              />
             </div>
-
-            {draft.codigos_balanza.scale_mode === "weight" ? (
-              <>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Inicio de Posición Peso</label>
-                  <input className="ui-input" type="number" min="1" max="13" value={draft.codigos_balanza.weight_start ?? 8} onChange={(event) => updateSection("codigos_balanza", { weight_start: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.weight_start ?? 8))) })} placeholder="8" disabled={!canWriteConfiguracion} />
-                  <span className="text-[11px] text-slate-500">En EAN-13 estándar de peso suele ser la posición 8</span>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Largo del Peso (Dígitos)</label>
-                  <input className="ui-input" type="number" min="1" max="6" value={draft.codigos_balanza.weight_length ?? 5} onChange={(event) => updateSection("codigos_balanza", { weight_length: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.weight_length ?? 5))) })} placeholder="5" disabled={!canWriteConfiguracion} />
-                  <span className="text-[11px] text-slate-500">Comúnmente 5 dígitos (ej: 01275 para 1,275 kg)</span>
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Inicio de Posición Importe</label>
-                  <input className="ui-input" type="number" min="1" max="13" value={draft.codigos_balanza.amount_start ?? 7} onChange={(event) => updateSection("codigos_balanza", { amount_start: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.amount_start ?? 7))) })} placeholder="7" disabled={!canWriteConfiguracion} />
-                  <span className="text-[11px] text-slate-500">Posición donde arranca el monto</span>
-                </div>
-
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-slate-700 dark:text-slate-300">Largo del Importe (Dígitos)</label>
-                  <input className="ui-input" type="number" min="1" max="8" value={draft.codigos_balanza.amount_length ?? 6} onChange={(event) => updateSection("codigos_balanza", { amount_length: Math.max(1, Math.floor(toNumber(event.target.value, draft.codigos_balanza.amount_length ?? 6))) })} placeholder="6" disabled={!canWriteConfiguracion} />
-                  <span className="text-[11px] text-slate-500">Comúnmente 6 dígitos con 2 decimales</span>
-                </div>
-              </>
-            )}
 
             {/* SIMULADOR EN TIEMPO REAL */}
-            <div className="md:col-span-2 rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-900/50 dark:bg-blue-950/20">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="md:col-span-2 rounded-2xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-900/50 dark:bg-blue-950/20 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Scale size={18} className="text-blue-600 dark:text-blue-400" />
                   <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
@@ -3326,7 +2873,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                 </div>
                 <button
                   type="button"
-                  className="text-xs text-blue-600 hover:underline dark:text-blue-400 font-medium"
+                  className="text-xs text-blue-600 hover:underline dark:text-blue-400 font-medium cursor-pointer"
                   onClick={() => setScaleTesterBarcode("2000010012756")}
                 >
                   Cargar código de prueba (2000010012756)
@@ -3350,7 +2897,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                 <div className="sm:col-span-2 flex flex-wrap gap-2 items-center">
                   {scaleTesterResult ? (
                     <>
-                      <div className="flex flex-col rounded-lg bg-white px-3 py-2 shadow-sm border border-emerald-200 dark:bg-slate-900 dark:border-emerald-800/60">
+                      <div className="flex flex-col rounded-xl bg-white px-3 py-2 shadow-xs border border-emerald-200 dark:bg-slate-900 dark:border-emerald-800/60">
                         <span className="text-[10px] uppercase font-bold text-slate-500">PLU Extraído</span>
                         <span className="font-mono text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
                           {scaleTesterResult.productCode}{" "}
@@ -3361,7 +2908,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                       </div>
 
                       {scaleTesterResult.mode === "weight" && scaleTesterResult.weight != null && (
-                        <div className="flex flex-col rounded-lg bg-white px-3 py-2 shadow-sm border border-emerald-200 dark:bg-slate-900 dark:border-emerald-800/60">
+                        <div className="flex flex-col rounded-xl bg-white px-3 py-2 shadow-xs border border-emerald-200 dark:bg-slate-900 dark:border-emerald-800/60">
                           <span className="text-[10px] uppercase font-bold text-slate-500">Peso Extraído</span>
                           <span className="font-mono text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
                             {scaleTesterResult.weight.toLocaleString("es-AR", { minimumFractionDigits: 3 })} kg{" "}
@@ -3373,7 +2920,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                       )}
 
                       {scaleTesterResult.mode === "total_price" && scaleTesterResult.totalPrice != null && (
-                        <div className="flex flex-col rounded-lg bg-white px-3 py-2 shadow-sm border border-emerald-200 dark:bg-slate-900 dark:border-emerald-800/60">
+                        <div className="flex flex-col rounded-xl bg-white px-3 py-2 shadow-xs border border-emerald-200 dark:bg-slate-900 dark:border-emerald-800/60">
                           <span className="text-[10px] uppercase font-bold text-slate-500">Importe Extraído</span>
                           <span className="font-mono text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
                             $ {scaleTesterResult.totalPrice.toLocaleString("es-AR", { minimumFractionDigits: 2 })}
@@ -3387,7 +2934,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                       </div>
                     </>
                   ) : (
-                    <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800/50 dark:text-amber-300">
+                    <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 p-2.5 rounded-xl border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800/50 dark:text-amber-300">
                       <AlertTriangle size={16} className="shrink-0" />
                       <span>
                         {!draft.codigos_balanza.scale_parser_enabled
@@ -3400,105 +2947,84 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* SECCIÓN: INTEGRACIONES Y SISTEMA */}
-        <section
-          className="ui-card space-y-4"
-          hidden={!scopePreset.visibleSections.sistema || (visibleTabs.length > 1 && activeTab !== "sistema")}
-        >
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
-            <div className="flex items-center gap-2">
-              <Settings className="text-blue-600 dark:text-blue-400" size={20} />
-              <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Integraciones y Sistema</h2>
-                <p className="text-xs text-slate-500">MercadoPago, proveedor de datos de base y estado de plataforma</p>
-              </div>
+      {/* SECCIÓN 10: INTEGRACIONES Y SISTEMA */}
+      <section
+        className="space-y-6"
+        hidden={!scopePreset.visibleSections.sistema || (visibleTabs.length > 1 && activeTab !== "sistema")}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-500/10 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400">
+              <Settings size={22} />
             </div>
-
-            <div className="flex items-center gap-2">
-              <button type="button" className="ui-btn-ghost" onClick={() => { void resetSection("sistema"); }} disabled={!canWriteConfiguracion || savingSection.sistema}>Restablecer</button>
-              <button type="button" className="ui-btn-primary" onClick={() => { void handleSaveSection("sistema"); }} disabled={!canWriteConfiguracion || savingSection.sistema}>{savingSection.sistema ? "Guardando..." : "Guardar Sistema"}</button>
-            </div>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="ui-input font-medium">
-              Proveedor de Datos Activo: <span className="font-bold text-blue-600">{draft.sistema.data_provider.toUpperCase()}</span>
-            </div>
-
-            <div className="ui-input font-medium">
-              Versión del Sistema: <span className="font-bold text-slate-900 dark:text-slate-100">{draft.sistema.version}</span>
-            </div>
-
-            {/* MERCADOPAGO */}
-            <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3 mb-3 dark:border-slate-700">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Integración con Mercado Pago (QR / Cobro)</h3>
-                <div className="flex items-center gap-2">
-                  <span className="ui-badge ui-badge--info">
-                    Modo {mercadoPagoModeLabel[mercadoPagoConfig.mode]}
-                  </span>
-                  <span className={mercadoPagoConfigured ? "ui-badge ui-badge--success" : "ui-badge ui-badge--danger"}>
-                    {mercadoPagoConfigured ? "Configurado" : "Sin Configurar"}
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="flex items-center gap-2.5 text-sm font-medium text-slate-800 dark:text-slate-200">
-                  <input type="checkbox" className="h-4 w-4 rounded text-blue-600" checked={mercadoPagoConfig.enabled} onChange={(event) => updateMercadoPagoSettings({ enabled: event.target.checked })} disabled={!canWriteConfiguracion} />
-                  Habilitar Cobro por Mercado Pago
-                </label>
-
-                <select className="ui-input" value={mercadoPagoConfig.mode} onChange={(event) => updateMercadoPagoSettings({ mode: event.target.value as MercadoPagoMode })} disabled={!canWriteConfiguracion}>
-                  <option value="mock">Modo Mock (Simulación)</option>
-                  <option value="sandbox">Modo Sandbox (Pruebas)</option>
-                  <option value="real">Modo Real (Producción)</option>
-                </select>
-
-                <input className="ui-input md:col-span-2" value={mercadoPagoConfig.public_key} onChange={(event) => updateMercadoPagoSettings({ public_key: event.target.value.trim() })} placeholder="Public Key de Mercado Pago (APP_USR-...)" disabled={!canWriteConfiguracion} />
-              </div>
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                CONFIGURACIÓN › INTEGRACIONES
+              </span>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                Integraciones y Sistema
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Estado general de la plataforma y servicios conectados.
+              </p>
             </div>
           </div>
-        </section>
-      </div>
+        </div>
+
+        {/* PANEL VACÍO MODERN ROUNDED */}
+        <div className="rounded-2xl sm:rounded-3xl border border-dashed border-slate-300 dark:border-slate-800 bg-white/50 dark:bg-slate-900/40 p-12 text-center shadow-xs">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 mb-4">
+            <Settings size={26} />
+          </div>
+          <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
+            Sin configuraciones activas para este módulo
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-2 leading-relaxed">
+            De momento no hay parámetros ni integraciones que requieran configuración manual en esta sección. Las funciones del sistema operan con sus valores predeterminados.
+          </p>
+          <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-slate-200/90 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-4 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            <span>Plataforma conectada y operativa</span>
+          </div>
+        </div>
+      </section>
 
       {/* MODAL ASISTENTE DE CERTIFICADOS ARCA */}
       <ArcaCertificateWizardModal
         isOpen={isArcaWizardOpen}
         onClose={() => setIsArcaWizardOpen(false)}
-        cuit={draft?.facturacion?.arca?.cuit_emisor || draft?.facturacion?.issuer_cuit || ""}
-        businessName={draft?.facturacion?.issuer_tax_name || draft?.negocio?.legal_name || ""}
+        cuit={draft?.facturacion?.arca?.cuit_emisor || draft?.facturacion?.issuer_cuit || draft?.negocio?.cuit || ""}
+        businessName={draft?.facturacion?.issuer_tax_name || draft?.negocio?.legal_name || draft?.negocio?.trade_name || ""}
         alias={draft?.facturacion?.arca?.certificado_alias || "pos-v2"}
         currentCrt={draft?.facturacion?.arca?.certificate_crt}
         currentKey={draft?.facturacion?.arca?.certificate_key}
-        onSaveCredentials={async ({ certificate_crt, certificate_key, certificado_alias }) => {
-          if (!draft?.facturacion) return;
-          const updatedFacturacion: FacturacionSettings = {
-            ...draft.facturacion,
-            arca: {
-              ...draft.facturacion.arca,
-              enabled: true,
-              mode: draft.facturacion.arca.mode === "mock" ? "real" : draft.facturacion.arca.mode,
-              certificate_crt,
-              certificate_key,
-              certificado_alias: certificado_alias || draft.facturacion.arca.certificado_alias || "pos-v2",
-            },
+        onSaveCredentials={async (credentials) => {
+          if (!draft) return;
+          const updatedArca = {
+            ...draft.facturacion.arca,
+            cuit_emisor: draft?.facturacion?.arca?.cuit_emisor || draft?.facturacion?.issuer_cuit || draft?.negocio?.cuit || "",
+            certificado_alias: credentials.certificado_alias || draft.facturacion.arca.certificado_alias || "pos-v2",
+            certificate_crt: credentials.certificate_crt,
+            certificate_key: credentials.certificate_key,
           };
-          updateSection("facturacion", updatedFacturacion);
-          await handleSaveSection("facturacion", updatedFacturacion);
+          updateFacturacionSettings({ arca: updatedArca });
+          await saveSection("facturacion");
+          toast.success("Credenciales de ARCA guardadas y activadas con éxito");
+          setIsArcaWizardOpen(false);
         }}
       />
 
-      {/* MODAL GUÍA PARA EL CONTADOR / INSTRUCTIVO PDF */}
+      {/* MODAL GUÍA DE CERTIFICADOS PARA EL CONTADOR */}
       <ArcaAccountantGuideModal
         isOpen={isArcaGuideOpen}
         onClose={() => setIsArcaGuideOpen(false)}
-        cuit={draft?.facturacion?.arca?.cuit_emisor || draft?.facturacion?.issuer_cuit || ""}
-        businessName={draft?.facturacion?.issuer_tax_name || draft?.negocio?.legal_name || ""}
+        cuit={draft?.facturacion?.arca?.cuit_emisor || draft?.facturacion?.issuer_cuit || draft?.negocio?.cuit || ""}
+        businessName={draft?.facturacion?.issuer_tax_name || draft?.negocio?.legal_name || draft?.negocio?.trade_name || ""}
         alias={draft?.facturacion?.arca?.certificado_alias || "pos-v2"}
       />
-    </PagePlaceholder>
+    </div>
   );
 };

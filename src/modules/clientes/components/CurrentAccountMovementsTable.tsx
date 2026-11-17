@@ -5,17 +5,25 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { useMemo, useState } from "react";
+import { FileText } from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { cn } from "@/utils/cn";
 import type { CurrentAccountMovement } from "@/types/entities";
 import type {
   CurrentAccountSaleDetail,
   CurrentAccountSummary,
+  PendingDebtAllocation,
 } from "@/modules/clientes/hooks/useCurrentAccount";
+import {
+  formatDisplaySaleNumber,
+  formatDisplayReceiptNumber,
+} from "@/utils/voucher-format.utils";
 
 interface CurrentAccountMovementsTableProps {
   movements: CurrentAccountMovement[];
   saleDetailsById?: Record<string, CurrentAccountSaleDetail>;
   accountSummary: CurrentAccountSummary;
+  pendingAllocationsByMovementId?: Record<string, PendingDebtAllocation>;
 }
 
 const columnHelper = createColumnHelper<CurrentAccountMovement>();
@@ -38,6 +46,7 @@ export const CurrentAccountMovementsTable = ({
   movements,
   saleDetailsById = {},
   accountSummary,
+  pendingAllocationsByMovementId = {},
 }: CurrentAccountMovementsTableProps) => {
   const [ticketSaleDetail, setTicketSaleDetail] = useState<CurrentAccountSaleDetail | null>(null);
 
@@ -49,6 +58,12 @@ export const CurrentAccountMovementsTable = ({
   const getUpdatedDebtAmount = (movement: CurrentAccountMovement): number => {
     const baseAmount = Math.abs(movement.amount);
     if (movement.type !== "debt") return baseAmount;
+
+    const allocation = pendingAllocationsByMovementId[movement.id];
+    if (allocation) {
+      if (allocation.pendingAmount <= 0) return baseAmount;
+      return allocation.updatedAmount;
+    }
 
     const saleDetail = movement.sale_id ? saleDetailsById[movement.sale_id] : null;
     const rule = accountSummary.pricingRule;
@@ -65,10 +80,10 @@ export const CurrentAccountMovementsTable = ({
 
     if (rule.mode === "surcharge_fixed") {
       const fixedAmount = Number(rule.surcharge_amount ?? 0);
-      if (!Number.isFinite(fixedAmount) || fixedAmount <= 0 || accountSummary.initialDebtTotal <= 0) {
+      if (!Number.isFinite(fixedAmount) || fixedAmount <= 0 || accountSummary.accountingBalance <= 0) {
         return baseAmount;
       }
-      return roundAmount(baseAmount + fixedAmount * (baseAmount / accountSummary.initialDebtTotal));
+      return roundAmount(baseAmount + fixedAmount * (baseAmount / accountSummary.accountingBalance));
     }
 
     return baseAmount;
@@ -91,13 +106,15 @@ export const CurrentAccountMovementsTable = ({
         if (!movement.sale_id) return "-";
 
         const saleDetail = saleDetailsById[movement.sale_id];
-        if (!saleDetail) return `Venta ${movement.sale_id.slice(0, 8)}`;
+        if (!saleDetail) return `Venta #${movement.sale_id.slice(0, 8)}`;
 
         return (
           <div className="space-y-0.5">
-            <p className="font-medium text-slate-800">{saleDetail.sale_number}</p>
-            <p className="text-xs text-slate-500">
-              {saleDetail.receipt_number ? `Ticket ${saleDetail.receipt_number}` : "Sin ticket"}
+            <p className="font-medium text-slate-800 dark:text-slate-200">
+              {formatDisplaySaleNumber(saleDetail.sale_number)}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {saleDetail.receipt_number ? `Ticket ${formatDisplayReceiptNumber(saleDetail.receipt_number)}` : "Sin ticket"}
             </p>
           </div>
         );
@@ -114,14 +131,26 @@ export const CurrentAccountMovementsTable = ({
     columnHelper.display({
       id: "updated_balance",
       header: () => (
-        <span title="El recargo o actualizacion vigente reemplaza al anterior; no se suma varias veces.">
+        <span title="Saldo actualizado según la regla vigente calculada sobre la deuda pendiente.">
           Saldo actualizado
         </span>
       ),
       cell: (info) => {
         const movement = info.row.original;
-        if (movement.type === "debt") return currency.format(getUpdatedDebtAmount(movement));
-        return "-";
+        if (movement.type !== "debt") return "-";
+        const allocation = pendingAllocationsByMovementId[movement.id];
+        if (allocation && allocation.pendingAmount <= 0) {
+          return (
+            <span className="text-slate-400 dark:text-slate-500 font-normal">
+              Saldada ({currency.format(Math.abs(movement.amount))})
+            </span>
+          );
+        }
+        return (
+          <span className="font-semibold text-purple-600 dark:text-purple-400 font-mono">
+            {currency.format(getUpdatedDebtAmount(movement))}
+          </span>
+        );
       },
     }),
     columnHelper.accessor("notes", {
@@ -140,7 +169,7 @@ export const CurrentAccountMovementsTable = ({
         return (
           <button
             type="button"
-            className="ui-btn-ghost px-2 py-1 text-xs"
+            className="rounded-xl border border-slate-200/90 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition-all cursor-pointer"
             onClick={() => setTicketSaleDetail(saleDetail)}
           >
             Ver ticket
@@ -158,7 +187,7 @@ export const CurrentAccountMovementsTable = ({
 
   if (!movements.length) {
     return (
-      <div className="ui-empty-state">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-8 text-center text-sm text-slate-500 shadow-xs dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
         Este cliente todavia no tiene movimientos.
       </div>
     );
@@ -166,13 +195,14 @@ export const CurrentAccountMovementsTable = ({
 
   return (
     <>
-      <div className="current-account-movements ui-table-wrap max-h-[520px] overflow-auto">
+      {/* 1. DESKTOP VIEW: TABLA TRADICIONAL (hidden md:block) */}
+      <div className="hidden md:block current-account-movements ui-table-wrap rounded-2xl border border-slate-200/90 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900 overflow-hidden max-h-[520px] overflow-y-auto">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="sticky top-0 z-10 bg-slate-50">
+          <thead className="sticky top-0 z-10 bg-slate-50/90 dark:bg-slate-800/80 border-b border-slate-200/80 dark:border-slate-800 backdrop-blur-xs">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="px-4 py-2 text-left font-medium text-slate-700">
+                  <th key={header.id} className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200">
                     {header.isPlaceholder
                       ? null
                       : flexRender(header.column.columnDef.header, header.getContext())}
@@ -181,11 +211,11 @@ export const CurrentAccountMovementsTable = ({
               </tr>
             ))}
           </thead>
-          <tbody className="divide-y divide-slate-200 bg-white">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900">
             {table.getRowModel().rows.map((row) => (
               <tr key={row.id}>
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-4 py-2 align-top text-slate-700">
+                  <td key={cell.id} className="px-4 py-2.5 align-top text-slate-700 dark:text-slate-300">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
@@ -195,23 +225,152 @@ export const CurrentAccountMovementsTable = ({
         </table>
       </div>
 
-      {ticketSaleDetail ? (
-        <section className="fixed inset-0 z-[60] flex items-center justify-center bg-[var(--ui-overlay)] p-4">
-          <div className="w-full max-w-3xl rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
+      {/* 2. MOBILE VIEW: TARJETAS INDIVIDUALES (block md:hidden) */}
+      <div className="block md:hidden space-y-3 max-h-[560px] overflow-y-auto pr-0.5">
+        {sortedMovements.map((movement) => {
+          const saleDetail = movement.sale_id ? saleDetailsById[movement.sale_id] : null;
+          const isDebt = movement.type === "debt";
+          const isPayment = movement.type === "payment";
+          const updatedDebt = isDebt ? getUpdatedDebtAmount(movement) : null;
+
+          return (
+            <article
+              key={movement.id}
+              className="rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-xs dark:border-slate-800 dark:bg-slate-900 space-y-2.5 transition-all"
+            >
+              {/* Zona 1: Tipo con punto de estado + Fecha */}
+              <div className="flex items-center justify-between gap-2">
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold border shrink-0",
+                    isDebt
+                      ? "bg-rose-50 border-rose-200/80 text-rose-700 dark:bg-rose-950/60 dark:border-rose-900/60 dark:text-rose-300"
+                      : isPayment
+                      ? "bg-emerald-50 border-emerald-200/80 text-emerald-700 dark:bg-emerald-950/60 dark:border-emerald-800/60 dark:text-emerald-300"
+                      : "bg-indigo-50 border-indigo-200/80 text-indigo-700 dark:bg-indigo-950/60 dark:border-indigo-900/60 dark:text-indigo-300"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "h-1.5 w-1.5 rounded-full shrink-0",
+                      isDebt
+                        ? "bg-rose-500"
+                        : isPayment
+                        ? "bg-emerald-500"
+                        : "bg-indigo-500"
+                    )}
+                  />
+                  <span>{movementTypeLabels[movement.type] ?? movement.type}</span>
+                </span>
+
+                <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                  {new Date(movement.created_at).toLocaleString("es-AR", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
+
+              {/* Zona 2: Identificador / Comprobante */}
               <div>
-                <h3 className="text-base font-semibold text-slate-900">Ticket</h3>
+                <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm leading-snug">
+                  {saleDetail
+                    ? formatDisplaySaleNumber(saleDetail.sale_number)
+                    : movement.sale_id
+                    ? `Venta #${movement.sale_id.slice(0, 8)}`
+                    : movement.notes || "Movimiento manual"}
+                </h4>
+                {saleDetail?.receipt_number ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Ticket: {formatDisplayReceiptNumber(saleDetail.receipt_number)}
+                  </p>
+                ) : null}
+              </div>
+
+              {/* Zona 3: Monto Principal & Botón de Ticket */}
+              <div className="flex items-end justify-between gap-3 pt-1 border-t border-slate-100 dark:border-slate-800/80">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">
+                    MONTO INICIAL
+                  </span>
+                  <span
+                    className={cn(
+                      "text-base sm:text-lg font-black font-mono leading-tight",
+                      isDebt
+                        ? "text-rose-600 dark:text-rose-400"
+                        : isPayment
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-slate-900 dark:text-slate-100"
+                    )}
+                  >
+                    {currency.format(movement.amount)}
+                  </span>
+                </div>
+
+                {saleDetail && (
+                  <button
+                    type="button"
+                    onClick={() => setTicketSaleDetail(saleDetail)}
+                    className="!rounded-full h-8 px-3 inline-flex items-center gap-1.5 border border-slate-200/90 bg-white hover:bg-slate-50 text-slate-700 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-200 shadow-2xs text-xs font-semibold active:scale-95 transition-all cursor-pointer"
+                    title="Ver comprobante"
+                  >
+                    <FileText size={13} className="text-blue-600 dark:text-blue-400" />
+                    <span>Ver ticket</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Zona 4: Sub-panel para Saldo Actualizado y Observación */}
+              {(isDebt || (movement.notes && saleDetail)) && (
+                <div className="rounded-xl bg-slate-50/80 border border-slate-200/70 p-2.5 dark:bg-slate-800/40 dark:border-slate-700/60 space-y-1 text-xs">
+                  {isDebt && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500">
+                        Saldo actualizado:
+                      </span>
+                      {pendingAllocationsByMovementId[movement.id]?.pendingAmount === 0 ? (
+                        <span className="text-slate-400 dark:text-slate-500 text-xs">
+                          Saldada ({currency.format(Math.abs(movement.amount))})
+                        </span>
+                      ) : (
+                        <strong className="font-mono text-purple-600 dark:text-purple-400 font-bold">
+                          {currency.format(updatedDebt ?? Math.abs(movement.amount))}
+                        </strong>
+                      )}
+                    </div>
+                  )}
+                  {movement.notes && saleDetail && (
+                    <p className="text-slate-600 dark:text-slate-300 italic text-[11px] pt-0.5">
+                      "{movement.notes}"
+                    </p>
+                  )}
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+
+      {ticketSaleDetail ? (
+        <section className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="relative z-10 w-full max-w-3xl rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 pb-3 dark:border-slate-800">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Detalle de Ticket</h3>
                 <p className="text-xs text-slate-500">
-                  {ticketSaleDetail.sale_number}
-                  {ticketSaleDetail.receipt_number ? ` | ${ticketSaleDetail.receipt_number}` : ""}
+                  {formatDisplaySaleNumber(ticketSaleDetail.sale_number)}
+                  {ticketSaleDetail.receipt_number ? ` | Ticket ${formatDisplayReceiptNumber(ticketSaleDetail.receipt_number)}` : ""}
                 </p>
               </div>
               <ModalCloseButton label="Cerrar ticket" onClick={() => setTicketSaleDetail(null)} />
             </div>
 
-            <div className="mt-3 max-h-[60vh] overflow-auto rounded-lg border border-slate-200">
+            <div className="mt-3 max-h-[60vh] overflow-auto rounded-xl border border-slate-200/90 dark:border-slate-800">
               <table className="min-w-full text-sm">
-                <thead className="bg-slate-50">
+                <thead className="bg-slate-50/90 dark:bg-slate-800/80 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200 border-b border-slate-200/80 dark:border-slate-800">
                   <tr>
                     <th className="px-3 py-2 text-left">Producto</th>
                     <th className="px-3 py-2 text-left">Cantidad</th>
@@ -220,16 +379,16 @@ export const CurrentAccountMovementsTable = ({
                     <th className="px-3 py-2 text-left">Total</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
                   {ticketSaleDetail.items.map((item) => (
-                    <tr key={`${item.product_id}-${item.product_name}`}>
-                      <td className="px-3 py-2">{item.product_name}</td>
-                      <td className="px-3 py-2">{item.quantity.toLocaleString("es-AR")}</td>
-                      <td className="px-3 py-2">{currency.format(item.unit_price)}</td>
-                      <td className="px-3 py-2">
+                    <tr key={`${item.product_id}-${item.product_name}`} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                      <td className="px-3 py-2 font-medium">{item.product_name}</td>
+                      <td className="px-3 py-2 font-mono">{item.quantity.toLocaleString("es-AR")}</td>
+                      <td className="px-3 py-2 font-mono">{currency.format(item.unit_price)}</td>
+                      <td className="px-3 py-2 font-mono">
                         {item.current_unit_price == null ? "-" : currency.format(item.current_unit_price)}
                       </td>
-                      <td className="px-3 py-2">{currency.format(item.line_total)}</td>
+                      <td className="px-3 py-2 font-bold font-mono">{currency.format(item.line_total)}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -1,7 +1,6 @@
-import { useRef, useState } from "react";
-import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
-import { IconButton } from "@/components/ui/IconButton";
-import { RefreshCw } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Plus, RefreshCw } from "lucide-react";
+import { LoadingState } from "@/components/ui/UiStates";
 import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
@@ -39,14 +38,14 @@ const DateFilterInput = ({ label, value, onChange }: DateFilterInputProps) => {
 
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-slate-600">{label}</label>
+      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">{label}</label>
       <input
         ref={inputRef}
         type="date"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onClick={openPicker}
-        className="ui-input ui-input--date cursor-pointer"
+        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200 cursor-pointer"
       />
     </div>
   );
@@ -69,6 +68,7 @@ export const StockPage = () => {
   const { canRead, canWrite } = usePermissions();
   const canReadStock = canRead("stock");
   const canWriteStock = canWrite("stock");
+  const canWriteManualAdjustments = canWrite("stock_ajustes_manuales");
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StockStatusFilter>("all");
 
@@ -95,10 +95,14 @@ export const StockPage = () => {
     updateStockThresholdBulk,
   } = useStockModule(tenantId, user?.id ?? null);
 
-  const movementViewRows = movementRows.map((movement) => ({
-    movement,
-    product: productsById.get(movement.product_id) ?? null,
-  }));
+  const movementViewRows = useMemo(
+    () =>
+      movementRows.map((movement) => ({
+        movement,
+        product: productsById.get(movement.product_id) ?? null,
+      })),
+    [movementRows, productsById]
+  );
 
   const handleDownloadMovementHistory = async () => {
     const reportRows = movementViewRows.map(({ movement, product }) => ({
@@ -122,122 +126,155 @@ export const StockPage = () => {
 
   if (!tenantId) {
     return (
-      <PagePlaceholder
-        title="Stock"
-        description="No hay un comercio activo"
-      />
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-xs dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+        No hay un comercio activo.
+      </div>
     );
   }
 
   if (!canReadStock) {
     return (
-      <PagePlaceholder
-        title="Stock"
-        description="No tenes permisos de lectura para este modulo"
-      />
+      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-xs dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+        No tenés permisos de lectura para este módulo.
+      </div>
     );
   }
 
   return (
-    <PagePlaceholder title="Stock">
-      <div className="stock-operational-page space-y-3">
-        <div className="workspace-toolbar workspace-toolbar--inline flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <StockSummaryCards
-              activeProducts={summary.activeProducts}
-              lowStock={summary.lowStock}
-              overMax={summary.overMax}
-              unassigned={summary.unassigned}
-              activeFilter={statusFilter}
-              onSelectFilter={setStatusFilter}
-            />
+    <div className="space-y-4 w-full min-w-0 max-w-full">
+      {/* Encabezado Principal de Stock */}
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          {/* Breadcrumb con formato estándar de la skill */}
+          <div className="flex items-center gap-1.5 text-xs font-semibold tracking-wider uppercase">
+            <span className="text-slate-400 dark:text-slate-500">INVENTARIO</span>
+            <span className="text-slate-400 dark:text-slate-500 font-bold">›</span>
+            <span className="text-blue-600 dark:text-blue-400 font-bold">CONTROL DE STOCK</span>
           </div>
-          <div className="flex items-center gap-2">
-            {canWriteStock && stockSettings.allow_manual_adjustments ? (
-              <button
-                type="button"
-                onClick={() => {
-                  clearFeedback();
-                  setIsAdjustmentModalOpen(true);
-                }}
-                className="ui-btn-primary"
-                disabled={isLoading || isSubmitting}
-              >
-                Ajustar stock
-              </button>
-            ) : null}
-            <IconButton
-              icon={RefreshCw}
-              label="Recargar stock"
-              onClick={() => {
-                clearFeedback();
-                void reload();
-              }}
-              loading={isLoading}
-              disabled={isSubmitting}
-            />
-          </div>
+
+          <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+            Stock
+          </h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Control de existencias, umbrales y movimientos de inventario en tiempo real.
+          </p>
         </div>
 
-        {feedback ? <div className={feedback.type === "success" ? "ui-success-state" : "ui-error-state"}>{feedback.message}</div> : null}
+        {/* Acciones superiores con botones píldora */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+          <button
+            type="button"
+            onClick={() => {
+              clearFeedback();
+              void reload();
+            }}
+            disabled={isLoading || isSubmitting}
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200/90 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition-all cursor-pointer"
+            title="Recargar stock desde el servidor"
+            aria-label="Recargar stock"
+          >
+            <RefreshCw
+              size={15}
+              className={isLoading ? "animate-spin text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400"}
+            />
+            <span className="hidden sm:inline">Recargar</span>
+          </button>
 
-        <StockTrackingTable
-          products={products}
-          categories={categoryOptions}
-          disabled={isSubmitting || !canWriteStock}
-          statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
-          globalLowThreshold={stockSettings.global_low_stock_threshold}
-          onUpdateOne={updateStockThreshold}
-          onUpdateBulk={updateStockThresholdBulk}
-        />
-
-        <section className="workspace-history space-y-3">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold text-slate-900">Historial</h2>
-              <p className="text-xs text-slate-500">{movementRows.length} movimientos</p>
-            </div>
-            <div className="grid flex-1 gap-2 md:max-w-2xl md:grid-cols-3">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-600">Tipo</label>
-                <select
-                  value={movementTypeFilter}
-                  onChange={(event) =>
-                    setMovementTypeFilter(event.target.value as typeof movementTypeFilter)
-                  }
-                  className="ui-input"
-                >
-                  {movementTypeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <DateFilterInput label="Desde" value={dateFrom} onChange={setDateFrom} />
-              <DateFilterInput label="Hasta" value={dateTo} onChange={setDateTo} />
-            </div>
-
+          {canWriteManualAdjustments ? (
             <button
               type="button"
-              className="ui-btn-ghost px-3 py-2 text-sm"
-              onClick={handleDownloadMovementHistory}
-              disabled={!movementViewRows.length}
+              onClick={() => {
+                clearFeedback();
+                setIsAdjustmentModalOpen(true);
+              }}
+              disabled={isLoading || isSubmitting}
+              className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-500/25 hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 transition-all cursor-pointer"
             >
-              Descargar historial
+              <Plus size={16} strokeWidth={2.5} />
+              <span>Ajustar stock</span>
             </button>
-          </div>
+          ) : null}
+        </div>
+      </header>
 
-          {isLoading ? (
-            <div className="rounded-lg border border-slate-200 p-8 text-center text-sm text-slate-600">
-              Cargando stock...
-            </div>
-          ) : (
-            <StockMovementsTable rows={movementViewRows} />
-          )}
-        </section>
-      </div>
+      {/* Franja de 4 Tarjetas KPI Redondeadas */}
+      <StockSummaryCards
+        activeProducts={summary.activeProducts}
+        lowStock={summary.lowStock}
+        overMax={summary.overMax}
+        unassigned={summary.unassigned}
+        activeFilter={statusFilter}
+        onSelectFilter={setStatusFilter}
+        onConfigureUnassigned={() => setStatusFilter("unassigned")}
+      />
+
+      {feedback ? (
+        <div className={`rounded-2xl ${feedback.type === "success" ? "ui-success-state" : "ui-error-state"}`}>
+          {feedback.message}
+        </div>
+      ) : null}
+
+      {/* Tabla y Tarjetas de Seguimiento de Stock */}
+      <StockTrackingTable
+        products={products}
+        categories={categoryOptions}
+        disabled={isSubmitting || !canWriteStock}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        globalLowThreshold={stockSettings.global_low_stock_threshold}
+        onUpdateOne={updateStockThreshold}
+        onUpdateBulk={updateStockThresholdBulk}
+        summary={summary}
+      />
+
+      {/* Sección Historial de Movimientos Redondeada */}
+      <section className="space-y-4 rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Historial de movimientos</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{movementRows.length} movimientos registrados</p>
+          </div>
+          <button
+            type="button"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200/90 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition-all active:scale-95 disabled:opacity-50"
+            onClick={handleDownloadMovementHistory}
+            disabled={!movementViewRows.length}
+          >
+            <span>Descargar historial (XLSX)</span>
+          </button>
+        </div>
+
+        {/* Filtros de Historial en Panel Redondeado */}
+        <div className="grid gap-2.5 sm:grid-cols-3 rounded-xl sm:rounded-2xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/40">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">Tipo de movimiento</label>
+            <select
+              value={movementTypeFilter}
+              onChange={(event) =>
+                setMovementTypeFilter(event.target.value as typeof movementTypeFilter)
+              }
+              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-200"
+            >
+              {movementTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <DateFilterInput label="Desde" value={dateFrom} onChange={setDateFrom} />
+          <DateFilterInput label="Hasta" value={dateTo} onChange={setDateTo} />
+        </div>
+
+        {isLoading ? (
+          <LoadingState
+            message="Cargando movimientos de stock..."
+            description="Sincronizando ingresos, egresos y ajustes de inventario..."
+          />
+        ) : (
+          <StockMovementsTable rows={movementViewRows} />
+        )}
+      </section>
 
       <StockAdjustmentModal
         open={isAdjustmentModalOpen}
@@ -247,6 +284,7 @@ export const StockPage = () => {
         onClose={() => setIsAdjustmentModalOpen(false)}
         onSubmit={applyManualAdjustmentsBulk}
       />
-    </PagePlaceholder>
+    </div>
   );
 };
+

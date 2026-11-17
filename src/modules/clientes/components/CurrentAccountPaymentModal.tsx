@@ -1,14 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
-import { PaymentMethodSelector } from "@/components/payments/PaymentMethodSelector";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Banknote,
+  Check,
+  Copy,
+  CreditCard,
+  Landmark,
+  Loader2,
+  QrCode,
+  Receipt,
+  Wallet,
+} from "lucide-react";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
-import {
-  getPaymentMethodPosConfig,
-  normalizePaymentMethodCode,
-  type PaymentMethodPosConfig,
-} from "@/services/payment-methods.service";
+import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
 import type {
   BankAccount,
+  Customer,
   InstallmentPlan,
   OriginBank,
   PaymentMethod,
@@ -17,61 +24,19 @@ import type {
   CurrentAccountSummary,
   RegisterCurrentAccountPaymentValues,
 } from "@/modules/clientes/hooks/useCurrentAccount";
-import { handleNumericInputFocus } from "@/utils/input-helpers";
 
 interface CurrentAccountPaymentModalProps {
   open: boolean;
+  customer?: Customer | null;
   paymentMethods: PaymentMethod[];
   bankAccounts: BankAccount[];
-  originBanks: OriginBank[];
-  installmentPlans: InstallmentPlan[];
+  originBanks?: OriginBank[];
+  installmentPlans?: InstallmentPlan[];
   accountSummary: CurrentAccountSummary;
   disabled?: boolean;
   onClose: () => void;
   onSubmit: (values: RegisterCurrentAccountPaymentValues) => Promise<boolean>;
 }
-
-interface PaymentDetailsDraft {
-  destinationBankAccountId: string;
-  couponNumber: string;
-  authorizationNumber: string;
-  operationNumber: string;
-  voucherNumber: string;
-  originBankId: string;
-  newOriginBankName: string;
-  originAccountHolder: string;
-  cardBrand: string;
-  installmentPlanId: string;
-  chequeNumber: string;
-  chequeDueDate: string;
-}
-
-const getInitialDetailsDraft = (): PaymentDetailsDraft => ({
-  destinationBankAccountId: "",
-  couponNumber: "",
-  authorizationNumber: "",
-  operationNumber: "",
-  voucherNumber: "",
-  originBankId: "",
-  newOriginBankName: "",
-  originAccountHolder: "",
-  cardBrand: "",
-  installmentPlanId: "",
-  chequeNumber: "",
-  chequeDueDate: "",
-});
-
-const getPaymentMethodLabel = (paymentMethod: PaymentMethod): string => {
-  const code = normalizePaymentMethodCode(paymentMethod.code);
-  if (code === "cash") return "Efectivo";
-  if (code === "card_debit") return "Tarjeta de debito";
-  if (code === "card_credit") return "Tarjeta de credito";
-  if (code === "transfer") return "Transferencia bancaria";
-  if (code === "mercado_pago") return "Mercado Pago";
-  if (code === "cheque") return "Cheque";
-  if (code === "current_account") return "Cuenta corriente";
-  return paymentMethod.name;
-};
 
 const currency = new Intl.NumberFormat("es-AR", {
   style: "currency",
@@ -79,773 +44,931 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
-const roundAmount = (value: number): number => Number(value.toFixed(2));
-
-type PaymentPricingMode = "original" | "update_to_today_price" | "surcharge_percentage" | "surcharge_fixed";
-
-const resolvePreviewBalance = (
-  mode: PaymentPricingMode,
-  accountSummary: CurrentAccountSummary,
-  surchargePercent: string,
-  surchargeAmount: string
-): number => {
-  if (mode === "original") return accountSummary.accountingBalance;
-  if (mode === "update_to_today_price") {
-    return roundAmount(
-      accountSummary.updatedDebtTotal + accountSummary.adjustmentsTotal - accountSummary.paymentsTotal
-    );
+const getMethodIcon = (code: string) => {
+  const normalized = normalizePaymentMethodCode(code);
+  switch (normalized) {
+    case "cash":
+      return Banknote;
+    case "card_debit":
+    case "card_credit":
+      return CreditCard;
+    case "transfer":
+      return Landmark;
+    case "mercado_pago":
+      return QrCode;
+    case "cheque":
+      return Receipt;
+    default:
+      return Wallet;
   }
-
-  if (mode === "surcharge_percentage") {
-    const percent = Number(surchargePercent.trim().replace(",", "."));
-    if (!Number.isFinite(percent) || percent <= 0) return accountSummary.updatedBalance;
-    return roundAmount(
-      accountSummary.initialDebtTotal * (1 + percent / 100) +
-        accountSummary.adjustmentsTotal -
-        accountSummary.paymentsTotal
-    );
-  }
-
-  const fixedAmount = Number(surchargeAmount.trim().replace(",", "."));
-  if (!Number.isFinite(fixedAmount) || fixedAmount <= 0) return accountSummary.updatedBalance;
-  return roundAmount(
-    accountSummary.initialDebtTotal +
-      fixedAmount +
-      accountSummary.adjustmentsTotal -
-      accountSummary.paymentsTotal
-  );
 };
+
+interface PaymentOption {
+  id: string;
+  paymentMethodId: string;
+  code: string;
+  name: string;
+  subtitle: string;
+  bankAccountId?: string;
+  bankName?: string;
+}
 
 export const CurrentAccountPaymentModal = ({
   open,
+  customer,
   paymentMethods,
   bankAccounts,
-  originBanks,
-  installmentPlans,
   accountSummary,
-  disabled,
+  disabled = false,
   onClose,
   onSubmit,
 }: CurrentAccountPaymentModalProps) => {
   useBodyScrollLock(open);
-  const [selectedMethodId, setSelectedMethodId] = useState("");
-  const [amountInput, setAmountInput] = useState("");
+
+  const panelRef = useRef<HTMLElement | null>(null);
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Cuentas bancarias activas
+  const posBankAccounts = useMemo(() => {
+    return bankAccounts.filter((b) => b.is_active && b.is_pos_available !== false);
+  }, [bankAccounts]);
+
+  // Lista unificada de opciones de pago (desglosando bancos habilitados si corresponde)
+  const paymentOptions = useMemo<PaymentOption[]>(() => {
+    const options: PaymentOption[] = [];
+
+    // 1. Efectivo
+    const cashMethod = paymentMethods.find(
+      (m) => normalizePaymentMethodCode(m.code) === "cash"
+    );
+    if (cashMethod) {
+      options.push({
+        id: `method-${cashMethod.id}`,
+        paymentMethodId: cashMethod.id,
+        code: "cash",
+        name: cashMethod.name || "Efectivo",
+        subtitle: "Cobro inmediato en caja física abierta",
+      });
+    }
+
+    // 2. Transferencias Bancarias (Desglose por bancos del comercio)
+    const transferMethod = paymentMethods.find(
+      (m) => normalizePaymentMethodCode(m.code) === "transfer"
+    );
+
+    if (transferMethod) {
+      if (posBankAccounts.length > 0) {
+        for (const account of posBankAccounts) {
+          const holderPart = account.holder_name ? ` (${account.holder_name})` : "";
+          options.push({
+            id: `bank-acc-${account.id}`,
+            paymentMethodId: transferMethod.id,
+            code: "transfer",
+            name: `Transferencia ${account.bank_name}${holderPart}`,
+            subtitle: `${account.alias ? `Alias: ${account.alias}` : ""}${
+              account.cbu ? ` • CBU: ...${account.cbu.slice(-6)}` : ""
+            }`.trim() || account.account_type.replace("_", " "),
+            bankAccountId: account.id,
+            bankName: account.bank_name,
+          });
+        }
+      } else {
+        options.push({
+          id: `method-${transferMethod.id}`,
+          paymentMethodId: transferMethod.id,
+          code: "transfer",
+          name: transferMethod.name || "Transferencia Bancaria",
+          subtitle: "Comprobante / acreditación bancaria",
+        });
+      }
+    }
+
+    // 3. Tarjeta de Débito
+    const debitMethod = paymentMethods.find(
+      (m) => normalizePaymentMethodCode(m.code) === "card_debit"
+    );
+    if (debitMethod) {
+      options.push({
+        id: `method-${debitMethod.id}`,
+        paymentMethodId: debitMethod.id,
+        code: "card_debit",
+        name: debitMethod.name || "Tarjeta de Débito",
+        subtitle: "Cobro terminal posnet / débito",
+      });
+    }
+
+    // 4. Tarjeta de Crédito
+    const creditMethod = paymentMethods.find(
+      (m) => normalizePaymentMethodCode(m.code) === "card_credit"
+    );
+    if (creditMethod) {
+      options.push({
+        id: `method-${creditMethod.id}`,
+        paymentMethodId: creditMethod.id,
+        code: "card_credit",
+        name: creditMethod.name || "Tarjeta de Crédito",
+        subtitle: "Financiación / cuotas posnet",
+      });
+    }
+
+    // 5. Mercado Pago
+    const mpMethod = paymentMethods.find(
+      (m) => normalizePaymentMethodCode(m.code) === "mercado_pago"
+    );
+    if (mpMethod) {
+      options.push({
+        id: `method-${mpMethod.id}`,
+        paymentMethodId: mpMethod.id,
+        code: "mercado_pago",
+        name: mpMethod.name || "Mercado Pago",
+        subtitle: "Cobro QR digital / transferencia MP",
+      });
+    }
+
+    // 6. Cheque
+    const chequeMethod = paymentMethods.find(
+      (m) => normalizePaymentMethodCode(m.code) === "cheque"
+    );
+    if (chequeMethod) {
+      options.push({
+        id: `method-${chequeMethod.id}`,
+        paymentMethodId: chequeMethod.id,
+        code: "cheque",
+        name: chequeMethod.name || "Cheque",
+        subtitle: "Cheque físico / eCheq",
+      });
+    }
+
+    // Otros métodos activos que no sean cta cte
+    for (const m of paymentMethods) {
+      const code = normalizePaymentMethodCode(m.code);
+      if (
+        code !== "cash" &&
+        code !== "transfer" &&
+        code !== "card_debit" &&
+        code !== "card_credit" &&
+        code !== "mercado_pago" &&
+        code !== "cheque" &&
+        code !== "current_account"
+      ) {
+        options.push({
+          id: `method-${m.id}`,
+          paymentMethodId: m.id,
+          code: m.code,
+          name: m.name,
+          subtitle: "Otro medio de pago",
+        });
+      }
+    }
+
+    return options;
+  }, [paymentMethods, posBankAccounts]);
+
+  // Monto base adeudado (actualizado si corresponde o contable)
+  const defaultTarget = useMemo(() => {
+    const updated = Number(accountSummary?.updatedBalance ?? 0);
+    const accounting = Number(accountSummary?.accountingBalance ?? 0);
+    return Math.max(0, updated > 0 ? updated : accounting);
+  }, [accountSummary]);
+
+  const customerTotalDebt = defaultTarget;
+
+  // Montos asignados a cada opción { [optionId]: number }
+  const [allocatedAmounts, setAllocatedAmounts] = useState<Record<string, number>>({});
+  const [amountInputs, setAmountInputs] = useState<Record<string, string>>({});
+  const [lockedMethodIds, setLockedMethodIds] = useState<Record<string, boolean>>({});
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+
   const [notes, setNotes] = useState("");
-  const [applyPricingRule, setApplyPricingRule] = useState(false);
-  const [pricingMode, setPricingMode] = useState<PaymentPricingMode>("update_to_today_price");
-  const [surchargePercent, setSurchargePercent] = useState("");
-  const [surchargeAmount, setSurchargeAmount] = useState("");
-  const [detailsDraft, setDetailsDraft] = useState<PaymentDetailsDraft>(getInitialDetailsDraft());
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmittingLocal, setIsSubmittingLocal] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [copiedField, setCopiedField] = useState<"total" | "pending" | null>(null);
 
-  const busy = Boolean(disabled || isSubmittingLocal);
-  const previewUpdatedBalance = useMemo(
-    () =>
-      applyPricingRule
-        ? resolvePreviewBalance(pricingMode, accountSummary, surchargePercent, surchargeAmount)
-        : accountSummary.updatedBalance,
-    [accountSummary, applyPricingRule, pricingMode, surchargeAmount, surchargePercent]
-  );
-
+  // Inicialización al abrir
   useEffect(() => {
     if (!open) return;
-    const firstAllowedMethod =
-      paymentMethods.find(
-        (method) => normalizePaymentMethodCode(method.code) !== "current_account"
-      ) ?? paymentMethods[0];
-    setSelectedMethodId(firstAllowedMethod?.id ?? "");
-    setAmountInput(accountSummary.updatedBalance > 0 ? accountSummary.updatedBalance.toFixed(2) : "");
+    const initial = defaultTarget;
     setNotes("");
-    setApplyPricingRule(false);
-    setPricingMode("update_to_today_price");
-    setSurchargePercent("");
-    setSurchargeAmount("");
-    setDetailsDraft(getInitialDetailsDraft());
-    setErrorMessage(null);
-  }, [accountSummary.updatedBalance, open, paymentMethods]);
+    setSubmitError(null);
+    setLockedMethodIds({});
 
-  const selectedMethod = useMemo(
-    () => paymentMethods.find((method) => method.id === selectedMethodId) ?? null,
-    [paymentMethods, selectedMethodId]
-  );
-  const selectedMethodCode = normalizePaymentMethodCode(selectedMethod?.code);
-  const selectedMethodConfig = useMemo<PaymentMethodPosConfig | null>(
-    () => (selectedMethod ? getPaymentMethodPosConfig(selectedMethod) : null),
-    [selectedMethod]
-  );
+    if (paymentOptions.length > 0) {
+      const first = paymentOptions[0];
+      setHighlightedIndex(0);
+      setAllocatedAmounts({ [first.id]: initial });
+      setAmountInputs({ [first.id]: initial > 0 ? initial.toFixed(2) : "" });
+    } else {
+      setAllocatedAmounts({});
+      setAmountInputs({});
+    }
 
-  const destinationBankAccounts = useMemo(() => {
-    if (!selectedMethodConfig?.ask_destination_bank) return bankAccounts;
-    if (!selectedMethodConfig.destination_bank_account_ids.length) return bankAccounts;
+    const timer = window.setTimeout(() => {
+      panelRef.current?.focus();
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [open, defaultTarget, paymentOptions]);
 
-    const allowedIds = new Set(selectedMethodConfig.destination_bank_account_ids);
-    const filtered = bankAccounts.filter((account) => allowedIds.has(account.id));
-    return filtered.length ? filtered : bankAccounts;
-  }, [bankAccounts, selectedMethodConfig]);
+  // Cálculos de asignación total, parcial y saldos proyectados
+  const totalAssigned = useMemo(() => {
+    const sum = Object.values(allocatedAmounts).reduce((acc, val) => acc + (val || 0), 0);
+    return Number(sum.toFixed(2));
+  }, [allocatedAmounts]);
 
-  const selectedDestinationBank = useMemo(
-    () =>
-      destinationBankAccounts.find(
-        (account) => account.id === detailsDraft.destinationBankAccountId
-      ) ?? null,
-    [detailsDraft.destinationBankAccountId, destinationBankAccounts]
-  );
-  const selectedOriginBank = useMemo(
-    () => originBanks.find((bank) => bank.id === detailsDraft.originBankId) ?? null,
-    [detailsDraft.originBankId, originBanks]
-  );
-  const selectedInstallmentPlan = useMemo(
-    () =>
-      installmentPlans.find((plan) => plan.id === detailsDraft.installmentPlanId) ?? null,
-    [detailsDraft.installmentPlanId, installmentPlans]
-  );
+  const remainingDebt = useMemo(() => {
+    return Math.max(0, Number((customerTotalDebt - totalAssigned).toFixed(2)));
+  }, [customerTotalDebt, totalAssigned]);
 
-  const availableInstallmentPlans = useMemo(() => {
-    const normalizedBrand = detailsDraft.cardBrand.trim().toLowerCase();
-    return installmentPlans.filter((plan) => {
-      if (!plan.is_active) return false;
-      if (!normalizedBrand) return true;
-      if (!plan.card_brand) return true;
-      return plan.card_brand.trim().toLowerCase() === normalizedBrand;
+  const creditSurplus = useMemo(() => {
+    return totalAssigned > customerTotalDebt
+      ? Number((totalAssigned - customerTotalDebt).toFixed(2))
+      : 0;
+  }, [customerTotalDebt, totalAssigned]);
+
+  const isPartialPayment = totalAssigned > 0 && totalAssigned < customerTotalDebt - 0.01;
+  const isTotalPayment = Math.abs(totalAssigned - customerTotalDebt) <= 0.01 && totalAssigned > 0;
+  const hasCreditSurplus = totalAssigned > customerTotalDebt + 0.01;
+  const canSubmit = totalAssigned > 0 && !disabled && !isSubmittingLocal;
+
+  // Botón rápido para saldar la deuda total
+  const handlePayFullDebt = useCallback(() => {
+    if (paymentOptions.length === 0 || customerTotalDebt <= 0) return;
+    const cur = paymentOptions[highlightedIndex] || paymentOptions[0];
+    setLockedMethodIds({ [cur.id]: true });
+    setAllocatedAmounts({ [cur.id]: customerTotalDebt });
+    setAmountInputs({ [cur.id]: customerTotalDebt.toFixed(2) });
+  }, [customerTotalDebt, highlightedIndex, paymentOptions]);
+
+  // Actualizar el monto de un método cuando el usuario escribe
+  const updateOptionAmount = useCallback((optionId: string, rawValue: string) => {
+    setSubmitError(null);
+    setLockedMethodIds((prev) => {
+      if (!prev[optionId]) return prev;
+      const next = { ...prev };
+      delete next[optionId];
+      return next;
     });
-  }, [detailsDraft.cardBrand, installmentPlans]);
 
-  const patchDetails = (patch: Partial<PaymentDetailsDraft>) => {
-    setDetailsDraft((current) => ({
-      ...current,
-      ...patch,
-    }));
-    setErrorMessage(null);
-  };
+    setAmountInputs((prev) => ({ ...prev, [optionId]: rawValue }));
 
-  const resolvePaymentDetails = (): {
-    ok: boolean;
-    details: Record<string, unknown> | null;
-    error?: string;
-  } => {
-    if (!selectedMethod || !selectedMethodConfig) {
-      return { ok: false, details: null, error: "Selecciona un medio de pago" };
-    }
+    const clean = rawValue.replace(",", ".");
+    const numeric = parseFloat(clean);
 
-    if (selectedMethodCode === "current_account") {
-      return {
-        ok: false,
-        details: null,
-        error: "Cuenta corriente no se puede usar para cobrar deuda",
-      };
-    }
-
-    if (selectedMethodConfig.ask_destination_bank && !selectedDestinationBank) {
-      return {
-        ok: false,
-        details: null,
-        error: "Selecciona la cuenta bancaria destino",
-      };
-    }
-    if (selectedMethodConfig.ask_coupon_number && !detailsDraft.couponNumber.trim()) {
-      return {
-        ok: false,
-        details: null,
-        error: "Completa el numero de cupon",
-      };
-    }
-    if (selectedMethodConfig.ask_approval_number && !detailsDraft.authorizationNumber.trim()) {
-      return {
-        ok: false,
-        details: null,
-        error: "Completa el numero de autorizacion",
-      };
-    }
-    if (selectedMethodConfig.ask_operation_number && !detailsDraft.operationNumber.trim()) {
-      return {
-        ok: false,
-        details: null,
-        error: "Completa el numero de operacion",
-      };
-    }
-    if (selectedMethodConfig.ask_voucher_number && !detailsDraft.voucherNumber.trim()) {
-      return {
-        ok: false,
-        details: null,
-        error: "Completa el numero de comprobante",
-      };
-    }
-
-    if (selectedMethodConfig.ask_origin_bank) {
-      if (!detailsDraft.originBankId.trim()) {
-        return {
-          ok: false,
-          details: null,
-          error: "Selecciona banco de origen",
-        };
+    setAllocatedAmounts((prev) => {
+      const next = { ...prev };
+      if (isNaN(numeric) || numeric <= 0) {
+        delete next[optionId];
+      } else {
+        next[optionId] = Number(numeric.toFixed(2));
       }
-      if (detailsDraft.originBankId === "__new__") {
-        if (!selectedMethodConfig.allow_new_origin_bank) {
-          return {
-            ok: false,
-            details: null,
-            error: "No se permite cargar banco de origen nuevo para este medio",
-          };
+      return next;
+    });
+  }, []);
+
+  // Confirmar y fijar el monto asignado a un método (pasa a verde)
+  const confirmOptionAmount = useCallback(
+    (optionId: string) => {
+      setSubmitError(null);
+      const inputVal = amountInputs[optionId] ?? "";
+      const clean = String(inputVal).replace(",", ".");
+      const numeric = parseFloat(clean);
+      const currentMethodVal =
+        !isNaN(numeric) && numeric > 0
+          ? Number(numeric.toFixed(2))
+          : allocatedAmounts[optionId] || 0;
+
+      let nextAllocated: Record<string, number> = {};
+
+      if (currentMethodVal > 0) {
+        setLockedMethodIds((prev) => ({ ...prev, [optionId]: true }));
+        nextAllocated = { ...allocatedAmounts, [optionId]: currentMethodVal };
+        setAllocatedAmounts(nextAllocated);
+        setAmountInputs((prev) => ({ ...prev, [optionId]: currentMethodVal.toFixed(2) }));
+      } else {
+        setLockedMethodIds((prev) => {
+          const next = { ...prev };
+          delete next[optionId];
+          return next;
+        });
+        nextAllocated = { ...allocatedAmounts };
+        delete nextAllocated[optionId];
+        setAllocatedAmounts(nextAllocated);
+        setAmountInputs((prev) => {
+          const next = { ...prev };
+          delete next[optionId];
+          return next;
+        });
+      }
+
+      const inputEl = inputRefs.current[optionId];
+      if (inputEl) inputEl.blur();
+    },
+    [allocatedAmounts, amountInputs]
+  );
+
+  // Desplazar el resto pendiente dinámicamente al método objetivo
+  const shiftRemainderToOption = useCallback(
+    (targetOption: PaymentOption) => {
+      if (lockedMethodIds[targetOption.id]) return;
+
+      const lockedSum = Object.entries(allocatedAmounts).reduce((acc, [id, val]) => {
+        if (lockedMethodIds[id] && id !== targetOption.id) {
+          return acc + (val || 0);
         }
-        if (!detailsDraft.newOriginBankName.trim()) {
-          return {
-            ok: false,
-            details: null,
-            error: "Completa el nombre del nuevo banco de origen",
-          };
+        return acc;
+      }, 0);
+      const remainder = Number(Math.max(0, customerTotalDebt - lockedSum).toFixed(2));
+
+      setAllocatedAmounts((prev) => {
+        const next: Record<string, number> = {};
+        for (const [id, val] of Object.entries(prev)) {
+          if (lockedMethodIds[id]) {
+            next[id] = val;
+          }
         }
-      } else if (!selectedOriginBank) {
-        return {
-          ok: false,
-          details: null,
-          error: "Selecciona un banco de origen valido",
-        };
-      }
-    }
+        if (remainder > 0) {
+          next[targetOption.id] = remainder;
+        }
+        return next;
+      });
 
-    if (
-      selectedMethodConfig.ask_origin_account_holder &&
-      !detailsDraft.originAccountHolder.trim()
-    ) {
-      return {
-        ok: false,
-        details: null,
-        error: "Completa titular de la cuenta de origen",
-      };
-    }
-    if (selectedMethodConfig.ask_card_brand && !detailsDraft.cardBrand.trim()) {
-      return {
-        ok: false,
-        details: null,
-        error: "Completa la marca de tarjeta",
-      };
-    }
-    if (selectedMethodConfig.ask_installment_plan && !selectedInstallmentPlan) {
-      return {
-        ok: false,
-        details: null,
-        error: "Selecciona plan de cuotas",
-      };
-    }
-    if (selectedMethodConfig.ask_cheque_number && !detailsDraft.chequeNumber.trim()) {
-      return {
-        ok: false,
-        details: null,
-        error: "Completa numero de cheque",
-      };
-    }
-    if (selectedMethodConfig.ask_cheque_due_date && !detailsDraft.chequeDueDate.trim()) {
-      return {
-        ok: false,
-        details: null,
-        error: "Completa fecha de vencimiento del cheque",
-      };
-    }
+      setAmountInputs((prev) => {
+        const next: Record<string, string> = {};
+        for (const [id, val] of Object.entries(prev)) {
+          if (lockedMethodIds[id]) {
+            next[id] = val;
+          }
+        }
+        if (remainder > 0) {
+          next[targetOption.id] = remainder.toFixed(2);
+        }
+        return next;
+      });
+    },
+    [allocatedAmounts, lockedMethodIds, customerTotalDebt]
+  );
 
-    return {
-      ok: true,
-      details: {
-        payment_method: {
-          id: selectedMethod.id,
-          code: selectedMethod.code,
-          type: selectedMethod.type,
-          name: selectedMethod.name,
-        },
-        destination_bank_account:
-          selectedDestinationBank == null
-            ? null
-            : {
-                id: selectedDestinationBank.id,
-                bank_name: selectedDestinationBank.bank_name,
-                alias: selectedDestinationBank.alias,
-                holder_name: selectedDestinationBank.holder_name,
-              },
-        coupon_number: detailsDraft.couponNumber.trim() || null,
-        authorization_number: detailsDraft.authorizationNumber.trim() || null,
-        operation_number: detailsDraft.operationNumber.trim() || null,
-        voucher_number: detailsDraft.voucherNumber.trim() || null,
-        origin_bank:
-          detailsDraft.originBankId === "__new__"
-            ? {
-                is_new: true,
-                name: detailsDraft.newOriginBankName.trim(),
-              }
-            : selectedOriginBank == null
-              ? null
-              : {
-                  is_new: false,
-                  id: selectedOriginBank.id,
-                  code: selectedOriginBank.code,
-                  name: selectedOriginBank.name,
-                },
-        origin_account_holder: detailsDraft.originAccountHolder.trim() || null,
-        card_brand: detailsDraft.cardBrand.trim() || null,
-        installment_plan:
-          selectedInstallmentPlan == null
-            ? null
-            : {
-                id: selectedInstallmentPlan.id,
-                code: selectedInstallmentPlan.code,
-                name: selectedInstallmentPlan.name,
-                installments: selectedInstallmentPlan.installments,
-                interest_percent: selectedInstallmentPlan.interest_percent,
-              },
-        cheque_number: detailsDraft.chequeNumber.trim() || null,
-        cheque_due_date: detailsDraft.chequeDueDate.trim() || null,
-      },
-    };
-  };
+  // Seleccionar opción
+  const selectOption = useCallback(
+    (targetIndex: number) => {
+      if (paymentOptions.length === 0) return;
+      const clampedIndex = (targetIndex + paymentOptions.length) % paymentOptions.length;
+      const targetOption = paymentOptions[clampedIndex];
+      if (!targetOption) return;
 
-  const submit = async () => {
-    setErrorMessage(null);
+      setHighlightedIndex(clampedIndex);
+      shiftRemainderToOption(targetOption);
 
-    if (!selectedMethod) {
-      setErrorMessage("Selecciona un medio de pago");
+      window.setTimeout(() => {
+        const el = inputRefs.current[targetOption.id];
+        if (el) {
+          el.focus();
+          el.select();
+        }
+      }, 20);
+    },
+    [paymentOptions, shiftRemainderToOption]
+  );
+
+  // Envío final
+  const handleFinalSubmit = useCallback(async () => {
+    if (disabled || isSubmittingLocal) return;
+
+    if (totalAssigned <= 0) {
+      setSubmitError("Debes ingresar un importe mayor a $0 en al menos un medio de pago");
       return;
     }
 
-    const parsedAmount = Number(amountInput.trim().replace(",", "."));
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      setErrorMessage("El monto debe ser mayor a 0");
-      return;
-    }
+    const assignedOptions = paymentOptions.filter(
+      (opt) => (allocatedAmounts[opt.id] || 0) > 0
+    );
 
-    const resolved = resolvePaymentDetails();
-    if (!resolved.ok) {
-      setErrorMessage(resolved.error ?? "Faltan datos de cobro");
+    if (assignedOptions.length === 0) {
+      setSubmitError("Debes asignar un monto a al menos un medio de pago");
       return;
-    }
-
-    const parsedSurchargePercent = Number(surchargePercent.trim().replace(",", "."));
-    const parsedSurchargeAmount = Number(surchargeAmount.trim().replace(",", "."));
-    if (applyPricingRule && pricingMode === "surcharge_percentage") {
-      if (!Number.isFinite(parsedSurchargePercent) || parsedSurchargePercent <= 0) {
-        setErrorMessage("Ingresa un porcentaje de recargo mayor a 0");
-        return;
-      }
-    }
-    if (applyPricingRule && pricingMode === "surcharge_fixed") {
-      if (!Number.isFinite(parsedSurchargeAmount) || parsedSurchargeAmount <= 0) {
-        setErrorMessage("Ingresa un recargo fijo mayor a 0");
-        return;
-      }
     }
 
     setIsSubmittingLocal(true);
+    setSubmitError(null);
+
     try {
-      const ok = await onSubmit({
-        payment_method_id: selectedMethod.id,
-        amount: roundAmount(parsedAmount),
-        notes: notes.trim() || undefined,
-        payment_details: resolved.details,
-        pricing_rule: applyPricingRule
-          ? {
-              mode: pricingMode,
-              surcharge_percent:
-                pricingMode === "surcharge_percentage" ? parsedSurchargePercent : undefined,
-              surcharge_amount:
-                pricingMode === "surcharge_fixed" ? parsedSurchargeAmount : undefined,
-              notes: "Regla aplicada antes de registrar pago",
-            }
+      const isSplit = assignedOptions.length > 1;
+      const primaryOption = assignedOptions[0];
+
+      const splitPayments = assignedOptions.map((opt) => ({
+        payment_method_id: opt.paymentMethodId,
+        amount: allocatedAmounts[opt.id] || 0,
+        bank_account_id: opt.bankAccountId ?? null,
+        notes: opt.bankName ? `Banco: ${opt.bankName}` : undefined,
+      }));
+
+      const notesSummary = [
+        notes.trim() || null,
+        isSplit
+          ? `Cobro combinado: ${assignedOptions
+              .map((o) => `${o.name}: $${(allocatedAmounts[o.id] || 0).toFixed(2)}`)
+              .join(" + ")}`
+          : primaryOption.bankName
+          ? `Transferencia ${primaryOption.bankName}`
           : null,
+      ]
+        .filter(Boolean)
+        .join(" | ");
+
+      const success = await onSubmit({
+        amount: totalAssigned,
+        payment_method_id: primaryOption.paymentMethodId,
+        bank_account_id: primaryOption.bankAccountId ?? null,
+        notes: notesSummary || undefined,
+        split_payments: isSplit ? splitPayments : undefined,
       });
-      if (!ok) return;
-      onClose();
+
+      if (success) {
+        onClose();
+      }
+    } catch (err) {
+      console.error("Error al registrar cobro en cuenta corriente:", err);
+      setSubmitError("Ocurrió un error al registrar el cobro");
     } finally {
       setIsSubmittingLocal(false);
     }
+  }, [
+    allocatedAmounts,
+    disabled,
+    isSubmittingLocal,
+    notes,
+    onClose,
+    onSubmit,
+    paymentOptions,
+    totalAssigned,
+  ]);
+
+  // Listener global de teclado
+  useEffect(() => {
+    if (!open) return;
+
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) {
+        e.preventDefault();
+        return;
+      }
+
+      if (disabled || isSubmittingLocal) {
+        if (e.key === "Enter" || e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
+
+      const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      const activeInputEl = targetTag === "input" ? (e.target as HTMLInputElement) : null;
+      const isEditingAmount = Boolean(activeInputEl && activeInputEl.type === "number");
+
+      // Flecha abajo
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (isEditingAmount) activeInputEl?.blur();
+        if (paymentOptions.length === 0) return;
+        const nextIndex = (highlightedIndex + 1) % paymentOptions.length;
+        const nextOption = paymentOptions[nextIndex];
+        setHighlightedIndex(nextIndex);
+        if (nextOption) shiftRemainderToOption(nextOption);
+        return;
+      }
+
+      // Flecha arriba
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (isEditingAmount) activeInputEl?.blur();
+        if (paymentOptions.length === 0) return;
+        const prevIndex = (highlightedIndex - 1 + paymentOptions.length) % paymentOptions.length;
+        const prevOption = paymentOptions[prevIndex];
+        setHighlightedIndex(prevIndex);
+        if (prevOption) shiftRemainderToOption(prevOption);
+        return;
+      }
+
+      // Enter
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const currentOption = paymentOptions[highlightedIndex];
+        if (!currentOption) return;
+
+        // Si el foco está en un input o la opción no está fijada, fijar
+        if (isEditingAmount || !lockedMethodIds[currentOption.id]) {
+          confirmOptionAmount(currentOption.id);
+          return;
+        }
+
+        // Si hay un monto válido asignado, enviar el cobro
+        if (canSubmit) {
+          void handleFinalSubmit();
+        }
+        return;
+      }
+
+      // Escape
+      if (e.key === "Escape") {
+        e.preventDefault();
+        const currentOption = paymentOptions[highlightedIndex];
+        const lockedKeys = Object.keys(lockedMethodIds);
+
+        if (lockedKeys.length > 0) {
+          if (currentOption && lockedMethodIds[currentOption.id]) {
+            setLockedMethodIds((prev) => {
+              const next = { ...prev };
+              delete next[currentOption.id];
+              return next;
+            });
+            return;
+          }
+          const lastKey = lockedKeys[lockedKeys.length - 1];
+          setLockedMethodIds((prev) => {
+            const next = { ...prev };
+            delete next[lastKey];
+            return next;
+          });
+          return;
+        }
+
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown, { capture: true });
+  }, [
+    canSubmit,
+    confirmOptionAmount,
+    disabled,
+    handleFinalSubmit,
+    highlightedIndex,
+    isSubmittingLocal,
+    lockedMethodIds,
+    onClose,
+    open,
+    paymentOptions,
+    shiftRemainderToOption,
+  ]);
+
+  const handleCopyAmount = (amount: number, field: "total" | "pending") => {
+    void navigator.clipboard.writeText(amount.toFixed(2));
+    setCopiedField(field);
+    window.setTimeout(() => setCopiedField(null), 1500);
   };
 
   if (!open) return null;
 
   return (
-    <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-4">
-      <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 shadow-panel">
-        <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
-          <div>
-            <h3 className="text-base font-semibold text-slate-900">Registrar pago adeudado</h3>
-            <p className="text-xs text-slate-500">
-              Selecciona medio de pago y completa los datos contables requeridos.
-            </p>
+    <section className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150">
+      <article
+        ref={panelRef}
+        tabIndex={-1}
+        className="w-full max-w-2xl rounded-2xl sm:rounded-3xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl p-4 sm:p-6 flex flex-col gap-3 max-h-[92vh] overflow-y-auto outline-none"
+      >
+        {/* Cabecera del modal */}
+        <div className="flex items-center justify-between pb-1 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              Registrar Cobro en Cuenta Corriente
+            </h3>
+            <span className="rounded-md bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 font-mono">
+              ARS
+            </span>
           </div>
-          <ModalCloseButton label="Cerrar pago" onClick={onClose} disabled={busy} />
+          <ModalCloseButton label="Cerrar cobro" onClick={onClose} disabled={disabled || isSubmittingLocal} />
         </div>
 
-        <div className="mt-4 space-y-4">
-          <div>
-            <p className="mb-2 text-sm font-medium text-slate-800">Medio de pago</p>
-            <PaymentMethodSelector
-              paymentMethods={paymentMethods}
-              selectedPaymentMethodId={selectedMethodId}
-              disabled={busy}
-              columns={2}
-              isMethodDisabled={(method) => normalizePaymentMethodCode(method.code) === "current_account"}
-              getMethodBadges={(method) =>
-                normalizePaymentMethodCode(method.code) === "current_account" ? ["No permitido"] : []
-              }
-              onChange={(methodId) => {
-                setSelectedMethodId(methodId);
-                setErrorMessage(null);
-              }}
-            />
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700">Monto</label>
-              <input
-                type="number"
-                step="0.01"
-                value={amountInput}
-                onChange={(event) => {
-                  setAmountInput(event.target.value);
-                  setErrorMessage(null);
-                }}
-                onFocus={(e) =>
-                  handleNumericInputFocus(e, {
-                    isNew: amountInput === "0" || amountInput === "0.00" || amountInput === "0,00",
-                    onClear: () => setAmountInput(""),
-                  })
-                }
-                className="ui-input"
-                disabled={busy}
-              />
+        {/* Sub-tarjeta con información del cliente */}
+        {customer && (
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded-xl px-3 py-2 border border-slate-200/80 dark:border-slate-700/80">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-bold text-slate-900 dark:text-slate-100 truncate">{customer.full_name}</span>
+              {customer.document_number && (
+                <span className="font-mono text-slate-500 shrink-0">
+                  ({customer.document_type ? `${customer.document_type.toUpperCase()} ` : ""}{customer.document_number})
+                </span>
+              )}
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-slate-700">Observacion</label>
-              <input
-                type="text"
-                value={notes}
-                onChange={(event) => {
-                  setNotes(event.target.value);
-                  setErrorMessage(null);
-                }}
-                className="ui-input"
-                disabled={busy}
-              />
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-slate-500">Deuda actual:</span>
+              <strong className="font-mono text-slate-900 dark:text-slate-100 font-bold">
+                {currency.format(customerTotalDebt)}
+              </strong>
             </div>
           </div>
+        )}
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <label className="flex items-start gap-2 text-sm font-medium text-slate-800">
-              <input
-                type="checkbox"
-                checked={applyPricingRule}
-                onChange={(event) => {
-                  setApplyPricingRule(event.target.checked);
-                  if (event.target.checked) {
-                    const nextPreview = resolvePreviewBalance(
-                      pricingMode,
-                      accountSummary,
-                      surchargePercent,
-                      surchargeAmount
-                    );
-                    if (nextPreview > 0) setAmountInput(nextPreview.toFixed(2));
-                  } else if (accountSummary.updatedBalance > 0) {
-                    setAmountInput(accountSummary.updatedBalance.toFixed(2));
-                  }
-                  setErrorMessage(null);
-                }}
-                disabled={busy}
-              />
-              <span>Desea aplicar algun recargo o actualizacion antes del pago?</span>
-            </label>
-            <p className="mt-1 text-xs text-slate-500" title="El recargo o actualizacion vigente reemplaza al anterior; no se suma varias veces.">
-              El recargo o actualizacion reemplaza al anterior; no se acumula.
-            </p>
-
-            {applyPricingRule ? (
-              <div className="mt-3 grid gap-2">
-                <select
-                  className="ui-input"
-                  value={pricingMode}
-                  onChange={(event) => {
-                    const nextMode = event.target.value as PaymentPricingMode;
-                    setPricingMode(nextMode);
-                    const nextPreview = resolvePreviewBalance(
-                      nextMode,
-                      accountSummary,
-                      surchargePercent,
-                      surchargeAmount
-                    );
-                    if (nextPreview > 0) setAmountInput(nextPreview.toFixed(2));
-                    setErrorMessage(null);
+        {/* 2 PANELES SUPERIORES (TOTAL A COBRAR vs SALDO RESTANTE DE DEUDA) */}
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
+          {/* PANEL 1: TOTAL A COBRAR (PAGO) */}
+          <div
+            onClick={() => handleCopyAmount(totalAssigned, "total")}
+            title="Clic para copiar monto a cobrar"
+            className="group relative flex flex-col justify-between rounded-xl p-2.5 sm:p-3 border border-slate-300 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50 hover:border-blue-400 dark:hover:border-blue-500 cursor-pointer transition active:scale-[0.99] min-w-0 overflow-hidden"
+          >
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate">
+                Total a Cobrar
+              </span>
+              {copiedField === "total" ? (
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 animate-in fade-in shrink-0">
+                  ¡Copiado!
+                </span>
+              ) : (
+                <Copy size={12} className="text-slate-400 opacity-0 group-hover:opacity-100 transition shrink-0" />
+              )}
+            </div>
+            <div className="mt-1 flex flex-wrap items-baseline justify-between gap-1">
+              <span className="text-base sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight font-mono truncate" title={currency.format(totalAssigned)}>
+                {currency.format(totalAssigned)}
+              </span>
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                  totalAssigned <= 0
+                    ? "bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
+                    : isPartialPayment
+                    ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                    : isTotalPayment
+                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                    : "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+                }`}
+              >
+                {totalAssigned <= 0
+                  ? "Sin monto"
+                  : isPartialPayment
+                  ? "Pago Parcial"
+                  : isTotalPayment
+                  ? "Cancelación Total"
+                  : "Saldo a favor"}
+              </span>
+            </div>
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                Suma asignada
+              </span>
+              {customerTotalDebt > 0 && Math.abs(totalAssigned - customerTotalDebt) > 0.01 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePayFullDebt();
                   }}
-                  disabled={busy}
+                  className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer shrink-0"
                 >
-                  <option value="original">Volver a precio original</option>
-                  <option value="update_to_today_price">Actualizar a precio de hoy</option>
-                  <option value="surcharge_percentage">Recargo porcentual final</option>
-                  <option value="surcharge_fixed">Recargo fijo final</option>
-                </select>
-
-                {pricingMode === "surcharge_percentage" ? (
-                  <input
-                    className="ui-input"
-                    type="number"
-                    step="0.01"
-                    value={surchargePercent}
-                    onChange={(event) => {
-                      setSurchargePercent(event.target.value);
-                      const nextPreview = resolvePreviewBalance(
-                        "surcharge_percentage",
-                        accountSummary,
-                        event.target.value,
-                        surchargeAmount
-                      );
-                      if (nextPreview > 0) setAmountInput(nextPreview.toFixed(2));
-                      setErrorMessage(null);
-                    }}
-                    onFocus={(e) =>
-                      handleNumericInputFocus(e, {
-                        isNew: surchargePercent === "" || surchargePercent === "0",
-                        onClear: () => setSurchargePercent(""),
-                      })
-                    }
-                    placeholder="Porcentaje de recargo final"
-                    disabled={busy}
-                  />
-                ) : null}
-
-                {pricingMode === "surcharge_fixed" ? (
-                  <input
-                    className="ui-input"
-                    type="number"
-                    step="0.01"
-                    value={surchargeAmount}
-                    onChange={(event) => {
-                      setSurchargeAmount(event.target.value);
-                      const nextPreview = resolvePreviewBalance(
-                        "surcharge_fixed",
-                        accountSummary,
-                        surchargePercent,
-                        event.target.value
-                      );
-                      if (nextPreview > 0) setAmountInput(nextPreview.toFixed(2));
-                      setErrorMessage(null);
-                    }}
-                    onFocus={(e) =>
-                      handleNumericInputFocus(e, {
-                        isNew: surchargeAmount === "" || surchargeAmount === "0",
-                        onClear: () => setSurchargeAmount(""),
-                      })
-                    }
-                    placeholder="Monto fijo de recargo final"
-                    disabled={busy}
-                  />
-                ) : null}
-
-                <p className="text-xs text-slate-500">
-                  Saldo actualizado a cobrar: <strong>{currency.format(previewUpdatedBalance)}</strong>
-                </p>
-              </div>
-            ) : null}
+                  Cobrar deuda total ({currency.format(customerTotalDebt)})
+                </button>
+              )}
+            </div>
           </div>
 
-          {selectedMethod && selectedMethodConfig ? (
-            <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <div>
-                <p className="text-sm font-medium text-slate-800">Datos contables del cobro</p>
-                <p className="text-xs text-slate-500">
-                  Completa los datos de {getPaymentMethodLabel(selectedMethod).toLowerCase()}.
-                </p>
-              </div>
-
-              {selectedMethodConfig.ask_card_brand ? (
-                <input
-                  className="ui-input"
-                  value={detailsDraft.cardBrand}
-                  onChange={(event) => patchDetails({ cardBrand: event.target.value })}
-                  placeholder="Tarjeta (Visa, Master, Amex...)"
-                  disabled={busy}
-                />
-              ) : null}
-
-              {selectedMethodConfig.ask_installment_plan ? (
-                <select
-                  className="ui-input"
-                  value={detailsDraft.installmentPlanId}
-                  onChange={(event) => patchDetails({ installmentPlanId: event.target.value })}
-                  disabled={busy}
-                >
-                  <option value="">Plan de cuotas</option>
-                  {availableInstallmentPlans.map((plan) => (
-                    <option key={plan.id} value={plan.id}>
-                      {plan.name} ({plan.installments} cuotas)
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-
-              {selectedMethodConfig.ask_coupon_number ||
-              selectedMethodConfig.ask_approval_number ||
-              selectedMethodConfig.ask_operation_number ||
-              selectedMethodConfig.ask_voucher_number ? (
-                <div className="grid gap-2 md:grid-cols-2">
-                  {selectedMethodConfig.ask_coupon_number ? (
-                    <input
-                      className="ui-input"
-                      value={detailsDraft.couponNumber}
-                      onChange={(event) => patchDetails({ couponNumber: event.target.value })}
-                      placeholder="Numero de cupon"
-                      disabled={busy}
-                    />
-                  ) : null}
-                  {selectedMethodConfig.ask_approval_number ? (
-                    <input
-                      className="ui-input"
-                      value={detailsDraft.authorizationNumber}
-                      onChange={(event) =>
-                        patchDetails({ authorizationNumber: event.target.value })
-                      }
-                      placeholder="Numero de autorizacion"
-                      disabled={busy}
-                    />
-                  ) : null}
-                  {selectedMethodConfig.ask_operation_number ? (
-                    <input
-                      className="ui-input"
-                      value={detailsDraft.operationNumber}
-                      onChange={(event) => patchDetails({ operationNumber: event.target.value })}
-                      placeholder="Numero de operacion"
-                      disabled={busy}
-                    />
-                  ) : null}
-                  {selectedMethodConfig.ask_voucher_number ? (
-                    <input
-                      className="ui-input"
-                      value={detailsDraft.voucherNumber}
-                      onChange={(event) => patchDetails({ voucherNumber: event.target.value })}
-                      placeholder="Numero de comprobante"
-                      disabled={busy}
-                    />
-                  ) : null}
-                </div>
-              ) : null}
-
-              {selectedMethodConfig.ask_origin_bank ? (
-                <div className="grid gap-2">
-                  <select
-                    className="ui-input"
-                    value={detailsDraft.originBankId}
-                    onChange={(event) => patchDetails({ originBankId: event.target.value })}
-                    disabled={busy}
-                  >
-                    <option value="">Banco de origen</option>
-                    {originBanks.map((bank) => (
-                      <option key={bank.id} value={bank.id}>
-                        {bank.name}
-                      </option>
-                    ))}
-                    {selectedMethodConfig.allow_new_origin_bank ? (
-                      <option value="__new__">+ Agregar nuevo banco</option>
-                    ) : null}
-                  </select>
-
-                  {selectedMethodConfig.allow_new_origin_bank &&
-                  detailsDraft.originBankId === "__new__" ? (
-                    <input
-                      className="ui-input"
-                      value={detailsDraft.newOriginBankName}
-                      onChange={(event) =>
-                        patchDetails({ newOriginBankName: event.target.value })
-                      }
-                      placeholder="Nuevo banco de origen"
-                      disabled={busy}
-                    />
-                  ) : null}
-                </div>
-              ) : null}
-
-              {selectedMethodConfig.ask_origin_account_holder ? (
-                <input
-                  className="ui-input"
-                  value={detailsDraft.originAccountHolder}
-                  onChange={(event) =>
-                    patchDetails({ originAccountHolder: event.target.value })
-                  }
-                  placeholder="Titular cuenta origen"
-                  disabled={busy}
-                />
-              ) : null}
-
-              {selectedMethodConfig.ask_cheque_number ||
-              selectedMethodConfig.ask_cheque_due_date ? (
-                <div className="grid gap-2 md:grid-cols-2">
-                  {selectedMethodConfig.ask_cheque_number ? (
-                    <input
-                      className="ui-input"
-                      value={detailsDraft.chequeNumber}
-                      onChange={(event) => patchDetails({ chequeNumber: event.target.value })}
-                      placeholder="Numero de cheque"
-                      disabled={busy}
-                    />
-                  ) : null}
-                  {selectedMethodConfig.ask_cheque_due_date ? (
-                    <input
-                      type="date"
-                      className="ui-input"
-                      value={detailsDraft.chequeDueDate}
-                      onChange={(event) =>
-                        patchDetails({ chequeDueDate: event.target.value })
-                      }
-                      disabled={busy}
-                    />
-                  ) : null}
-                </div>
-              ) : null}
-
-              {selectedMethodConfig.ask_destination_bank ? (
-                <div className="space-y-1">
-                  <select
-                    className="ui-input"
-                    value={detailsDraft.destinationBankAccountId}
-                    onChange={(event) =>
-                      patchDetails({ destinationBankAccountId: event.target.value })
-                    }
-                    disabled={busy}
-                  >
-                    <option value="">Cuenta bancaria destino</option>
-                    {destinationBankAccounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.bank_name} — {account.holder_name}{account.alias ? ` (${account.alias})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedDestinationBank ? (
-                    <p className="text-xs text-slate-500">
-                      Alias destino: {selectedDestinationBank.alias || "Sin alias"}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
+          {/* PANEL 2: SALDO RESTANTE DE DEUDA */}
+          <div
+            onClick={() => handleCopyAmount(remainingDebt, "pending")}
+            title="Clic para copiar saldo restante"
+            className={`group relative flex flex-col justify-between rounded-xl p-2.5 sm:p-3 border cursor-pointer transition active:scale-[0.99] min-w-0 overflow-hidden ${
+              isTotalPayment
+                ? "border-emerald-300 dark:border-emerald-700/80 bg-emerald-50/50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200"
+                : hasCreditSurplus
+                ? "border-purple-300 dark:border-purple-700/80 bg-purple-50/50 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200"
+                : isPartialPayment
+                ? "border-blue-300 dark:border-blue-700/80 bg-blue-50/40 dark:bg-blue-950/30 text-blue-900 dark:text-blue-200"
+                : "border-amber-300 dark:border-amber-700/80 bg-amber-50/50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-wider truncate">
+                {hasCreditSurplus ? "Saldo a Favor" : "Saldo Restante Deuda"}
+              </span>
+              {copiedField === "pending" ? (
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 animate-in fade-in shrink-0">
+                  ¡Copiado!
+                </span>
+              ) : (
+                <Copy size={12} className="opacity-0 group-hover:opacity-100 transition shrink-0" />
+              )}
             </div>
-          ) : null}
-
-          {errorMessage ? (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              {errorMessage}
+            <div className="mt-1 flex items-baseline justify-between gap-2">
+              <span className="text-base sm:text-2xl font-black tracking-tight font-mono truncate">
+                {hasCreditSurplus ? `+${currency.format(creditSurplus)}` : currency.format(remainingDebt)}
+              </span>
             </div>
-          ) : null}
-
-          <div className="flex justify-end gap-2 border-t border-slate-200 pt-3">
-            <button type="button" className="ui-btn-ghost" onClick={onClose} disabled={busy}>
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className="ui-btn-primary"
-              onClick={() => {
-                void submit();
-              }}
-              disabled={busy || !paymentMethods.length}
-            >
-              {busy ? "Guardando..." : "Guardar pago"}
-            </button>
+            <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400 truncate">
+              {isTotalPayment
+                ? "Deuda 100% saldada"
+                : hasCreditSurplus
+                ? "Crédito a favor del cliente"
+                : isPartialPayment
+                ? `Deuda anterior: ${currency.format(customerTotalDebt)}`
+                : `Deuda actual: ${currency.format(customerTotalDebt)}`}
+            </p>
           </div>
         </div>
-      </div>
+
+        {/* LISTA UNIFICADA DE OPCIONES DE PAGO */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between px-1 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <span>Medio de Pago / Cuenta</span>
+            <span>Importe Asignado ($)</span>
+          </div>
+
+          <div className="space-y-1">
+            {paymentOptions.map((option, index) => {
+              const isHighlighted = highlightedIndex === index;
+              const isConfirmed = Boolean(lockedMethodIds[option.id] && (allocatedAmounts[option.id] || 0) > 0);
+              const rawAmount = amountInputs[option.id] ?? "";
+              const hasAmount = Boolean(rawAmount && parseFloat(rawAmount.replace(",", ".")) > 0);
+              const Icon = getMethodIcon(option.code);
+
+              return (
+                <div
+                  key={option.id}
+                  onClick={() => selectOption(index)}
+                  className={`group flex items-center justify-between gap-2.5 py-1.5 px-3 rounded-xl border transition cursor-pointer ${
+                    isConfirmed
+                      ? "border-emerald-500 dark:border-emerald-500 bg-emerald-50/80 dark:bg-emerald-950/40 ring-2 ring-emerald-500/60 shadow-xs"
+                      : isHighlighted
+                      ? "border-amber-400 dark:border-amber-400 bg-amber-500/15 dark:bg-amber-500/20 ring-2 ring-amber-400 dark:ring-amber-400/90 shadow-sm"
+                      : hasAmount
+                      ? "border-slate-300 dark:border-slate-600 bg-slate-100/70 dark:bg-slate-800/80 hover:border-slate-400 dark:hover:border-slate-500"
+                      : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/60 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800/80"
+                  }`}
+                >
+                  {/* Lado izquierdo: Ícono y Nombre */}
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition ${
+                        isConfirmed
+                          ? "bg-emerald-600 dark:bg-emerald-500 text-white dark:text-slate-950 shadow-xs"
+                          : isHighlighted
+                          ? "bg-amber-400 dark:bg-amber-400 text-slate-950 font-black shadow-xs"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                      }`}
+                    >
+                      <Icon size={14} />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`font-bold text-xs truncate ${
+                            isConfirmed
+                              ? "text-slate-900 dark:text-white"
+                              : isHighlighted
+                              ? "text-slate-950 dark:text-amber-100"
+                              : "text-slate-800 dark:text-slate-200"
+                          }`}
+                        >
+                          {option.name}
+                        </span>
+                        {isConfirmed && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-emerald-600 text-white">
+                              <Check size={9} strokeWidth={3} />
+                            </span>
+                            <span className="text-[9px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-950/90 px-1 py-0 rounded border border-emerald-300 dark:border-emerald-700">
+                              Confirmado
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      {option.subtitle && (
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate leading-tight">
+                          {option.subtitle}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Lado derecho: Casilla de Importe ($) */}
+                  <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <div className="relative w-32">
+                      <span
+                        className={`absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-black pointer-events-none transition ${
+                          isConfirmed
+                            ? "text-emerald-700 dark:text-emerald-300"
+                            : isHighlighted
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-slate-400 dark:text-slate-500"
+                        }`}
+                      >
+                        $
+                      </span>
+                      <input
+                        ref={(el) => {
+                          inputRefs.current[option.id] = el;
+                        }}
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        value={amountInputs[option.id] ?? ""}
+                        onChange={(e) => updateOptionAmount(option.id, e.target.value)}
+                        onFocus={(e) => {
+                          e.target.select();
+                          setHighlightedIndex(index);
+                        }}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
+                        data-lpignore="true"
+                        disabled={disabled || isSubmittingLocal}
+                        className={`w-full rounded-lg border py-1 pl-5 pr-2 text-right font-mono text-xs outline-none transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                          isConfirmed
+                            ? "border-emerald-500 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/90 text-emerald-950 dark:text-emerald-100 font-black ring-2 ring-emerald-500/50 shadow-xs"
+                            : isHighlighted
+                            ? "border-amber-400 dark:border-amber-400 bg-white dark:bg-slate-900 text-slate-950 dark:text-amber-100 font-bold ring-2 ring-amber-400/60 shadow-xs"
+                            : hasAmount
+                            ? "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"
+                            : "border-slate-300 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/90 text-slate-700 dark:text-slate-300 font-bold focus:bg-white dark:focus:bg-slate-900 focus:border-amber-400 dark:focus:border-amber-400"
+                        }`}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Observaciones */}
+        <div>
+          <label className="block text-xs font-medium text-slate-700 dark:text-slate-200 mb-1">
+            Observaciones / N° de Comprobante o Recibo (Opcional)
+          </label>
+          <input
+            type="text"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Ej: Pago en sucursal / Recibo N° 0001-00004523"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            data-lpignore="true"
+            disabled={disabled || isSubmittingLocal}
+            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl text-xs bg-white dark:bg-slate-900/90 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          />
+        </div>
+
+        {/* Mensaje de error si hubiese */}
+        {submitError && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-800 dark:border-rose-900 dark:bg-rose-950/60 dark:text-rose-200">
+            {submitError}
+          </div>
+        )}
+
+        {/* Botones de acción inferiores */}
+        <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={disabled || isSubmittingLocal}
+            className="px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition cursor-pointer"
+          >
+            Cancelar (Esc)
+          </button>
+          <button
+            type="button"
+            onClick={handleFinalSubmit}
+            disabled={!canSubmit}
+            className={`px-6 py-2.5 text-xs font-bold rounded-xl transition shadow-md flex items-center gap-2 cursor-pointer disabled:cursor-not-allowed ${
+              !canSubmit
+                ? "bg-slate-300 dark:bg-slate-800 text-slate-500"
+                : isTotalPayment
+                ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/25"
+                : hasCreditSurplus
+                ? "bg-purple-600 hover:bg-purple-700 text-white shadow-purple-500/25"
+                : "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/25"
+            }`}
+          >
+            {isSubmittingLocal ? (
+              <>
+                <Loader2 size={14} className="animate-spin" />
+                <span>Registrando...</span>
+              </>
+            ) : isTotalPayment ? (
+              <>
+                <Check size={14} strokeWidth={3} />
+                <span>Confirmar Cobro Total ({currency.format(totalAssigned)}) (Enter)</span>
+              </>
+            ) : isPartialPayment ? (
+              <>
+                <Check size={14} strokeWidth={3} />
+                <span>Confirmar Cobro Parcial ({currency.format(totalAssigned)}) (Enter)</span>
+              </>
+            ) : hasCreditSurplus ? (
+              <>
+                <Check size={14} strokeWidth={3} />
+                <span>Confirmar Cobro ({currency.format(totalAssigned)}) (Enter)</span>
+              </>
+            ) : (
+              <span>Ingresá un importe a cobrar</span>
+            )}
+          </button>
+        </div>
+      </article>
     </section>
   );
 };

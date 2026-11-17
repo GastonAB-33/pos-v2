@@ -229,7 +229,7 @@ export const BarcodeGeneratorModal = ({ open, product, onClose }: BarcodeGenerat
 
   return (
     <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-4">
-      <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-5 shadow-panel md:p-6">
+      <div className="w-full max-w-2xl rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-5 shadow-2xl md:p-6 dark:border-slate-800 dark:bg-slate-900">
         {/* Header */}
         <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
           <div className="flex items-center gap-2.5">
@@ -317,7 +317,7 @@ export const BarcodeGeneratorModal = ({ open, product, onClose }: BarcodeGenerat
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
               {/* Checkbox Nombre */}
               <label
-                className={`flex cursor-pointer items-center gap-2.5 rounded-lg border p-2.5 text-xs font-medium transition-all ${
+                className={`flex cursor-pointer items-center gap-2.5 rounded-xl border p-2.5 text-xs font-medium transition-all ${
                   settings.showName
                     ? "border-indigo-300 bg-indigo-50/70 text-indigo-950 font-semibold shadow-xs"
                     : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
@@ -334,7 +334,7 @@ export const BarcodeGeneratorModal = ({ open, product, onClose }: BarcodeGenerat
 
               {/* Checkbox Precio */}
               <label
-                className={`flex cursor-pointer items-center gap-2.5 rounded-lg border p-2.5 text-xs font-medium transition-all ${
+                className={`flex cursor-pointer items-center gap-2.5 rounded-xl border p-2.5 text-xs font-medium transition-all ${
                   settings.showPrice
                     ? "border-indigo-300 bg-indigo-50/70 text-indigo-950 font-semibold shadow-xs"
                     : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
@@ -351,7 +351,7 @@ export const BarcodeGeneratorModal = ({ open, product, onClose }: BarcodeGenerat
 
               {/* Checkbox Código de Barras */}
               <label
-                className={`flex cursor-pointer items-center gap-2.5 rounded-lg border p-2.5 text-xs font-medium transition-all ${
+                className={`flex cursor-pointer items-center gap-2.5 rounded-xl border p-2.5 text-xs font-medium transition-all ${
                   settings.showBarcode
                     ? "border-indigo-300 bg-indigo-50/70 text-indigo-950 font-semibold shadow-xs"
                     : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
@@ -383,8 +383,8 @@ export const BarcodeGeneratorModal = ({ open, product, onClose }: BarcodeGenerat
             </span>
           </div>
 
-          <div className="flex justify-center rounded-xl border border-slate-200 bg-slate-100/70 p-4 md:p-6">
-            <div className="w-full max-w-xs rounded-xl border-2 border-dashed border-slate-300 bg-white p-4 shadow-sm transition-all">
+          <div className="flex justify-center rounded-2xl border border-slate-200 bg-slate-100/70 p-4 md:p-6">
+            <div className="w-full max-w-xs rounded-2xl border-2 border-dashed border-slate-300 bg-white p-4 shadow-sm transition-all">
               {!settings.showName && !settings.showPrice && !settings.showBarcode ? (
                 <div className="py-6 text-center text-xs text-slate-400">
                   Selecciona al menos una opción para previsualizar la etiqueta.

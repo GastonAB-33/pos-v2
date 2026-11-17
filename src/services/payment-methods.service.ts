@@ -437,6 +437,10 @@ export const paymentMethodsService = {
     throw new Error("No se pueden eliminar medios de pago del catalogo del sistema.");
   },
 
+  ensureDefaults: async (tenantId: string) => {
+    return paymentMethodsService.ensureDefaultMethods(tenantId);
+  },
+
   ensureDefaultMethods: async (tenantId: string) => {
     const rows = await crud.getAllByTenant(tenantId);
     const groupedByCode = rows.reduce<Map<string, PaymentMethod[]>>((acc, row) => {

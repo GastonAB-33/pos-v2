@@ -58,13 +58,17 @@ export const ManualCashMovementModal = ({
 
   const paymentMethods = propPaymentMethods ?? modulePaymentMethods;
   const bankAccounts = propBankAccounts ?? moduleBankAccounts;
-  const canWrite = propCanWrite ?? (checkPermission("caja") || checkPermission("pos"));
+  const canWrite = propCanWrite ?? checkPermission("caja_movimientos_manuales");
 
   const handleModeToggle = (next: "income" | "expense") => {
     setTab(next);
   };
 
   const handleSubmit = async (values: CashMovementValues) => {
+    if (!canWrite) {
+      toast.error("No posees permisos para registrar movimientos manuales de caja");
+      return;
+    }
     if (tab === "income") {
       const ok = await registerIncome(values);
       if (ok) {

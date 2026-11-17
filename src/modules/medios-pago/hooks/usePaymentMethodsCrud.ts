@@ -21,7 +21,7 @@ export const usePaymentMethodsCrud = (tenantId: string | null, userId: string | 
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [search, setSearch] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<CrudFeedback | null>(null);
 
@@ -160,3 +160,4 @@ export const usePaymentMethodsCrud = (tenantId: string | null, userId: string | 
     togglePaymentMethod,
   };
 };
+

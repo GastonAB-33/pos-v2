@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { ChevronDown, ChevronUp, MessageSquare } from "lucide-react";
+import { SUPPORT_WHATSAPP_PHONE } from "../config/app-urls";
 
 export const LandingFaq: React.FC = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
@@ -96,7 +97,7 @@ export const LandingFaq: React.FC = () => {
             <p className="text-xs text-slate-500">Nuestro equipo comercial y técnico te responde en menos de 10 minutos.</p>
           </div>
           <a
-            href="https://wa.me/?text=Hola%20Jireh%20POS!%20Tengo%20una%20consulta%20antes%20de%20iniciar%20mi%20prueba%20gratuita."
+            href={`https://wa.me/${SUPPORT_WHATSAPP_PHONE}?text=${encodeURIComponent("¡Hola equipo de Jireh! Tengo una consulta antes de iniciar mi prueba gratuita.")}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-600/20 hover:bg-emerald-700 transition shrink-0"

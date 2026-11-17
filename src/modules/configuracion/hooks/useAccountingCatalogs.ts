@@ -3,7 +3,11 @@ import { auditService } from "@/services/audit.service";
 import { bankAccountsService } from "@/services/bank-accounts.service";
 import { installmentPlansService } from "@/services/installment-plans.service";
 import { originBanksService } from "@/services/origin-banks.service";
-import type { BankAccount, InstallmentPlan, OriginBank } from "@/types/entities";
+import {
+  normalizePaymentMethodCode,
+  paymentMethodsService,
+} from "@/services/payment-methods.service";
+import type { BankAccount, InstallmentPlan, OriginBank, PaymentMethod } from "@/types/entities";
 
 interface AccountingFeedback {
   type: "success" | "error";
@@ -38,6 +42,20 @@ interface UpsertInstallmentPlanInput {
   is_active: boolean;
 }
 
+const paymentMethodPriority = (code: string): number => {
+  const normalized = normalizePaymentMethodCode(code);
+  switch (normalized) {
+    case "cash": return 0;
+    case "card_debit": return 1;
+    case "card_credit": return 2;
+    case "transfer": return 3;
+    case "mercado_pago": return 4;
+    case "cheque": return 5;
+    case "current_account": return 6;
+    default: return 7;
+  }
+};
+
 export const useAccountingCatalogs = (
   tenantId: string | null,
   userId: string | null,
@@ -46,7 +64,8 @@ export const useAccountingCatalogs = (
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [originBanks, setOriginBanks] = useState<OriginBank[]>([]);
   const [installmentPlans, setInstallmentPlans] = useState<InstallmentPlan[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [isLoading, setIsLoading] = useState(Boolean(tenantId && enabled));
   const [feedback, setFeedback] = useState<AccountingFeedback | null>(null);
 
   const clearFeedback = useCallback(() => setFeedback(null), []);
@@ -56,6 +75,7 @@ export const useAccountingCatalogs = (
       setBankAccounts([]);
       setOriginBanks([]);
       setInstallmentPlans([]);
+      setPaymentMethods([]);
       return;
     }
 
@@ -64,12 +84,14 @@ export const useAccountingCatalogs = (
       await Promise.allSettled([
         originBanksService.ensureDefaults(tenantId),
         installmentPlansService.ensureDefaults(tenantId),
+        paymentMethodsService.ensureDefaults(tenantId),
       ]);
 
-      const [accountsRows, originRows, plansRows] = await Promise.all([
+      const [accountsRows, originRows, plansRows, methodsRows] = await Promise.all([
         bankAccountsService.getAllByTenant(tenantId),
         originBanksService.getAllByTenant(tenantId),
         installmentPlansService.getAllByTenant(tenantId),
+        paymentMethodsService.getAllByTenant(tenantId),
       ]);
 
       setBankAccounts(
@@ -90,6 +112,14 @@ export const useAccountingCatalogs = (
         [...plansRows].sort((a, b) => {
           if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
           if (a.installments !== b.installments) return a.installments - b.installments;
+          return a.name.localeCompare(b.name, "es");
+        })
+      );
+
+      setPaymentMethods(
+        [...methodsRows].sort((a, b) => {
+          const priorityDiff = paymentMethodPriority(a.code) - paymentMethodPriority(b.code);
+          if (priorityDiff !== 0) return priorityDiff;
           return a.name.localeCompare(b.name, "es");
         })
       );
@@ -417,10 +447,118 @@ export const useAccountingCatalogs = (
     [load, logAudit, tenantId]
   );
 
+  const deleteInstallmentPlan = useCallback(
+    async (id: string) => {
+      if (!tenantId) return;
+      try {
+        await installmentPlansService.delete(tenantId, id);
+        await logAudit(
+          "delete_installment_plan",
+          "installment_plan",
+          id,
+          "Plan de cuotas eliminado",
+          {}
+        );
+        await load();
+        setFeedback({
+          type: "success",
+          message: "Plan de cuotas eliminado.",
+        });
+      } catch {
+        setFeedback({
+          type: "error",
+          message: "No se pudo eliminar el plan de cuotas.",
+        });
+      }
+    },
+    [load, logAudit, tenantId]
+  );
+
+  const togglePaymentMethod = useCallback(
+    async (id: string) => {
+      if (!tenantId) return false;
+      const target = paymentMethods.find((method) => method.id === id);
+
+      try {
+        const updated = await paymentMethodsService.toggleActive(tenantId, id);
+        await logAudit(
+          "toggle_payment_method",
+          "payment_method",
+          id,
+          `Medio de pago ${updated?.is_active ? "activado" : "desactivado"}: ${target?.name || id}`,
+          {
+            previous_is_active: target?.is_active ?? null,
+            next_is_active: updated?.is_active ?? null,
+          }
+        );
+        await load();
+        setFeedback({
+          type: "success",
+          message: `Medio de pago "${target?.name || "seleccionado"}" ${updated?.is_active ? "activado" : "desactivado"}.`,
+        });
+        return true;
+      } catch {
+        setFeedback({
+          type: "error",
+          message: "No se pudo cambiar el estado del medio de pago.",
+        });
+        return false;
+      }
+    },
+    [load, logAudit, paymentMethods, tenantId]
+  );
+
+  const updatePaymentMethod = useCallback(
+    async (
+      id: string,
+      values: {
+        surcharge_percent: number;
+        discount_percent: number;
+        notes?: string | null;
+      }
+    ) => {
+      if (!tenantId) return false;
+      const target = paymentMethods.find((method) => method.id === id);
+
+      try {
+        await paymentMethodsService.update(tenantId, id, {
+          surcharge_percent: Math.max(0, values.surcharge_percent),
+          discount_percent: Math.max(0, values.discount_percent),
+          notes: values.notes ? values.notes.trim() : null,
+        });
+        await logAudit(
+          "update_payment_method",
+          "payment_method",
+          id,
+          `Medio de pago actualizado: ${target?.name || id}`,
+          {
+            surcharge_percent: values.surcharge_percent,
+            discount_percent: values.discount_percent,
+            notes: values.notes,
+          }
+        );
+        await load();
+        setFeedback({
+          type: "success",
+          message: `Configuración de "${target?.name || "medio"}" guardada correctamente.`,
+        });
+        return true;
+      } catch {
+        setFeedback({
+          type: "error",
+          message: "No se pudo guardar la configuración del medio de pago.",
+        });
+        return false;
+      }
+    },
+    [load, logAudit, paymentMethods, tenantId]
+  );
+
   return {
     bankAccounts,
     originBanks,
     installmentPlans,
+    paymentMethods,
     isLoading,
     feedback,
     clearFeedback,
@@ -432,6 +570,9 @@ export const useAccountingCatalogs = (
     toggleOriginBank,
     upsertInstallmentPlan,
     toggleInstallmentPlan,
+    deleteInstallmentPlan,
+    togglePaymentMethod,
+    updatePaymentMethod,
   };
 };
 
@@ -440,4 +581,5 @@ export type {
   UpsertOriginBankInput,
   UpsertInstallmentPlanInput,
 };
+
 

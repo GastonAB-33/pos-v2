@@ -21,7 +21,7 @@ export const usePriceListsModule = (tenantId: string | null, userId: string | nu
   const [selectedPriceListId, setSelectedPriceListId] = useState<string | null>(null);
   const [priceListItems, setPriceListItems] = useState<PriceListItem[]>([]);
   const [search, setSearch] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<CrudFeedback | null>(null);
 
@@ -323,3 +323,4 @@ export const usePriceListsModule = (tenantId: string | null, userId: string | nu
     removeProductFixedPrice,
   };
 };
+

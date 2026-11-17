@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Product } from "@/types/entities";
 import { useProductsCrud } from "@/modules/productos/hooks/useProductsCrud";
 import { mapEntityToProductViewModel, productsModuleService } from "@/modules/productos/services/products.service";
+import { masterProductsService } from "@/services/master-products.service";
 import { downloadXlsx } from "@/utils/xlsx";
 import { matchesProductSearch } from "@/utils/search";
 import type {
@@ -35,13 +36,13 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
     [crud.products, crud.primaryBarcodes]
   );
 
-  const categoryOptions = useMemo(
-    () =>
-      [...new Set(productsView.map((product) => product.categoria).filter(Boolean))].sort((a, b) =>
-        a.localeCompare(b)
-      ),
-    [productsView]
-  );
+  const categoryOptions = useMemo(() => {
+    const set = new Set(productsView.map((product) => product.categoria).filter(Boolean));
+    if (set.size === 0) {
+      masterProductsService.getDefaultCategories().forEach((c) => set.add(c));
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [productsView]);
 
   const subcategoryOptions = useMemo(
     () =>

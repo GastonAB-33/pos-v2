@@ -65,7 +65,7 @@ export const useCustomersCrud = (tenantId: string | null, userId: string | null)
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
   const [search, setSearch] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<CrudFeedback | null>(null);
 
@@ -256,6 +256,7 @@ export const useCustomersCrud = (tenantId: string | null, userId: string | null)
 
   return {
     customers: filteredCustomers,
+    totalCount: customers.length,
     priceLists,
     search,
     setSearch,
@@ -270,3 +271,4 @@ export const useCustomersCrud = (tenantId: string | null, userId: string | null)
     toggleCustomerActive,
   };
 };
+

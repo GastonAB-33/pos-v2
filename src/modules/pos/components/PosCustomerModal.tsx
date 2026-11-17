@@ -216,43 +216,52 @@ export const PosCustomerModal = ({
   const getTabButtonClass = (tabKey: PosCustomerModalTab, hasErrors: boolean) => {
     if (tab === tabKey) {
       if (highlightedTab === tabKey || hasErrors) {
-        return "rounded-lg bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 shadow-sm ring-1 ring-red-300 dark:bg-red-950/60 dark:text-red-300 dark:ring-red-800";
+        return "rounded-lg sm:rounded-xl bg-red-50 px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-red-700 shadow-sm ring-1 ring-red-300 dark:bg-red-950/60 dark:text-red-300 dark:ring-red-800 transition-all";
       }
-      return "rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100 dark:shadow-none";
+      return "rounded-lg sm:rounded-xl bg-white px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-slate-900 shadow-sm dark:bg-slate-700 dark:text-slate-100 dark:shadow-none transition-all";
     }
 
     if (highlightedTab === tabKey || hasErrors) {
-      return "rounded-lg px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400";
+      return "rounded-lg sm:rounded-xl px-3.5 py-1.5 text-xs sm:text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50/50 dark:hover:bg-red-950/30 transition-all";
     }
 
-    return "rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white";
+    return "rounded-lg sm:rounded-xl px-3.5 py-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/50 transition-all";
   };
 
   const sectionClass =
     highlightedTab === tab || (tab === "personal" && hasPersonalErrors) || (tab === "fiscal" && hasFiscalErrors) || (tab === "account" && hasAccountErrors)
-      ? "rounded-xl border border-red-300 bg-red-50/60 p-3.5 dark:border-red-900/70 dark:bg-red-950/30"
-      : "rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 dark:border-slate-700/80 dark:bg-slate-800/50";
+      ? "rounded-xl border border-red-300 bg-red-50/60 p-4 dark:border-red-900/70 dark:bg-red-950/30"
+      : "rounded-xl border border-slate-200/90 bg-slate-50/70 p-4 dark:border-slate-700/80 dark:bg-slate-800/50";
 
   return (
-    <section className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4">
+    <section className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-xs animate-in fade-in duration-150">
       <button
         type="button"
         aria-label="Cerrar modal cliente"
-        className="absolute inset-0"
+        className="absolute inset-0 cursor-default"
         onClick={onCancel}
       />
 
       <form
         autoComplete="off"
-        className="relative z-10 w-full max-w-3xl space-y-4 rounded-2xl bg-white p-4 shadow-panel dark:bg-slate-900 dark:border dark:border-slate-800"
+        className="relative z-10 w-full max-w-3xl space-y-4 rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-2xl dark:bg-slate-900 dark:border-slate-800"
         onSubmit={handleSubmit(handlePreSubmit, onInvalid)}
       >
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 pb-3 dark:border-slate-800">
+          <div>
+            <div className="flex items-center gap-1.5 text-xs font-semibold tracking-wider uppercase">
+              <span className="text-slate-400 dark:text-slate-500">CLIENTES</span>
+              <span className="text-slate-400 dark:text-slate-500 font-bold">›</span>
+              <span className="text-blue-600 dark:text-blue-400 font-bold">
+                {mode === "create" ? "NUEVO CLIENTE" : "DATOS DE CLIENTE"}
+              </span>
+            </div>
+            <h3 className="mt-0.5 text-lg font-bold text-slate-900 dark:text-slate-100">{title}</h3>
+          </div>
           <ModalCloseButton label="Cerrar cliente" onClick={onCancel} disabled={disabled} />
         </div>
 
-        <div className="inline-flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800/80 dark:border dark:border-slate-700/60">
+        <div className="inline-flex rounded-xl sm:rounded-2xl bg-slate-100 p-1 dark:bg-slate-800/80 dark:border dark:border-slate-700/60">
           <button
             type="button"
             onClick={() => setTab("personal")}
@@ -287,6 +296,7 @@ export const PosCustomerModal = ({
                   {...register("firstName")}
                   className="ui-input"
                   disabled={disabled}
+                  placeholder="Nombre de pila"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -303,6 +313,7 @@ export const PosCustomerModal = ({
                   {...register("lastName")}
                   className="ui-input"
                   disabled={disabled}
+                  placeholder="Apellido"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -322,7 +333,7 @@ export const PosCustomerModal = ({
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Numero documento{" "}
+                  Número documento{" "}
                   {activeReq.document_number ? (
                     <span className="text-red-500 dark:text-red-400">*</span>
                   ) : (
@@ -333,6 +344,7 @@ export const PosCustomerModal = ({
                   {...register("documentNumber")}
                   className="ui-input"
                   disabled={disabled}
+                  placeholder="Sin puntos ni guiones"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -345,7 +357,7 @@ export const PosCustomerModal = ({
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Telefono{" "}
+                  Teléfono{" "}
                   {activeReq.phone ? (
                     <span className="text-red-500 dark:text-red-400">*</span>
                   ) : (
@@ -356,6 +368,7 @@ export const PosCustomerModal = ({
                   {...register("phone")}
                   className="ui-input"
                   disabled={disabled}
+                  placeholder="Ej: 11 1234-5678"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -378,6 +391,7 @@ export const PosCustomerModal = ({
                   {...register("email")}
                   className="ui-input"
                   disabled={disabled}
+                  placeholder="cliente@ejemplo.com"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -388,7 +402,7 @@ export const PosCustomerModal = ({
               </div>
               <div className="md:col-span-2">
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Direccion{" "}
+                  Dirección{" "}
                   {activeReq.address ? (
                     <span className="text-red-500 dark:text-red-400">*</span>
                   ) : (
@@ -399,6 +413,7 @@ export const PosCustomerModal = ({
                   {...register("address")}
                   className="ui-input"
                   disabled={disabled}
+                  placeholder="Calle, número, piso o localidad"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -416,12 +431,13 @@ export const PosCustomerModal = ({
             <div className="grid gap-3 md:grid-cols-2">
               <div className="md:col-span-2">
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Razon social <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
+                  Razón social <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
                 </label>
                 <input
                   {...register("fiscalBusinessName")}
                   className="ui-input"
                   disabled={disabled}
+                  placeholder="Nombre legal o razón social"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -437,6 +453,7 @@ export const PosCustomerModal = ({
                   {...register("fiscalAddress")}
                   className="ui-input"
                   disabled={disabled}
+                  placeholder="Dirección fiscal para comprobantes"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -446,7 +463,7 @@ export const PosCustomerModal = ({
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Condicion fiscal <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
+                  Condición fiscal <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
                 </label>
                 <input
                   {...register("fiscalCondition")}
@@ -483,11 +500,11 @@ export const PosCustomerModal = ({
         {tab === "account" ? (
           <div className={sectionClass}>
             <div className="space-y-3">
-              <label className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+              <label className="flex items-center gap-2.5 text-sm font-semibold text-slate-800 dark:text-slate-200 cursor-pointer">
                 <input
                   type="checkbox"
                   {...register("currentAccountEnabled")}
-                  className="h-4 w-4"
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900"
                   disabled={disabled}
                 />
                 Habilitar cuenta corriente para este cliente
@@ -495,7 +512,7 @@ export const PosCustomerModal = ({
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Limite autorizado <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
+                  Límite autorizado <span className="text-[11px] font-normal text-slate-500 dark:text-slate-400">{optionalLabel}</span>
                 </label>
                 <input
                   type="number"
@@ -504,7 +521,7 @@ export const PosCustomerModal = ({
                   {...register("currentAccountLimit")}
                   className="ui-input"
                   disabled={disabled || !currentAccountEnabled}
-                  placeholder="Sin limite si se deja vacio"
+                  placeholder="Sin límite si se deja vacío"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -514,43 +531,49 @@ export const PosCustomerModal = ({
               </div>
 
               <div className="grid gap-2 text-xs sm:grid-cols-4">
-                <p className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
                   <span className="block text-[11px] text-slate-500 dark:text-slate-400">Estado</span>
-                  <span className="font-medium text-slate-900 dark:text-slate-100">
-                    {currentAccountEnabled ? "Habilitada" : "Deshabilitada"}
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">
+                    {currentAccountEnabled ? (
+                      <span className="text-emerald-600 dark:text-emerald-400">Habilitada</span>
+                    ) : (
+                      "Deshabilitada"
+                    )}
                   </span>
-                </p>
-                <p className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
-                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">Limite autorizado</span>
-                  <span className="font-medium text-slate-900 dark:text-slate-100">
-                    {accountLimit == null ? "Sin limite" : currency.format(accountLimit)}
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">Límite autorizado</span>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100 font-mono">
+                    {accountLimit == null ? "Sin límite" : currency.format(accountLimit)}
                   </span>
-                </p>
-                <p className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
                   <span className="block text-[11px] text-slate-500 dark:text-slate-400">Deuda actual</span>
-                  <span className="font-medium text-slate-900 dark:text-slate-100">{currency.format(currentBalance)}</span>
-                </p>
-                <p className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
+                  <span className="font-semibold text-slate-900 dark:text-slate-100 font-mono">
+                    {currency.format(currentBalance)}
+                  </span>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-slate-600 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
                   <span className="block text-[11px] text-slate-500 dark:text-slate-400">Disponible</span>
-                  <span className="font-medium text-slate-900 dark:text-slate-100">
+                  <span className="font-semibold text-slate-900 dark:text-slate-100 font-mono">
                     {currentAccountEnabled
                       ? accountAvailable == null
                         ? "Sin tope"
                         : currency.format(accountAvailable)
                       : "-"}
                   </span>
-                </p>
+                </div>
               </div>
 
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Este limite se aplica en POS cuando se cobra con cuenta corriente.
+                Este límite se aplica en POS cuando se cobra con cuenta corriente.
               </p>
 
               {onOpenCurrentAccount ? (
                 <div className="flex items-center justify-end">
                   <button
                     type="button"
-                    className="ui-btn-ghost px-3 py-1.5 text-xs"
+                    className="rounded-xl border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 cursor-pointer"
                     onClick={onOpenCurrentAccount}
                     disabled={disabled}
                   >
@@ -562,11 +585,20 @@ export const PosCustomerModal = ({
           </div>
         ) : null}
 
-        <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
-          <button type="button" className="ui-btn-ghost" onClick={onCancel} disabled={disabled}>
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200/80 pt-4 dark:border-slate-800">
+          <button
+            type="button"
+            className="rounded-xl border border-slate-200/90 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-750 transition-all cursor-pointer"
+            onClick={onCancel}
+            disabled={disabled}
+          >
             Cancelar
           </button>
-          <button type="submit" className="ui-btn-primary disabled:opacity-60" disabled={disabled}>
+          <button
+            type="submit"
+            className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-semibold text-white shadow-sm shadow-blue-500/25 hover:bg-blue-700 active:scale-95 disabled:opacity-60 transition-all cursor-pointer"
+            disabled={disabled}
+          >
             {mode === "create" ? "Crear cliente" : "Guardar cambios"}
           </button>
         </div>
@@ -574,8 +606,8 @@ export const PosCustomerModal = ({
 
       {/* Cuadro de confirmación ágil: Preguntar si desea asignarle cuenta corriente */}
       {isCurrentAccountPromptOpen && pendingSubmitValues ? (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/65 p-4 animate-in fade-in duration-150">
-          <div className="relative w-full max-w-md rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/65 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="relative w-full max-w-md rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 sm:p-6 shadow-2xl space-y-4">
             <div className="flex items-start gap-3">
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-100 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400">
                 <CreditCard size={22} />
@@ -590,12 +622,12 @@ export const PosCustomerModal = ({
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-3.5 space-y-2.5 text-xs text-slate-600 dark:text-slate-300">
+            <div className="rounded-xl border border-slate-200/80 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/50 p-4 space-y-3 text-xs text-slate-600 dark:text-slate-300">
               <p className="leading-relaxed">
                 Asignar una cuenta corriente permite realizar <strong>ventas fiadas / a crédito</strong> desde el POS y llevar el registro de saldos y cobranzas.
               </p>
 
-              <div className="pt-1.5 border-t border-slate-200/80 dark:border-slate-700/60">
+              <div className="pt-2 border-t border-slate-200/80 dark:border-slate-700/60">
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1">
                   Límite de crédito autorizado ($) <span className="text-[10px] font-normal text-slate-400 lowercase">(opcional)</span>
                 </label>
@@ -608,14 +640,14 @@ export const PosCustomerModal = ({
                     placeholder="Sin límite fijado"
                     value={promptLimit}
                     onChange={(e) => setPromptLimit(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 py-1.5 pl-7 pr-3 text-xs font-mono font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 py-2 pl-7 pr-3 text-xs font-mono font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     autoFocus
                   />
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2 border-t border-slate-200/80 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => {
@@ -623,7 +655,7 @@ export const PosCustomerModal = ({
                   setPendingSubmitValues(null);
                 }}
                 disabled={disabled}
-                className="ui-btn-ghost text-xs order-3 sm:order-1"
+                className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 order-3 sm:order-1 transition-all cursor-pointer"
               >
                 Volver
               </button>
@@ -639,7 +671,7 @@ export const PosCustomerModal = ({
                   });
                 }}
                 disabled={disabled}
-                className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3.5 py-2 text-xs font-bold transition order-2 text-center"
+                className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-3.5 py-2 text-xs font-semibold transition order-2 text-center cursor-pointer"
               >
                 No, crear sin cuenta corriente
               </button>
@@ -655,7 +687,7 @@ export const PosCustomerModal = ({
                   });
                 }}
                 disabled={disabled}
-                className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-xs font-bold shadow-lg shadow-indigo-600/20 transition order-1 sm:order-3 text-center cursor-pointer"
+                className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-xs font-semibold shadow-sm shadow-blue-500/25 transition order-1 sm:order-3 text-center cursor-pointer"
               >
                 Sí, asignar cuenta corriente
               </button>

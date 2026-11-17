@@ -35,17 +35,29 @@ export const StockMovementsTable = ({ rows }: StockMovementsTableProps) => {
     columnHelper.accessor((row) => row.movement.created_at, {
       id: "date",
       header: "Fecha",
-      cell: (info) => new Date(info.getValue()).toLocaleString("es-AR"),
+      cell: (info) => (
+        <span className="text-slate-600 dark:text-slate-400 whitespace-nowrap">
+          {new Date(info.getValue()).toLocaleString("es-AR")}
+        </span>
+      ),
     }),
     columnHelper.accessor((row) => row.product?.name ?? "Producto eliminado", {
       id: "product",
       header: "Producto",
-      cell: (info) => info.getValue(),
+      cell: (info) => (
+        <span className="font-semibold text-slate-900 dark:text-slate-100">
+          {info.getValue()}
+        </span>
+      ),
     }),
     columnHelper.accessor((row) => row.movement.movement_type, {
       id: "type",
       header: "Tipo",
-      cell: (info) => movementTypeLabel[info.getValue()] ?? info.getValue(),
+      cell: (info) => (
+        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+          {movementTypeLabel[info.getValue()] ?? info.getValue()}
+        </span>
+      ),
     }),
     columnHelper.accessor((row) => row.movement.quantity, {
       id: "quantity",
@@ -53,7 +65,11 @@ export const StockMovementsTable = ({ rows }: StockMovementsTableProps) => {
       cell: (info) => {
         const isWeight = info.row.original.product?.sale_mode === "weight";
         const qty = isWeight ? info.getValue() * 1000 : info.getValue();
-        return `${qty.toLocaleString("es-AR")} ${unitLabel(info.row.original.product)}`;
+        return (
+          <span className="font-bold text-slate-900 dark:text-slate-100">
+            {qty.toLocaleString("es-AR")} {unitLabel(info.row.original.product)}
+          </span>
+        );
       },
     }),
     columnHelper.display({
@@ -61,7 +77,11 @@ export const StockMovementsTable = ({ rows }: StockMovementsTableProps) => {
       header: "Referencia",
       cell: (info) => {
         const movement = info.row.original.movement;
-        return getReferenceTypeLabel(movement.reference_type);
+        return (
+          <span className="text-xs text-slate-600 dark:text-slate-400">
+            {getReferenceTypeLabel(movement.reference_type)}
+          </span>
+        );
       },
     }),
   ];
@@ -74,20 +94,20 @@ export const StockMovementsTable = ({ rows }: StockMovementsTableProps) => {
 
   if (!rows.length) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+      <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
         No hay movimientos de stock para mostrar.
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200">
-      <table className="min-w-full divide-y divide-slate-200 text-sm">
-        <thead className="bg-slate-50">
+    <div className="overflow-x-auto rounded-2xl border border-slate-200/90 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900">
+      <table className="min-w-full divide-y divide-slate-200/80 dark:divide-slate-800 text-sm">
+        <thead className="bg-slate-50/90 dark:bg-slate-800/70">
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
-                <th key={header.id} className="px-4 py-2 text-left font-medium text-slate-700">
+                <th key={header.id} className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">
                   {header.isPlaceholder
                     ? null
                     : flexRender(header.column.columnDef.header, header.getContext())}
@@ -96,11 +116,11 @@ export const StockMovementsTable = ({ rows }: StockMovementsTableProps) => {
             </tr>
           ))}
         </thead>
-        <tbody className="divide-y divide-slate-200 bg-white">
+        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-slate-900">
           {table.getRowModel().rows.map((row) => (
-            <tr key={row.id}>
+            <tr key={row.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
               {row.getVisibleCells().map((cell) => (
-                <td key={cell.id} className="px-4 py-2 text-slate-700">
+                <td key={cell.id} className="px-4 py-2.5 text-slate-700 dark:text-slate-300">
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}

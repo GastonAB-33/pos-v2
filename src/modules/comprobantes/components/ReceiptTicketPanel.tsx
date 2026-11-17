@@ -6,6 +6,11 @@ import { settingsService } from "@/services/settings.service";
 import { invoicesService } from "@/services/invoices.service";
 import { ArcaInvoiceSheet, type ArcaInvoiceCopy } from "@/components/arca/ArcaInvoiceSheet";
 import type { BusinessSettings, FacturacionSettings, Invoice, Receipt } from "@/types/entities";
+import {
+  formatDisplaySaleNumber,
+  formatDisplayReceiptNumber,
+  formatDisplayNotes,
+} from "@/utils/voucher-format.utils";
 
 interface ReceiptTicketPanelProps {
   receipt: Receipt;
@@ -38,12 +43,12 @@ const buildPlainTextTicket = (receipt: Receipt, invoice?: Invoice | null): strin
     "========================================",
     "          TICKET DE VENTA               ",
     "========================================",
-    `Número: ${receipt.receipt_number}`,
+    `Número: ${formatDisplayReceiptNumber(receipt.receipt_number)}`,
     `Fecha: ${new Date(receipt.issued_at).toLocaleString("es-AR")}`,
-    `Venta: ${receipt.sale_number}`,
+    `Venta: ${formatDisplaySaleNumber(receipt.sale_number)}`,
     `Cliente: ${receipt.customer_name ?? "Consumidor final"}`,
     `Medio de pago: ${getPaymentMethodLabel(receipt.payment_method)}`,
-    ...(receipt.notes ? [`Detalle: ${receipt.notes}`] : []),
+    ...(receipt.notes ? [`Detalle: ${formatDisplayNotes(receipt.notes)}`] : []),
     "",
     "ITEMS:",
     "----------------------------------------",
@@ -226,7 +231,7 @@ export const ReceiptTicketPanel = ({
               Ticket de Venta
             </h3>
             <p className="mt-1 font-mono text-lg font-bold text-slate-900 dark:text-slate-100">
-              {receipt.receipt_number}
+              {formatDisplayReceiptNumber(receipt.receipt_number)}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {new Date(receipt.issued_at).toLocaleString("es-AR")}
@@ -237,7 +242,7 @@ export const ReceiptTicketPanel = ({
             <div className="flex items-center justify-between">
               <span className="text-slate-500 dark:text-slate-400 font-medium">Venta:</span>
               <span className="font-mono font-semibold text-slate-900 dark:text-slate-100">
-                {receipt.sale_number}
+                {formatDisplaySaleNumber(receipt.sale_number)}
               </span>
             </div>
             <div className="flex items-center justify-between">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
+import { LoadingState } from "@/components/ui/UiStates";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import {
   ArrowDownLeft,
@@ -38,6 +38,7 @@ import { CashOpenForm } from "@/modules/caja/components/CashOpenForm";
 import { CashSessionCloseDetailModal } from "@/modules/caja/components/CashSessionCloseDetailModal";
 import { ReceiptTicketPanel } from "@/modules/comprobantes/components/ReceiptTicketPanel";
 import { useCashModule, parseCloseSnapshot } from "@/modules/caja/hooks/useCashModule";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { invoicesService } from "@/services/invoices.service";
 import { receiptsService } from "@/services/receipts.service";
 import type { CashSession, Invoice, Receipt } from "@/types/entities";
@@ -76,6 +77,7 @@ export const CajaPage = () => {
   const { canRead, canWrite } = usePermissions();
   const canReadCaja = canRead("caja");
   const canWriteCaja = canWrite("caja");
+  const canWriteManualMovements = canWrite("caja_movimientos_manuales");
 
   const [isOpenCashModalOpen, setIsOpenCashModalOpen] = useState(false);
   const [isManualMovementModalOpen, setIsManualMovementModalOpen] = useState(false);
@@ -344,6 +346,18 @@ export const CajaPage = () => {
     isCloseCashModalOpen,
   ]);
 
+  const isAnyModalOpen =
+    isDailyDetailModalOpen ||
+    isCloseDetailModalOpen ||
+    isSaleDocumentModalOpen ||
+    isCurrentAccountModalOpen ||
+    openSummaryModal !== null ||
+    isManualMovementModalOpen ||
+    isOpenCashModalOpen ||
+    isCloseCashModalOpen;
+
+  useBodyScrollLock(isAnyModalOpen);
+
   const handleRefresh = async () => {
     clearFeedback();
     setIsRefreshing(true);
@@ -399,162 +413,192 @@ export const CajaPage = () => {
   };
 
   if (!tenantId) {
-    return <PagePlaceholder title="Caja diaria" description="No hay un comercio activo" />;
+    return <section className="ui-panel">No hay un comercio activo.</section>;
   }
 
   if (!canReadCaja) {
     return (
-      <PagePlaceholder
-        title="Caja diaria"
-        description="No tenés permisos de lectura para este módulo"
-      />
+      <section className="ui-panel">No tenés permisos de lectura para este módulo.</section>
     );
   }
 
   return (
-    <PagePlaceholder
-      title="Caja diaria"
-      description="Control de efectivo, arqueos de turno y movimientos en mostrador"
-    >
-      <div className="caja-daily-workspace space-y-3.5">
-        {/* Barra Superior Compacta y Funcional con resaltado según estado de caja */}
+    <div className="ui-page operational-page caja-daily-page flex flex-col space-y-4 w-full min-w-0 max-w-full overflow-x-hidden box-border pb-24 md:pb-6">
+      {/* Encabezado Principal Flotante Moderno */}
+      <header className="w-full max-w-full min-w-0 box-border flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          {/* Breadcrumbs en mayúsculas con jerarquía */}
+          <div className="flex items-center gap-1.5 text-xs font-semibold tracking-wider uppercase">
+            <span className="text-slate-400 dark:text-slate-500">CONTABLE</span>
+            <span className="text-slate-400 dark:text-slate-500 font-bold">›</span>
+            <span className="text-blue-600 dark:text-blue-400 font-bold">CAJA DIARIA</span>
+          </div>
+
+          <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+            Caja Diaria
+          </h1>
+          <p className="mt-0.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+            Control de efectivo, arqueos de turno y movimientos en mostrador.
+          </p>
+        </div>
+
+        {/* Fila de Botones Píldora Adaptativos para Móvil y Desktop */}
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap sm:items-center gap-1.5 sm:gap-2.5 w-full sm:w-auto min-w-0 max-w-full box-border py-0.5">
+          {/* Botón Secundario Píldora Actualizar */}
+          <button
+            type="button"
+            onClick={() => void handleRefresh()}
+            disabled={isLoading || isSubmitting || isRefreshing || isBackgroundRefreshing}
+            className="w-full min-w-0 sm:w-auto inline-flex items-center justify-center gap-1 sm:gap-1.5 rounded-2xl border border-slate-200/90 bg-white px-2 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-sm font-semibold text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 disabled:opacity-50 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition-all cursor-pointer overflow-hidden"
+            title="Actualizar datos de caja"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-slate-500 dark:text-slate-400 ${isRefreshing || isBackgroundRefreshing ? "animate-spin" : ""}`} />
+            <span className="truncate">Actualizar</span>
+          </button>
+
+          {/* Botón Píldora Cta. Cte. */}
+          <button
+            type="button"
+            onClick={() => setIsCurrentAccountModalOpen(true)}
+            disabled={isSubmitting || !dailySession}
+            className="w-full min-w-0 sm:w-auto inline-flex items-center justify-center gap-1 sm:gap-1.5 rounded-2xl border border-slate-200/90 bg-white px-2 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-sm font-semibold text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 disabled:opacity-50 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition-all cursor-pointer overflow-hidden"
+            title="Cobros y saldos de Cuenta Corriente"
+          >
+            <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-slate-500 dark:text-slate-400" />
+            <span className="truncate">Cta. Cte.</span>
+          </button>
+
+          {/* Botón Píldora Revelar / Ocultar A Ciegas */}
+          {cashSettings.blind_cash_closing && canRevealBlindCash && (
+            <button
+              type="button"
+              onClick={() => setRevealBlindAmounts((prev) => !prev)}
+              className="w-full min-w-0 sm:w-auto inline-flex items-center justify-center gap-1 sm:gap-1.5 rounded-2xl border border-slate-200/90 bg-white px-2 sm:px-3.5 py-1.5 sm:py-2 text-[11px] sm:text-sm font-semibold text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition-all cursor-pointer overflow-hidden"
+            >
+              {revealBlindAmounts ? (
+                <EyeOff className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-slate-500 dark:text-slate-400" />
+              ) : (
+                <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 text-blue-500 dark:text-blue-400" />
+              )}
+              <span className="truncate">{revealBlindAmounts ? "Ocultar" : "Revelar"}</span>
+            </button>
+          )}
+
+          {/* Botón Cerrar Caja Píldora */}
+          {currentSession && canWriteCaja && (
+            <button
+              type="button"
+              disabled={isSubmitting}
+              onClick={() => {
+                setClosingSessionSnapshot(currentSession);
+                setClosingSummarySnapshot({
+                  expectedBalance: currentSessionSummary.expectedBalance,
+                  expectedCashBalance: currentSessionSummary.expectedCashBalance,
+                  expectedFullBalance: currentSessionSummary.expectedFullBalance,
+                });
+                setClosingIncomeSnapshot(currentSessionIncomeSummary);
+                setIsCashClosed(false);
+                setIsCloseCashModalOpen(true);
+              }}
+              className="w-full min-w-0 sm:w-auto inline-flex items-center justify-center gap-1 sm:gap-1.5 rounded-2xl bg-rose-600 px-2 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-sm font-semibold text-white shadow-sm shadow-rose-500/25 hover:bg-rose-700 active:scale-95 disabled:opacity-50 transition-all cursor-pointer overflow-hidden"
+            >
+              <Lock className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+              <span className="truncate">Cerrar caja</span>
+            </button>
+          )}
+
+          {/* Botón Abrir Caja Píldora */}
+          {!currentSession && canWriteCaja && (
+            <button
+              type="button"
+              disabled={isSubmitting}
+              onClick={() => setIsOpenCashModalOpen(true)}
+              className="w-full min-w-0 sm:w-auto inline-flex items-center justify-center gap-1 sm:gap-1.5 rounded-2xl bg-emerald-600 px-2 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-sm font-semibold text-white shadow-sm shadow-emerald-500/25 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 transition-all cursor-pointer overflow-hidden"
+            >
+              <LockOpen className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+              <span className="truncate">Abrir caja</span>
+            </button>
+          )}
+
+          {/* Botón Primario Píldora Movimiento Manual */}
+          <button
+            type="button"
+            disabled={
+              isSubmitting ||
+              !canWriteManualMovements ||
+              !currentSession
+            }
+            title={
+              !canWriteManualMovements
+                ? "No posees permisos para registrar movimientos manuales de caja"
+                : undefined
+            }
+            onClick={() => {
+              setManualMovementTab("income");
+              setIsManualMovementModalOpen(true);
+            }}
+            className="w-full min-w-0 sm:w-auto inline-flex items-center justify-center gap-1 sm:gap-1.5 rounded-2xl bg-blue-600 px-2 sm:px-4 py-1.5 sm:py-2 text-[11px] sm:text-sm font-semibold text-white shadow-sm shadow-blue-500/25 hover:bg-blue-700 active:scale-95 disabled:opacity-50 transition-all cursor-pointer overflow-hidden"
+          >
+            <ArrowLeftRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+            <span className="truncate">Mov. manual</span>
+          </button>
+        </div>
+      </header>
+
+      <div className="caja-daily-workspace space-y-4">
+        {/* Cinta Informativa de Estado de Caja Redondeada 2xl/3xl */}
         <div
-          className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-2xl border transition-all duration-200 shadow-sm ${
-            currentSession
-              ? "bg-white dark:bg-[#0b1325] border-emerald-400 dark:border-emerald-500/80 ring-1 ring-emerald-500/25 shadow-emerald-500/10"
-              : "bg-white dark:bg-[#0b1325] border-amber-400 dark:border-amber-500/80 ring-1 ring-amber-500/25 shadow-amber-500/10"
+          className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 px-4 sm:px-5 py-3 rounded-2xl sm:rounded-3xl border transition-all duration-200 shadow-xs ${
+            isLoading && !currentSession
+              ? "bg-white dark:bg-slate-900 border-blue-400/80 dark:border-blue-500/70 ring-1 ring-blue-500/20"
+              : currentSession
+              ? "bg-white dark:bg-slate-900 border-emerald-400/80 dark:border-emerald-500/70 ring-1 ring-emerald-500/20"
+              : "bg-white dark:bg-slate-900 border-amber-400/80 dark:border-amber-500/70 ring-1 ring-amber-500/20"
           }`}
         >
-          {/* Lado Izquierdo: Estado de Caja + Información en 1 sola línea */}
-          <div className="flex flex-wrap items-center gap-2.5 min-w-0">
-            <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors ${
-                currentSession
-                  ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800/80"
-                  : "bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700/80"
-              }`}
-            >
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 min-w-0">
+            {isLoading && !currentSession ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border self-start shrink-0 bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-950/60 dark:text-blue-400 dark:border-blue-800/80">
+                <span className="h-2 w-2 rounded-full bg-blue-500 animate-ping" />
+                <span>Verificando estado de turno de caja...</span>
+              </span>
+            ) : (
               <span
-                className={`h-2 w-2 rounded-full ${
-                  currentSession ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-colors self-start shrink-0 ${
+                  currentSession
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-400 dark:border-emerald-800/80"
+                    : "bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-700/80"
                 }`}
-              />
-              {currentSession ? "Caja abierta" : "Sin caja abierta"}
-            </span>
+              >
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    currentSession ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                  }`}
+                />
+                {currentSession ? "Caja abierta" : "Sin caja abierta"}
+              </span>
+            )}
 
             {dailySession && (
-              <span className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
+              <div className="text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
                 <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
                 <span>Responsable de apertura: <strong className="text-slate-800 dark:text-slate-200 font-semibold">{dailySessionResponsible}</strong></span>
                 {user?.id && dailySession.opened_by_user_id !== user.id && (
                   <>
-                    <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
+                    <span className="text-slate-300 dark:text-slate-600">•</span>
                     <span className="text-blue-600 dark:text-blue-400 font-medium">Operando: <strong>{user.fullName || user.username || "Tú"}</strong></span>
                   </>
                 )}
-                <span className="hidden md:inline text-slate-300 dark:text-slate-600">•</span>
-                <span className="hidden md:inline">Desde {formatDateTime(dailySession.opened_at)}</span>
-              </span>
+                <span className="text-slate-300 dark:text-slate-600">•</span>
+                <span>Desde {formatDateTime(dailySession.opened_at)}</span>
+              </div>
             )}
           </div>
 
-          {/* Lado Derecho: Acciones principales */}
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setIsCurrentAccountModalOpen(true)}
-              disabled={isSubmitting || !dailySession}
-              className="h-10 inline-flex items-center gap-2 px-3.5 text-sm font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800/90 hover:bg-slate-50 dark:hover:bg-slate-700/80 border border-slate-300 dark:border-slate-700 rounded-xl transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
-            >
-              <Users className="h-4 w-4 text-slate-400 dark:text-slate-400" />
-              <span>Cta. Cte.</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={
-                isSubmitting ||
-                !canWriteCaja ||
-                !currentSession ||
-                !cashSettings.allow_manual_movements
-              }
-              onClick={() => {
-                setManualMovementTab("income");
-                setIsManualMovementModalOpen(true);
-              }}
-              className="h-10 inline-flex items-center gap-2 px-4 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-500 rounded-xl transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
-            >
-              <ArrowLeftRight className="h-4 w-4" />
-              <span>Movimiento manual</span>
-            </button>
-
-            {!currentSession && canWriteCaja && (
-              <button
-                type="button"
-                disabled={isSubmitting}
-                onClick={() => setIsOpenCashModalOpen(true)}
-                className="h-10 inline-flex items-center gap-2 px-4 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
-              >
-                <LockOpen className="h-4 w-4" />
-                <span>Abrir caja</span>
-              </button>
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 shrink-0 self-end sm:self-auto">
+            {lastUpdatedAt && (
+              <span>Actualizado: {new Date(lastUpdatedAt).toLocaleTimeString("es-AR")}</span>
             )}
-
-            {currentSession && canWriteCaja && (
-              <button
-                type="button"
-                disabled={isSubmitting}
-                onClick={() => {
-                  setClosingSessionSnapshot(currentSession);
-                  setClosingSummarySnapshot({
-                    expectedBalance: currentSessionSummary.expectedBalance,
-                    expectedCashBalance: currentSessionSummary.expectedCashBalance,
-                    expectedFullBalance: currentSessionSummary.expectedFullBalance,
-                  });
-                  setClosingIncomeSnapshot(currentSessionIncomeSummary);
-                  setIsCashClosed(false);
-                  setIsCloseCashModalOpen(true);
-                }}
-                className="h-10 inline-flex items-center gap-2 px-3.5 text-sm font-bold text-rose-700 dark:text-rose-300 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800/70 rounded-xl transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
-              >
-                <Lock className="h-4 w-4" />
-                <span>Cerrar caja</span>
-              </button>
-            )}
-
-            {cashSettings.blind_cash_closing && canRevealBlindCash && (
-              <button
-                type="button"
-                onClick={() => setRevealBlindAmounts((prev) => !prev)}
-                title={
-                  revealBlindAmounts
-                    ? "Ocultar montos (Caja a ciegas activa)"
-                    : "Revelar montos protegidos (Supervisor / Administrador)"
-                }
-                className="h-10 inline-flex items-center gap-1.5 px-3 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700/80 border border-slate-300 dark:border-slate-700 rounded-xl transition-colors shadow-2xs cursor-pointer"
-              >
-                {revealBlindAmounts ? (
-                  <EyeOff className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-                ) : (
-                  <Eye className="h-4 w-4 text-blue-500 dark:text-blue-400" />
-                )}
-                <span className="hidden md:inline">
-                  {revealBlindAmounts ? "Ocultar" : "Revelar"}
-                </span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => {
-                void handleRefresh();
-              }}
-              disabled={isLoading || isSubmitting || isRefreshing || isBackgroundRefreshing}
-              title="Recargar caja diaria"
-              className="h-10 w-10 inline-flex items-center justify-center text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700/80 border border-slate-300 dark:border-slate-700 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
-            >
-              <RefreshCw className={`h-4 w-4 ${isRefreshing || isBackgroundRefreshing ? "animate-spin" : ""}`} />
-            </button>
           </div>
         </div>
 
@@ -592,33 +636,33 @@ export const CajaPage = () => {
 
         {/* Panel Principal: Hero Saldo en Mano + Métricas Condensadas */}
         {dailySession ? (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
-            {/* Tarjeta Hero: Saldo Teórico en Mano (Col 1 a 5) */}
-            <article className="lg:col-span-5 rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-4 sm:p-5 shadow-sm flex flex-col justify-between">
+          <div className="w-full max-w-full min-w-0 box-border grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
+            {/* Tarjeta Hero: Saldo Teórico en Mano (Col 1 a 5 en XL, ancho completo en menores) */}
+            <article className="w-full max-w-full min-w-0 box-border xl:col-span-5 rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-3.5 sm:p-5 shadow-sm flex flex-col justify-between overflow-hidden">
               <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <div className="flex items-center justify-between gap-2 min-w-0">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
                     Efectivo en Caja (Teórico)
                     {isBlindModeActive && (
-                      <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-md bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                      <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-md bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 shrink-0">
                         A ciegas
                       </span>
                     )}
                   </span>
-                  <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+                  <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 shrink-0">
                     <DollarSign className="h-4 w-4" />
                   </div>
                 </div>
-                <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-emerald-600 dark:text-emerald-400">
+                <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-emerald-600 dark:text-emerald-400 truncate">
                   {isBlindModeActive ? "$ ••••••••" : formatMoney(dailySessionTotals.expectedBalance)}
                 </p>
                 {!isBlindModeActive ? (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
-                    <span>Apertura {formatMoney(dailySessionTotals.openingAmount)}</span>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed min-w-0">
+                    <span className="truncate">Apertura {formatMoney(dailySessionTotals.openingAmount)}</span>
                     <span className="text-slate-300 dark:text-slate-600">+</span>
-                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Efec. +{formatMoney(cashIncomes)}</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold truncate">Efec. +{formatMoney(cashIncomes)}</span>
                     <span className="text-slate-300 dark:text-slate-600">-</span>
-                    <span className="text-rose-600 dark:text-rose-400 font-semibold">Egresos -{formatMoney(cashExpenses)}</span>
+                    <span className="text-rose-600 dark:text-rose-400 font-semibold truncate">Egresos -{formatMoney(cashExpenses)}</span>
                   </div>
                 ) : (
                   <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
@@ -627,24 +671,24 @@ export const CajaPage = () => {
                 )}
               </div>
 
-              <div className="pt-3 mt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+              <div className="pt-3 mt-3 border-t border-slate-100 dark:border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 min-w-0">
                 {!isBlindModeActive ? (
                   <button
                     type="button"
                     onClick={() => setOpenSummaryModal("total")}
-                    className="text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition underline underline-offset-2 cursor-pointer"
+                    className="text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition underline underline-offset-2 cursor-pointer text-left truncate"
                   >
                     Ver fórmula de cálculo
                   </button>
                 ) : (
-                  <span className="text-xs text-slate-400 dark:text-slate-500 italic">
+                  <span className="text-xs text-slate-400 dark:text-slate-500 italic truncate">
                     Fórmula protegida en modo ciego
                   </span>
                 )}
                 <button
                   type="button"
                   onClick={() => openDailyDetail(dailyDate)}
-                  className="text-xs font-semibold text-blue-600 dark:text-sky-400 hover:underline flex items-center gap-1 cursor-pointer"
+                  className="text-xs font-semibold text-blue-600 dark:text-sky-400 hover:underline flex items-center gap-1 cursor-pointer text-left shrink-0"
                 >
                   <ListFilter size={13} />
                   <span>Auditar movimientos</span>
@@ -652,47 +696,47 @@ export const CajaPage = () => {
               </div>
             </article>
 
-            {/* Tarjetas Secundarias Condensadas (Col 6 a 12: 3 columnas) */}
-            <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {/* Tarjetas Secundarias Condensadas (Col 6 a 12 en XL: 3 columnas) */}
+            <div className="w-full max-w-full min-w-0 box-border xl:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {/* Apertura */}
-              <article className="rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-3.5 shadow-sm flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <article className="w-full max-w-full min-w-0 box-border rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-3 sm:p-3.5 shadow-sm flex flex-col justify-between overflow-hidden">
+                <div className="min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate">
                       Apertura
                     </span>
-                    <CalendarClock className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
+                    <CalendarClock className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400 shrink-0" />
                   </div>
-                  <p className="mt-2 text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                  <p className="mt-1.5 sm:mt-2 text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-slate-100 truncate">
                     {formatMoney(dailySession.opening_amount)}
                   </p>
                 </div>
-                <div className="mt-2.5 py-1.5 px-3 text-center text-xs font-medium text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900/60 rounded-lg border border-slate-100 dark:border-slate-800">
+                <div className="mt-2.5 py-1.5 px-3 text-center text-xs font-medium text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900/60 rounded-lg border border-slate-100 dark:border-slate-800 truncate">
                   Fondo de inicio
                 </div>
               </article>
 
               {/* Ingresos */}
-              <article className="rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-3.5 shadow-sm flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <article className="w-full max-w-full min-w-0 box-border rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-3 sm:p-3.5 shadow-sm flex flex-col justify-between overflow-hidden">
+                <div className="min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate">
                       Ingresos
                     </span>
-                    <ArrowDownLeft className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
+                    <ArrowDownLeft className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
                   </div>
-                  <p className="mt-2 text-lg font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+                  <p className="mt-1.5 sm:mt-2 text-base sm:text-lg font-bold tracking-tight text-emerald-600 dark:text-emerald-400 truncate">
                     {isBlindModeActive
                       ? "+••••••••"
                       : `+${formatMoney(totalIncomes)}`}
                   </p>
                   {!isBlindModeActive && (
-                    <div className="mt-1 flex flex-col gap-0.5 text-[10px] text-slate-500 dark:text-slate-400">
-                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    <div className="mt-1 flex flex-col gap-0.5 text-[10px] text-slate-500 dark:text-slate-400 min-w-0">
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400 truncate">
                         En efectivo: +{formatMoney(cashIncomes)}
                       </span>
                       {digitalIncomes > 0 && (
-                        <span className="text-slate-400 dark:text-slate-500">
+                        <span className="text-slate-400 dark:text-slate-500 truncate">
                           Bancos / Digital: +{formatMoney(digitalIncomes)}
                         </span>
                       )}
@@ -706,37 +750,37 @@ export const CajaPage = () => {
                   }}
                   disabled={isBlindModeActive}
                   title={isBlindModeActive ? "Desglose protegido en modo ciego" : undefined}
-                  className={`mt-2.5 w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-semibold rounded-lg transition-colors ${
+                  className={`mt-2.5 w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-semibold rounded-lg transition-colors truncate ${
                     isBlindModeActive
                       ? "opacity-60 cursor-not-allowed text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700"
                       : "text-emerald-700 dark:text-emerald-300 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/70 border border-emerald-200/80 dark:border-emerald-800/80 cursor-pointer"
                   }`}
                 >
-                  {isBlindModeActive ? "Oculto en caja a ciegas" : "Ver detalle"}
+                  <span className="truncate">{isBlindModeActive ? "Oculto en caja a ciegas" : "Ver detalle"}</span>
                 </button>
               </article>
 
               {/* Egresos */}
-              <article className="rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-3.5 shadow-sm flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <article className="w-full max-w-full min-w-0 box-border rounded-2xl border border-slate-200 dark:border-slate-800/90 bg-white dark:bg-[#0b1325] p-3 sm:p-3.5 shadow-sm flex flex-col justify-between overflow-hidden">
+                <div className="min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 truncate">
                       Egresos
                     </span>
-                    <ArrowUpRight className="h-3.5 w-3.5 text-rose-500 dark:text-rose-400" />
+                    <ArrowUpRight className="h-3.5 w-3.5 text-rose-500 dark:text-rose-400 shrink-0" />
                   </div>
-                  <p className="mt-2 text-lg font-bold tracking-tight text-rose-600 dark:text-rose-400">
+                  <p className="mt-1.5 sm:mt-2 text-base sm:text-lg font-bold tracking-tight text-rose-600 dark:text-rose-400 truncate">
                     {isBlindModeActive
                       ? "-••••••••"
                       : `-${formatMoney(totalExpenses)}`}
                   </p>
                   {!isBlindModeActive && (
-                    <div className="mt-1 flex flex-col gap-0.5 text-[10px] text-slate-500 dark:text-slate-400">
-                      <span className="font-semibold text-rose-600 dark:text-rose-400">
+                    <div className="mt-1 flex flex-col gap-0.5 text-[10px] text-slate-500 dark:text-slate-400 min-w-0">
+                      <span className="font-semibold text-rose-600 dark:text-rose-400 truncate">
                         En efectivo: -{formatMoney(cashExpenses)}
                       </span>
                       {digitalExpenses > 0 && (
-                        <span className="text-slate-400 dark:text-slate-500">
+                        <span className="text-slate-400 dark:text-slate-500 truncate">
                           Bancos / Débito: -{formatMoney(digitalExpenses)}
                         </span>
                       )}
@@ -750,13 +794,13 @@ export const CajaPage = () => {
                   }}
                   disabled={isBlindModeActive}
                   title={isBlindModeActive ? "Desglose protegido en modo ciego" : undefined}
-                  className={`mt-2.5 w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-semibold rounded-lg transition-colors ${
+                  className={`mt-2.5 w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-semibold rounded-lg transition-colors truncate ${
                     isBlindModeActive
                       ? "opacity-60 cursor-not-allowed text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700"
                       : "text-rose-700 dark:text-rose-300 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/70 border border-rose-200/80 dark:border-rose-800/80 cursor-pointer"
                   }`}
                 >
-                  {isBlindModeActive ? "Oculto en caja a ciegas" : "Ver detalle"}
+                  <span className="truncate">{isBlindModeActive ? "Oculto en caja a ciegas" : "Ver detalle"}</span>
                 </button>
               </article>
             </div>
@@ -764,29 +808,31 @@ export const CajaPage = () => {
         ) : null}
 
         {/* Selector de Pestañas: "Turno Actual" vs "Historial de Jornadas" */}
-        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2 pt-1">
-          <div className="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800/80 p-1 border border-slate-200 dark:border-slate-700/80">
+        <div className="w-full max-w-full min-w-0 box-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+          <div className="w-full sm:w-auto grid grid-cols-2 sm:flex min-w-0 max-w-full box-border rounded-2xl border border-slate-200/90 bg-white p-1 shadow-xs dark:border-slate-800 dark:bg-slate-900">
             <button
               type="button"
               onClick={() => setActiveViewTab("shift")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              className={`w-full sm:w-auto min-w-0 inline-flex items-center justify-center gap-1 px-2 sm:px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer overflow-hidden ${
                 activeViewTab === "shift"
-                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  ? "bg-slate-900 text-white shadow-xs dark:bg-slate-100 dark:text-slate-900"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60"
               }`}
             >
-              Movimientos del turno ({currentSession ? activeShiftMovements.length : 0})
+              <span className="truncate sm:hidden">Turno ({currentSession ? activeShiftMovements.length : 0})</span>
+              <span className="hidden sm:inline">Movimientos del turno ({currentSession ? activeShiftMovements.length : 0})</span>
             </button>
             <button
               type="button"
               onClick={() => setActiveViewTab("history")}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              className={`w-full sm:w-auto min-w-0 inline-flex items-center justify-center gap-1 px-2 sm:px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer overflow-hidden ${
                 activeViewTab === "history"
-                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  ? "bg-slate-900 text-white shadow-xs dark:bg-slate-100 dark:text-slate-900"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/60"
               }`}
             >
-              Historial de jornadas ({dailyTracking.length})
+              <span className="truncate sm:hidden">Historial ({dailyTracking.length})</span>
+              <span className="hidden sm:inline">Historial de jornadas ({dailyTracking.length})</span>
             </button>
           </div>
 
@@ -794,9 +840,9 @@ export const CajaPage = () => {
             <button
               type="button"
               onClick={() => openDailyDetail(dailyDate)}
-              className="text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white inline-flex items-center gap-1 cursor-pointer"
+              className="self-start sm:self-auto inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition-all cursor-pointer shrink-0"
             >
-              <ListFilter size={13} />
+              <ListFilter size={13} className="text-blue-600 dark:text-blue-400" />
               <span>Filtros y auditoría</span>
             </button>
           )}
@@ -805,13 +851,13 @@ export const CajaPage = () => {
         {/* Vista Condicional: Tabla de Turno Actual vs Historial */}
         {activeViewTab === "shift" ? (
           currentSession ? (
-            <div className="bg-white dark:bg-[#0b1325] rounded-2xl border border-slate-200 dark:border-slate-800/90 shadow-sm p-4 space-y-3">
+            <div className="w-full max-w-full min-w-0 box-border bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-xs p-3.5 sm:p-5 space-y-3.5 overflow-hidden">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
                     Movimientos en Curso
                   </h3>
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Operaciones registradas durante este turno de caja
                   </p>
                 </div>
@@ -828,6 +874,11 @@ export const CajaPage = () => {
                 blindMode={isBlindModeActive}
               />
             </div>
+          ) : isLoading && !currentSession ? (
+            <LoadingState
+              message="Cargando estado de la caja diaria..."
+              description="Consultando turnos, arqueos y movimientos de caja en curso..."
+            />
           ) : (
             <div className="p-8 text-center bg-white dark:bg-[#0b1325] rounded-2xl border border-slate-200 dark:border-slate-800/90 shadow-sm space-y-3">
               <div className="inline-flex p-3 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200/80 dark:border-amber-800/80">
@@ -864,21 +915,23 @@ export const CajaPage = () => {
           )
         ) : (
           isLoading && dailyTracking.length === 0 ? (
-            <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-              <RefreshCw className="h-6 w-6 text-slate-400 animate-spin mx-auto mb-2" />
-              <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Cargando historial de cajas diarias...</p>
-            </div>
-          ) : (
-            <CashDailyTrackingTable
-              rows={dailyTracking}
-              usersById={usersById}
-              onViewDetail={(date, sessionId) => {
-                openDailyDetail(date, sessionId);
-              }}
-              onViewCloseDetail={(date, session) => {
-                handleOpenCloseDetailForDate(date, session);
-              }}
+            <LoadingState
+              message="Cargando historial de cajas diarias..."
+              description="Consultando jornadas anteriores, turnos y arqueos..."
             />
+          ) : (
+            <div className="w-full min-w-0 max-w-full">
+              <CashDailyTrackingTable
+                rows={dailyTracking}
+                usersById={usersById}
+                onViewDetail={(date, sessionId) => {
+                  openDailyDetail(date, sessionId);
+                }}
+                onViewCloseDetail={(date, session) => {
+                  handleOpenCloseDetailForDate(date, session);
+                }}
+              />
+            </div>
           )
         )}
       </div>
@@ -891,13 +944,13 @@ export const CajaPage = () => {
         defaultMode={manualMovementTab}
         paymentMethods={paymentMethods}
         bankAccounts={bankAccounts}
-        canWrite={canWriteCaja}
+        canWrite={canWriteManualMovements}
       />
 
       {/* MODAL: Apertura de Caja */}
       {isOpenCashModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="w-full max-w-lg max-h-[88vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="w-full max-w-lg max-h-[88vh] flex flex-col bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
             <header className="shrink-0 px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/70 dark:bg-slate-800/60">
               <div className="flex items-center gap-2">
                 <LockOpen className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
@@ -926,8 +979,8 @@ export const CajaPage = () => {
 
       {/* MODAL: Cierre de Caja */}
       {isCloseCashModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-3">
-          <div className="w-full max-w-lg max-h-[96vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-3">
+          <div className="w-full max-w-lg max-h-[96vh] flex flex-col bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
             <header className="shrink-0 px-4 py-2.5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/70 dark:bg-slate-800/60">
               <div className="flex items-center gap-2">
                 <Lock className="h-4 w-4 text-slate-500 dark:text-slate-400" />
@@ -1015,8 +1068,8 @@ export const CajaPage = () => {
 
       {/* MODAL: Resumen de Ingresos / Egresos / Total Esperado */}
       {openSummaryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md max-h-[88vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md max-h-[88vh] flex flex-col bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
             <header className="shrink-0 px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/70 dark:bg-slate-800/60">
               <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-100">
                 {openSummaryModal === "incomes"
@@ -1153,8 +1206,8 @@ export const CajaPage = () => {
 
       {/* MODAL: Cuenta Corriente */}
       {isCurrentAccountModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-          <div className="w-full max-w-3xl max-h-[88vh] flex flex-col bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="w-full max-w-3xl max-h-[88vh] flex flex-col bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
             <header className="shrink-0 px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/70 dark:bg-slate-800/60">
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4 text-slate-500 dark:text-slate-400" />
@@ -1263,41 +1316,74 @@ export const CajaPage = () => {
 
       {/* MODAL: Detalle de Caja Unificado (Arqueo de Cierre + Movimientos de la Jornada) */}
       {isDailyDetailModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-150">
-          <div className="w-full max-w-5xl max-h-[90vh] flex flex-col bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            {/* 1. CABECERA: TÍTULO Y SELECTOR ADAPTATIVO DE TURNOS */}
-            <header className="shrink-0 px-4 sm:px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-50/80 dark:bg-slate-800/60">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/80 dark:border-blue-800/80">
-                  <CalendarClock className="h-4 w-4" />
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 overscroll-contain animate-in fade-in duration-150"
+          onTouchMove={(e) => {
+            if (e.target === e.currentTarget) {
+              e.preventDefault();
+            }
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsDailyDetailModalOpen(false);
+              setIsBillsPopoverOpen(false);
+              setIsShiftPopoverOpen(false);
+            }
+          }}
+        >
+          <div className="w-full max-w-5xl h-[92vh] sm:h-auto sm:max-h-[90vh] flex flex-col bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden overscroll-contain">
+            {/* 1. CABECERA: TÍTULO, CRUZ DE CERRAR INAMOVIBLE Y SELECTOR ADAPTATIVO DE TURNOS */}
+            <header className="shrink-0 px-3.5 sm:px-5 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/60 space-y-2.5">
+              {/* FILA 1: Título e ícono a la izquierda + Botón cerrar inamovible y visible a la derecha */}
+              <div className="flex items-center justify-between gap-3 w-full">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200/80 dark:border-blue-800/80 shrink-0">
+                    <CalendarClock className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 truncate">
+                      <span>Detalle de Caja</span>
+                      <span className="text-xs font-normal text-slate-400">·</span>
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                        {activeDetailDate ? formatLocalDateDisplay(activeDetailDate) : "-"}
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">
+                      Arqueo de cierre y registro de movimientos
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                    <span>Detalle de Caja</span>
-                    <span className="text-xs font-normal text-slate-400">·</span>
-                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                      {activeDetailDate ? formatLocalDateDisplay(activeDetailDate) : "-"}
-                    </span>
-                  </h3>
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                    Arqueo de cierre y registro completo de movimientos
-                  </p>
+
+                <div className="shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDailyDetailModalOpen(false);
+                      setIsBillsPopoverOpen(false);
+                      setIsShiftPopoverOpen(false);
+                    }}
+                    className="h-8 w-8 rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center transition shadow-2xs cursor-pointer"
+                    title="Cerrar detalle de caja"
+                    aria-label="Cerrar modal"
+                  >
+                    <X size={16} />
+                  </button>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                {/* SELECTOR ADAPTATIVO DE TURNOS */}
-                {activeDateSessions.length > 1 && (
-                  activeDateSessions.length <= 3 ? (
+              {/* FILA 2: SELECTOR ADAPTATIVO DE TURNOS (en su propia fila scrollable si hay múltiples turnos) */}
+              {activeDateSessions.length > 1 && (
+                <div className="w-full overflow-x-auto no-scrollbar pt-0.5">
+                  {activeDateSessions.length <= 3 ? (
                     /* Si son 1 a 3 turnos: Pastillitas directas a un clic */
-                    <div className="flex items-center gap-1 bg-white dark:bg-slate-900/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-2xs">
+                    <div className="inline-flex items-center gap-1 bg-white dark:bg-slate-900/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-2xs">
                       <button
                         type="button"
                         onClick={() => {
                           setDetailSessionId(null);
                           setIsBillsPopoverOpen(false);
                         }}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
                           !detailSessionId
                             ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-2xs"
                             : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
@@ -1316,7 +1402,7 @@ export const CajaPage = () => {
                               setDetailSessionId(s.id);
                               setIsBillsPopoverOpen(false);
                             }}
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition whitespace-nowrap cursor-pointer ${
                               isSelected
                                 ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-2xs"
                                 : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
@@ -1332,7 +1418,7 @@ export const CajaPage = () => {
                     </div>
                   ) : (
                     /* Si son 4 o más turnos: Selector desplegable compacto flotante (Popover) */
-                    <div className="relative">
+                    <div className="relative inline-block">
                       <button
                         type="button"
                         onClick={() => {
@@ -1356,7 +1442,7 @@ export const CajaPage = () => {
                       </button>
 
                       {isShiftPopoverOpen && (
-                        <div className="absolute right-0 top-full mt-1.5 z-50 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl p-2 space-y-1 animate-in fade-in zoom-in-95">
+                        <div className="absolute left-0 sm:right-0 sm:left-auto top-full mt-1.5 z-50 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl p-2 space-y-1 animate-in fade-in zoom-in-95">
                           <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                             Seleccionar turno a auditar:
                           </div>
@@ -1414,17 +1500,9 @@ export const CajaPage = () => {
                         </div>
                       )}
                     </div>
-                  )
-                )}
-
-                <ModalCloseButton
-                  onClick={() => {
-                    setIsDailyDetailModalOpen(false);
-                    setIsBillsPopoverOpen(false);
-                    setIsShiftPopoverOpen(false);
-                  }}
-                />
-              </div>
+                  )}
+                </div>
+              )}
             </header>
 
             {/* 2. FRANJA SUPERIOR COMPACTA: RESUMEN DE CIERRE / ARQUEO Y POPOVER DE BILLETES */}
@@ -1658,7 +1736,7 @@ export const CajaPage = () => {
             })()}
 
             {/* 3. TABLA DE MOVIMIENTOS EN EL RESTO DE LA PANTALLA */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="flex-1 overflow-y-auto overscroll-contain p-2.5 sm:p-4 space-y-3 touch-pan-y">
               {isLoading && detailMovements.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-500 dark:text-slate-400">
                   Cargando movimientos...
@@ -1701,8 +1779,8 @@ export const CajaPage = () => {
 
             <div className="flex-1 overflow-y-auto p-4">
               {isSaleDocumentLoading ? (
-                <div className="p-8 text-center text-xs text-slate-500 dark:text-slate-400">
-                  Cargando comprobante...
+                <div className="py-8">
+                  <LoadingState message="Cargando comprobante de venta..." />
                 </div>
               ) : saleDocumentError ? (
                 <div className="p-4 text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/60 rounded-lg border border-rose-200 dark:border-rose-800/80">
@@ -1740,6 +1818,6 @@ export const CajaPage = () => {
         }}
         usersById={usersById}
       />
-    </PagePlaceholder>
+    </div>
   );
 };

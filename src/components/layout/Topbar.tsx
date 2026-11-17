@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, CircleEllipsis, LifeBuoy, Menu, Moon, MoonStar, Newspaper, RefreshCw, Search, Sun, UserRound } from "lucide-react";
+import { Bell, BookOpen, ChevronDown, Headset, Menu, Moon, MoonStar, MoreHorizontal, Newspaper, RefreshCw, Search, Sun } from "lucide-react";
+import { useDeviceProfile } from "@/hooks/useDeviceProfile";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/useToast";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
@@ -10,16 +11,18 @@ import { publicChangelogEntries } from "@/features/changelog/public-changelog";
 import { useOffline } from "@/features/offline/hooks/useOffline";
 import { usePwa } from "@/features/pwa/hooks/usePwa";
 import { SupportReportModal } from "@/features/support/components/SupportReportModal";
+import { QuickStartGuideModal } from "@/components/layout/QuickStartGuideModal";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { QuickPriceGlobalModal } from "@/modules/productos/components/QuickPriceGlobalModal";
 import { authService } from "@/services/auth.service";
-import { productsService } from "@/services/products.service";
+import { useProductsStore } from "@/features/products/store/products.store";
 import { usersService } from "@/services/users.service";
 import { useUiStore } from "@/store/ui.store";
-import type { Product, UserRecord } from "@/types/entities";
+import type { UserRecord } from "@/types/entities";
 import { storageKeys } from "@/utils/local-storage";
 import { cn } from "@/utils/cn";
 import { isStockTrackingEnabled } from "@/utils/stock-tracking";
+import { generateUuid } from "@/utils/uuid";
 
 type TopbarPanel = "support" | "tasks" | "chat" | "notifications" | "user" | "more" | "changelog" | null;
 type TaskStatus = "pendiente" | "completada";
@@ -167,16 +170,42 @@ export const Topbar = () => {
   const sidebarTheme = useUiStore((state) => state.sidebarTheme);
   const setSidebarTheme = useUiStore((state) => state.setSidebarTheme);
   const toggleSidebar = useUiStore((state) => state.toggleSidebar);
+  const { isDesktop } = useDeviceProfile();
+  const sidebarPinned = useUiStore((state) => state.sidebarPinned);
+  const toggleSidebarPinned = useUiStore((state) => state.toggleSidebarPinned);
+  const setSidebarHovered = useUiStore((state) => state.setSidebarHovered);
+
+  const handleToggleMenu = () => {
+    if (isDesktop) {
+      setSidebarHovered(false);
+      toggleSidebarPinned();
+    } else {
+      toggleSidebar();
+    }
+  };
 
   const [now, setNow] = useState(() => new Date());
   const [activePanel, setActivePanel] = useState<TopbarPanel>(null);
   const [isSupportReportModalOpen, setIsSupportReportModalOpen] = useState(false);
+  const [isQuickStartModalOpen, setIsQuickStartModalOpen] = useState(false);
   useBodyScrollLock(Boolean(activePanel));
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [presenceMap, setPresenceMap] = useState<PresenceMap>({});
-  const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
+  const catalogProducts = useProductsStore((state) => state.products);
+  const lowStockProducts = useMemo(() => {
+    return catalogProducts
+      .filter((product) => product.is_active !== false && isStockTrackingEnabled(product.description))
+      .filter((product) => {
+        if (typeof product.stock_min === "number") {
+          return product.stock_current <= product.stock_min;
+        }
+        return product.stock_current <= 0;
+      })
+      .sort((a, b) => a.stock_current - b.stock_current)
+      .slice(0, 8);
+  }, [catalogProducts]);
   const [isQuickPriceModalOpen, setIsQuickPriceModalOpen] = useState(false);
 
   const [taskTitle, setTaskTitle] = useState("");
@@ -223,6 +252,15 @@ export const Topbar = () => {
     email: user?.email,
     fallback: "Invitado",
   });
+
+  const userInitials = useMemo(() => {
+    const trimmed = currentUserLabel.trim();
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return trimmed.slice(0, 2).toUpperCase() || "US";
+  }, [currentUserLabel]);
 
   const usersForAssignments = useMemo(() => {
     const deduped = new Map<string, UserRecord>();
@@ -340,44 +378,13 @@ export const Topbar = () => {
     };
   }, [tenantId]);
 
+  // Carga inicial pasiva del catalogo solo si esta vacio para este tenant (sin polling recurrente)
   useEffect(() => {
-    let active = true;
-
-    const loadStockNotifications = async () => {
-      if (!tenantId) {
-        setLowStockProducts([]);
-        return;
-      }
-
-      try {
-        const products = await productsService.getAllByTenant(tenantId);
-        if (!active) return;
-        const lowStock = products
-          .filter((product) => product.is_active && isStockTrackingEnabled(product.description))
-          .filter((product) => {
-            if (typeof product.stock_min === "number") {
-              return product.stock_current <= product.stock_min;
-            }
-            return product.stock_current <= 0;
-          })
-          .sort((a, b) => a.stock_current - b.stock_current)
-          .slice(0, 8);
-        setLowStockProducts(lowStock);
-      } catch {
-        if (!active) return;
-        setLowStockProducts([]);
-      }
-    };
-
-    void loadStockNotifications();
-    const poll = window.setInterval(() => {
-      void loadStockNotifications();
-    }, 60_000);
-
-    return () => {
-      active = false;
-      window.clearInterval(poll);
-    };
+    if (!tenantId) return;
+    const store = useProductsStore.getState();
+    if (store.loadedTenantId !== tenantId || store.products.length === 0) {
+      void store.loadCatalog(tenantId);
+    }
   }, [tenantId]);
 
   useEffect(() => {
@@ -472,7 +479,7 @@ export const Topbar = () => {
     }
 
     const record: TaskItem = {
-      id: crypto.randomUUID(),
+      id: generateUuid(),
       tenantId,
       title,
       description,
@@ -543,7 +550,7 @@ export const Topbar = () => {
     }
 
     const message: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: generateUuid(),
       tenantId,
       senderId: currentUserId,
       senderLabel: currentUserLabel,
@@ -574,42 +581,65 @@ export const Topbar = () => {
   };
 
   return (
-    <header className="app-topbar relative">
-      <div className="flex min-w-0 items-center gap-3">
+    <header className="app-topbar sticky top-0 z-30 w-full flex-nowrap shadow-sm">
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
         <button
           type="button"
-          className="app-menu-button ui-btn-ghost"
-          aria-label="Abrir menu"
-          onClick={toggleSidebar}
+          className="app-menu-button flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-xs transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+          aria-label={sidebarPinned ? "Ocultar menú lateral" : "Fijar menú lateral"}
+          title={sidebarPinned ? "Ocultar menú lateral" : "Fijar menú lateral abierto"}
+          onClick={handleToggleMenu}
         >
-          <Menu aria-hidden="true" size={19} />
+          <Menu aria-hidden="true" size={18} />
         </button>
 
-        <div className="min-w-0">
-          <p className="truncate text-[15px] font-semibold text-slate-900 capitalize">{formattedDate}</p>
-          <p className="truncate text-xs text-slate-500">{currentTitle} · {tenantName}</p>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs sm:text-[15px] font-semibold text-slate-900 capitalize dark:text-slate-100">
+            <span className="hidden sm:inline">{formattedDate}</span>
+            <span className="sm:hidden font-bold">{currentTitle}</span>
+          </p>
+          <p className="truncate text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
+            <span className="hidden sm:inline">{currentTitle} · </span>
+            {tenantName}
+          </p>
           {lastSyncMessage ? (
-            <p className={`truncate text-[11px] ${lastSyncError ? "text-red-600" : "text-slate-500"}`}>{lastSyncMessage}</p>
+            <p className={'truncate text-[10px] sm:text-[11px] ' + (lastSyncError ? 'text-red-600' : 'text-slate-500')}>{lastSyncMessage}</p>
           ) : null}
         </div>
       </div>
-      <div className="app-topbar-actions flex items-center gap-1 md:gap-2">
+      <div className="app-topbar-actions flex shrink-0 items-center gap-1.5 md:gap-2">
+        {/* Primeros pasos */}
         <button
           type="button"
-          className="ui-btn-ghost gap-1.5 px-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
+          className="hidden md:inline-flex h-9 items-center gap-2 rounded-2xl bg-blue-50 px-3.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 dark:bg-blue-950/70 dark:text-blue-300 dark:hover:bg-blue-900/60 dark:border dark:border-blue-800/60"
+          onClick={() => {
+            setActivePanel(null);
+            setIsQuickStartModalOpen(true);
+          }}
+          title="Manual de Primeros Pasos y Guías Rápidas"
+        >
+          <BookOpen aria-hidden="true" size={15} className="text-blue-600 dark:text-blue-400" />
+          <span>Primeros pasos</span>
+        </button>
+
+        {/* Soporte */}
+        <button
+          type="button"
+          className="hidden sm:inline-flex h-9 items-center gap-2 rounded-2xl bg-slate-100 px-3.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200/80 dark:bg-slate-800/90 dark:text-slate-200 dark:hover:bg-slate-700 dark:border dark:border-slate-700/60"
           onClick={() => {
             setActivePanel(null);
             setIsSupportReportModalOpen(true);
           }}
           title="Soporte y reporte de problemas"
         >
-          <LifeBuoy aria-hidden="true" size={16} />
-          <span className="hidden sm:inline">Soporte</span>
+          <Headset aria-hidden="true" size={16} className="text-slate-600 dark:text-slate-300" />
+          <span>Soporte</span>
         </button>
 
+        {/* Consulta rápida */}
         <button
           type="button"
-          className="ui-btn-ghost gap-1.5 px-2 text-xs font-semibold text-slate-700 hover:text-brand-600 dark:text-slate-200 dark:hover:text-brand-400"
+          className="flex h-9 w-9 sm:w-auto shrink-0 items-center justify-center gap-2 rounded-2xl bg-slate-100 sm:px-3.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-200/80 dark:bg-slate-800/90 dark:text-slate-200 dark:hover:bg-slate-700 dark:border dark:border-slate-700/60"
           title="Consulta rápida de precios y stock (escanear o buscar)"
           onClick={(e) => {
             e.stopPropagation();
@@ -617,70 +647,72 @@ export const Topbar = () => {
             setIsQuickPriceModalOpen(true);
           }}
         >
-          <Search aria-hidden="true" size={15} className="text-brand-600 dark:text-brand-400" />
+          <Search aria-hidden="true" size={16} className="text-slate-600 dark:text-slate-300" />
           <span className="hidden sm:inline">Consulta</span>
-          <span className="sm:hidden font-bold text-[11px]">Consultar</span>
         </button>
 
+        {/* Tema */}
         <button
           type="button"
-          className="ui-btn-ghost gap-1.5 px-2 text-xs font-semibold"
-          title={`Tema: ${theme === "midnight" ? "Azul Oscuro (Intermedio)" : theme === "dark" ? "Oscuro" : "Claro"}. Clic para cambiar.`}
+          className="hidden sm:flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 transition hover:bg-slate-200/80 dark:bg-slate-800/90 dark:text-slate-200 dark:hover:bg-slate-700 dark:border dark:border-slate-700/60"
+          title={'Tema: ' + (theme === 'midnight' ? 'Azul Oscuro (Intermedio)' : theme === 'dark' ? 'Oscuro' : 'Claro') + '. Clic para cambiar.'}
           onClick={(e) => {
             e.stopPropagation();
             cycleTheme();
           }}
         >
           {theme === "midnight" ? (
-            <MoonStar aria-hidden="true" size={15} className="text-indigo-400" />
+            <MoonStar aria-hidden="true" size={16} className="text-indigo-400" />
           ) : theme === "dark" ? (
-            <Moon aria-hidden="true" size={15} className="text-amber-300" />
+            <Sun aria-hidden="true" size={16} className="text-amber-400" />
           ) : (
-            <Sun aria-hidden="true" size={15} className="text-amber-500" />
+            <Moon aria-hidden="true" size={16} className="text-slate-600 dark:text-slate-300" />
           )}
-          <span className="hidden sm:inline">
-            {theme === "midnight" ? "Azul" : theme === "dark" ? "Oscuro" : "Claro"}
-          </span>
         </button>
 
+        {/* Alertas */}
         <button
           type="button"
-          className="ui-btn-ghost relative gap-1 px-2 text-xs"
+          className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 transition hover:bg-slate-200/80 dark:bg-slate-800/90 dark:text-slate-200 dark:hover:bg-slate-700 dark:border dark:border-slate-700/60"
           onClick={(e) => {
             e.stopPropagation();
             togglePanel("notifications");
           }}
-          title="Alertas"
+          title="Alertas de stock"
         >
-          <Bell aria-hidden="true" size={15} />
-          <span className="hidden sm:inline">Alertas</span>
+          <Bell aria-hidden="true" size={16} className="text-slate-600 dark:text-slate-300" />
           {notificationCount > 0 ? (
-            <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700 dark:bg-red-950 dark:text-red-300">
+            <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white shadow-xs ring-2 ring-white dark:ring-slate-900">
               {notificationCount}
             </span>
           ) : null}
         </button>
 
+        {/* Mas herramientas */}
         <button
           type="button"
-          className="ui-btn-ghost relative gap-1 px-2 text-xs"
+          className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 transition hover:bg-slate-200/80 dark:bg-slate-800/90 dark:text-slate-200 dark:hover:bg-slate-700 dark:border dark:border-slate-700/60"
           onClick={(e) => {
             e.stopPropagation();
             togglePanel("more");
           }}
           title="Más herramientas"
         >
-          <CircleEllipsis aria-hidden="true" size={16} />
-          <span className="hidden sm:inline">Mas</span>
+          <MoreHorizontal aria-hidden="true" size={18} className="text-slate-600 dark:text-slate-300" />
           {pendingTasksCount + unreadChatCount > 0 ? (
-            <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+            <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white shadow-xs ring-2 ring-white dark:ring-slate-900">
               {pendingTasksCount + unreadChatCount}
             </span>
           ) : null}
         </button>
+
+        {/* Divisor vertical */}
+        <div className="mx-0.5 hidden h-6 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
+
+        {/* Usuario */}
         <button
           type="button"
-          className="ui-btn-ghost app-topbar-user gap-2 px-2 text-right"
+          className="flex items-center gap-2.5 rounded-2xl p-1 sm:pr-2 text-left transition hover:bg-slate-100 dark:hover:bg-slate-800/80"
           aria-label={`Opciones de ${currentUserLabel}`}
           onClick={(e) => {
             e.stopPropagation();
@@ -688,11 +720,18 @@ export const Topbar = () => {
           }}
           title={currentUserLabel}
         >
-          <UserRound aria-hidden="true" size={16} />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-600 dark:bg-blue-950 dark:text-blue-300 dark:ring-1 dark:ring-blue-800">
+            {userInitials}
+          </div>
           <span className="hidden min-w-0 md:block">
-            <span className="block truncate text-sm font-medium text-slate-900">{currentUserLabel}</span>
-            <span className="block truncate text-xs text-slate-500">{user?.email ?? "sin-sesion@local"}</span>
+            <span className="block max-w-[140px] truncate text-[13px] font-semibold text-slate-800 dark:text-slate-100 leading-tight">
+              {currentUserLabel}
+            </span>
+            <span className="block max-w-[140px] truncate text-[11px] text-slate-400 dark:text-slate-400 leading-tight">
+              {user?.email ?? "sin-sesion@local"}
+            </span>
           </span>
+          <ChevronDown aria-hidden="true" size={14} className="hidden text-slate-400 dark:text-slate-400 sm:block shrink-0" />
         </button>
       </div>
 
@@ -706,10 +745,39 @@ export const Topbar = () => {
 
       {activePanel === "more" ? (
         <div
-          className="ui-card app-topbar-popover fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[280px] space-y-2 shadow-2xl"
+          className="ui-card app-topbar-popover fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-4 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[280px] space-y-2 shadow-2xl rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
           onClick={(e) => e.stopPropagation()}
         >
           <p className="ui-section-label">Herramientas</p>
+          <button
+            type="button"
+            className="ui-popover-action sm:hidden"
+            onClick={() => {
+              setActivePanel(null);
+              setIsSupportReportModalOpen(true);
+            }}
+          >
+            <span className="inline-flex items-center gap-2">
+              <Headset aria-hidden="true" size={15} />
+              Soporte y ayuda
+            </span>
+          </button>
+          <button
+            type="button"
+            className="ui-popover-action sm:hidden"
+            onClick={() => cycleTheme()}
+          >
+            <span className="inline-flex items-center gap-2">
+              {theme === "midnight" ? (
+                <MoonStar aria-hidden="true" size={15} className="text-indigo-400" />
+              ) : theme === "dark" ? (
+                <Sun aria-hidden="true" size={15} className="text-amber-400" />
+              ) : (
+                <Moon aria-hidden="true" size={15} className="text-slate-600 dark:text-slate-300" />
+              )}
+              Tema: {theme === "midnight" ? "Medianoche" : theme === "dark" ? "Oscuro" : "Claro"}
+            </span>
+          </button>
           <button type="button" className="ui-popover-action" onClick={() => togglePanel("tasks")}>
             <span>Tareas del equipo</span>
             {pendingTasksCount > 0 ? <span className="ui-badge ui-badge--warn">{pendingTasksCount}</span> : null}
@@ -722,6 +790,19 @@ export const Topbar = () => {
             <span className="inline-flex items-center gap-2">
               <Newspaper aria-hidden="true" size={15} />
               Novedades del sistema
+            </span>
+          </button>
+          <button
+            type="button"
+            className="ui-popover-action"
+            onClick={() => {
+              setActivePanel(null);
+              setIsQuickStartModalOpen(true);
+            }}
+          >
+            <span className="inline-flex items-center gap-2">
+              <BookOpen aria-hidden="true" size={15} />
+              Primeros pasos y guías
             </span>
           </button>
         </div>
@@ -938,7 +1019,7 @@ export const Topbar = () => {
 
       {activePanel === "notifications" ? (
         <div
-          className="ui-card fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[420px] space-y-3 shadow-2xl"
+          className="ui-card fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-4 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[420px] space-y-3 shadow-2xl rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-800 pb-2.5">
@@ -999,15 +1080,19 @@ export const Topbar = () => {
 
       {activePanel === "user" ? (
         <div
-          className="ui-card fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-6 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[360px] space-y-3 shadow-2xl"
+          className="ui-card fixed inset-x-3 top-14 z-50 max-h-[85vh] overflow-y-auto md:absolute md:inset-x-auto md:right-4 md:top-[calc(100%+8px)] w-auto md:w-full max-w-[360px] space-y-3 shadow-2xl rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2.5">
             <div>
-              <p className="text-sm font-semibold text-slate-900">{user?.fullName ?? "Invitado"}</p>
-              <p className="text-xs text-slate-500">{user?.email ?? "sin-sesion@local"}</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{user?.fullName ?? "Invitado"}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{user?.email ?? "sin-sesion@local"}</p>
             </div>
-            <button type="button" className="ui-btn-ghost px-2 py-1 text-xs" onClick={() => setActivePanel(null)}>
+            <button
+              type="button"
+              className="ui-btn-ghost px-2 py-1 text-xs dark:text-slate-200 dark:border-slate-700"
+              onClick={() => setActivePanel(null)}
+            >
               Cerrar
             </button>
           </div>
@@ -1169,6 +1254,11 @@ export const Topbar = () => {
         isOpen={isSupportReportModalOpen}
         onClose={() => setIsSupportReportModalOpen(false)}
         adminWhatsAppNumber={env.supportWhatsappPhone}
+      />
+
+      <QuickStartGuideModal
+        isOpen={isQuickStartModalOpen}
+        onClose={() => setIsQuickStartModalOpen(false)}
       />
 
       {isQuickPriceModalOpen ? (

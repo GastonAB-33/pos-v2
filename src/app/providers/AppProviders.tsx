@@ -1,5 +1,6 @@
 import type { PropsWithChildren } from "react";
 import { BrowserRouter } from "react-router-dom";
+import { ScrollToTop } from "@/components/layout/ScrollToTop";
 import { LegacyAlertToastBridge } from "@/components/ui/LegacyAlertToastBridge";
 import { ThemeProvider } from "@/app/providers/ThemeProvider";
 import { Toaster } from "@/components/ui/Toaster";
@@ -18,6 +19,7 @@ export const AppProviders = ({ children }: PropsWithChildren) => {
     <ThemeProvider>
       <PwaProvider>
         <BrowserRouter>
+          <ScrollToTop />
           <AuthSessionListener />
           <TenantProvider>
             <OfflineProvider>

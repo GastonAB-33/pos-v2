@@ -179,18 +179,18 @@ export const SalaryPaymentsSection = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* 4 Tarjetas KPI Superiores */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total General Desembolsado */}
-        <article className="rounded-2xl border border-slate-300 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <article className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
               Total Desembolsado
             </span>
             <DollarSign className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
           </div>
-          <p className="mt-2 text-2xl font-black font-mono tracking-tight text-slate-900 dark:text-white">
+          <p className="mt-3 text-2xl font-black font-mono tracking-tight text-slate-900 dark:text-white">
             {currency.format(totalPaid)}
           </p>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
@@ -199,14 +199,14 @@ export const SalaryPaymentsSection = ({
         </article>
 
         {/* Total Adelantos */}
-        <article className="rounded-2xl border border-amber-300 bg-amber-50/70 p-4 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/20">
+        <article className="rounded-2xl sm:rounded-3xl border border-amber-200/90 bg-amber-50/70 p-5 shadow-xs dark:border-amber-900/60 dark:bg-amber-950/20">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 dark:text-amber-300">
               Adelantos Otorgados
             </span>
             <Coins className="h-5 w-5 text-amber-600 dark:text-amber-400" />
           </div>
-          <p className="mt-2 text-2xl font-black font-mono tracking-tight text-amber-950 dark:text-amber-100">
+          <p className="mt-3 text-2xl font-black font-mono tracking-tight text-amber-950 dark:text-amber-100">
             {currency.format(computedAdvancesTotal)}
           </p>
           <p className="mt-1 text-xs text-amber-800 dark:text-amber-400">
@@ -215,14 +215,14 @@ export const SalaryPaymentsSection = ({
         </article>
 
         {/* Total Sueldos Liquidados */}
-        <article className="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-4 shadow-sm dark:border-indigo-900/60 dark:bg-indigo-950/20">
+        <article className="rounded-2xl sm:rounded-3xl border border-indigo-200/90 bg-indigo-50/70 p-5 shadow-xs dark:border-indigo-900/60 dark:bg-indigo-950/20">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-300">
               Sueldos Liquidados
             </span>
             <Receipt className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
           </div>
-          <p className="mt-2 text-2xl font-black font-mono tracking-tight text-indigo-950 dark:text-indigo-100">
+          <p className="mt-3 text-2xl font-black font-mono tracking-tight text-indigo-950 dark:text-indigo-100">
             {currency.format(computedSalariesTotal)}
           </p>
           <p className="mt-1 text-xs text-indigo-800 dark:text-indigo-400">
@@ -231,14 +231,14 @@ export const SalaryPaymentsSection = ({
         </article>
 
         {/* Descontado por Cta. Cte. */}
-        <article className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-sm dark:border-emerald-900/60 dark:bg-emerald-950/20">
+        <article className="rounded-2xl sm:rounded-3xl border border-emerald-200/90 bg-emerald-50/70 p-5 shadow-xs dark:border-emerald-900/60 dark:bg-emerald-950/20">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-300">
               Descontado por Cta. Cte.
             </span>
             <ShoppingBag className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
           </div>
-          <p className="mt-2 text-2xl font-black font-mono tracking-tight text-emerald-950 dark:text-emerald-100">
+          <p className="mt-3 text-2xl font-black font-mono tracking-tight text-emerald-950 dark:text-emerald-100">
             {currency.format(totalCurrentAccountDiscounts)}
           </p>
           <p className="mt-1 text-xs text-emerald-800 dark:text-emerald-400">
@@ -248,7 +248,7 @@ export const SalaryPaymentsSection = ({
       </div>
 
       {/* Barra de Filtros y Acciones */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 rounded-2xl border border-slate-300 bg-white p-3.5 shadow-xs dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900">
         {/* Controles de Filtros */}
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Filtro Empleado */}
@@ -256,7 +256,7 @@ export const SalaryPaymentsSection = ({
             <select
               value={selectedEmployeeId}
               onChange={(e) => onSelectEmployeeId(e.target.value)}
-              className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             >
               <option value="all">Todos los empleados</option>
               {employees.map((e) => (
@@ -273,7 +273,7 @@ export const SalaryPaymentsSection = ({
               <select
                 value={selectedType}
                 onChange={(e) => onSelectType(e.target.value as SalaryPaymentFilterType)}
-                className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               >
                 <option value="all">Todos los tipos (Sueldos y Adelantos)</option>
                 <option value="salary">Solo Pagos de Sueldo</option>
@@ -288,7 +288,7 @@ export const SalaryPaymentsSection = ({
               <select
                 value={datePreset}
                 onChange={(e) => onSelectDatePreset(e.target.value as SalaryDatePreset)}
-                className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               >
                 <option value="all">Todos los períodos</option>
                 <option value="last_2_weeks">Últimas 2 semanas (Quincenal)</option>
@@ -307,7 +307,7 @@ export const SalaryPaymentsSection = ({
                 type="date"
                 value={customStartDate}
                 onChange={(e) => onSelectCustomStartDate(e.target.value)}
-                className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 text-xs text-slate-800 dark:text-slate-200"
+                className="rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 px-2.5 py-1 text-xs text-slate-800 dark:text-slate-200"
                 title="Fecha inicio"
               />
               <span className="text-xs text-slate-400">-</span>
@@ -315,7 +315,7 @@ export const SalaryPaymentsSection = ({
                 type="date"
                 value={customEndDate}
                 onChange={(e) => onSelectCustomEndDate(e.target.value)}
-                className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 text-xs text-slate-800 dark:text-slate-200"
+                className="rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 px-2.5 py-1 text-xs text-slate-800 dark:text-slate-200"
                 title="Fecha fin"
               />
             </div>
@@ -326,7 +326,7 @@ export const SalaryPaymentsSection = ({
             <select
               value={selectedPeriod}
               onChange={(e) => onSelectPeriod(e.target.value)}
-              className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200"
+              className="rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200"
             >
               <option value="all">Cualquier liquidación nominal</option>
               {availableNamedPeriods.map((p) => (
@@ -345,9 +345,9 @@ export const SalaryPaymentsSection = ({
               <button
                 type="button"
                 onClick={() => handleOpenAdvanceModal()}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-500 hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500 px-3.5 py-2 text-xs font-bold text-white shadow-2xs transition cursor-pointer"
+                className="inline-flex items-center gap-1.5 rounded-2xl border border-amber-300 dark:border-amber-700 bg-amber-500 hover:bg-amber-600 dark:bg-amber-600 dark:hover:bg-amber-500 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-xs transition cursor-pointer active:scale-[0.98]"
               >
-                <Coins size={14} />
+                <Coins size={15} />
                 <span>+ Adelanto</span>
               </button>
             )}
@@ -355,9 +355,9 @@ export const SalaryPaymentsSection = ({
             <button
               type="button"
               onClick={() => handleOpenSalaryModal()}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white px-3.5 py-2 text-xs font-bold text-white shadow-2xs transition cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-2xl bg-blue-600 hover:bg-blue-700 px-5 py-2 text-xs sm:text-sm font-semibold text-white shadow-xs transition cursor-pointer active:scale-[0.98]"
             >
-              <PlusCircle size={14} />
+              <PlusCircle size={15} />
               <span>Registrar Pago de Sueldo</span>
             </button>
           </div>
@@ -365,10 +365,10 @@ export const SalaryPaymentsSection = ({
       </div>
 
       {/* Tabla de Pagos de Sueldo y Adelantos */}
-      <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="border-b border-slate-200 bg-slate-50 font-bold uppercase tracking-wider text-slate-700 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-300">
+            <thead className="border-b border-slate-200/90 bg-slate-50/90 font-semibold uppercase tracking-wider text-slate-600 dark:border-slate-800 dark:bg-slate-800/70 dark:text-slate-300">
               <tr>
                 <th className="py-3 px-3.5">Fecha</th>
                 <th className="py-3 px-3">Tipo</th>
@@ -388,7 +388,7 @@ export const SalaryPaymentsSection = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-700 dark:text-slate-300">
               {filteredPayments.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-slate-500 dark:text-slate-400">
+                  <td colSpan={13} className="py-12 text-center text-slate-500 dark:text-slate-400 font-medium">
                     <p className="font-semibold text-sm">No hay registros de sueldos o adelantos con los filtros seleccionados.</p>
                     <p className="text-xs text-slate-400 mt-1">Probá cambiando el rango de fechas o el empleado seleccionado.</p>
                   </td>
@@ -416,12 +416,12 @@ export const SalaryPaymentsSection = ({
                       {/* Tipo: Adelanto vs Sueldo */}
                       <td className="py-3 px-3 whitespace-nowrap">
                         {isAdv ? (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 dark:bg-amber-950/70 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800 px-2 py-0.5 text-[10px] font-bold">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-950/70 text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-800 px-2.5 py-0.5 text-[10px] font-bold">
                             <Coins size={11} />
                             Adelanto
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-100 dark:bg-indigo-950/70 text-indigo-900 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-2 py-0.5 text-[10px] font-bold">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 dark:bg-indigo-950/70 text-indigo-900 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-2.5 py-0.5 text-[10px] font-bold">
                             <Receipt size={11} />
                             Sueldo
                           </span>
@@ -491,7 +491,7 @@ export const SalaryPaymentsSection = ({
 
                       {/* Medio de Pago */}
                       <td className="py-3 px-3 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                           {paymentMethodLabels[p.payment_method_code] || p.payment_method_code}
                         </span>
                       </td>
@@ -518,7 +518,7 @@ export const SalaryPaymentsSection = ({
                           <button
                             type="button"
                             onClick={() => handleDelete(p)}
-                            className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30 dark:hover:text-rose-400 transition cursor-pointer"
+                            className="!rounded-full p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30 dark:hover:text-rose-400 transition cursor-pointer"
                             title={isAdv ? "Eliminar adelanto" : "Eliminar liquidación"}
                           >
                             <Trash2 size={14} />

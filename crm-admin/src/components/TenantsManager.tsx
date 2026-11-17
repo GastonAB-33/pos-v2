@@ -13,6 +13,8 @@ import {
   Package,
   ShoppingCart,
   MessageSquare,
+  FileText,
+  RefreshCw,
 } from "lucide-react";
 
 interface TenantsManagerProps {
@@ -21,6 +23,11 @@ interface TenantsManagerProps {
   onExtendTrial: (tenant: TenantAccount) => void;
   onActivateManual: (tenant: TenantAccount) => void;
   onToggleStatus: (tenantId: string, currentStatus: SubscriptionStatus) => void;
+  onOpenNotes: (tenant: TenantAccount) => void;
+  onRefreshTelemetry?: (tenant: TenantAccount) => void;
+  onRefreshAllTelemetry?: () => void;
+  loadingTenantId?: string | null;
+  isRefreshingAll?: boolean;
 }
 
 export const TenantsManager: React.FC<TenantsManagerProps> = ({
@@ -29,6 +36,11 @@ export const TenantsManager: React.FC<TenantsManagerProps> = ({
   onExtendTrial,
   onActivateManual,
   onToggleStatus,
+  onOpenNotes,
+  onRefreshTelemetry,
+  onRefreshAllTelemetry,
+  loadingTenantId,
+  isRefreshingAll = false,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>(filterExpiringOnly ? "expiring" : "all");
@@ -91,6 +103,18 @@ export const TenantsManager: React.FC<TenantsManagerProps> = ({
               {f.label}
             </button>
           ))}
+
+          {onRefreshAllTelemetry && (
+            <button
+              onClick={onRefreshAllTelemetry}
+              disabled={isRefreshingAll}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-950/60 hover:bg-sky-900/80 text-sky-400 border border-sky-800/60 text-xs font-bold transition disabled:opacity-50 ml-1"
+              title="Consultar métricas en la base de datos para todos los comercios mostrados"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingAll ? "animate-spin" : ""}`} />
+              <span>{isRefreshingAll ? "Consultando..." : "Consultar Todo"}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -165,16 +189,30 @@ export const TenantsManager: React.FC<TenantsManagerProps> = ({
                       <span>MRR: <strong className="text-emerald-400">${t.mrrAmount.toLocaleString("es-AR")}</strong></span>
                     </div>
 
-                    {/* Métricas de adopción en vivo */}
-                    <div className="flex items-center gap-4 text-xs text-slate-400 pt-1.5">
-                      <span className="flex items-center gap-1">
+                    {/* Métricas de adopción en vivo (consulta bajo demanda a la base de datos) */}
+                    <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-400 pt-2">
+                      <span className="flex items-center gap-1.5 bg-slate-950/80 px-2.5 py-1 rounded-xl border border-slate-800">
                         <Package className="h-3.5 w-3.5 text-sky-400" />
-                        Productos: <strong className="text-white">{t.productsCount}</strong>
+                        <span>Productos:</span>
+                        <strong className="text-white font-mono">{t.productsCount}</strong>
                       </span>
-                      <span className="flex items-center gap-1">
+                      <span className="flex items-center gap-1.5 bg-slate-950/80 px-2.5 py-1 rounded-xl border border-slate-800">
                         <ShoppingCart className="h-3.5 w-3.5 text-emerald-400" />
-                        Ventas Registradas: <strong className="text-white">{t.salesCount}</strong>
+                        <span>Ventas Registradas:</span>
+                        <strong className="text-white font-mono">{t.salesCount}</strong>
                       </span>
+
+                      {onRefreshTelemetry && (
+                        <button
+                          onClick={() => onRefreshTelemetry(t)}
+                          disabled={loadingTenantId === t.id}
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-sky-950/50 hover:bg-sky-900/70 text-sky-300 hover:text-white border border-sky-800/60 text-xs font-semibold transition disabled:opacity-50"
+                          title="Consultar datos reales de productos y ventas en la base de datos (bajo consumo)"
+                        >
+                          <RefreshCw className={`h-3 w-3 text-sky-400 ${loadingTenantId === t.id ? "animate-spin" : ""}`} />
+                          <span>{loadingTenantId === t.id ? "Consultando..." : "Consultar en base de datos"}</span>
+                        </button>
+                      )}
                     </div>
 
                     {t.notes && (
@@ -197,6 +235,16 @@ export const TenantsManager: React.FC<TenantsManagerProps> = ({
                       <MessageSquare className="h-3.5 w-3.5" />
                       <span>WhatsApp</span>
                     </a>
+
+                    {/* Botón Bitácora */}
+                    <button
+                      onClick={() => onOpenNotes(t)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-bold transition"
+                      title="Ver y registrar notas de interacción"
+                    >
+                      <FileText className="h-3.5 w-3.5 text-sky-400" />
+                      <span>Bitácora</span>
+                    </button>
 
                     {/* Botón Extender Prueba */}
                     {isTrial && (
