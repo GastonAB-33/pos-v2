@@ -21,7 +21,7 @@ export const useCurrentAccountsPage = (
     initialCustomerId?.trim() || null
   );
   const [search, setSearch] = useState("");
-  const [filterMode, setFilterMode] = useState<CurrentAccountsFilterMode>("all");
+  const [filterMode, setFilterMode] = useState<CurrentAccountsFilterMode>("debt");
   const [isLoading, setIsLoading] = useState(Boolean(tenantId));
   const [feedback, setFeedback] = useState<CurrentAccountsPageFeedback | null>(null);
 

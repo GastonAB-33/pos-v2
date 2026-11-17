@@ -21,6 +21,8 @@ import {
   RefreshCw,
   Search,
   ArrowRight,
+  ArrowLeft,
+  Pencil,
   UserCheck,
   UserPlus,
   Package,
@@ -76,6 +78,8 @@ export const CuentasCorrientesPage = () => {
   const canCreateCustomer = canWriteClientes || canWriteCurrentAccounts;
 
   const [isCreateCustomerModalOpen, setIsCreateCustomerModalOpen] = useState(false);
+  const [isEditCustomerModalOpen, setIsEditCustomerModalOpen] = useState(false);
+  const [panelRefreshKey, setPanelRefreshKey] = useState(0);
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
   const [isSubmittingCustomer, setIsSubmittingCustomer] = useState(false);
 
@@ -108,6 +112,14 @@ export const CuentasCorrientesPage = () => {
     toast.error(feedback.message);
     clearFeedback();
   }, [clearFeedback, feedback, toast]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    if (document.documentElement) document.documentElement.scrollTop = 0;
+    if (document.body) document.body.scrollTop = 0;
+    const appMain = document.querySelector(".app-main");
+    if (appMain) appMain.scrollTop = 0;
+  }, [selectedCustomer?.id]);
 
   const handleCreateCustomerSubmit = async (values: PosCustomerModalValues) => {
     if (!tenantId) return;
@@ -188,7 +200,7 @@ export const CuentasCorrientesPage = () => {
   return (
     <div className="ui-page operational-page cuentas-corrientes-clientes-page space-y-4 w-full min-w-0 max-w-full">
       {/* Encabezado Principal Flotante Moderno */}
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           {/* Breadcrumbs en mayúsculas con jerarquía */}
           <div className="flex items-center gap-1.5 text-xs font-semibold tracking-wider uppercase">
@@ -197,40 +209,75 @@ export const CuentasCorrientesPage = () => {
             <span className="text-blue-600 dark:text-blue-400 font-bold">CTA. CTE. CLIENTES</span>
           </div>
 
-          <h1 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+          <h1 className="mt-0.5 text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
             Cuentas Corrientes Clientes
           </h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Gestión de saldos deudores, cobranzas, límites de crédito y control de envases retornables.
-          </p>
         </div>
 
         {/* Fila de Botones Píldora */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-          <button
-            type="button"
-            onClick={() => {
-              clearFeedback();
-              void reload();
-            }}
-            disabled={isLoading}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200/90 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 disabled:opacity-50 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition-all cursor-pointer"
-          >
-            <RefreshCw className={`h-4 w-4 text-slate-500 dark:text-slate-400 ${isLoading ? "animate-spin" : ""}`} />
-            <span>Actualizar</span>
-          </button>
-
-          {canCreateCustomer && (
+        {selectedCustomer ? (
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setIsCreateCustomerModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-500/25 hover:bg-blue-700 active:scale-95 disabled:opacity-50 transition-all cursor-pointer"
+              onClick={() => setSelectedCustomerId(null)}
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 bg-white px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition-all cursor-pointer"
             >
-              <UserPlus size={16} strokeWidth={2.5} />
-              <span>Nuevo cliente</span>
+              <ArrowLeft size={15} />
+              <span>Volver</span>
             </button>
-          )}
-        </div>
+
+            {canWriteCurrentAccounts && (
+              <button
+                type="button"
+                onClick={() => setIsEditCustomerModalOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 bg-white px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                <Pencil size={15} />
+                <span>Editar</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                clearFeedback();
+                void reload();
+                setPanelRefreshKey((prev) => prev + 1);
+              }}
+              disabled={isLoading}
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 bg-white px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 disabled:opacity-50 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition-all cursor-pointer"
+            >
+              <RefreshCw className={`h-4 w-4 text-slate-500 dark:text-slate-400 ${isLoading ? "animate-spin" : ""}`} />
+              <span>Actualizar</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                clearFeedback();
+                void reload();
+              }}
+              disabled={isLoading}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200/90 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 disabled:opacity-50 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition-all cursor-pointer"
+            >
+              <RefreshCw className={`h-4 w-4 text-slate-500 dark:text-slate-400 ${isLoading ? "animate-spin" : ""}`} />
+              <span>Actualizar</span>
+            </button>
+
+            {canCreateCustomer && (
+              <button
+                type="button"
+                onClick={() => setIsCreateCustomerModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm shadow-blue-500/25 hover:bg-blue-700 active:scale-95 disabled:opacity-50 transition-all cursor-pointer"
+              >
+                <UserPlus size={16} strokeWidth={2.5} />
+                <span>Nuevo cliente</span>
+              </button>
+            )}
+          </div>
+        )}
       </header>
 
       <div className="cuentas-corrientes-clientes-workspace space-y-4">
@@ -318,6 +365,9 @@ export const CuentasCorrientesPage = () => {
             onBalanceUpdated={() => {
               void reload();
             }}
+            isEditModalOpen={isEditCustomerModalOpen}
+            onEditModalOpenChange={setIsEditCustomerModalOpen}
+            refreshKey={panelRefreshKey}
           />
         ) : (
           <div className="space-y-4">

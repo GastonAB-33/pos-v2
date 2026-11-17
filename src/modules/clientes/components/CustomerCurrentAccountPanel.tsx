@@ -11,8 +11,7 @@ import { posCustomerProfilesService } from "@/services/pos-customer-profiles.ser
 import { auditService } from "@/services/audit.service";
 import { useToast } from "@/components/ui/useToast";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, DollarSign, Package, Pencil, PlusCircle, RefreshCw } from "lucide-react";
-import { IconButton } from "@/components/ui/IconButton";
+import { DollarSign, Package, PlusCircle } from "lucide-react";
 import { formatCustomerDocument } from "@/modules/configuracion/hooks/useEntityRequirements";
 import { parseCustomerPackageDebts, serializeCustomerPackageDebts, useTenantReturnablePackages } from "@/utils/returnable-packages";
 import type { Customer } from "@/types/entities";
@@ -24,6 +23,9 @@ interface CustomerCurrentAccountPanelProps {
   canWrite: boolean;
   onClose: () => void;
   onBalanceUpdated: () => void;
+  isEditModalOpen?: boolean;
+  onEditModalOpenChange?: (open: boolean) => void;
+  refreshKey?: number;
 }
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -48,8 +50,11 @@ export const CustomerCurrentAccountPanel = ({
   userId,
   customer,
   canWrite,
-  onClose,
+  onClose: _onClose,
   onBalanceUpdated,
+  isEditModalOpen: controlledIsEditOpen,
+  onEditModalOpenChange,
+  refreshKey,
 }: CustomerCurrentAccountPanelProps) => {
   const toast = useToast();
   const [currentCustomer, setCurrentCustomer] = useState<Customer>(customer);
@@ -57,7 +62,12 @@ export const CustomerCurrentAccountPanel = ({
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
   const [isManualDebtModalOpen, setIsManualDebtModalOpen] = useState(false);
   const [isAddPackageModalOpen, setIsAddPackageModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [internalIsEditOpen, setInternalIsEditOpen] = useState(false);
+  const isEditModalOpen = controlledIsEditOpen !== undefined ? controlledIsEditOpen : internalIsEditOpen;
+  const setIsEditModalOpen = (open: boolean) => {
+    setInternalIsEditOpen(open);
+    onEditModalOpenChange?.(open);
+  };
   const [isUpdatingCustomer, setIsUpdatingCustomer] = useState(false);
   const { packages: tenantPackageTypes } = useTenantReturnablePackages(tenantId);
 
@@ -85,6 +95,13 @@ export const CustomerCurrentAccountPanel = ({
     registerPayment,
     registerAdjustment,
   } = useCurrentAccount(tenantId, currentCustomer, userId);
+
+  useEffect(() => {
+    if (refreshKey !== undefined && refreshKey > 0) {
+      clearFeedback();
+      void reload();
+    }
+  }, [refreshKey, clearFeedback, reload]);
 
   const profile = useMemo(() => {
     return tenantId && currentCustomer?.id
@@ -341,62 +358,13 @@ export const CustomerCurrentAccountPanel = ({
     canWrite && Boolean(userId) && accountSummary.accountingBalance > 0;
 
   return (
-    <section className="current-account-detail rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-5 sm:p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900 space-y-5">
-      {/* Barra de navegación superior con botón Volver */}
-      <div className="flex items-center justify-between border-b border-slate-200/80 pb-3 dark:border-slate-800">
-        <button
-          type="button"
-          onClick={onClose}
-          className="inline-flex items-center gap-2 rounded-2xl border border-slate-200/90 bg-white px-3.5 sm:px-4 py-2 text-xs font-semibold text-slate-700 shadow-xs transition hover:border-slate-300 hover:bg-slate-50 active:scale-95 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 cursor-pointer"
-        >
-          <ArrowLeft size={14} />
-          <span className="hidden sm:inline">Volver al listado de clientes</span>
-          <span className="inline sm:hidden">Volver</span>
-        </button>
-
-        <div className="flex items-center gap-2">
-          {canWrite && (
-            <button
-              type="button"
-              onClick={() => setIsEditModalOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 bg-white px-3 sm:px-4 py-2 text-xs font-semibold text-slate-700 shadow-xs transition hover:border-slate-300 hover:bg-slate-50 active:scale-95 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 cursor-pointer"
-            >
-              <Pencil size={13} />
-              <span className="hidden sm:inline">Editar cliente</span>
-              <span className="inline sm:hidden">Editar</span>
-            </button>
-          )}
-          <IconButton
-            icon={RefreshCw}
-            label="Recargar cuenta corriente"
-            onClick={() => {
-              clearFeedback();
-              void reload();
-            }}
-            loading={isLoading}
-            disabled={isSubmitting}
-            className="!rounded-full hover:scale-105 transition-transform"
-          />
-        </div>
-      </div>
-
+    <section className="current-account-detail rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-4 sm:p-6 shadow-xs dark:border-slate-800 dark:bg-slate-900 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+            <h3 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100">
               {currentCustomer.full_name}
             </h3>
-            {canWrite && (
-              <button
-                type="button"
-                onClick={() => setIsEditModalOpen(true)}
-                title="Editar datos del cliente y límite de cuenta corriente"
-                className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-md shadow-xs transition dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-700"
-              >
-                <Pencil size={11} />
-                <span>Editar</span>
-              </button>
-            )}
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
             {formatCustomerDocument(currentCustomer.document_type, currentCustomer.document_number)}
@@ -442,7 +410,7 @@ export const CustomerCurrentAccountPanel = ({
             Saldo Adeudado
           </span>
           <span
-            className={`text-2xl font-bold tracking-tight ${
+            className={`text-2xl sm:text-3xl font-black tracking-tight ${
               balance > 0
                 ? "text-rose-600 dark:text-rose-400"
                 : balance < 0
@@ -455,17 +423,30 @@ export const CustomerCurrentAccountPanel = ({
         </div>
       </div>
 
-      <div className="current-account-balance-grid">
-        <article>
-          <p>Deuda original</p>
-          <strong>{currency.format(balance)}</strong>
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+        <article className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/50 p-3 sm:p-4">
+          <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Deuda original
+          </p>
+          <strong className="block mt-1 text-base sm:text-xl font-bold font-mono text-slate-900 dark:text-slate-100">
+            {currency.format(balance)}
+          </strong>
         </article>
-        <article className="current-account-balance-grid__updated">
-          <p>Saldo actualizado</p>
-          <strong>{currency.format(accountSummary.updatedBalance)}</strong>
-          <span title="El recargo o actualizacion vigente reemplaza al anterior; no se suma varias veces.">
-            Regla vigente
-          </span>
+        <article className="rounded-2xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/50 dark:bg-indigo-950/30 p-3 sm:p-4">
+          <div className="flex items-center justify-between gap-1">
+            <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+              Saldo actualizado
+            </p>
+            <span
+              className="text-[9px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/50 px-1.5 py-0.5 rounded-full shrink-0"
+              title="El recargo o actualización vigente reemplaza al anterior; no se suma varias veces."
+            >
+              Regla vigente
+            </span>
+          </div>
+          <strong className="block mt-1 text-base sm:text-xl font-bold font-mono text-indigo-600 dark:text-indigo-400">
+            {currency.format(accountSummary.updatedBalance)}
+          </strong>
         </article>
       </div>
 

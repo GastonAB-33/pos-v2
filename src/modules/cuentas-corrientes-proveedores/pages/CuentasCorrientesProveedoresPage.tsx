@@ -80,7 +80,7 @@ export const CuentasCorrientesProveedoresPage = () => {
   // Search & Filter
   type SupplierSort = "debt_desc" | "debt_asc" | "name_asc" | "name_desc";
   const [search, setSearch] = useState("");
-  const [filterMode, setFilterMode] = useState<"all" | "debt" | "zero">("all");
+  const [filterMode, setFilterMode] = useState<"all" | "debt" | "zero">("debt");
   const [sortBy, setSortBy] = useState<SupplierSort>("debt_desc");
   const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
   useBodyScrollLock(isAdvancedFiltersOpen);
@@ -181,6 +181,9 @@ export const CuentasCorrientesProveedoresPage = () => {
   }, [tenantId]);
 
   useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    if (document.documentElement) document.documentElement.scrollTop = 0;
+    if (document.body) document.body.scrollTop = 0;
     if (selectedSupplierId) {
       void loadMovements(selectedSupplierId);
     } else {
