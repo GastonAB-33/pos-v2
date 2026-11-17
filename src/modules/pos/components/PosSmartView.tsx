@@ -3,6 +3,7 @@ import {
   ArrowDownLeft,
   BadgePercent,
   Calculator,
+  Camera,
   ChevronDown,
   Coins,
   FileText,
@@ -81,6 +82,7 @@ export interface PosSmartViewProps {
   primaryBarcodes: Record<string, string>;
   onAddProduct: (product: Product, quantity?: number) => Promise<boolean | void>;
   onScanBarcode: (barcode: string) => Promise<boolean>;
+  onOpenScanner?: () => void;
 
   // Totales y Cobro
   subtotal: number;
@@ -132,6 +134,7 @@ export const PosSmartView = ({
   primaryBarcodes,
   onAddProduct,
   onScanBarcode,
+  onOpenScanner,
   subtotal,
   total,
   roundingAdjustment = 0,
@@ -385,27 +388,44 @@ export const PosSmartView = ({
           isHighlighted && "ring-2 ring-emerald-500/60 border-emerald-500/80"
         )}
       >
-        {/* Encabezado: Carrito (N ítems) y botón Vaciar a la derecha */}
+        {/* Encabezado: Carrito (N ítems) y botones de acción a la derecha */}
         <div className="flex items-center justify-between gap-2.5 mb-4">
-          <div className="flex items-center gap-2.5">
-            <ShoppingCart className="text-blue-600 dark:text-sky-400" size={20} />
-            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <ShoppingCart className="text-blue-600 dark:text-sky-400 shrink-0" size={20} />
+            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 truncate">
               Carrito ({items.length} {items.length === 1 ? "ítem" : "ítems"})
             </h2>
           </div>
 
-          {items.length > 0 ? (
-            <button
-              type="button"
-              onClick={onClearCart}
-              disabled={disabled || !canWrite}
-              className="h-8 px-2.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 dark:hover:border-rose-800/80 transition disabled:opacity-50 whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
-              title="Vaciar todos los productos del carrito"
-            >
-              <Trash2 size={13} className="text-slate-400 group-hover:text-rose-500" />
-              <span>Vaciar</span>
-            </button>
-          ) : null}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Botón de Cámara Escáner para Móvil y Desktop */}
+            {onOpenScanner ? (
+              <button
+                type="button"
+                onClick={onOpenScanner}
+                disabled={disabled || !canWrite}
+                className="h-8 px-2.5 sm:px-3 rounded-xl border border-blue-500/40 bg-blue-50/90 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer select-none active:scale-[0.97]"
+                title="Abrir escáner de cámara continuo"
+                aria-label="Abrir escáner de cámara continuo"
+              >
+                <Camera size={14} className="text-blue-600 dark:text-blue-400 shrink-0" />
+                <span className="inline">Escanear</span>
+              </button>
+            ) : null}
+
+            {items.length > 0 ? (
+              <button
+                type="button"
+                onClick={onClearCart}
+                disabled={disabled || !canWrite}
+                className="h-8 px-2.5 rounded-xl border border-slate-300 dark:border-slate-700/80 bg-slate-50 dark:bg-slate-800/40 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 dark:hover:bg-rose-950/40 dark:hover:text-rose-400 dark:hover:border-rose-800/80 transition disabled:opacity-50 whitespace-nowrap shrink-0 flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                title="Vaciar todos los productos del carrito"
+              >
+                <Trash2 size={13} className="text-slate-400 group-hover:text-rose-500" />
+                <span>Vaciar</span>
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {/* Buscador general con filtro desplegable de categoría */}
@@ -569,12 +589,23 @@ export const PosSmartView = ({
 
         {/* Lista de productos escaneados: 1 columna vertical continua y filas compactas estilizadas (Opción 1 + 3) */}
         {items.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-500 space-y-2">
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-500 space-y-2.5">
             <ShoppingCart size={40} className="text-slate-400 dark:text-slate-600 opacity-60 mb-1" />
             <p className="text-sm font-medium text-slate-600 dark:text-slate-400">El carrito está vacío</p>
             <p className="text-xs text-slate-400 dark:text-slate-500 max-w-sm">
               Escaneá un código de barras o escribí en el buscador superior para agregar productos.
             </p>
+            {onOpenScanner ? (
+              <button
+                type="button"
+                onClick={onOpenScanner}
+                disabled={disabled || !canWrite}
+                className="mt-2 inline-flex items-center gap-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 shadow-md shadow-blue-500/20 active:scale-[0.97] transition cursor-pointer"
+              >
+                <Camera size={15} />
+                <span>Escanear con cámara</span>
+              </button>
+            ) : null}
           </div>
         ) : (
           <div

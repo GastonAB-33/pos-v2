@@ -5,7 +5,11 @@ import { registerServiceWorker } from "@/app/pwa/register-service-worker";
 import { AppErrorBoundary } from "@/app/providers/AppErrorBoundary";
 import { AppProviders } from "@/app/providers/AppProviders";
 import { AppRouter } from "@/app/router/AppRouter";
+import { telemetry } from "@/lib/telemetry";
 import "@/styles.css";
+
+// Inicializar telemetría segura y captura de excepciones con ofuscación de PII
+telemetry.init();
 
 // Deshabilitar que la rueda del mouse modifique valores en inputs numéricos en todo el sistema
 if (typeof window !== "undefined") {

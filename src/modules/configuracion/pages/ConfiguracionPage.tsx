@@ -2913,7 +2913,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                           <span className="font-mono text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
                             {scaleTesterResult.weight.toLocaleString("es-AR", { minimumFractionDigits: 3 })} kg{" "}
                             <span className="text-xs font-medium text-slate-500">
-                              ({Math.round(scaleTesterResult.weight * 1000)} g)
+                              ({Math.round(scaleTesterResult.weight * 1000)} g / {Math.round(scaleTesterResult.weight * 1000)} u.)
                             </span>
                           </span>
                         </div>

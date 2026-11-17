@@ -538,6 +538,34 @@ const syncPendingSaleRecord = async (record: PendingSaleRecord): Promise<Sale> =
   return sale;
 };
 
+export const getCachedActiveCashSession = (tenantId: string): CashSession | null => {
+  if (typeof window === "undefined" || !tenantId) return null;
+  try {
+    const raw = window.localStorage.getItem(`${storageKeys.activeCashSession}:${tenantId}`);
+    if (!raw) return null;
+    const session = JSON.parse(raw) as CashSession;
+    if (session && session.status === "open") {
+      return session;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+export const setCachedActiveCashSession = (tenantId: string, session: CashSession | null): void => {
+  if (typeof window === "undefined" || !tenantId) return;
+  try {
+    if (session && session.status === "open") {
+      window.localStorage.setItem(`${storageKeys.activeCashSession}:${tenantId}`, JSON.stringify(session));
+    } else {
+      window.localStorage.removeItem(`${storageKeys.activeCashSession}:${tenantId}`);
+    }
+  } catch {
+    // Ignore storage quota errors
+  }
+};
+
 export const offlineService = {
   hydrate: async (): Promise<void> => {
     if (hydrated) return;
@@ -774,13 +802,25 @@ export const offlineService = {
       (row) => row.tenant_id !== snapshot.tenant_id
     );
     memoryState = { ...memoryState, posSnapshots: [...remaining, snapshot] };
+    if (snapshot.open_cash_session) {
+      setCachedActiveCashSession(snapshot.tenant_id, snapshot.open_cash_session);
+    }
     schedulePersist();
   },
 
   getPosSnapshot: (tenantId: string): PosOfflineSnapshot | null =>
     ((memoryState.posSnapshots as PosOfflineSnapshot[]).find((row) => row.tenant_id === tenantId) ?? null),
 
+  getCachedCashSession: (tenantId: string): CashSession | null => {
+    const fromSnapshot = offlineService.getPosSnapshot(tenantId)?.open_cash_session ?? null;
+    if (fromSnapshot && fromSnapshot.status === "open") {
+      return fromSnapshot;
+    }
+    return getCachedActiveCashSession(tenantId);
+  },
+
   updateCachedCashSession: (tenantId: string, session: CashSession | null): void => {
+    setCachedActiveCashSession(tenantId, session);
     const current = offlineService.getPosSnapshot(tenantId);
     if (!current) return;
     offlineService.savePosSnapshot({ ...current, open_cash_session: session, saved_at: nowIso() });

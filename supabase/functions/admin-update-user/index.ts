@@ -41,7 +41,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    await requireUsuariosWrite(req.headers.get("Authorization"));
+    // 1. Validar permisos y extraer tenant_id del llamador
+    const caller = await requireUsuariosWrite(req.headers.get("Authorization"));
 
     const body = (await req.json()) as Partial<UpdateUserPayload>;
     const userId = normalizeText(body.user_id);
@@ -70,16 +71,24 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Usuario no encontrado" }, 404);
     }
 
+    // 2. BLINDAJE CONTRA BOLA / IDOR: Prohibir estrictamente modificar usuarios de otro comercio
+    if (existing.tenant_id !== caller.tenantId) {
+      return jsonResponse(
+        { error: "Acceso denegado: no tenés autorización para modificar usuarios de otro comercio" },
+        403
+      );
+    }
+
     const { data: profile, error: profileError } = await serviceClient
       .from("permission_profiles")
       .select("id")
-      .eq("tenant_id", existing.tenant_id)
+      .eq("tenant_id", caller.tenantId)
       .eq("id", permissionProfileId)
       .maybeSingle();
 
     if (profileError) throw profileError;
     if (!profile) {
-      return jsonResponse({ error: "Perfil de permisos invalido para el tenant" }, 400);
+      return jsonResponse({ error: "Perfil de permisos invalido para este comercio" }, 400);
     }
 
     if (existing.auth_user_id) {
@@ -91,7 +100,7 @@ Deno.serve(async (req) => {
         email,
         user_metadata: {
           full_name: fullName,
-          tenant_id: existing.tenant_id,
+          tenant_id: caller.tenantId,
           username,
         },
       };
@@ -105,7 +114,16 @@ Deno.serve(async (req) => {
         authPatch
       );
 
-      if (authError) throw authError;
+      if (authError) {
+        const lower = authError.message?.toLowerCase() || "";
+        if (lower.includes("already been registered") || lower.includes("email already exists")) {
+          return jsonResponse(
+            { error: "El correo electrónico ingresado ya pertenece a otro usuario." },
+            400
+          );
+        }
+        throw authError;
+      }
     }
 
     const { data: user, error: userError } = await serviceClient
@@ -115,8 +133,10 @@ Deno.serve(async (req) => {
         username,
         full_name: fullName,
         permission_profile_id: permissionProfileId,
+        updated_at: new Date().toISOString(),
       })
       .eq("id", userId)
+      .eq("tenant_id", caller.tenantId)
       .select("*")
       .single();
 

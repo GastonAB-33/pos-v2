@@ -7,6 +7,7 @@ import {
   type UpdateEntityInput,
 } from "@/services/base/tenant-crud.service";
 import { dataProvider } from "@/services/config/data-provider";
+import { getCachedActiveCashSession, setCachedActiveCashSession } from "@/services/offline.service";
 import type { CashMovement, CashSession } from "@/types/entities";
 
 const cashSessionsCrud = new TenantCrudService<CashSession>(dbTables.cash_sessions);
@@ -66,60 +67,98 @@ const createMovementRow = (
 };
 
 const getLatestOpenSession = async (tenantId: string, userId?: string): Promise<CashSession | null> => {
-  if (dataProvider === "mock") {
-    const sessions = await cashSessionsCrud.getAllByTenant(tenantId);
-    if (userId) {
-      const userSession = sessions.find(
-        (session) => session.status === "open" && session.opened_by_user_id === userId
-      );
-      if (userSession) return userSession;
-    }
-    return (
-      sessions
-        .filter((session) => session.status === "open")
-        .sort((a, b) => b.opened_at.localeCompare(a.opened_at))[0] ?? null
-    );
-  }
+  try {
+    if (dataProvider === "mock") {
+      const sessions = await cashSessionsCrud.getAllByTenant(tenantId);
+      if (userId) {
+        const userSession = sessions.find(
+          (session) => session.status === "open" && session.opened_by_user_id === userId
+        );
+        if (userSession) {
+          setCachedActiveCashSession(tenantId, userSession);
+          return userSession;
+        }
+      }
+      const openSession =
+        sessions
+          .filter((session) => session.status === "open")
+          .sort((a, b) => b.opened_at.localeCompare(a.opened_at))[0] ?? null;
 
-  // 1. Si se especificó userId, intentar buscar primero una sesión abierta por este usuario
-  if (userId) {
-    const { data: userData, error: userError } = await supabase
+      if (openSession) {
+        setCachedActiveCashSession(tenantId, openSession);
+      }
+      return openSession;
+    }
+
+    // 1. Si se especificó userId, intentar buscar primero una sesión abierta por este usuario
+    if (userId) {
+      const { data: userData, error: userError } = await supabase
+        .from(dbTables.cash_sessions)
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .eq("status", "open")
+        .eq("opened_by_user_id", userId)
+        .order("opened_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!userError && userData) {
+        const session = userData as CashSession;
+        setCachedActiveCashSession(tenantId, session);
+        return session;
+      }
+    }
+
+    // 2. Si el usuario no abrió la caja (o no se especificó), buscar la caja abierta activa del comercio/tenant
+    const { data, error } = await supabase
       .from(dbTables.cash_sessions)
       .select("*")
       .eq("tenant_id", tenantId)
       .eq("status", "open")
-      .eq("opened_by_user_id", userId)
       .order("opened_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (!userError && userData) {
-      return userData as CashSession;
+    if (error) {
+      throw error;
     }
-  }
 
-  // 2. Si el usuario no abrió la caja (o no se especificó), buscar la caja abierta activa del comercio/tenant
-  const { data, error } = await supabase
-    .from(dbTables.cash_sessions)
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .eq("status", "open")
-    .order("opened_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
+    const session = (data as CashSession | null) ?? null;
+    if (session) {
+      setCachedActiveCashSession(tenantId, session);
+    }
+    return session;
+  } catch (error) {
+    // Si falla la red (sin conexión o corte de internet), rescatar la sesión abierta local
+    const fallback = getCachedActiveCashSession(tenantId);
+    if (fallback && fallback.status === "open") {
+      return fallback;
+    }
     throw error;
   }
-
-  return (data as CashSession | null) ?? null;
 };
 
 export const cashService = {
   getAllByTenant: (tenantId: string) => cashSessionsCrud.getAllByTenant(tenantId),
   getById: (tenantId: string, id: string) => cashSessionsCrud.getById(tenantId, id),
-  create: (tenantId: string, input: CreateCashSessionInput) => cashSessionsCrud.create(tenantId, input),
-  update: (tenantId: string, id: string, input: UpdateCashSessionInput) => cashSessionsCrud.update(tenantId, id, input),
+  create: async (tenantId: string, input: CreateCashSessionInput) => {
+    const session = await cashSessionsCrud.create(tenantId, input);
+    if (session && session.status === "open") {
+      setCachedActiveCashSession(tenantId, session);
+    }
+    return session;
+  },
+  update: async (tenantId: string, id: string, input: UpdateCashSessionInput) => {
+    const session = await cashSessionsCrud.update(tenantId, id, input);
+    if (session) {
+      if (session.status === "closed") {
+        setCachedActiveCashSession(tenantId, null);
+      } else if (session.status === "open") {
+        setCachedActiveCashSession(tenantId, session);
+      }
+    }
+    return session;
+  },
   delete: (tenantId: string, id: string) => cashSessionsCrud.delete(tenantId, id),
   createMovement: async (tenantId: string, input: CreateCashMovementInput) => {
     if (dataProvider === "mock") {

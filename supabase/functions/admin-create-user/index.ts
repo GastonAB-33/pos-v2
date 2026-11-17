@@ -2,7 +2,7 @@ import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import { requireUsuariosWrite, serviceClient } from "../_shared/admin.ts";
 
 interface CreateUserPayload {
-  tenant_id: string;
+  tenant_id?: string;
   email: string;
   username: string | null;
   full_name: string;
@@ -44,18 +44,21 @@ Deno.serve(async (req) => {
 
   try {
     step = "require-permission";
-    await requireUsuariosWrite(req.headers.get("Authorization"));
+    // 1. Extraer contexto seguro del llamador validado en servidor
+    const caller = await requireUsuariosWrite(req.headers.get("Authorization"));
 
     step = "parse-body";
     const body = (await req.json()) as Partial<CreateUserPayload>;
-    const tenantId = normalizeText(body.tenant_id);
+    // Blindaje multi-tenant: El tenant_id SIEMPRE se deriva de la sesión del llamador
+    const tenantId = caller.tenantId;
+
     const email = normalizeText(body.email).toLowerCase();
     const username = normalizeText(body.username) || null;
     const fullName = normalizeText(body.full_name);
     const password = normalizeText(body.password);
     const permissionProfileId = normalizeText(body.permission_profile_id);
 
-    if (!tenantId || !email || !fullName || !permissionProfileId) {
+    if (!email || !fullName || !permissionProfileId) {
       return jsonResponse({ error: "Faltan datos obligatorios" }, 400);
     }
 
@@ -73,7 +76,7 @@ Deno.serve(async (req) => {
 
     if (profileError) throw profileError;
     if (!profile) {
-      return jsonResponse({ error: "Perfil de permisos invalido para el tenant" }, 400);
+      return jsonResponse({ error: "Perfil de permisos invalido para este comercio" }, 400);
     }
 
     step = "create-or-link-auth-user";
@@ -101,28 +104,41 @@ Deno.serve(async (req) => {
         throw authError;
       }
 
-      // Verificar si ya existe en public.users para este tenant
-      const { data: existingInTenant, error: existingError } = await serviceClient
+      // Verificar si ya existe un usuario con este correo en public.users
+      const { data: existingUser, error: existingError } = await serviceClient
         .from("users")
         .select("id, tenant_id, auth_user_id")
-        .eq("tenant_id", tenantId)
         .eq("email", email)
         .maybeSingle();
 
       if (existingError) throw existingError;
-      if (existingInTenant) {
+
+      // PREVENCIÓN DE SECUESTRO DE CUENTAS (ACCOUNT TAKEOVER CROSS-TENANT)
+      // Si el correo ya pertenece a OTRO comercio, PROHIBIR la reasignación o cambio de clave
+      if (existingUser && existingUser.tenant_id !== tenantId) {
+        return jsonResponse(
+          {
+            error:
+              "Este correo electrónico ya está registrado en otro comercio. Por seguridad multi-tenant, cada usuario debe utilizar una dirección de correo exclusiva.",
+          },
+          409
+        );
+      }
+
+      // Si ya existe en este mismo comercio, retornar error amigable
+      if (existingUser && existingUser.tenant_id === tenantId) {
         return jsonResponse(
           { error: "Ya existe un usuario con este correo electrónico en este comercio." },
           400
         );
       }
 
-      // Obtener el ID del usuario existente en Supabase Auth
+      // Si el usuario existe en Supabase Auth pero no en public.users (caso huérfano del mismo tenant)
       const { data: listData, error: listError } = await serviceClient.auth.admin.listUsers();
       if (listError) throw authError;
 
       const matchedAuthUser = listData?.users?.find(
-        (u: { email?: string }) => u.email?.toLowerCase() === email.toLowerCase()
+        (u: { email?: string }) => u.email?.toLowerCase() === email
       );
 
       if (!matchedAuthUser) throw authError;
@@ -130,7 +146,7 @@ Deno.serve(async (req) => {
       authUserId = matchedAuthUser.id;
       isReassigned = true;
 
-      // Actualizar contrasena y metadata para el nuevo tenant
+      // Actualizar metadata del usuario para el tenant actual
       await serviceClient.auth.admin.updateUserById(authUserId, {
         password,
         user_metadata: {
@@ -139,34 +155,6 @@ Deno.serve(async (req) => {
           username,
         },
       });
-
-      // Si ya existia una fila previa en public.users (por ejemplo de pruebas o de otro tenant), se reasigna
-      const { data: existingAnywhere } = await serviceClient
-        .from("users")
-        .select("id")
-        .eq("auth_user_id", authUserId)
-        .maybeSingle();
-
-      if (existingAnywhere) {
-        const { data: updatedUser, error: updateError } = await serviceClient
-          .from("users")
-          .update({
-            tenant_id: tenantId,
-            email,
-            username,
-            full_name: fullName,
-            role_code: "staff",
-            permission_profile_id: permissionProfileId,
-            is_active: true,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existingAnywhere.id)
-          .select("*")
-          .single();
-
-        if (updateError) throw updateError;
-        return jsonResponse({ user: updatedUser });
-      }
     } else {
       authUserId = authData.user?.id ?? null;
     }

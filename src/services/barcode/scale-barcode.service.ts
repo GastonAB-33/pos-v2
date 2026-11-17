@@ -6,6 +6,8 @@ export interface ParsedScaleBarcode {
   mode: "weight" | "total_price";
   weight: number | null;
   totalPrice: number | null;
+  rawWeight?: string;
+  rawAmount?: string;
 }
 
 const digitsOnly = (value: string): string => value.replace(/\D+/g, "");
@@ -64,9 +66,6 @@ export const parseScaleBarcode = (
   if (settings.code_length > 0 && normalized.length !== settings.code_length) {
     return null;
   }
-  if (settings.code_length > 0 && normalized.length !== settings.code_length) {
-    return null;
-  }
 
   const prefix = digitsOnly(settings.scale_prefix);
   if (prefix && !normalized.startsWith(prefix)) {
@@ -107,5 +106,7 @@ export const parseScaleBarcode = (
     mode,
     weight,
     totalPrice,
+    rawWeight: weightRaw,
+    rawAmount: amountRaw,
   };
 };

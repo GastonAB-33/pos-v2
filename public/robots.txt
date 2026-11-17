@@ -1,0 +1,12 @@
+# Robots.txt for Jireh POS
+User-agent: *
+Disallow: /app/
+Disallow: /admin/
+Disallow: /usuarios/
+Disallow: /caja/
+Disallow: /configuracion/
+Allow: /
+Allow: /terminos
+Allow: /privacidad
+
+Sitemap: https://jirehpos.com/sitemap.xml

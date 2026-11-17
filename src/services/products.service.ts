@@ -39,7 +39,13 @@ const loadImageFromFile = (file: File): Promise<HTMLImageElement> =>
   });
 
 const optimizeProductImage = async (file: File): Promise<File> => {
-  if (!file.type.startsWith("image/") || file.type === "image/svg+xml") return file;
+  const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    throw new Error("Formato de imagen no permitido. Solo se aceptan imágenes JPG, PNG o WebP.");
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    throw new Error("La imagen supera el tamaño máximo permitido de 10 MB.");
+  }
 
   const image = await loadImageFromFile(file);
   const maxDimension = Math.max(image.width, image.height);

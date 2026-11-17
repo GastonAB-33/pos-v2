@@ -1,13 +1,19 @@
 import React from "react";
 import { JirehLogo } from "./brand/JirehLogo";
 import { POS_LOGIN_URL, SUPPORT_WHATSAPP_PHONE } from "../config/app-urls";
-import { Sparkles, MessageSquare, Mail, Phone, ShieldCheck, ArrowRight } from "lucide-react";
+import { Sparkles, MessageSquare, Mail, Phone, ShieldCheck, ArrowRight, Shield } from "lucide-react";
 
 interface LandingFooterProps {
   onOpenFreeTrial: () => void;
+  onOpenTerms?: () => void;
+  onOpenPrivacy?: () => void;
 }
 
-export const LandingFooter: React.FC<LandingFooterProps> = ({ onOpenFreeTrial }) => {
+export const LandingFooter: React.FC<LandingFooterProps> = ({
+  onOpenFreeTrial,
+  onOpenTerms,
+  onOpenPrivacy,
+}) => {
   return (
     <footer className="bg-slate-900 text-slate-300 relative overflow-hidden">
       
@@ -29,81 +35,77 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ onOpenFreeTrial })
               onClick={onOpenFreeTrial}
               className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#00B5C8] via-[#10B981] to-[#FF7800] px-8 py-3.5 text-base font-extrabold text-white shadow-xl hover:scale-[1.02] active:scale-[0.98] transition"
             >
-              <Sparkles className="h-4 w-4 text-amber-300" />
-              <span>Activar mis 7 Días Gratis</span>
+              <span>Comenzar Prueba Gratuita</span>
               <ArrowRight className="h-4 w-4" />
             </button>
             <a
-              href={POS_LOGIN_URL}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 px-6 py-3.5 text-sm font-bold text-white hover:bg-white/10 transition"
+              href={`https://wa.me/${SUPPORT_WHATSAPP_PHONE}?text=${encodeURIComponent("¡Hola! Me gustaría hacer unas consultas sobre Jireh POS.")}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 px-6 py-3.5 text-base font-semibold text-white transition"
             >
-              <span>Acceder al Sistema</span>
+              <MessageSquare className="h-4 w-4 text-[#25D366]" />
+              <span>Consultar por WhatsApp</span>
             </a>
           </div>
         </div>
       </div>
 
-      {/* Contenido del Footer */}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           
-          {/* Columna 1: Marca Jireh */}
-          <div className="md:col-span-1 space-y-4">
-            <JirehLogo size="md" variant="light" showTagline={true} />
+          {/* Columna 1: Marca y descripción */}
+          <div className="space-y-4 md:col-span-1">
+            <div className="flex items-center gap-2">
+              <JirehLogo size="md" />
+            </div>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Software de punto de venta, inventario en tiempo real y facturación electrónica en la nube. Diseñado para potenciar el crecimiento de comerciantes y negocios.
+              Software de punto de venta y gestión integral diseñado para optimizar almacenes, minimarkets, ferreterías y comercios minoristas de toda Argentina.
             </p>
-            <div className="flex items-center gap-2 text-xs text-emerald-400">
+            <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold">
               <ShieldCheck className="h-4 w-4" />
-              <span>Plataforma Segura SSL 256-bit</span>
+              <span>Alojamiento Seguro • Modo Offline</span>
             </div>
           </div>
 
-          {/* Columna 2: Navegación */}
+          {/* Columna 2: Módulos clave */}
           <div className="space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-white">
-              Navegación
-            </h4>
-            <ul className="space-y-2 text-xs">
-              <li><a href="#ventajas" className="hover:text-white transition">Ventajas Clave</a></li>
-              <li><a href="#herramientas" className="hover:text-white transition">Herramientas y Módulos</a></li>
-              <li><a href="#calculadora" className="hover:text-white transition">Calculadora de Ahorro</a></li>
-              <li><a href="#planes" className="hover:text-white transition">Planes y Precios</a></li>
-              <li><a href="#testimonios" className="hover:text-white transition">Casos de Éxito</a></li>
-              <li><a href="#faq" className="hover:text-white transition">Preguntas Frecuentes</a></li>
-            </ul>
-          </div>
-
-          {/* Columna 3: Funciones Principales */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-white">
-              Módulos Jireh
-            </h4>
+            <h4 className="text-sm font-bold text-white tracking-wider uppercase">Módulos</h4>
             <ul className="space-y-2 text-xs text-slate-400">
               <li>Punto de Venta Ultra Rápido</li>
-              <li>Control de Stock e Inventario</li>
-              <li>Arqueos de Caja y Cierres Ciegos</li>
-              <li>Cuentas Corrientes y Clientes</li>
-              <li>Listas de Precios y Promociones</li>
-              <li>Modo Offline PWA sin Internet</li>
+              <li>Control de Stock en Tiempo Real</li>
+              <li>Facturación Electrónica ARCA (AFIP)</li>
+              <li>Cuentas Corrientes y Saldos</li>
+              <li>Múltiples Listas de Precios</li>
+              <li>Reportes de Ganancia y Caja</li>
             </ul>
           </div>
 
-          {/* Columna 4: Contacto y Soporte */}
+          {/* Columna 3: Rubros adaptados */}
           <div className="space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-white">
-              Atención y Soporte
-            </h4>
-            <ul className="space-y-2.5 text-xs">
-              <li className="flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-emerald-400 shrink-0" />
+            <h4 className="text-sm font-bold text-white tracking-wider uppercase">Rubros</h4>
+            <ul className="space-y-2 text-xs text-slate-400">
+              <li>Almacenes y Minimarkets</li>
+              <li>Ferreterías y Corralones</li>
+              <li>Fiambrerías y Carnicerías</li>
+              <li>Kioscos y Maxikioscos 24hs</li>
+              <li>Dietéticas y Frutos Secos</li>
+              <li>Bazar y Limpieza</li>
+            </ul>
+          </div>
+
+          {/* Columna 4: Contacto directo */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-bold text-white tracking-wider uppercase">Atención al Cliente</h4>
+            <ul className="space-y-2 text-xs text-slate-400">
+              <li>
                 <a
                   href={`https://wa.me/${SUPPORT_WHATSAPP_PHONE}?text=${encodeURIComponent("¡Hola equipo de Jireh! Deseo información comercial.")}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-white transition"
                 >
-                  WhatsApp: Asesor en línea
+                  WhatsApp: Asesor en línea (+54 9 266 468-9173)
                 </a>
               </li>
               <li className="flex items-center gap-2">
@@ -128,13 +130,29 @@ export const LandingFooter: React.FC<LandingFooterProps> = ({ onOpenFreeTrial })
 
         </div>
 
-        {/* Barra inferior de copyright */}
+        {/* Barra inferior de copyright y cumplimiento legal */}
         <div className="mt-12 pt-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <p>© 2026 Jireh POS. Todos los derechos reservados.</p>
-          <div className="flex items-center gap-6">
-            <span className="hover:text-slate-400 cursor-pointer">Términos de Servicio</span>
-            <span className="hover:text-slate-400 cursor-pointer">Política de Privacidad</span>
-            <span className="hover:text-slate-400 cursor-pointer">Seguridad de Datos</span>
+          <p>© 2026 Jireh POS. Todos los derechos reservados. Sistema certificado bajo estándar Security Shield.</p>
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+            <button
+              onClick={onOpenTerms}
+              className="hover:text-slate-300 transition underline-offset-2 hover:underline"
+            >
+              Términos de Servicio
+            </button>
+            <button
+              onClick={onOpenPrivacy}
+              className="hover:text-slate-300 transition underline-offset-2 hover:underline"
+            >
+              Política de Privacidad
+            </button>
+            <button
+              onClick={onOpenPrivacy}
+              className="hover:text-slate-300 transition underline-offset-2 hover:underline flex items-center gap-1"
+            >
+              <Shield className="h-3 w-3 text-emerald-500" />
+              <span>Seguridad de Datos</span>
+            </button>
           </div>
         </div>
       </div>

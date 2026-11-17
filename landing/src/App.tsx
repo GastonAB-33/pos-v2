@@ -12,10 +12,15 @@ import { LandingFooter } from "./components/LandingFooter";
 import { FreeTrialModal } from "./components/FreeTrialModal";
 import { PaymentGatewayModal, type PlanDetails } from "./components/PaymentGatewayModal";
 import { FloatingWhatsAppButton } from "./components/FloatingWhatsAppButton";
+import { PrivacyPolicyModal } from "./components/legal/PrivacyPolicyModal";
+import { TermsConditionsModal } from "./components/legal/TermsConditionsModal";
+import { CookieConsentBanner } from "./components/legal/CookieConsentBanner";
 
 export const App: React.FC = () => {
   const [isFreeTrialOpen, setIsFreeTrialOpen] = useState(false);
   const [selectedPlanForTrial, setSelectedPlanForTrial] = useState('Plan "Me Estoy Formalizando"');
+  const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
+  const [isTermsOpen, setIsTermsOpen] = useState(false);
 
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [selectedPlanForPayment, setSelectedPlanForPayment] = useState<PlanDetails>({
@@ -72,13 +77,19 @@ export const App: React.FC = () => {
       </main>
 
       {/* Pie de página y contacto */}
-      <LandingFooter onOpenFreeTrial={() => handleOpenFreeTrial()} />
+      <LandingFooter
+        onOpenFreeTrial={() => handleOpenFreeTrial()}
+        onOpenTerms={() => setIsTermsOpen(true)}
+        onOpenPrivacy={() => setIsPrivacyOpen(true)}
+      />
 
       {/* Modales globales */}
       <FreeTrialModal
         isOpen={isFreeTrialOpen}
         onClose={() => setIsFreeTrialOpen(false)}
         selectedPlanName={selectedPlanForTrial}
+        onOpenTerms={() => setIsTermsOpen(true)}
+        onOpenPrivacy={() => setIsPrivacyOpen(true)}
       />
 
       {/* Botón flotante de WhatsApp de asistencia */}
@@ -88,6 +99,22 @@ export const App: React.FC = () => {
         isOpen={isPaymentOpen}
         onClose={() => setIsPaymentOpen(false)}
         plan={selectedPlanForPayment}
+      />
+
+      {/* Modales de Cumplimiento Normativo (35 Puntos) */}
+      <PrivacyPolicyModal
+        isOpen={isPrivacyOpen}
+        onClose={() => setIsPrivacyOpen(false)}
+      />
+
+      <TermsConditionsModal
+        isOpen={isTermsOpen}
+        onClose={() => setIsTermsOpen(false)}
+      />
+
+      {/* Banner de Consentimiento de Cookies */}
+      <CookieConsentBanner
+        onOpenPrivacy={() => setIsPrivacyOpen(true)}
       />
     </div>
   );

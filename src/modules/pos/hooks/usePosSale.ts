@@ -954,7 +954,7 @@ export const usePosSale = (tenantId: string | null) => {
         arca_settings: resolvedArcaSettings,
         require_open_session_for_sale: tenantSettings?.caja?.require_open_session_for_sale ?? false,
         default_invoice_document_type: tenantSettings?.facturacion?.default_document_type ?? "B",
-        open_cash_session: offlineService.getPosSnapshot(tenantId)?.open_cash_session ?? null,
+        open_cash_session: offlineService.getCachedCashSession(tenantId) ?? offlineService.getPosSnapshot(tenantId)?.open_cash_session ?? null,
       });
 
       if (hasPartialErrors) {
@@ -1590,11 +1590,11 @@ export const usePosSale = (tenantId: string | null) => {
           price_list_is_active: pricing.priceListIsActive,
           is_scale_item: existing.is_scale_item || Boolean(options?.parsedScale),
           scale_weight:
-            options?.parsedScale?.weight != null
+            product.sale_mode === "weight" && options?.parsedScale?.weight != null
               ? roundQty((existing.scale_weight ?? 0) + options.parsedScale.weight)
               : existing.scale_weight,
           scale_total_price:
-            options?.parsedScale?.totalPrice != null
+            product.sale_mode === "weight" && options?.parsedScale?.totalPrice != null
               ? roundAmount((existing.scale_total_price ?? 0) + options.parsedScale.totalPrice)
               : existing.scale_total_price,
           scale_barcode: options?.parsedScale?.raw ?? existing.scale_barcode,
@@ -1631,8 +1631,8 @@ export const usePosSale = (tenantId: string | null) => {
           price_list_name: pricing.priceListName,
           price_list_is_active: pricing.priceListIsActive,
           is_scale_item: Boolean(options?.parsedScale),
-          scale_weight: options?.parsedScale?.weight ?? null,
-          scale_total_price: options?.parsedScale?.totalPrice ?? null,
+          scale_weight: product.sale_mode === "weight" ? (options?.parsedScale?.weight ?? null) : null,
+          scale_total_price: product.sale_mode === "weight" ? (options?.parsedScale?.totalPrice ?? null) : null,
           scale_barcode: options?.parsedScale?.raw ?? null,
           is_manual_item: false,
           returnable_config: returnableConfig,
@@ -2214,20 +2214,46 @@ export const usePosSale = (tenantId: string | null) => {
         const pricing = await resolvePricingForProduct(scaleProduct, selectedCustomerId || null);
         const pricePerWeightUnit = pricing.unitPrice > 0 ? pricing.unitPrice : scaleProduct.price;
 
-        const detectedWeight =
-          parsedScale.weight != null && parsedScale.weight > 0
-            ? parsedScale.weight
-            : parsedScale.mode === "total_price" &&
-                parsedScale.totalPrice != null &&
-                parsedScale.totalPrice > 0 &&
-                pricePerWeightUnit > 0
-              ? roundQty(parsedScale.totalPrice / pricePerWeightUnit)
-              : Math.max(0.001, posSettings.barcode_scan_quantity || 1);
+        const isUnitProduct = scaleProduct.sale_mode === "unit";
+        let detectedQuantity: number;
 
-        // En modo peso, el precio unitario SIEMPRE debe ser el configurado en el sistema/lista de precios
+        if (isUnitProduct) {
+          if (parsedScale.mode === "weight") {
+            // En balanzas comerciales, los artículos por unidad (UN) emiten la cantidad entera
+            // en el campo peso/cantidad (ej. 00001 = 1 u., 00002 = 2 u.).
+            const rawInt = parsedScale.rawWeight ? parseInt(parsedScale.rawWeight, 10) : 0;
+            const decimals = scaleSettings.weight_decimals ?? 3;
+            const parsedUnits =
+              rawInt > 0
+                ? rawInt
+                : parsedScale.weight != null
+                ? Math.round(parsedScale.weight * 10 ** decimals)
+                : 1;
+            detectedQuantity = Math.max(1, parsedUnits);
+          } else {
+            // Modo importe total: calculamos la cantidad de unidades dividiendo el total por el precio unitario
+            detectedQuantity =
+              pricePerWeightUnit > 0 && parsedScale.totalPrice != null && parsedScale.totalPrice > 0
+                ? Math.max(1, Math.round(parsedScale.totalPrice / pricePerWeightUnit))
+                : 1;
+          }
+        } else {
+          // Producto pesable tradicional (venta por kilo / gramos)
+          detectedQuantity =
+            parsedScale.weight != null && parsedScale.weight > 0
+              ? parsedScale.weight
+              : parsedScale.mode === "total_price" &&
+                  parsedScale.totalPrice != null &&
+                  parsedScale.totalPrice > 0 &&
+                  pricePerWeightUnit > 0
+                ? roundQty(parsedScale.totalPrice / pricePerWeightUnit)
+                : Math.max(0.001, posSettings.barcode_scan_quantity || 1);
+        }
+
+        // En modo peso o unidad de balanza, el precio unitario se toma del catálogo/lista
         const overrideUnitPrice = null;
 
-        const added = await addProductToCart(scaleProduct, detectedWeight, {
+        const added = await addProductToCart(scaleProduct, detectedQuantity, {
           overrideUnitPrice,
           parsedScale,
         });

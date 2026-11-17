@@ -34,4 +34,6 @@ export const routePaths = {
   configuracionContable: "/contable/configuracion",
   usuarios: "/usuarios",
   unauthorized: "/unauthorized",
+  privacidad: "/privacidad",
+  terminos: "/terminos",
 } as const;

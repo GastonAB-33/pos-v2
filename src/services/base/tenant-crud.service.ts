@@ -407,6 +407,11 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
       updated_at: nowIso(),
     };
 
+    // Blindaje contra asignación masiva (Mass Assignment)
+    delete payload.id;
+    delete payload.tenant_id;
+    delete payload.created_at;
+
     if (dataProvider === "mock") {
       const table = this.getMockRows();
       const index = table.findIndex((row) => row.tenant_id === tenantId && row.id === id);

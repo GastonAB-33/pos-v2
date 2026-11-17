@@ -330,6 +330,15 @@ export const LoginPage = () => {
             Estadisticas
           </Link>
         </p>
+        <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-center gap-3 text-[11px] text-slate-500">
+          <Link to={routePaths.terminos} className="hover:underline hover:text-slate-700 dark:hover:text-slate-300">
+            Términos de Servicio
+          </Link>
+          <span>•</span>
+          <Link to={routePaths.privacidad} className="hover:underline hover:text-slate-700 dark:hover:text-slate-300">
+            Política de Privacidad
+          </Link>
+        </div>
       </section>
     </main>
   );
