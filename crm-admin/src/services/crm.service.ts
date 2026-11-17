@@ -339,12 +339,9 @@ export const crmService = {
     slug: string;
     found: boolean;
   }> {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !anonKey) {
-      throw new Error("Faltan variables de entorno VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en CRM Admin.");
-    }
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://qfquvyxyodmnyqlchpbf.supabase.co";
+    const anonKey =
+      import.meta.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_NmP-WEg3k_lNF-p005-Teg_p3Hnrn49";
 
     const res = await fetch(`${supabaseUrl}/rest/v1/rpc/get_tenant_telemetry`, {
       method: "POST",
