@@ -92,7 +92,7 @@ export const App: React.FC = () => {
               contactName: row.contact_name,
               email: row.email,
               phone: row.phone,
-              clientPassword: row.client_password,
+              clientPassword: row.client_password || local?.clientPassword,
               category: row.category || "Almacén y Kiosco",
               stage: effectiveStage,
               selectedPlan: row.selected_plan || 'Plan "Me Estoy Formalizando"',
