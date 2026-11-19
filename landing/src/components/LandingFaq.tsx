@@ -41,7 +41,7 @@ export const LandingFaq: React.FC = () => {
   ];
 
   return (
-    <section id="faq" className="py-20 bg-slate-50 relative">
+    <section id="faq" className="py-12 sm:py-14 bg-white relative">
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
         
         <div className="text-center">
@@ -59,7 +59,7 @@ export const LandingFaq: React.FC = () => {
           </p>
         </div>
 
-        <div className="mt-12 space-y-3.5">
+        <div className="mt-8 sm:mt-10 space-y-3">
           {faqs.map((faq, idx) => {
             const isOpen = openIndex === idx;
             return (

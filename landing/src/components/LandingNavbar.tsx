@@ -22,7 +22,7 @@ export const LandingNavbar: React.FC<LandingNavbarProps> = ({ onOpenFreeTrial })
   const navLinks = [
     { label: "Ventajas", href: "#ventajas" },
     { label: "Herramientas", href: "#herramientas" },
-    { label: "Calculadora", href: "#calculadora" },
+    { label: "Cómo Empezar", href: "#como-empezar" },
     { label: "Planes", href: "#planes" },
     { label: "Testimonios", href: "#testimonios" },
     { label: "FAQ", href: "#faq" },
