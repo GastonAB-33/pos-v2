@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Download, FileText, Printer } from "lucide-react";
+import { CheckCircle2, Download, FileText, Printer, RefreshCw } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { settingsService } from "@/services/settings.service";
@@ -17,6 +17,7 @@ interface ReceiptTicketPanelProps {
   invoice?: Invoice | null;
   onClose?: () => void;
   mode?: "ticket" | "invoice" | "both";
+  isLoadingDetail?: boolean;
 }
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -52,7 +53,7 @@ const buildPlainTextTicket = (receipt: Receipt, invoice?: Invoice | null): strin
     "",
     "ITEMS:",
     "----------------------------------------",
-    ...receipt.items.map(
+    ...(receipt.items ?? []).map(
       (item) =>
         `${item.name}\n  ${item.quantity.toLocaleString("es-AR")} x ${currency.format(item.unit_price)} = ${currency.format(item.subtotal)}`
     ),
@@ -120,6 +121,7 @@ export const ReceiptTicketPanel = ({
   invoice,
   onClose,
   mode = "both",
+  isLoadingDetail = false,
 }: ReceiptTicketPanelProps) => {
   const { tenantId } = useTenant();
   const [facturacionSettings, setFacturacionSettings] = useState<FacturacionSettings | null>(null);
@@ -269,7 +271,14 @@ export const ReceiptTicketPanel = ({
 
           {/* LISTADO DE ITEMS */}
           <div className="space-y-1.5 py-2 text-xs">
-            {receipt.items.map((item, index) => (
+            {isLoadingDetail ? (
+              <div className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">
+                <RefreshCw className="h-4 w-4 animate-spin mx-auto mb-1.5 text-blue-500" />
+                Cargando detalle de productos...
+              </div>
+            ) : (receipt.items ?? []).length === 0 ? (
+              <p className="text-center text-slate-400 py-2">Sin productos registrados</p>
+            ) : (receipt.items ?? []).map((item, index) => (
               <div
                 key={`${item.name}-${index}`}
                 className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-800 last:border-0"
@@ -335,14 +344,16 @@ export const ReceiptTicketPanel = ({
             <div className="mt-4 flex flex-wrap gap-2 pt-1 print:hidden">
               <button
                 type="button"
-                className="ui-btn-primary flex items-center gap-1.5 text-xs"
+                className="ui-btn-primary flex items-center gap-1.5 text-xs disabled:opacity-50"
+                disabled={isLoadingDetail}
                 onClick={printDocument}
               >
                 <Printer size={14} /> Imprimir ticket
               </button>
               <button
                 type="button"
-                className="ui-btn-ghost flex items-center gap-1.5 text-xs"
+                className="ui-btn-ghost flex items-center gap-1.5 text-xs disabled:opacity-50"
+                disabled={isLoadingDetail}
                 onClick={downloadTicket}
               >
                 <Download size={14} /> Descargar .txt
@@ -389,7 +400,8 @@ export const ReceiptTicketPanel = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="ui-btn-primary flex items-center gap-1.5 text-xs"
+                className="ui-btn-primary flex items-center gap-1.5 text-xs disabled:opacity-50"
+                disabled={isLoadingDetail}
                 onClick={printDocument}
               >
                 <Printer size={14} /> Imprimir Factura / PDF

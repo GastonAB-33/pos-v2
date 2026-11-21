@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditService } from "@/services/audit.service";
-import { productsService } from "@/services/products.service";
+import { useProductsStore } from "@/features/products/store/products.store";
 import { buildPromotionBarcode, promotionsService, type PromotionWithDetails } from "@/services/promotions.service";
 import type { Product } from "@/types/entities";
 import type { PromotionFormValues } from "@/modules/promociones/schemas/promotion-form.schema";
@@ -86,13 +86,20 @@ export const usePromotionsCrud = (tenantId: string | null, userId: string | null
 
     setIsLoading(true);
     try {
+      // Aprovechar catálogo cacheado en memoria para evitar descargar megas de productos
+      const prodStore = useProductsStore.getState();
+      const hasFreshCatalog = prodStore.loadedTenantId === tenantId && prodStore.products.length > 0;
+      const productsPromise = hasFreshCatalog
+        ? Promise.resolve(prodStore.products)
+        : prodStore.loadCatalog(tenantId).then(() => useProductsStore.getState().products);
+
       const [allPromotions, allProducts] = await Promise.all([
         promotionsService.getAllByTenantWithDetails(tenantId),
-        productsService.getAllByTenant(tenantId),
+        productsPromise,
       ]);
 
       setPromotions(allPromotions);
-      setProducts(allProducts.filter((product) => product.is_active));
+      setProducts(allProducts.filter((product: Product) => product.is_active));
     } catch {
       setFeedback({ type: "error", message: "No se pudieron cargar las promociones" });
     } finally {

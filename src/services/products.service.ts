@@ -349,10 +349,11 @@ export const productsService = {
     }
 
     // 1.1 Validar que el código de barras no esté asignado como código interno de OTRO producto
-    const allProducts = await productsService.getAllByTenant(tenantId);
-    const productWithSameCode = allProducts.find(
-      (p) => p.id !== productId && p.code && p.code.trim().toUpperCase() === barcode.toUpperCase()
-    );
+    const matchingProducts = await crud.query(tenantId, {
+      eq: { code: barcode.trim() },
+      limit: 2,
+    });
+    const productWithSameCode = matchingProducts.find((p) => p.id !== productId);
     if (productWithSameCode) {
       throw new Error(
         `El código de barras "${rawBarcode.trim()}" ya está asignado como código de producto en "${productWithSameCode.name}"`

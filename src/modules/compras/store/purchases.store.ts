@@ -125,6 +125,16 @@ export const usePurchasesStore = create<PurchasesStoreState>()((set, get) => ({
     }
 
     try {
+      // Aprovechar catálogo en memoria/localStorage de useProductsStore para 0 egress repetido
+      const prodStore = useProductsStore.getState();
+      const hasFreshCatalog = prodStore.loadedTenantId === tenantId && prodStore.products.length > 0;
+      const productsPromise = hasFreshCatalog
+        ? Promise.resolve(prodStore.products)
+        : prodStore.loadCatalog(tenantId).then(() => useProductsStore.getState().products);
+      const barcodesPromise = hasFreshCatalog
+        ? Promise.resolve(prodStore.allBarcodes)
+        : productsService.getBarcodesByTenant(tenantId);
+
       const [
         allProducts,
         allProductBarcodes,
@@ -134,8 +144,8 @@ export const usePurchasesStore = create<PurchasesStoreState>()((set, get) => ({
         activeCashSession,
         allUsers,
       ] = await Promise.all([
-        productsService.getAllByTenant(tenantId),
-        productsService.getBarcodesByTenant(tenantId),
+        productsPromise,
+        barcodesPromise,
         suppliersService.getAllByTenant(tenantId),
         purchasesService.getRecentByTenant(tenantId, 100),
         bankAccountsService.getActiveByTenant(tenantId),

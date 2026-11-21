@@ -30,17 +30,22 @@ export interface GeneralCashSummary {
 export const generalCashService = {
   getAllByTenant: (tenantId: string) => generalCashCrud.getAllByTenant(tenantId),
 
+  getRecentByTenant: (tenantId: string, limit = 300) =>
+    generalCashCrud.query(tenantId, {
+      order: { column: "created_at", ascending: false },
+      limit,
+    }),
+
   createMovement: async (
     tenantId: string,
     payload: CreateGeneralCashMovementInput
   ): Promise<GeneralCashMovement> => {
-    const movements = await generalCashCrud.getAllByTenant(tenantId);
-
-    const sorted = [...movements].sort((a, b) =>
-      (a.created_at || "").localeCompare(b.created_at || "")
-    );
-    const lastMovement = sorted[sorted.length - 1];
-    const previousBalance = Number(lastMovement?.balance_after) || 0;
+    // Optimización crítica de egress: Traer UNICAMENTE el último movimiento para balance_after
+    const latestMovements = await generalCashCrud.query(tenantId, {
+      order: { column: "created_at", ascending: false },
+      limit: 1,
+    });
+    const previousBalance = Number(latestMovements[0]?.balance_after) || 0;
 
     const numAmount = Number(payload.amount) || 0;
     const delta =
@@ -58,12 +63,13 @@ export const generalCashService = {
   },
 
   getBalanceSummary: async (tenantId: string): Promise<GeneralCashSummary> => {
-    const movements = await generalCashCrud.getAllByTenant(tenantId);
-    const sorted = [...movements].sort((a, b) =>
-      (a.created_at || "").localeCompare(b.created_at || "")
-    );
+    // Acotado a los últimos 500 movimientos para evitar escanear toda la tabla
+    const movements = await generalCashCrud.query(tenantId, {
+      order: { column: "created_at", ascending: true },
+      limit: 500,
+    });
     const currentBalance =
-      sorted.length > 0 ? Number(sorted[sorted.length - 1].balance_after) || 0 : 0;
+      movements.length > 0 ? Number(movements[movements.length - 1].balance_after) || 0 : 0;
 
     let totalIncome = 0;
     let totalExpense = 0;

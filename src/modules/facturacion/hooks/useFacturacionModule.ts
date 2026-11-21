@@ -70,9 +70,10 @@ export const useFacturacionModule = (tenantId: string | null, userId: string | n
     setFeedback(null);
 
     try {
+      // Optimización crítica de egress: Cargar facturas y ventas recientes (acotadas a 250 / 200)
       const [invoiceRows, saleRows, customerRows, tenantSettings] = await Promise.all([
-        invoicesService.getAllByTenant(tenantId),
-        salesService.getAllByTenant(tenantId),
+        invoicesService.getRecentByTenant(tenantId, 250),
+        salesService.getRecentSales(tenantId, 200),
         customersService.getAllByTenant(tenantId),
         settingsService.getByTenant(tenantId),
       ]);

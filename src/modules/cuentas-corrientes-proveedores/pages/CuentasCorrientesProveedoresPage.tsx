@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { LoadingState } from "@/components/ui/UiStates";
 import { IconButton } from "@/components/ui/IconButton";
@@ -32,6 +35,7 @@ import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { suppliersService } from "@/services/suppliers.service";
 import { supplierCurrentAccountsService } from "@/services/supplier-current-accounts.service";
+import { purchasesService } from "@/services/purchases.service";
 import { generalCashService } from "@/services/general-cash.service";
 import { cashService } from "@/services/cash.service";
 import { bankAccountsService } from "@/services/bank-accounts.service";
@@ -48,6 +52,8 @@ import type {
   Supplier,
   SupplierCurrentAccountMovement,
   BankAccount,
+  Purchase,
+  PurchaseItem,
 } from "@/types/entities";
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -55,6 +61,28 @@ const currency = new Intl.NumberFormat("es-AR", {
   currency: "ARS",
   maximumFractionDigits: 2,
 });
+
+const formatPurchasePaymentMethod = (method: string | null | undefined): string => {
+  if (!method) return "Cuenta Corriente";
+  switch (method) {
+    case "cash_daily":
+      return "Caja Diaria";
+    case "cash_general":
+      return "Caja Fuerte / General";
+    case "cash":
+      return "Efectivo Directo";
+    case "transfer":
+      return "Transferencia Bancaria";
+    case "current_account":
+      return "Cuenta Corriente Proveedor";
+    case "split":
+      return "Pago Combinado";
+    case "cheque":
+      return "Cheque";
+    default:
+      return method;
+  }
+};
 
 export const CuentasCorrientesProveedoresPage = () => {
   const [searchParams] = useSearchParams();
@@ -74,6 +102,8 @@ export const CuentasCorrientesProveedoresPage = () => {
   );
   const [movements, setMovements] = useState<SupplierCurrentAccountMovement[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [purchasesById, setPurchasesById] = useState<Record<string, { purchase: Purchase; items: PurchaseItem[] }>>({});
+  const [selectedMovementDetail, setSelectedMovementDetail] = useState<SupplierCurrentAccountMovement | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMovementsLoading, setIsMovementsLoading] = useState(false);
 
@@ -168,7 +198,41 @@ export const CuentasCorrientesProveedoresPage = () => {
     setIsMovementsLoading(true);
     try {
       const movs = await supplierCurrentAccountsService.getBySupplier(tenantId, supplierId);
-      setMovements([...movs].reverse());
+      const reversedMovs = [...movs].reverse();
+      setMovements(reversedMovs);
+
+      const purchaseIds = Array.from(
+        new Set(reversedMovs.map((m) => m.purchase_id).filter((id): id is string => Boolean(id)))
+      );
+
+      if (purchaseIds.length > 0) {
+        try {
+          const [purchasesList, itemsList] = await Promise.all([
+            purchasesService.getByIds(tenantId, purchaseIds),
+            purchasesService.getItemsByPurchaseIds(tenantId, purchaseIds),
+          ]);
+
+          const itemsByPurchaseId = itemsList.reduce<Map<string, PurchaseItem[]>>((acc, item) => {
+            const current = acc.get(item.purchase_id) ?? [];
+            current.push(item);
+            acc.set(item.purchase_id, current);
+            return acc;
+          }, new Map());
+
+          const map: Record<string, { purchase: Purchase; items: PurchaseItem[] }> = {};
+          for (const p of purchasesList) {
+            map[p.id] = {
+              purchase: p,
+              items: itemsByPurchaseId.get(p.id) ?? [],
+            };
+          }
+          setPurchasesById(map);
+        } catch (pErr) {
+          console.error("Error al cargar detalles de compras para cuenta corriente:", pErr);
+        }
+      } else {
+        setPurchasesById({});
+      }
     } catch {
       toast.error("Error al cargar movimientos del proveedor");
     } finally {
@@ -770,6 +834,7 @@ export const CuentasCorrientesProveedoresPage = () => {
                           <th className="py-3 px-4">Detalle / Notas</th>
                           <th className="py-3 px-4 text-right">Monto</th>
                           <th className="py-3 px-4 text-right">Saldo Deudor</th>
+                          <th className="py-3 px-4 text-center">Comprobante</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -825,6 +890,17 @@ export const CuentasCorrientesProveedoresPage = () => {
                               </td>
                               <td className="py-3 px-4 text-right font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
                                 {currency.format(mov.balance_after)}
+                              </td>
+                              <td className="py-3 px-4 text-center whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedMovementDetail(mov)}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-xl shadow-2xs dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-200 transition-all cursor-pointer active:scale-95"
+                                  title="Ver comprobante o detalle de pago"
+                                >
+                                  <FileText size={12} className="text-blue-600 dark:text-blue-400" />
+                                  <span>Ver detalle</span>
+                                </button>
                               </td>
                             </tr>
                           );
@@ -893,10 +969,20 @@ export const CuentasCorrientesProveedoresPage = () => {
                           </div>
 
                           {/* Zona 2: Detalle / Observaciones */}
-                          <div>
+                          <div className="space-y-1.5">
                             <p className="font-medium text-slate-900 dark:text-slate-100 text-xs sm:text-sm leading-snug">
                               {mov.notes || "Sin observaciones"}
                             </p>
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedMovementDetail(mov)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200/90 rounded-full dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition-all cursor-pointer active:scale-95"
+                              >
+                                <FileText size={11} className="text-blue-600 dark:text-blue-400" />
+                                <span>Ver comprobante</span>
+                              </button>
+                            </div>
                           </div>
 
                           {/* Zona 3: Monto & Saldo Posterior */}
@@ -1460,6 +1546,148 @@ export const CuentasCorrientesProveedoresPage = () => {
             </div>
           </div>
         ) : null}
+
+        {/* Modal: Detalle de Comprobante / Pago a Proveedor */}
+        {selectedMovementDetail && selectedSupplier && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-150">
+            <div className="w-full max-w-2xl bg-white rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden border border-slate-200/90 dark:bg-slate-900 dark:border-slate-800 flex flex-col max-h-[90vh]">
+              <header className="px-5 py-4 border-b border-slate-200/90 flex justify-between items-center bg-slate-50/90 dark:border-slate-800 dark:bg-slate-800/70 shrink-0">
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2 text-base">
+                    <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
+                    <span>
+                      {selectedMovementDetail.purchase_id
+                        ? "Detalle de Comprobante de Compra"
+                        : selectedMovementDetail.type === "payment"
+                        ? "Comprobante de Pago a Proveedor"
+                        : selectedMovementDetail.type === "debt"
+                        ? "Comprobante de Deuda / Compra a Crédito"
+                        : "Comprobante de Ajuste"}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Proveedor: <strong className="text-slate-700 dark:text-slate-300">{selectedSupplier.name}</strong>
+                    {" "}• Fecha: {new Date(selectedMovementDetail.created_at).toLocaleString("es-AR")}
+                  </p>
+                </div>
+                <ModalCloseButton onClick={() => setSelectedMovementDetail(null)} />
+              </header>
+
+              <div className="p-5 space-y-4 overflow-y-auto flex-1">
+                {/* Caso 1: Tiene compra asociada (purchase_id) */}
+                {(() => {
+                  const purchaseData = selectedMovementDetail.purchase_id
+                    ? purchasesById[selectedMovementDetail.purchase_id]
+                    : null;
+
+                  if (purchaseData) {
+                    const { purchase, items } = purchaseData;
+                    const isSplit = purchase.payment_method === "split" || purchase.notes?.includes("Pago Combinado:");
+                    const otherAmount = Math.max(0, purchase.total - selectedMovementDetail.amount);
+
+                    return (
+                      <div className="space-y-4">
+                        {/* Cabecera de Compra */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 rounded-xl border border-slate-200/90 bg-slate-50/70 p-3 text-xs dark:border-slate-700/80 dark:bg-slate-800/50">
+                          <div>
+                            <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Nº de Compra</span>
+                            <span className="font-semibold text-slate-800 dark:text-slate-100 font-mono">
+                              {purchase.purchase_number}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Comprobante</span>
+                            <span className="font-semibold text-slate-800 dark:text-slate-100">
+                              {purchase.document_type || "Factura"} {purchase.document_number ? `Nº ${purchase.document_number}` : ""}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Fecha Emisión</span>
+                            <span className="font-semibold text-slate-800 dark:text-slate-100">
+                              {purchase.issue_date || new Date(purchase.created_at).toLocaleDateString("es-AR")}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Pago o Pago Combinado */}
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">
+                            {isSplit ? "Pago combinado:" : "Pago:"}
+                          </span>
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-800 dark:text-slate-200">
+                            <span className="text-slate-600 dark:text-slate-400">Cuenta Corriente:</span>
+                            <strong className="font-mono text-slate-900 dark:text-slate-100">{currency.format(selectedMovementDetail.amount)}</strong>
+                          </span>
+                          {otherAmount > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-800 dark:text-slate-200">
+                              <span className="text-slate-600 dark:text-slate-400">{purchase.payment_method ? formatPurchasePaymentMethod(purchase.payment_method) : "Otros medios"}:</span>
+                              <strong className="font-mono text-slate-900 dark:text-slate-100">{currency.format(otherAmount)}</strong>
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Tabla de Productos de la compra */}
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                            Productos de la compra
+                          </p>
+                          <div className="overflow-x-auto rounded-xl border border-slate-200/90 dark:border-slate-800">
+                            <table className="min-w-full text-xs">
+                              <thead className="bg-slate-50/90 dark:bg-slate-800/80 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200 border-b border-slate-200/80 dark:border-slate-800">
+                                <tr>
+                                  <th className="px-3 py-2 text-left">Producto</th>
+                                  <th className="px-3 py-2 text-right">Cantidad</th>
+                                  <th className="px-3 py-2 text-right">Costo Unitario</th>
+                                  <th className="px-3 py-2 text-right">Total</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+                                {items.map((item) => (
+                                  <tr key={item.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                                    <td className="px-3 py-2 font-medium">{item.product_name_snapshot}</td>
+                                    <td className="px-3 py-2 font-mono text-right">{item.quantity.toLocaleString("es-AR")}</td>
+                                    <td className="px-3 py-2 font-mono text-right">{currency.format(item.unit_cost)}</td>
+                                    <td className="px-3 py-2 font-bold font-mono text-right">{currency.format(item.line_total)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot className="bg-slate-50/90 dark:bg-slate-800/80 border-t border-slate-200/90 dark:border-slate-800 font-bold">
+                                <tr>
+                                  <td colSpan={3} className="px-3 py-2 text-right text-xs uppercase text-slate-600 dark:text-slate-300">
+                                    Total de la Compra:
+                                  </td>
+                                  <td className="px-3 py-2 text-right font-mono text-sm text-slate-900 dark:text-slate-100">
+                                    {currency.format(purchase.total)}
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
+
+                        {purchase.notes && (
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 italic pt-1">
+                              Nota: {purchase.notes}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    }
+                })()}
+              </div>
+
+              <footer className="px-5 py-3 border-t border-slate-200/90 dark:border-slate-800 flex justify-end shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setSelectedMovementDetail(null)}
+                  className="rounded-xl bg-slate-900 hover:bg-slate-800 px-5 py-2 text-xs font-semibold text-white dark:bg-slate-800 dark:hover:bg-slate-700 transition cursor-pointer"
+                >
+                  Cerrar
+                </button>
+              </footer>
+            </div>
+          </div>
+        )}
 
         {/* Modal: Registrar Pago a Proveedor (Diseño POS) */}
         {isPaymentModalOpen && selectedSupplier && (

@@ -78,9 +78,18 @@ export const EmployeeProductConsumptionModal = ({
     let isMounted = true;
     setIsLoading(true);
 
+    const prodStore = useProductsStore.getState();
+    const hasFreshCatalog = prodStore.loadedTenantId === tenantId && prodStore.products.length > 0;
+    const productsPromise = hasFreshCatalog
+      ? Promise.resolve(prodStore.products)
+      : prodStore.loadCatalog(tenantId).then(() => useProductsStore.getState().products);
+    const barcodesPromise = hasFreshCatalog
+      ? Promise.resolve(prodStore.primaryBarcodes)
+      : productsService.getPrimaryBarcodesMapByTenant(tenantId).catch(() => ({}));
+
     Promise.all([
-      productsService.getAllByTenant(tenantId),
-      productsService.getPrimaryBarcodesMapByTenant(tenantId).catch(() => ({})),
+      productsPromise,
+      barcodesPromise,
       settingsService.getByTenant(tenantId).catch(() => null),
     ])
       .then(([productsData, barcodesMap, tenantSettings]) => {

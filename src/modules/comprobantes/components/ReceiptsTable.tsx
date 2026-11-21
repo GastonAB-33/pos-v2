@@ -5,7 +5,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import type { Receipt } from "@/types/entities";
-import { formatDisplayReceiptNumber } from "@/utils/voucher-format.utils";
+import { formatDisplayReceiptNumber, formatDisplaySaleNumber } from "@/utils/voucher-format.utils";
 
 interface ReceiptsTableProps {
   receipts: Receipt[];
@@ -34,9 +34,14 @@ export const ReceiptsTable = ({
     columnHelper.accessor("receipt_number", {
       header: "Numero",
       cell: (info) => (
-        <span className="font-mono text-sm text-slate-900 dark:text-slate-100 font-semibold">
-          {formatDisplayReceiptNumber(info.getValue())}
-        </span>
+        <div>
+          <span className="font-mono text-sm text-slate-900 dark:text-slate-100 font-semibold block">
+            {formatDisplayReceiptNumber(info.getValue())}
+          </span>
+          <span className="font-mono text-[11px] text-slate-400 dark:text-slate-500 block">
+            {formatDisplaySaleNumber(info.row.original.sale_number)}
+          </span>
+        </div>
       ),
     }),
     columnHelper.accessor("issued_at", {
@@ -57,7 +62,11 @@ export const ReceiptsTable = ({
     }),
     columnHelper.accessor("total", {
       header: "Total",
-      cell: (info) => <span className="font-kpi font-bold text-slate-900 dark:text-slate-100">{currency.format(info.getValue())}</span>,
+      cell: (info) => (
+        <span className="font-kpi font-bold text-slate-900 dark:text-slate-100">
+          {currency.format(info.getValue())}
+        </span>
+      ),
     }),
     columnHelper.display({
       id: "actions",
@@ -66,7 +75,7 @@ export const ReceiptsTable = ({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full transition dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full transition dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 active:scale-95 cursor-pointer"
             onClick={() => onView(info.row.original)}
           >
             Ver detalle
@@ -75,7 +84,7 @@ export const ReceiptsTable = ({
           {canGenerateInvoice && onGenerateInvoice ? (
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-full transition shadow-xs disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-full transition shadow-xs disabled:opacity-50 active:scale-95 cursor-pointer"
               onClick={() => onGenerateInvoice(info.row.original)}
               disabled={generating}
             >
@@ -96,40 +105,121 @@ export const ReceiptsTable = ({
   if (!receipts.length) {
     return (
       <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-12 text-center text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-        No hay comprobantes generados.
+        No se encontraron comprobantes para el criterio seleccionado.
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-sm overflow-hidden dark:border-slate-800 dark:bg-slate-900">
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-          <thead className="bg-slate-50/90 dark:bg-slate-800/70 border-b border-slate-200/90 dark:border-slate-800">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="hover:bg-slate-50/80 transition-colors dark:hover:bg-slate-800/50">
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-4 py-3 text-slate-700 dark:text-slate-200">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="space-y-3">
+      {/* VISTA DESKTOP / TABLET (hidden md:block): Tabla completa de alta densidad */}
+      <div className="hidden md:block rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-sm overflow-hidden dark:border-slate-800 dark:bg-slate-900">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+            <thead className="bg-slate-50/90 dark:bg-slate-800/70 border-b border-slate-200/90 dark:border-slate-800">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <th
+                      key={header.id}
+                      className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400"
+                    >
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    </th>
+                  ))}
+                </tr>
+              ))}
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {table.getRowModel().rows.map((row) => (
+                <tr
+                  key={row.id}
+                  className="hover:bg-slate-50/80 transition-colors dark:hover:bg-slate-800/50"
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id} className="px-4 py-3 text-slate-700 dark:text-slate-200">
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* VISTA MOBILE (block md:hidden): Tarjetas individuales touch-friendly conforme al skill mobile-data-cards */}
+      <div className="block md:hidden space-y-2.5">
+        {receipts.map((receipt) => (
+          <article
+            key={receipt.id}
+            className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs dark:border-slate-800 dark:bg-slate-900 space-y-3"
+          >
+            {/* Zona 1: Cabecera con número de comprobante y fecha */}
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
+                {formatDisplayReceiptNumber(receipt.receipt_number)}
+              </span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                {new Date(receipt.issued_at).toLocaleString("es-AR", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </div>
+
+            {/* Zona 2: Cliente y Venta Asociada */}
+            <div className="flex items-center justify-between text-xs">
+              <div className="min-w-0 pr-2">
+                <span className="text-slate-400 dark:text-slate-500 font-medium">Cliente: </span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200 truncate inline-block max-w-[170px] align-bottom">
+                  {receipt.customer_name ?? "Consumidor final"}
+                </span>
+              </div>
+              <div className="font-mono text-[11px] text-slate-500 dark:text-slate-400 shrink-0">
+                {formatDisplaySaleNumber(receipt.sale_number)}
+              </div>
+            </div>
+
+            {/* Zona 3: Total destacado y Botones de Acción */}
+            <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-slate-800">
+              <div>
+                <span className="text-[10px] uppercase font-semibold text-slate-400 dark:text-slate-500 block">
+                  Total
+                </span>
+                <span className="font-kpi text-base font-bold text-slate-900 dark:text-slate-100">
+                  {currency.format(receipt.total)}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full transition dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 active:scale-95 cursor-pointer"
+                  onClick={() => onView(receipt)}
+                >
+                  Ver detalle
+                </button>
+
+                {canGenerateInvoice && onGenerateInvoice ? (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-full transition shadow-xs disabled:opacity-50 active:scale-95 cursor-pointer"
+                    onClick={() => onGenerateInvoice(receipt)}
+                    disabled={generating}
+                  >
+                    Facturar
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </article>
+        ))}
       </div>
     </div>
   );

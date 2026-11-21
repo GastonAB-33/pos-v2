@@ -177,6 +177,13 @@ export const invoicesService = {
     return invoicesCrud.query(tenantId, { in: { sale_id: saleIds } });
   },
 
+  getRecentByTenant: (tenantId: string, limit = 200): Promise<Invoice[]> => {
+    return invoicesCrud.query(tenantId, {
+      order: { column: "created_at", ascending: false },
+      limit,
+    });
+  },
+
   generateDocumentNumber: generateNextDocumentNumber,
 
   createBudget: async (

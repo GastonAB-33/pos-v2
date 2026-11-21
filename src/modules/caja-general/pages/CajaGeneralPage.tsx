@@ -105,8 +105,9 @@ export const CajaGeneralPage = () => {
     if (!tenantId) return;
     setIsLoading(true);
     try {
+      // Optimización crítica de egress: Cargar solo los últimos 300 movimientos de Caja General
       const [allMovements, cashSummary] = await Promise.all([
-        generalCashService.getAllByTenant(tenantId),
+        generalCashService.getRecentByTenant(tenantId, 300),
         generalCashService.getBalanceSummary(tenantId),
       ]);
       setMovements(

@@ -30,14 +30,26 @@ export const bankAccountMovementsService = {
   getAllByTenant: (tenantId: string) =>
     bankAccountMovementsCrud.getAllByTenant(tenantId),
 
+  getRecentByTenant: (
+    tenantId: string,
+    limit = 500
+  ): Promise<BankAccountMovement[]> => {
+    return bankAccountMovementsCrud.query(tenantId, {
+      order: { column: "created_at", ascending: false },
+      limit,
+    });
+  },
+
   getByBankAccount: async (
     tenantId: string,
-    bankAccountId: string
+    bankAccountId: string,
+    limit?: number
   ): Promise<BankAccountMovement[]> => {
-    const all = await bankAccountMovementsCrud.getAllByTenant(tenantId);
-    return all
-      .filter((m) => m.bank_account_id === bankAccountId)
-      .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+    return bankAccountMovementsCrud.query(tenantId, {
+      eq: { bank_account_id: bankAccountId },
+      order: { column: "created_at", ascending: false },
+      limit,
+    });
   },
 
   getBalanceByBankAccount: async (
@@ -46,7 +58,8 @@ export const bankAccountMovementsService = {
   ): Promise<BankAccountBalanceSummary> => {
     const movements = await bankAccountMovementsService.getByBankAccount(
       tenantId,
-      bankAccountId
+      bankAccountId,
+      500
     );
 
     // Los movimientos vienen desc, invertimos para reconstruir cronológicamente
@@ -77,13 +90,13 @@ export const bankAccountMovementsService = {
   getAllBalancesByTenant: async (
     tenantId: string
   ): Promise<Record<string, number>> => {
-    const all = await bankAccountMovementsCrud.getAllByTenant(tenantId);
-    const sorted = [...all].sort((a, b) =>
-      (a.created_at || "").localeCompare(b.created_at || "")
-    );
+    const all = await bankAccountMovementsCrud.query(tenantId, {
+      order: { column: "created_at", ascending: true },
+      limit: 1000,
+    });
 
     const balances: Record<string, number> = {};
-    for (const mov of sorted) {
+    for (const mov of all) {
       balances[mov.bank_account_id] = Number(mov.balance_after) || 0;
     }
     return balances;
@@ -93,17 +106,13 @@ export const bankAccountMovementsService = {
     tenantId: string,
     payload: CreateBankAccountMovementInput
   ): Promise<BankAccountMovement> => {
-    const movements = await bankAccountMovementsService.getByBankAccount(
-      tenantId,
-      payload.bank_account_id
-    );
-
-    // Los ordenamos cronológicamente ascendente para obtener el saldo anterior más reciente
-    const sorted = [...movements].sort((a, b) =>
-      (a.created_at || "").localeCompare(b.created_at || "")
-    );
-    const lastMovement = sorted[sorted.length - 1];
-    const previousBalance = Number(lastMovement?.balance_after) || 0;
+    // Optimización crítica de egress: Traer UNICAMENTE el último movimiento para balance_after
+    const latestMovements = await bankAccountMovementsCrud.query(tenantId, {
+      eq: { bank_account_id: payload.bank_account_id },
+      order: { column: "created_at", ascending: false },
+      limit: 1,
+    });
+    const previousBalance = Number(latestMovements[0]?.balance_after) || 0;
 
     const numAmount = Number(payload.amount) || 0;
     const delta =

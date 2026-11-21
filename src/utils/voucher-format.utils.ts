@@ -56,19 +56,25 @@ export const formatDisplayReceiptNumber = (receiptNumber: string | null | undefi
   const str = String(receiptNumber).trim();
 
   // 1. Formato correlativo diario con fecha: TCK-261114-0012 -> TCK-0012
-  const mDate = str.match(/^TCK-(?:SYNC-|OFF-)?\d{6}-(\d{1,6})$/i);
+  const mDate = str.match(/^TCK-(?:SYNC-|OFF-|VTA-)?\d{6}-(\d{1,6})$/i);
   if (mDate) {
     return `TCK-${mDate[1].padStart(4, "0")}`;
   }
 
-  // 2. Formato histórico con timestamp: TCK-1794601494624 o TCK-SYNC-1794601494624 -> TCK-4624
-  const mTs = str.match(/^TCK-(?:SYNC-|OFF-)?(\d{10,14})$/i);
+  // 2. Formato histórico con timestamp y sufijo de dígitos: TCK-1794601494624-5947 -> TCK-5947
+  const mSuffix = str.match(/^TCK-(?:SYNC-|OFF-|VTA-)?\d{10,14}-(\d{1,6})$/i);
+  if (mSuffix) {
+    return `TCK-${mSuffix[1].padStart(4, "0")}`;
+  }
+
+  // 3. Formato histórico con solo timestamp: TCK-1794601494624 o TCK-SYNC-1794601494624 -> TCK-4624
+  const mTs = str.match(/^TCK-(?:SYNC-|OFF-|VTA-)?(\d{10,14})$/i);
   if (mTs) {
     return `TCK-${mTs[1].slice(-4)}`;
   }
 
-  // 3. Formato correlativo directo ya limpio: TCK-12 -> TCK-0012
-  const mDirect = str.match(/^TCK-(\d{1,6})$/i);
+  // 4. Formato correlativo directo ya limpio: TCK-12 -> TCK-0012
+  const mDirect = str.match(/^TCK-(?:VTA-)?(\d{1,6})$/i);
   if (mDirect) {
     return `TCK-${mDirect[1].padStart(4, "0")}`;
   }
@@ -85,7 +91,8 @@ export const formatDisplayNotes = (notes: string | null | undefined): string => 
     .replace(/VTA-\d{10,14}-(\d{1,6})/gi, (_, p1) => `VTA-${String(p1).padStart(4, "0")}`)
     .replace(/VTA-\d{6}-(\d{1,6})/gi, (_, p1) => `VTA-${String(p1).padStart(4, "0")}`)
     .replace(/VTA-(\d{10,14})/gi, (_, p1) => `VTA-${String(p1).slice(-4)}`)
-    .replace(/TCK-(?:SYNC-|OFF-)?\d{10,14}/gi, (match) => {
+    .replace(/TCK-(?:SYNC-|OFF-|VTA-)?\d{10,14}-(\d{1,6})/gi, (_, p1) => `TCK-${String(p1).padStart(4, "0")}`)
+    .replace(/TCK-(?:SYNC-|OFF-|VTA-)?\d{10,14}/gi, (match) => {
       const nums = match.match(/\d{10,14}/);
       return `TCK-${nums ? nums[0].slice(-4) : match}`;
     });

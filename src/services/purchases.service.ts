@@ -17,6 +17,10 @@ export type UpdatePurchaseItemInput = UpdateEntityInput<PurchaseItem>;
 export const purchasesService = {
   getAllByTenant: (tenantId: string) => purchasesCrud.getAllByTenant(tenantId),
   getById: (tenantId: string, id: string) => purchasesCrud.getById(tenantId, id),
+  getByIds: async (tenantId: string, purchaseIds: string[]): Promise<Purchase[]> => {
+    if (purchaseIds.length === 0) return [];
+    return purchasesCrud.query(tenantId, { in: { id: purchaseIds } });
+  },
   create: (tenantId: string, input: CreatePurchaseInput) => purchasesCrud.create(tenantId, input),
   update: (tenantId: string, id: string, input: UpdatePurchaseInput) =>
     purchasesCrud.update(tenantId, id, input),

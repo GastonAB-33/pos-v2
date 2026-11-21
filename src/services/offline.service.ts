@@ -669,7 +669,8 @@ export const offlineService = {
     const tenantRows = offlineService.getPendingSales(tenantId);
     if (!tenantRows.length) return summary;
 
-    const existingSales = await salesService.getAllByTenant(tenantId);
+    // Optimización crítica de egress: Traer solo ventas recientes para chequear idempotencia
+    const existingSales = await salesService.getRecentSales(tenantId, 250);
     const remainingRows: PendingSaleRecord[] = [];
 
     for (const row of tenantRows) {
