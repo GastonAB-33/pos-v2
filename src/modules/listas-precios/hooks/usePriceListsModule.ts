@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { auditService } from "@/services/audit.service";
 import { priceListsService } from "@/services/price-lists.service";
-import { productsService } from "@/services/products.service";
+import { useProductsStore } from "@/features/products/store/products.store";
 import type { PriceList, PriceListItem, Product } from "@/types/entities";
 import type { PriceListFormValues } from "@/modules/listas-precios/schemas/price-list-form.schema";
 
@@ -39,9 +39,16 @@ export const usePriceListsModule = (tenantId: string | null, userId: string | nu
     setIsLoading(true);
 
     try {
+      // Aprovechar catálogo cacheado en memoria para evitar descargar megas de productos
+      const prodStore = useProductsStore.getState();
+      const hasFreshCatalog = prodStore.loadedTenantId === tenantId && prodStore.products.length > 0;
+      const productsPromise = hasFreshCatalog
+        ? Promise.resolve(prodStore.products)
+        : prodStore.loadCatalog(tenantId).then(() => useProductsStore.getState().products);
+
       const [lists, allProducts] = await Promise.all([
         priceListsService.getAllByTenant(tenantId),
-        productsService.getAllByTenant(tenantId),
+        productsPromise,
       ]);
 
       const sortedLists = [...lists].sort((a, b) => a.name.localeCompare(b.name));

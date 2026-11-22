@@ -61,6 +61,48 @@ export interface CurrentAccountSaleItemDetail {
   current_line_total: number | null;
 }
 
+export const formatPaymentMethodCode = (code: string | null | undefined): string => {
+  if (!code) return "Otro medio";
+  const normalized = code.trim().toLowerCase();
+  switch (normalized) {
+    case "cash":
+    case "efectivo":
+      return "Efectivo";
+    case "current_account":
+    case "cuenta_corriente":
+      return "Cuenta Corriente";
+    case "card_debit":
+    case "debit":
+    case "debito":
+      return "Tarjeta de Débito";
+    case "card_credit":
+    case "credit":
+    case "credito":
+      return "Tarjeta de Crédito";
+    case "card":
+    case "tarjeta":
+      return "Tarjeta";
+    case "transfer":
+    case "transferencia":
+      return "Transferencia Bancaria";
+    case "mercado_pago":
+    case "mercadopago":
+      return "Mercado Pago";
+    case "cheque":
+      return "Cheque";
+    default:
+      return code.charAt(0).toUpperCase() + code.slice(1);
+  }
+};
+
+export interface CurrentAccountSalePaymentItem {
+  id?: string;
+  method_code: string;
+  method_name: string;
+  amount: number;
+  status?: string;
+}
+
 export interface CurrentAccountSaleDetail {
   sale_id: string;
   sale_number: string;
@@ -69,6 +111,11 @@ export interface CurrentAccountSaleDetail {
   sale_date: string;
   items: CurrentAccountSaleItemDetail[];
   current_total: number | null;
+  payments?: CurrentAccountSalePaymentItem[];
+  receipt_notes?: string | null;
+  receipt_payment_method?: string | null;
+  current_account_debt_amount?: number | null;
+  other_payments_total?: number | null;
 }
 
 export interface CurrentAccountDebtSaleOption {
@@ -496,10 +543,11 @@ export const useCurrentAccount = (
       let nextSaleDetailsById: Record<string, CurrentAccountSaleDetail> = {};
 
       if (saleIds.length) {
-        const [targetSales, targetSaleItems, targetReceipts] = await Promise.all([
+        const [targetSales, targetSaleItems, targetReceipts, targetPayments] = await Promise.all([
           salesService.getByIds(tenantId, saleIds),
           salesService.getItemsBySaleIds(tenantId, saleIds),
           receiptsService.getBySaleIds(tenantId, saleIds),
+          salesService.getPaymentsBySaleIds(tenantId, saleIds),
         ]);
 
         const productIds = Array.from(
@@ -516,10 +564,18 @@ export const useCurrentAccount = (
           acc.set(item.sale_id, current);
           return acc;
         }, new Map());
-        const receiptsBySaleId = targetReceipts.reduce<Map<string, string>>((acc, receipt) => {
+        const receiptsBySaleId = targetReceipts.reduce<Map<string, typeof targetReceipts[number]>>((acc, receipt) => {
           if (!receipt.sale_id) return acc;
           if (acc.has(receipt.sale_id)) return acc;
-          acc.set(receipt.sale_id, receipt.receipt_number);
+          acc.set(receipt.sale_id, receipt);
+          return acc;
+        }, new Map());
+
+        const paymentsBySaleId = targetPayments.reduce<Map<string, typeof targetPayments>>((acc, payment) => {
+          if (!payment.sale_id) return acc;
+          const current = acc.get(payment.sale_id) ?? [];
+          current.push(payment);
+          acc.set(payment.sale_id, current);
           return acc;
         }, new Map());
         const productPriceById = new Map(targetProducts.map((product) => [product.id, product.price]));
@@ -553,14 +609,67 @@ export const useCurrentAccount = (
                 ? roundAmount(items.reduce((sum, item) => sum + (item.current_line_total ?? 0), 0))
                 : null;
 
+            const receipt = receiptsBySaleId.get(saleId);
+            const salePayments = paymentsBySaleId.get(saleId) ?? [];
+
+            let payments: CurrentAccountSalePaymentItem[] = salePayments.map((p) => ({
+              id: p.id,
+              method_code: p.payment_method_code,
+              method_name: formatPaymentMethodCode(p.payment_method_code),
+              amount: p.amount,
+              status: p.status,
+            }));
+
+            if (payments.length === 0) {
+              if (receipt?.payment_method) {
+                payments = [
+                  {
+                    method_code: receipt.payment_method,
+                    method_name: formatPaymentMethodCode(receipt.payment_method),
+                    amount: saleTotal,
+                  },
+                ];
+              } else if (fallbackMovement) {
+                payments = [
+                  {
+                    method_code: "current_account",
+                    method_name: "Cuenta Corriente",
+                    amount: fallbackMovement.amount,
+                  },
+                ];
+              }
+            }
+
+            const currentAccountPayment = payments.find(
+              (p) => p.method_code === "current_account" || p.method_code === "cuenta_corriente"
+            );
+            const currentAccountDebtAmount = currentAccountPayment
+              ? currentAccountPayment.amount
+              : fallbackMovement?.type === "debt"
+              ? fallbackMovement.amount
+              : null;
+
+            const otherPaymentsTotal = roundAmount(
+              payments
+                .filter(
+                  (p) => p.method_code !== "current_account" && p.method_code !== "cuenta_corriente"
+                )
+                .reduce((sum, p) => sum + p.amount, 0)
+            );
+
             acc[saleId] = {
               sale_id: saleId,
               sale_number: sale?.sale_number ?? `VTA-${saleId.slice(0, 8)}`,
-              receipt_number: receiptsBySaleId.get(saleId) ?? null,
+              receipt_number: receipt?.receipt_number ?? null,
               sale_total: saleTotal,
               sale_date: sale?.created_at ?? fallbackMovement?.created_at ?? new Date().toISOString(),
               items,
               current_total: currentTotal,
+              payments,
+              receipt_notes: receipt?.notes ?? null,
+              receipt_payment_method: receipt?.payment_method ?? null,
+              current_account_debt_amount: currentAccountDebtAmount,
+              other_payments_total: otherPaymentsTotal,
             };
 
             return acc;

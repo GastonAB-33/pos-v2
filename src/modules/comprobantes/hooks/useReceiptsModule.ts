@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { auditService } from "@/services/audit.service";
 import { invoicesService } from "@/services/invoices.service";
 import { receiptsService } from "@/services/receipts.service";
@@ -13,45 +13,79 @@ interface ReceiptFeedback {
 export const useReceiptsModule = (tenantId: string | null, userId: string | null) => {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<ReceiptFeedback | null>(null);
 
   const clearFeedback = () => setFeedback(null);
 
+  // Debounce de búsqueda para no saturar consultas ni gastar egress en cada pulsación
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch((prev) => {
+        if (prev !== search) {
+          setPage(1); // Reiniciar a página 1 si cambió el término
+          return search;
+        }
+        return prev;
+      });
+    }, 350);
+
+    return () => clearTimeout(handler);
+  }, [search]);
+
   const loadReceipts = useCallback(async () => {
     if (!tenantId) {
       setReceipts([]);
+      setTotalCount(0);
+      setTotalPages(1);
       return;
     }
 
     setIsLoading(true);
+    setFeedback(null);
 
     try {
-      const list = await receiptsService.getRecentByTenant(tenantId, 250);
-      setReceipts(list.sort((a, b) => b.issued_at.localeCompare(a.issued_at)));
-    } catch {
-      setFeedback({ type: "error", message: "No se pudieron cargar los comprobantes" });
+      const result = await receiptsService.getPaginatedByTenant(tenantId, {
+        page,
+        pageSize,
+        search: debouncedSearch,
+      });
+
+      setReceipts(result.receipts);
+      setTotalCount(result.total);
+      setTotalPages(result.totalPages);
+    } catch (err) {
+      console.warn("[useReceiptsModule] Error en getPaginatedByTenant, usando fallback directo:", err);
+      try {
+        const fallbackList = await receiptsService.getRecentByTenant(tenantId, 100);
+        const sorted = fallbackList.sort((a, b) => b.issued_at.localeCompare(a.issued_at));
+        setReceipts(sorted);
+        setTotalCount(sorted.length);
+        setTotalPages(1);
+      } catch (fallbackErr) {
+        console.error("[useReceiptsModule] Fallo crítico cargando comprobantes:", fallbackErr);
+        setFeedback({ type: "error", message: "No se pudieron cargar los comprobantes" });
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, page, pageSize, debouncedSearch]);
 
   useEffect(() => {
     void loadReceipts();
   }, [loadReceipts]);
 
-  const filteredReceipts = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return receipts;
-
-    return receipts.filter((receipt) =>
-      [receipt.receipt_number, receipt.sale_number, receipt.customer_name ?? ""]
-        .join(" ")
-        .toLowerCase()
-        .includes(term)
-    );
-  }, [receipts, search]);
+  const handleClearSearch = useCallback(() => {
+    setSearch("");
+    setDebouncedSearch("");
+    setPage(1);
+  }, []);
 
   const generateInvoiceFromReceipt = async (receipt: Receipt) => {
     if (!tenantId) return false;
@@ -100,9 +134,18 @@ export const useReceiptsModule = (tenantId: string | null, userId: string | null
   };
 
   return {
-    receipts: filteredReceipts,
+    receipts,
     search,
     setSearch,
+    clearSearch: handleClearSearch,
+    debouncedSearch,
+    isSearching: isLoading || search !== debouncedSearch,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    totalCount,
+    totalPages,
     isLoading,
     isSubmitting,
     feedback,

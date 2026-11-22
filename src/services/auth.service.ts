@@ -109,7 +109,7 @@ export const authService = {
     if (expectedInput) {
       const matchesTenant = isTenantMatchingInput(session.tenant, expectedInput);
       if (!matchesTenant) {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: "local" });
         const tenantDisplayName = session.tenant.tradeName || session.tenant.legalName || "asignado";
         throw new Error(
           `El comercio ingresado ("${expectedInput}") no coincide con tu usuario. Tu usuario pertenece a "${tenantDisplayName}". Por favor verificá el nombre del comercio.`
@@ -120,9 +120,9 @@ export const authService = {
     return session;
   },
 
-  signOut: async () => {
+  signOut: async (scope: "local" | "global" | "others" = "local") => {
     if (dataProvider !== "supabase") return;
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope });
   },
 
   getStoredPosSession: async (): Promise<PosSession | null> => {

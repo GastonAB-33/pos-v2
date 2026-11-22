@@ -20,3 +20,11 @@ When creating, editing, or styling any user interface component (pages, modals, 
 6. **Modals & Cards**: Avoid raw opacity overlays like `bg-slate-50/40`. Always pair card and modal containers with explicit dark styles (e.g. `dark:bg-slate-800/50 dark:border-slate-700/80`).
 7. **Ghost / Cancel Buttons**: Ensure secondary buttons have a visible border and light text in dark mode (`dark:border-slate-700 dark:text-slate-200`).
 8. **Browser Suggestions & Autocomplete**: Always disable browser autocomplete suggestions on entity forms (customers, suppliers, products) by adding `autoComplete="off"` to `<form>` and `autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} data-lpignore="true"` to input fields.
+
+## Monorepo Safe Git & Push Protocol
+When performing any Git operation (staging, commit, push):
+1. **Always follow the `monorepo-safe-git` skill** located at [SKILL.md](file:///.agents/skills/monorepo-safe-git/SKILL.md).
+2. **Never execute blind global commands**: Never run `git add .`, `git add -A`, or `git commit -a`.
+3. **Active Zone Inquiry**: Whenever a commit or push is requested, check `git status -s`. If changes exist in more than one zone (`landing/`, `crm-admin/`, `src/`), explicitly ask the user which platform/section the commit belongs to before staging.
+4. **Selective Staging**: Stage exclusively the files corresponding to the chosen zone (`git add landing/`, `git add crm-admin/`, etc.).
+5. **Pre-Push Verification**: Before running `git push`, show the user the exact commits and branch that will be sent to the remote repository, and request final confirmation.

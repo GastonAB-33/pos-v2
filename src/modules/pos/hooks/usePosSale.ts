@@ -513,6 +513,7 @@ export const usePosSale = (tenantId: string | null) => {
   const [mercadoPagoIntent, setMercadoPagoIntent] = useState<MercadoPagoPaymentIntent | null>(null);
   const cartRef = useRef<PosCartItem[]>([]);
   const isConfirmingSaleRef = useRef(false);
+  const hasEnsuredDefaultsRef = useRef(false);
 
   const toggleDiscounts = useCallback(() => {
     setDiscountsEnabled((prev) => !prev);
@@ -744,10 +745,13 @@ export const usePosSale = (tenantId: string | null) => {
           return;
         }
 
-        await Promise.allSettled([
-          originBanksService.ensureDefaults(tenantId),
-          installmentPlansService.ensureDefaults(tenantId),
-        ]);
+        if (!hasEnsuredDefaultsRef.current) {
+          hasEnsuredDefaultsRef.current = true;
+          void Promise.allSettled([
+            originBanksService.ensureDefaults(tenantId),
+            installmentPlansService.ensureDefaults(tenantId),
+          ]);
+        }
 
         const shouldFetchCatalog = force || !hasCachedCatalog;
 

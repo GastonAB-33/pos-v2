@@ -938,14 +938,16 @@ export const CajaPage = () => {
 
 
       {/* MODAL: Movimiento Manual */}
-      <ManualCashMovementModal
-        isOpen={isManualMovementModalOpen}
-        onClose={() => setIsManualMovementModalOpen(false)}
-        defaultMode={manualMovementTab}
-        paymentMethods={paymentMethods}
-        bankAccounts={bankAccounts}
-        canWrite={canWriteManualMovements}
-      />
+      {isManualMovementModalOpen && (
+        <ManualCashMovementModal
+          isOpen={isManualMovementModalOpen}
+          onClose={() => setIsManualMovementModalOpen(false)}
+          defaultMode={manualMovementTab}
+          paymentMethods={paymentMethods}
+          bankAccounts={bankAccounts}
+          canWrite={canWriteManualMovements}
+        />
+      )}
 
       {/* MODAL: Apertura de Caja */}
       {isOpenCashModalOpen && (

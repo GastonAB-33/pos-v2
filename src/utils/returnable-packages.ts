@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { settingsService } from "@/services/settings.service";
 import { productsService } from "@/services/products.service";
+import { useProductsStore } from "@/features/products/store/products.store";
 import type { ReturnablePackageType } from "@/types/entities";
 /**
  * Utilidades y helpers para la gestión de envases retornables
@@ -160,8 +161,12 @@ export const fetchTenantReturnablePackages = async (
       return configured;
     }
 
-    // Si no hay lista en configuración, extraer envases usados en productos
-    const products = await productsService.getAllByTenant(tenantId);
+    // Si no hay lista en configuración, extraer envases usados en productos (usando caché si existe)
+    const cachedProducts = useProductsStore.getState().products;
+    const products =
+      cachedProducts.length > 0 && useProductsStore.getState().loadedTenantId === tenantId
+        ? cachedProducts
+        : await productsService.getAllByTenant(tenantId);
     const map = new Map<string, ReturnablePackageType>();
 
     for (const p of products) {

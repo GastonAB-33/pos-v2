@@ -137,7 +137,8 @@ export const BancosPage = () => {
     if (!tenantId) return;
     setIsMovementsLoading(true);
     try {
-      const movs = await bankAccountMovementsService.getAllByTenant(tenantId);
+      // Optimización crítica de egress: Traer solo los 500 movimientos bancarios más recientes
+      const movs = await bankAccountMovementsService.getRecentByTenant(tenantId, 500);
       setAllMovements(movs);
 
       // Calcular saldos a partir del último movimiento ordenado cronológicamente

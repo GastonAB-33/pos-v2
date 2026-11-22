@@ -61,7 +61,7 @@ export const LandingAdvantages: React.FC = () => {
   ];
 
   return (
-    <section id="ventajas" className="py-20 bg-slate-50 relative">
+    <section id="ventajas" className="py-12 sm:py-14 bg-white relative">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         
         {/* Encabezado de sección */}
@@ -82,7 +82,7 @@ export const LandingAdvantages: React.FC = () => {
         </div>
 
         {/* Grilla de ventajas */}
-        <div className="mt-14 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+        <div className="mt-8 sm:mt-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
           {advantages.map((adv, idx) => {
             const Icon = adv.icon;
             const borderColors = {

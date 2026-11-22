@@ -46,7 +46,7 @@ export const LandingTestimonials: React.FC = () => {
   ];
 
   return (
-    <section id="testimonios" className="py-20 bg-white relative">
+    <section id="testimonios" className="py-12 sm:py-14 bg-slate-50/70 border-y border-slate-200/80 relative">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800 uppercase tracking-wider">
@@ -63,7 +63,7 @@ export const LandingTestimonials: React.FC = () => {
           </p>
         </div>
 
-        <div className="mt-14 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="mt-8 sm:mt-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {testimonials.map((t, idx) => (
             <div
               key={idx}

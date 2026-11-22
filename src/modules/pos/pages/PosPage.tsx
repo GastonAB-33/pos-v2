@@ -32,7 +32,6 @@ import { useProductsStore } from "@/features/products/store/products.store";
 import type { OpenCashValues } from "@/modules/caja/schemas/cash.schemas";
 import { computePricingBackward, roundMoney } from "@/modules/productos/utils/product-pricing";
 import { auditService } from "@/services/audit.service";
-import { bankAccountsService } from "@/services/bank-accounts.service";
 import { cashService } from "@/services/cash.service";
 import { customersService } from "@/services/customers.service";
 import { productsService, type UpdateProductInput } from "@/services/products.service";
@@ -390,19 +389,31 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
 
     setIsLoadingReceipts(true);
     try {
-      const [receiptsRes, invoicesRes, salesRes, paymentsRes, banksRes] = await Promise.allSettled([
-        receiptsService.getAllByTenant(tenantId),
-        invoicesService.getAllByTenant(tenantId),
-        salesService.getAllByTenant(tenantId),
-        salesService.getAllPaymentsByTenant(tenantId),
-        bankAccountsService.getAllByTenant(tenantId),
+      // Optimización crítica de egress: Traer solo comprobantes y ventas recientes (acotado a 100)
+      const [receiptsRes, salesRes] = await Promise.allSettled([
+        receiptsService.getRecentByTenant(tenantId, 100),
+        salesService.getRecentSales(tenantId, 100),
       ]);
 
       const receiptRows = receiptsRes.status === "fulfilled" ? receiptsRes.value : [];
-      const invoiceRows = invoicesRes.status === "fulfilled" ? invoicesRes.value : [];
       const salesRows = salesRes.status === "fulfilled" ? salesRes.value : [];
+
+      const targetSaleIds = Array.from(
+        new Set([
+          ...receiptRows.map((r) => r.sale_id).filter(Boolean),
+          ...salesRows.map((s) => s.id).filter(Boolean),
+        ])
+      );
+
+      // Cargar facturas y pagos UNICAMENTE indexados a las ventas recientes del lote
+      const [invoicesRes, paymentsRes] = await Promise.allSettled([
+        targetSaleIds.length ? invoicesService.getBySaleIds(tenantId, targetSaleIds) : Promise.resolve([]),
+        targetSaleIds.length ? salesService.getPaymentsBySaleIds(tenantId, targetSaleIds) : Promise.resolve([]),
+      ]);
+
+      const invoiceRows = invoicesRes.status === "fulfilled" ? invoicesRes.value : [];
       const paymentRows = paymentsRes.status === "fulfilled" ? paymentsRes.value : [];
-      const allBanks = banksRes.status === "fulfilled" ? banksRes.value : bankAccounts;
+      const allBanks = bankAccounts;
 
       const bankMap = new Map<string, BankAccount>();
       for (const b of allBanks) {

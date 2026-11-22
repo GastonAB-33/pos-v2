@@ -87,7 +87,7 @@ export const LandingPricing: React.FC<LandingPricingProps> = ({
   ];
 
   return (
-    <section id="planes" className="py-20 bg-slate-50 relative">
+    <section id="planes" className="py-12 sm:py-14 bg-white relative">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         
         {/* Encabezado */}
@@ -149,7 +149,7 @@ export const LandingPricing: React.FC<LandingPricingProps> = ({
         </div>
 
         {/* Tarjetas de Precios */}
-        <div className="mt-14 grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
+        <div className="mt-8 sm:mt-10 grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
           {plans.map((plan) => {
             const displayPrice = period === "annual" ? plan.annualPricePerMonth : plan.monthlyPrice;
 

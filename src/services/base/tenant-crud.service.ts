@@ -14,6 +14,27 @@ export type UpdateEntityInput<TEntity extends TenantScopedEntity> = Partial<
   Omit<TEntity, "id" | "tenant_id" | "created_at" | "updated_at">
 >;
 
+export interface QueryPaginatedOptions {
+  select?: string;
+  eq?: Record<string, unknown>;
+  in?: Record<string, unknown[]>;
+  gte?: Record<string, unknown>;
+  lte?: Record<string, unknown>;
+  order?: { column: string; ascending?: boolean };
+  limit?: number;
+  offset?: number;
+  search?: {
+    term: string;
+    terms?: string[];
+    columns: string[];
+  };
+}
+
+export interface PaginatedQueryResult<TEntity> {
+  data: TEntity[];
+  total: number;
+}
+
 const isAuthExpiredError = (error: unknown): boolean => {
   if (!error || typeof error !== "object") return false;
   const candidate = error as { code?: string; message?: string; status?: number };
@@ -99,7 +120,7 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
     throw firstResult.error;
   }
 
-  async getAllByTenant(tenantId: string): Promise<TEntity[]> {
+  async getAllByTenant(tenantId: string, maxLimit = 3000): Promise<TEntity[]> {
     if (dataProvider === "mock") {
       const table = this.getMockRows();
       return table.filter((row) => row.tenant_id === tenantId);
@@ -124,7 +145,7 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
         const chunk = (data ?? []) as TEntity[];
         if (chunk.length === 0) break;
         allRecords.push(...chunk);
-        if (chunk.length < pageSize) break;
+        if (chunk.length < pageSize || allRecords.length >= maxLimit) break;
         from += pageSize;
       }
 
@@ -310,6 +331,183 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
       }
       throw error;
     }
+  }
+
+  async queryPaginated(
+    tenantId: string,
+    options: QueryPaginatedOptions = {}
+  ): Promise<PaginatedQueryResult<TEntity>> {
+    const filterAndSortMock = (rawRows: TEntity[]): PaginatedQueryResult<TEntity> => {
+      let rows = rawRows.filter((row) => {
+        if (row.tenant_id !== tenantId) return false;
+        const rowRec = row as unknown as Record<string, unknown>;
+        if (options.eq) {
+          for (const [key, val] of Object.entries(options.eq)) {
+            if (rowRec[key] !== val) return false;
+          }
+        }
+        if (options.in) {
+          for (const [key, vals] of Object.entries(options.in)) {
+            const rowVal = rowRec[key];
+            if (!vals.includes(rowVal)) return false;
+          }
+        }
+        if (options.gte) {
+          for (const [key, val] of Object.entries(options.gte)) {
+            const rowVal = rowRec[key];
+            if (rowVal == null || (rowVal as any) < (val as any)) return false;
+          }
+        }
+        if (options.lte) {
+          for (const [key, val] of Object.entries(options.lte)) {
+            const rowVal = rowRec[key];
+            if (rowVal == null || (rowVal as any) > (val as any)) return false;
+          }
+        }
+        if (options.search && options.search.columns.length > 0) {
+          const rawTerms = [options.search.term, ...(options.search.terms ?? [])]
+            .map((t) => (t ?? "").trim().toLowerCase())
+            .filter(Boolean);
+          const uniqueTerms = Array.from(new Set(rawTerms));
+          if (uniqueTerms.length > 0) {
+            const match = options.search.columns.some((col) => {
+              const val = rowRec[col];
+              if (val == null) return false;
+              const strVal = String(val).toLowerCase();
+              return uniqueTerms.some((t) => strVal.includes(t));
+            });
+            if (!match) return false;
+          }
+        }
+        return true;
+      });
+
+      if (options.order) {
+        const col = options.order.column;
+        const asc = options.order.ascending ?? true;
+        rows = [...rows].sort((a, b) => {
+          const valA = (a as unknown as Record<string, unknown>)[col];
+          const valB = (b as unknown as Record<string, unknown>)[col];
+          if (valA == null && valB == null) return 0;
+          if (valA == null) return asc ? -1 : 1;
+          if (valB == null) return asc ? 1 : -1;
+          if (valA < valB) return asc ? -1 : 1;
+          if (valA > valB) return asc ? 1 : -1;
+          return 0;
+        });
+      }
+
+      const total = rows.length;
+      const offset = options.offset ?? 0;
+      const limit = options.limit ?? 25;
+      const data = rows.slice(offset, offset + limit);
+      return { data, total };
+    };
+
+    if (dataProvider === "mock") {
+      return filterAndSortMock(this.getMockRows());
+    }
+
+    const buildQuery = (selectClause: string, withCount: boolean) => {
+      let builder = supabase
+        .from(this.tableName)
+        .select(selectClause, withCount ? { count: "exact" } : undefined)
+        .eq("tenant_id", tenantId);
+
+      if (options.eq) {
+        for (const [key, val] of Object.entries(options.eq)) {
+          builder = builder.eq(key, val);
+        }
+      }
+      if (options.in) {
+        for (const [key, vals] of Object.entries(options.in)) {
+          if (vals && vals.length > 0) {
+            builder = builder.in(key, vals);
+          }
+        }
+      }
+      if (options.gte) {
+        for (const [key, val] of Object.entries(options.gte)) {
+          if (val != null) {
+            builder = builder.gte(key, val);
+          }
+        }
+      }
+      if (options.lte) {
+        for (const [key, val] of Object.entries(options.lte)) {
+          if (val != null) {
+            builder = builder.lte(key, val);
+          }
+        }
+      }
+      if (options.search && options.search.columns.length > 0) {
+        const rawTerms = [options.search.term, ...(options.search.terms ?? [])]
+          .map((t) => (t ?? "").trim().replace(/[,()]/g, " "))
+          .filter(Boolean);
+        const uniqueTerms = Array.from(new Set(rawTerms));
+        if (uniqueTerms.length > 0) {
+          const orFilter = uniqueTerms
+            .flatMap((t) => options.search!.columns.map((col) => `${col}.ilike.%${t}%`))
+            .join(",");
+          builder = builder.or(orFilter);
+        }
+      }
+      if (options.order) {
+        builder = builder.order(options.order.column, {
+          ascending: options.order.ascending ?? true,
+        });
+      }
+      const offset = options.offset ?? 0;
+      const limit = options.limit ?? 25;
+      const to = offset + limit - 1;
+      builder = builder.range(offset, to);
+
+      return builder;
+    };
+
+    // Estrategia de reintentos progresivos ante fallos de PostgREST:
+    // 1. Con proyección optimizada y count exacto.
+    // 2. Con select('*') y count exacto (si falló por nombres de columnas).
+    // 3. Con select('*') sin count (si falló por restricción del header count en RLS).
+    const attempts = [
+      { selectClause: options.select || "*", withCount: true },
+      { selectClause: "*", withCount: true },
+      { selectClause: "*", withCount: false },
+    ];
+
+    for (let i = 0; i < attempts.length; i++) {
+      const attempt = attempts[i];
+      try {
+        const result = await this.execWithAuthRetry<{ rows: TEntity[]; count: number | null }>(
+          async () => {
+            const builder = buildQuery(attempt.selectClause, attempt.withCount);
+            const { data, count, error } = await builder;
+            return {
+              data: error ? null : { rows: (data ?? []) as unknown as TEntity[], count: count ?? null },
+              error,
+            };
+          }
+        );
+
+        if (result && Array.isArray(result.rows)) {
+          const total = result.count != null ? result.count : result.rows.length;
+          return {
+            data: result.rows,
+            total,
+          };
+        }
+      } catch (error) {
+        if (isMissingTableError(error)) {
+          return filterAndSortMock(this.getMockRows());
+        }
+        if (i === attempts.length - 1) {
+          console.warn("[TenantCrudService] Agotados los reintentos de consulta paginada, usando fallback local:", error);
+          return filterAndSortMock(this.getMockRows());
+        }
+      }
+    }
+
+    return filterAndSortMock(this.getMockRows());
   }
 
   async getById(tenantId: string, id: string): Promise<TEntity | null> {

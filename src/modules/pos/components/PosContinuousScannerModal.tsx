@@ -389,7 +389,13 @@ export const PosContinuousScannerModal = ({
         timerRef.current = window.setTimeout(scanFrame, 200);
       } catch (err) {
         console.error("Error al iniciar cámara:", err);
-        setError("No se pudo acceder a la cámara. Por favor verificá los permisos de cámara en tu navegador.");
+        if (err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")) {
+          setError("Permiso de cámara bloqueado o denegado. Tocá el candado o ícono de ajustes en la barra del navegador para permitir la cámara.");
+        } else if (err instanceof DOMException && (err.name === "NotFoundError" || err.name === "DevicesNotFoundError")) {
+          setError("No se detectó ninguna cámara disponible en este dispositivo.");
+        } else {
+          setError("No se pudo acceder a la cámara. Verificá los permisos de tu navegador.");
+        }
       } finally {
         setIsStarting(false);
       }

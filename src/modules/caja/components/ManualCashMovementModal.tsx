@@ -21,7 +21,7 @@ export interface ManualCashMovementModalProps {
   canWrite?: boolean;
 }
 
-export const ManualCashMovementModal = ({
+const ManualCashMovementModalDialog = ({
   isOpen,
   onClose,
   defaultMode = "expense",
@@ -53,8 +53,6 @@ export const ManualCashMovementModal = ({
       setTab(defaultMode);
     }
   }, [isOpen, defaultMode]);
-
-  if (!isOpen) return null;
 
   const paymentMethods = propPaymentMethods ?? modulePaymentMethods;
   const bankAccounts = propBankAccounts ?? moduleBankAccounts;
@@ -183,4 +181,9 @@ export const ManualCashMovementModal = ({
       </div>
     </div>
   );
+};
+
+export const ManualCashMovementModal = (props: ManualCashMovementModalProps) => {
+  if (!props.isOpen) return null;
+  return <ManualCashMovementModalDialog {...props} />;
 };

@@ -156,8 +156,14 @@ export const BarcodeScannerModal = ({
         };
 
         timerRef.current = window.setTimeout(scanFrame, 200);
-      } catch {
-        setError("No se pudo acceder a la cámara. Verificá permisos.");
+      } catch (err) {
+        if (err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")) {
+          setError("Permiso de cámara denegado. Asegurate de habilitar el permiso de cámara en el navegador.");
+        } else if (err instanceof DOMException && (err.name === "NotFoundError" || err.name === "DevicesNotFoundError")) {
+          setError("No se detectó ninguna cámara en este dispositivo.");
+        } else {
+          setError("No se pudo acceder a la cámara. Verificá permisos.");
+        }
       } finally {
         setIsStarting(false);
       }
@@ -175,30 +181,30 @@ export const BarcodeScannerModal = ({
 
   return (
     <section className="fixed inset-0 z-[90] flex items-center justify-center bg-[var(--ui-overlay)] p-4">
-      <div className="w-full max-w-xl rounded-xl border border-slate-200 bg-white p-4 shadow-panel md:p-5">
-        <div className="mb-3 flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+      <div className="w-full max-w-xl rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-4 shadow-panel dark:border-slate-800 dark:bg-slate-900 md:p-5">
+        <div className="mb-3 flex items-center justify-between gap-3 border-b border-slate-200/80 pb-3 dark:border-slate-800">
           <div>
-            <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-            <p className="text-xs text-slate-500">{description}</p>
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{description}</p>
           </div>
           <ModalCloseButton label="Cerrar escáner" onClick={onClose} />
         </div>
 
         <div className="space-y-3">
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-950">
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-950 dark:border-slate-800">
             <video ref={videoRef} className="h-64 w-full object-cover" muted playsInline autoPlay />
           </div>
 
-          {isStarting ? <p className="text-xs text-slate-500">Iniciando cámara...</p> : null}
+          {isStarting ? <p className="text-xs text-slate-500 dark:text-slate-400">Iniciando cámara...</p> : null}
           {!detectorSupported ? (
-            <p className="text-xs text-amber-700">
+            <p className="text-xs text-amber-700 dark:text-amber-400">
               Este navegador no soporta detección automática nativa de códigos.
             </p>
           ) : null}
-          {error ? <p className="text-xs text-red-600">{error}</p> : null}
+          {error ? <p className="text-xs text-red-600 dark:text-red-400">{error}</p> : null}
 
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/60">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
               Ingreso manual (respaldo)
             </label>
             <div className="flex items-center gap-2">
