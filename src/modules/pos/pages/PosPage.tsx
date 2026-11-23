@@ -4,7 +4,7 @@ import { PosContinuousScannerModal } from "@/modules/pos/components/PosContinuou
 import { PagePlaceholder } from "@/components/ui/PagePlaceholder";
 import { LoadingState } from "@/components/ui/UiStates";
 import { IconButton } from "@/components/ui/IconButton";
-import { Banknote, CreditCard, FileText, Landmark, Loader2, LockOpen, RefreshCw, Search, ShoppingCart, User as UserIcon, X } from "lucide-react";
+import { Banknote, CloudCheck, CreditCard, FileText, Landmark, Loader2, LockOpen, RefreshCw, Search, ShoppingCart, User as UserIcon, WifiOff, X } from "lucide-react";
 import { useToast } from "@/components/ui/useToast";
 import { routePaths } from "@/config/routes";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
@@ -34,6 +34,7 @@ import { computePricingBackward, roundMoney } from "@/modules/productos/utils/pr
 import { auditService } from "@/services/audit.service";
 import { cashService } from "@/services/cash.service";
 import { customersService } from "@/services/customers.service";
+import { masterProductsService } from "@/services/master-products.service";
 import { productsService, type UpdateProductInput } from "@/services/products.service";
 import { invoicesService } from "@/services/invoices.service";
 import { normalizePaymentMethodCode } from "@/services/payment-methods.service";
@@ -42,7 +43,7 @@ import { receiptsService } from "@/services/receipts.service";
 import { salesService } from "@/services/sales.service";
 import { settingsService } from "@/services/settings.service";
 import { usersService } from "@/services/users.service";
-import type { BankAccount, Customer, Invoice, OriginBank, PaymentMethodType, Receipt, SaleItem } from "@/types/entities";
+import type { BankAccount, Customer, Invoice, OriginBank, PaymentMethodType, Receipt, Sale, SaleItem } from "@/types/entities";
 
 const currency = new Intl.NumberFormat("es-AR", {
   style: "currency",
@@ -63,6 +64,7 @@ interface PosRecentReceiptItem {
   receipt: Receipt;
   invoice: Invoice | null;
   payments?: PosReceiptPaymentSummary[];
+  offlineStatus?: "pending" | "synced" | null;
 }
 
 interface PosReceiptModalState {
@@ -156,7 +158,7 @@ export const PosPage = () => {
   const canWritePos = canWrite("pos");
   const canWriteCustomers = canWrite("clientes");
   const canWriteProducts = canWrite("productos");
-  const { success: toastSuccess, error: toastError } = useToast();
+  const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
   const {
     isOnline,
     isSyncing,
@@ -335,8 +337,13 @@ export const PosPage = () => {
   }, [clearMercadoPagoIntent, paymentMethods, selectedPaymentMethodId]);
 
   const checkoutSummary = useMemo(
-    () => getCheckoutSummary(selectedPaymentMethodId || null),
-    [getCheckoutSummary, selectedPaymentMethodId]
+    () => {
+      const methodToUse = isCheckoutModalOpen
+        ? selectedPaymentMethodId
+        : (getEffectiveDefaultPaymentMethodId() || selectedPaymentMethodId);
+      return getCheckoutSummary(methodToUse || null);
+    },
+    [getCheckoutSummary, getEffectiveDefaultPaymentMethodId, isCheckoutModalOpen, selectedPaymentMethodId]
   );
   const productCategories = useMemo(
     () =>
@@ -459,6 +466,58 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
         paymentsBySaleId.set(p.sale_id, currentList);
       }
 
+      const salesById = new Map<string, Sale>();
+      for (const s of salesRows) {
+        if (s.id) salesById.set(s.id, s);
+      }
+
+      // Incorporar ventas offline pendientes en la cola local
+      const pendingSales = offlineService.getPendingSales(tenantId);
+      const pendingSaleNumbers = new Set(pendingSales.map((p) => p.sale_number));
+      const pendingLocalIds = new Set(pendingSales.map((p) => p.local_id));
+
+      const pendingReceipts: Receipt[] = [];
+      for (const ps of pendingSales) {
+        const alreadyInReceipts = receiptRows.some((r) => r.sale_number === ps.sale_number);
+        const alreadyInSales = salesRows.some((s) => s.sale_number === ps.sale_number);
+        if (alreadyInReceipts || alreadyInSales) continue;
+
+        const customer = ps.customer_id
+          ? customers.find((c) => c.id === ps.customer_id)
+          : null;
+
+        const fakeSaleId = `pending-sale-${ps.local_id}`;
+        pendingReceipts.push({
+          id: `pending-rcpt-${ps.local_id}`,
+          tenant_id: ps.tenant_id,
+          sale_id: fakeSaleId,
+          sale_number: ps.sale_number,
+          receipt_number: `TCK-${ps.sale_number.replace(/^VTA-/, "")}`,
+          issued_at: ps.created_at || new Date().toISOString(),
+          customer_name: customer ? customer.full_name : null,
+          payment_method: ps.payment_method.type,
+          items: ps.items.map((it) => ({
+            name: it.name,
+            quantity: it.quantity,
+            unit_price: it.unit_price,
+            subtotal: it.line_total,
+          })),
+          total: ps.totals.total,
+          notes: ps.notes ?? "Venta offline pendiente de sincronización",
+          created_by: ps.created_by,
+          created_at: ps.created_at || new Date().toISOString(),
+          updated_at: ps.updated_at || new Date().toISOString(),
+        });
+
+        paymentsBySaleId.set(fakeSaleId, [
+          {
+            methodCode: ps.payment_method.code,
+            methodName: ps.payment_method.name,
+            amount: ps.totals.total,
+          },
+        ]);
+      }
+
       const receiptSaleIds = new Set<string>();
       for (const r of receiptRows) {
         if (r.sale_id) receiptSaleIds.add(r.sale_id);
@@ -491,7 +550,7 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
         });
       }
 
-      const allCombinedReceipts = [...receiptRows, ...syntheticReceipts]
+      const allCombinedReceipts = [...pendingReceipts, ...receiptRows, ...syntheticReceipts]
         .sort((a, b) => (b.issued_at || "").localeCompare(a.issued_at || ""))
         .slice(0, 100);
 
@@ -540,10 +599,38 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
           ];
         }
 
+        const correspondingSale = receipt.sale_id ? salesById.get(receipt.sale_id) : null;
+        const rcptNotes = (receipt.notes ?? "").toLowerCase();
+        const saleNotes = (correspondingSale?.notes ?? "").toLowerCase();
+        const rcptNum = (receipt.receipt_number ?? "").toUpperCase();
+
+        const isPending =
+          receipt.id.startsWith("pending-") ||
+          pendingSaleNumbers.has(receipt.sale_number) ||
+          (Boolean(receipt.notes) && Array.from(pendingLocalIds).some((lid) => receipt.notes?.includes(lid)));
+
+        const isOfflineSynced =
+          !isPending &&
+          (rcptNotes.includes("[offline:") ||
+            saleNotes.includes("[offline:") ||
+            rcptNotes.includes("sync offline") ||
+            saleNotes.includes("sync offline") ||
+            rcptNotes.includes("venta offline") ||
+            saleNotes.includes("venta offline") ||
+            rcptNum.includes("TCK-SYNC-") ||
+            rcptNum.includes("TCK-OFF-"));
+
+        const offlineStatus: "pending" | "synced" | null = isPending
+          ? "pending"
+          : isOfflineSynced
+          ? "synced"
+          : null;
+
         return {
           receipt,
           invoice: invoiceBySaleId.get(receipt.sale_id) ?? null,
           payments,
+          offlineStatus,
         };
       });
 
@@ -553,7 +640,7 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
     } finally {
       setIsLoadingReceipts(false);
     }
-  }, [bankAccounts, tenantId, toastError]);
+  }, [bankAccounts, customers, tenantId, toastError]);
 
   const filteredReceipts = useMemo(() => {
     const query = receiptsSearchTerm.trim().toLowerCase();
@@ -574,6 +661,10 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
         return mName.includes(query) || bName.includes(query) || hName.includes(query);
       });
 
+      const matchesOffline =
+        (item.offlineStatus === "pending" && ("sin internet".includes(query) || "offline".includes(query) || "pendiente".includes(query))) ||
+        (item.offlineStatus === "synced" && ("sincronizada".includes(query) || "offline".includes(query) || "sync".includes(query)));
+
       return (
         saleNum.includes(query) ||
         rcptNum.includes(query) ||
@@ -581,7 +672,8 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
         notes.includes(query) ||
         totalStr.includes(query) ||
         invNum.includes(query) ||
-        matchesPayments
+        matchesPayments ||
+        matchesOffline
       );
     });
   }, [recentReceipts, receiptsSearchTerm]);
@@ -959,8 +1051,18 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
       try {
         const result = await addProductByBarcode(cleanBarcode);
         if (!result.ok || (!result.product && !result.promotion)) {
+          // Consultar si el producto existe en el Catálogo Maestro Global
+          const masterProduct = await masterProductsService.getByBarcode(cleanBarcode);
+
+          if (masterProduct) {
+            // Caso A: Existe en Catálogo Global -> Alerta Amarilla (warning)
+            toastWarning("El producto no se encontró en tu catálogo, pero sí en el Catálogo Global.");
+          } else {
+            // Caso B: No existe ni en el catálogo del cliente ni en el Catálogo Global -> Alerta Roja (error)
+            toastError("No se encontró el producto ni en tu catálogo ni en el Catálogo Global.");
+          }
+
           // Guardar el código escaneado que no fue encontrado y abrir modal rápido
-          // Si existe en el Catálogo Maestro Global, se precargará automáticamente con nombre y categoría
           setLastNotFoundBarcode(cleanBarcode);
           setIsQuickProductModalOpen(true);
           return false;
@@ -968,6 +1070,12 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
 
         const scannedProduct = result.product;
         if (!scannedProduct && !result.promotion) {
+          const masterProduct = await masterProductsService.getByBarcode(cleanBarcode);
+          if (masterProduct) {
+            toastWarning("El producto no se encontró en tu catálogo, pero sí en el Catálogo Global.");
+          } else {
+            toastError("No se encontró el producto ni en tu catálogo ni en el Catálogo Global.");
+          }
           setLastNotFoundBarcode(cleanBarcode);
           setIsQuickProductModalOpen(true);
           return false;
@@ -991,6 +1099,8 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
       isCashGateBlocking,
       isCheckoutModalOpen,
       isSubmitting,
+      toastError,
+      toastWarning,
       triggerCartSuccessHighlight,
     ]
   );
@@ -1968,6 +2078,7 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
         open={isQuickProductModalOpen && !isCheckoutModalOpen}
         initialBarcode={lastNotFoundBarcode}
         categories={productCategories}
+        defaultSaveMode="catalog"
         disabled={isSubmitting || isCashGateBlocking || isCheckoutModalOpen || !canWritePos}
         onClose={() => {
           setIsQuickProductModalOpen(false);
@@ -2356,6 +2467,27 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
                                 </span>
                               );
                             })}
+
+                            {/* Cartelito exclusivo para ventas originadas offline */}
+                            {item.offlineStatus === "pending" && (
+                              <span
+                                title="Esta venta fue registrada sin conexión a internet y está pendiente de sincronización"
+                                className="inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 shadow-xs dark:border-amber-400/60 dark:bg-amber-900/50 dark:text-amber-100"
+                              >
+                                <WifiOff size={12} className="shrink-0 text-amber-600 dark:text-amber-300" />
+                                <span>Sin internet</span>
+                              </span>
+                            )}
+
+                            {item.offlineStatus === "synced" && (
+                              <span
+                                title="Esta venta fue registrada sin conexión a internet y ya fue sincronizada correctamente con la nube"
+                                className="inline-flex items-center gap-1.5 rounded-md border border-sky-300 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-900 shadow-xs dark:border-sky-400/60 dark:bg-sky-900/50 dark:text-sky-100"
+                              >
+                                <CloudCheck size={12} className="shrink-0 text-sky-600 dark:text-sky-300" />
+                                <span>Offline sincronizada</span>
+                              </span>
+                            )}
                           </div>
 
                           {/* Acciones */}

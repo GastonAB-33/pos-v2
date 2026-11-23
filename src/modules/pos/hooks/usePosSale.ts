@@ -38,6 +38,7 @@ import {
   formatDisplaySaleNumber,
   getNextDailySaleNumbers,
 } from "@/utils/voucher-format.utils";
+import { formatErrorMessage } from "@/utils/errors";
 import type { ArcaSettings, BankAccount, BarcodeScaleSettings, Customer, Employee, InstallmentPlan, Invoice, InvoiceDocumentType,
   PaymentMethodInvoiceRules, MercadoPagoSettings, OriginBank, PaymentMethod, PaymentMethodType, PosSettings, PriceList, Product, ProductBarcode, Receipt, Sale } from "@/types/entities";
 import type { PosCheckoutValues } from "@/modules/pos/schemas/pos-checkout.schema";
@@ -144,6 +145,7 @@ interface BarcodeScanResult {
   promotion?: PromotionWithDetails;
   parsedScale?: ParsedScaleBarcode | null;
   error?: string;
+  notFound?: boolean;
 }
 
 export interface PosQuickProductInput {
@@ -157,6 +159,9 @@ export interface PosQuickProductInput {
   code: string;
   barcode: string;
   favorite: boolean;
+  brand?: string | null;
+  subcategory?: string | null;
+  imageUrl?: string | null;
 }
 
 export interface PosCartItemEditInput {
@@ -1921,15 +1926,15 @@ export const usePosSale = (tenantId: string | null) => {
       // 1. CREACIÓN OPTIMISTA INMEDIATA (0ms de espera)
       const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       const barcodeClean = input.barcode.trim();
-      const code = input.code.trim() || null;
+      const code = input.code.trim() || (barcodeClean ? barcodeClean : null);
 
       const optimisticProduct: Product = {
         id: tempId,
         tenant_id: tenantId,
         code,
         name,
-        image_url: null,
-        brand: null,
+        image_url: input.imageUrl ?? null,
+        brand: input.brand ?? null,
         supplier: null,
         is_favorite: input.favorite,
         description: null,
@@ -1939,7 +1944,7 @@ export const usePosSale = (tenantId: string | null) => {
         stock_min: null,
         stock_max: null,
         category,
-        subcategory: null,
+        subcategory: input.subcategory ?? null,
         sale_mode: input.saleMode,
         currency_code: "ARS",
         price_without_vat: priceWithoutVat,
@@ -1984,8 +1989,8 @@ export const usePosSale = (tenantId: string | null) => {
           const created = await productsService.create(tenantId, {
             code,
             name,
-            image_url: null,
-            brand: null,
+            image_url: input.imageUrl ?? null,
+            brand: input.brand ?? null,
             supplier: null,
             is_favorite: input.favorite,
             description: null,
@@ -1995,7 +2000,7 @@ export const usePosSale = (tenantId: string | null) => {
             stock_min: null,
             stock_max: null,
             category,
-            subcategory: null,
+            subcategory: input.subcategory ?? null,
             sale_mode: input.saleMode,
             currency_code: "ARS",
             price_without_vat: priceWithoutVat,
@@ -2059,11 +2064,30 @@ export const usePosSale = (tenantId: string | null) => {
             },
           });
         } catch (error) {
-          const message =
-            error instanceof Error && error.message
-              ? error.message
-              : "No se pudo sincronizar el nuevo producto con el servidor";
-          setFeedback({ type: "error", message });
+          console.error("[usePosSale] Error registrando producto rápido en el servidor:", error);
+          const errMessage = formatErrorMessage(
+            error,
+            "No se pudo sincronizar el nuevo producto con el servidor"
+          );
+
+          // Revertir producto temporal del carrito y memoria para evitar errores de clave foránea al cobrar
+          setCartState((prev) => prev.filter((item) => item.product_id !== tempId));
+          setProducts((current) => current.filter((p) => p.id !== tempId));
+          useProductsStore.getState().removeProduct(tempId);
+          if (barcodeClean) {
+            setPrimaryBarcodes((current) => {
+              const next = { ...current };
+              delete next[tempId];
+              return next;
+            });
+            setProductBarcodes((current) => current.filter((b) => b.product_id !== tempId));
+            useProductsStore.getState().patchPrimaryBarcode(tempId, "");
+          }
+
+          setFeedback({
+            type: "error",
+            message: `No se pudo registrar el producto en el catálogo: ${errMessage}`,
+          });
         }
       })();
 
@@ -2304,9 +2328,8 @@ export const usePosSale = (tenantId: string | null) => {
             return addPromotionToCart(promotion, barcode);
           }
 
-          const message = `No se encontró producto para el código ${barcode}`;
-          setFeedback({ type: "error", message });
-          return { ok: false, barcode, error: message };
+          const message = "Producto no encontrado";
+          return { ok: false, barcode, error: message, notFound: true };
         }
 
         const scanQuantity = Math.max(0.001, posSettings.barcode_scan_quantity || 1);

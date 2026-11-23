@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Download, FileText, Printer, RefreshCw } from "lucide-react";
+import { CheckCircle2, CloudCheck, Download, FileText, Printer, RefreshCw, WifiOff } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { settingsService } from "@/services/settings.service";
@@ -124,6 +124,16 @@ export const ReceiptTicketPanel = ({
   isLoadingDetail = false,
 }: ReceiptTicketPanelProps) => {
   const { tenantId } = useTenant();
+  const rcptNotes = (receipt.notes ?? "").toLowerCase();
+  const rcptNum = (receipt.receipt_number ?? "").toUpperCase();
+  const isPending = receipt.id.startsWith("pending-");
+  const isOffline =
+    !isPending &&
+    (rcptNotes.includes("[offline:") ||
+      rcptNotes.includes("sync offline") ||
+      rcptNotes.includes("venta offline") ||
+      rcptNum.includes("TCK-SYNC-") ||
+      rcptNum.includes("TCK-OFF-"));
   const [facturacionSettings, setFacturacionSettings] = useState<FacturacionSettings | null>(null);
   const [businessSettings, setBusinessSettings] = useState<BusinessSettings | null>(null);
   const [loadedInvoice, setLoadedInvoice] = useState<Invoice | null>(invoice ?? null);
@@ -259,11 +269,27 @@ export const ReceiptTicketPanel = ({
                 {getPaymentMethodLabel(receipt.payment_method)}
               </span>
             </div>
+            {isOffline && (
+              <div className="flex items-center justify-between text-xs pt-0.5">
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Origen:</span>
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800/60 rounded px-1.5 py-0.5">
+                  <CloudCheck size={11} className="shrink-0 text-sky-500" /> Venta offline sincronizada
+                </span>
+              </div>
+            )}
+            {isPending && (
+              <div className="flex items-center justify-between text-xs pt-0.5">
+                <span className="text-slate-500 dark:text-slate-400 font-medium">Origen:</span>
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800/60 rounded px-1.5 py-0.5">
+                  <WifiOff size={11} className="shrink-0 text-amber-500" /> Sin internet (pendiente)
+                </span>
+              </div>
+            )}
             {receipt.notes ? (
               <div className="flex items-start justify-between text-xs pt-1">
                 <span className="text-slate-500 dark:text-slate-400 font-medium">Detalle:</span>
                 <span className="text-right text-slate-800 dark:text-slate-200 max-w-[280px]">
-                  {receipt.notes}
+                  {formatDisplayNotes(receipt.notes)}
                 </span>
               </div>
             ) : null}

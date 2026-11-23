@@ -219,7 +219,10 @@ export const CuentasCorrientesPage = () => {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setSelectedCustomerId(null)}
+              onClick={() => {
+                setSelectedCustomerId(null);
+                void reload();
+              }}
               className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-200/90 bg-white px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50 active:scale-95 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 transition-all cursor-pointer"
             >
               <ArrowLeft size={15} />
@@ -361,7 +364,10 @@ export const CuentasCorrientesPage = () => {
             userId={user?.id ?? null}
             customer={selectedCustomer}
             canWrite={canWriteCurrentAccounts}
-            onClose={() => setSelectedCustomerId(null)}
+            onClose={() => {
+              setSelectedCustomerId(null);
+              void reload();
+            }}
             onBalanceUpdated={() => {
               void reload();
             }}

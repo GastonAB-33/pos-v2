@@ -346,11 +346,12 @@ export const PosSmartView = ({
       // Si no es un resultado de catálogo directo, intentar como código de barras
       if (searchScope !== "name") {
         const scanned = await onScanBarcode(query);
-        if (scanned) {
-          setSearchQuery("");
-          setIsSearchOpen(false);
-          return;
+        setSearchQuery("");
+        setIsSearchOpen(false);
+        if (!scanned) {
+          searchInputRef.current?.blur();
         }
+        return;
       }
       return;
     }
@@ -404,7 +405,7 @@ export const PosSmartView = ({
                 type="button"
                 onClick={onOpenScanner}
                 disabled={disabled || !canWrite}
-                className="h-8 px-2.5 sm:px-3 rounded-xl border border-blue-500/40 bg-blue-50/90 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer select-none active:scale-[0.97]"
+                className="md:hidden h-8 px-2.5 sm:px-3 rounded-xl border border-blue-500/40 bg-blue-50/90 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer select-none active:scale-[0.97]"
                 title="Abrir escáner de cámara continuo"
                 aria-label="Abrir escáner de cámara continuo"
               >
@@ -600,7 +601,7 @@ export const PosSmartView = ({
                 type="button"
                 onClick={onOpenScanner}
                 disabled={disabled || !canWrite}
-                className="mt-2 inline-flex items-center gap-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 shadow-md shadow-blue-500/20 active:scale-[0.97] transition cursor-pointer"
+                className="md:hidden mt-2 inline-flex items-center gap-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-4 py-2 shadow-md shadow-blue-500/20 active:scale-[0.97] transition cursor-pointer"
               >
                 <Camera size={15} />
                 <span>Escanear con cámara</span>
@@ -688,7 +689,7 @@ export const PosSmartView = ({
                         #{index + 1}
                       </span>
                       <h3
-                        className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 uppercase tracking-tight truncate max-w-full"
+                        className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 uppercase tracking-tight line-clamp-2 leading-snug break-words max-w-full"
                         title={item.name}
                       >
                         {item.name}
@@ -841,12 +842,12 @@ export const PosSmartView = ({
                           type="button"
                           onClick={() => onDecrease(item.product_id)}
                           disabled={disabled || !canWrite}
-                          className="h-full w-8 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-40 select-none shrink-0 border-r border-slate-200 dark:border-slate-800/80"
+                          className="h-full w-7 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-40 select-none shrink-0 border-r border-slate-200 dark:border-slate-800/80"
                           title={item.sale_mode === "weight" ? "Disminuir 50g" : "Disminuir cantidad"}
                         >
                           -
                         </button>
-                        <div className="flex items-center justify-center px-1.5 h-full">
+                        <div className="flex items-center justify-center px-1 h-full">
                           <input
                             type="number"
                             step="any"
@@ -919,7 +920,7 @@ export const PosSmartView = ({
                             }}
                             className={cn(
                               "h-full !bg-transparent !border-0 !outline-none !shadow-none !p-0 !min-h-0 font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 tabular-nums text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
-                              item.sale_mode === "weight" ? "w-14" : "w-10"
+                              item.sale_mode === "weight" ? "w-10 sm:w-11" : "w-7 sm:w-8"
                             )}
                             title={
                               item.sale_mode === "weight"
@@ -928,7 +929,7 @@ export const PosSmartView = ({
                             }
                             disabled={disabled || !canWrite}
                           />
-                          <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 select-none shrink-0 pl-1">
+                          <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 select-none shrink-0 pl-0.5">
                             {item.sale_mode === "weight" ? "g" : "u."}
                           </span>
                         </div>
@@ -936,7 +937,7 @@ export const PosSmartView = ({
                           type="button"
                           onClick={() => onIncrease(item.product_id)}
                           disabled={disabled || !canWrite}
-                          className="h-full w-8 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-40 select-none shrink-0 border-l border-slate-200 dark:border-slate-800/80"
+                          className="h-full w-7 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-40 select-none shrink-0 border-l border-slate-200 dark:border-slate-800/80"
                           title={item.sale_mode === "weight" ? "Aumentar 50g" : "Aumentar cantidad"}
                         >
                           +
@@ -962,8 +963,8 @@ export const PosSmartView = ({
                   </div>
 
                   {/* Subtotal en escritorio y botones de acción */}
-                  <div className="flex items-center justify-end gap-1.5 sm:gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200 dark:border-slate-800/60 w-full sm:w-auto">
-                    <div className="hidden sm:block text-right min-w-[90px]">
+                  <div className="flex items-center justify-end gap-1.5 sm:gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-200 dark:border-slate-800/60 w-full sm:w-auto">
+                    <div className="hidden sm:block text-right min-w-[68px] shrink-0">
                       <span className={cn(
                         "font-extrabold text-sm sm:text-base tracking-tight",
                         itemSubtotal < 0 ? "text-rose-600 dark:text-rose-400" : "text-blue-600 dark:text-sky-400"
@@ -983,9 +984,9 @@ export const PosSmartView = ({
                           type="button"
                           onClick={() => onOpenItemPromoModal(item as PosCartItemComputed)}
                           disabled={disabled || !canWrite}
-                          title="Aplicar promoción o descuento manual a este producto"
+                          title="Aplicar descuento a este producto"
                           className={cn(
-                            "px-2 sm:px-2.5 py-1 rounded-lg border text-xs font-semibold transition disabled:opacity-40 flex items-center gap-1 cursor-pointer",
+                            "px-2 py-1 rounded-lg border text-xs font-semibold transition disabled:opacity-40 flex items-center gap-1 cursor-pointer",
                             ("manual_discount" in item && (item as PosCartItemComputed).manual_discount) ||
                             ("manual_promotion" in item && (item as PosCartItemComputed).manual_promotion)
                               ? "border-emerald-400 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 font-bold"
@@ -1001,7 +1002,7 @@ export const PosSmartView = ({
                                 : "text-slate-400"
                             }
                           />
-                          <span>Promo</span>
+                          <span>Descuento</span>
                         </button>
                       ) : null}
 
@@ -1010,7 +1011,7 @@ export const PosSmartView = ({
                           type="button"
                           onClick={() => onEdit(item)}
                           disabled={disabled || !canWrite}
-                          className="px-2 sm:px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 text-xs font-semibold transition disabled:opacity-40"
+                          className="px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-700/80 bg-white dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200 text-xs font-semibold transition disabled:opacity-40"
                         >
                           Editar
                         </button>

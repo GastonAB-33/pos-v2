@@ -2946,6 +2946,12 @@ section.fixed.inset-0 > div:not(.absolute) {
   color: #0c4a6e !important;
 }
 
+.ui-toast-card--warning {
+  background-color: #fffbeb !important;
+  border-color: #f59e0b !important;
+  color: #78350f !important;
+}
+
 html.dark .ui-toast-card {
   background-color: #18181b !important;
   box-shadow: 0 14px 34px -4px rgba(0, 0, 0, 0.6), 0 6px 12px -3px rgba(0, 0, 0, 0.4) !important;
@@ -2969,6 +2975,12 @@ html.dark .ui-toast-card--info {
   color: #bae6fd !important;
 }
 
+html.dark .ui-toast-card--warning {
+  background-color: #261904 !important;
+  border-color: #b45309 !important;
+  color: #fef3c7 !important;
+}
+
 .ui-toast-icon--error {
   background-color: #fee2e2 !important;
   color: #dc2626 !important;
@@ -2982,6 +2994,16 @@ html.dark .ui-toast-card--info {
 .ui-toast-icon--info {
   background-color: #e0f2fe !important;
   color: #0284c7 !important;
+}
+
+.ui-toast-icon--warning {
+  background-color: #fef3c7 !important;
+  color: #d97706 !important;
+}
+
+html.dark .ui-toast-icon--warning {
+  background-color: #451a03 !important;
+  color: #fbbf24 !important;
 }
 
 html.dark .ui-toast-icon--error {
@@ -3131,4 +3153,87 @@ html.dark .arca-invoice-page .border-black,
 html.midnight .arca-invoice-page .border-black,
 .arca-invoice-page .border-black {
   border-color: #000000 !important;
+}
+
+
+/* ========================================================
+   MODAL PRODUCTO RÁPIDO - DESTACADO VISUAL CATÁLOGO GLOBAL
+   (Tonos suaves, mate y elegantes, sin brillo saturado)
+   ======================================================== */
+
+.ui-input--master-prefilled {
+  border-color: rgba(217, 119, 6, 0.45) !important;
+  background-color: #fffdf7 !important;
+  color: #1e293b !important;
+  box-shadow: 0 0 0 1px rgba(217, 119, 6, 0.12) !important;
+}
+
+html.dark .ui-input--master-prefilled {
+  border-color: rgba(245, 158, 11, 0.35) !important;
+  background-color: #16181d !important;
+  color: #f1f5f9 !important;
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.12) !important;
+}
+
+.ui-input--master-prefilled:focus {
+  border-color: rgba(245, 158, 11, 0.6) !important;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25) !important;
+}
+
+@keyframes gentle-pulse-green {
+  0%, 100% {
+    border-color: rgba(16, 185, 129, 0.35);
+    background-color: #fafdfc;
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.12);
+  }
+  50% {
+    border-color: rgba(16, 185, 129, 0.6);
+    background-color: #f3fbf7;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.22);
+  }
+}
+
+@keyframes gentle-pulse-green-dark {
+  0%, 100% {
+    border-color: rgba(16, 185, 129, 0.3);
+    background-color: #131916;
+    box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.1);
+  }
+  50% {
+    border-color: rgba(52, 211, 153, 0.5);
+    background-color: #15221c;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+  }
+}
+
+.ui-input--master-confirm {
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  color: #0f172a !important;
+  font-weight: 600 !important;
+  animation: gentle-pulse-green 2s ease-in-out infinite !important;
+}
+
+html.dark .ui-input--master-confirm {
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #f1f5f9 !important;
+  font-weight: 600 !important;
+  animation: gentle-pulse-green-dark 2s ease-in-out infinite !important;
+}
+
+.ui-input--master-confirm:focus {
+  border-color: rgba(16, 185, 129, 0.7) !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3) !important;
+}
+
+@keyframes gentle-panel-pulse-green {
+  0%, 100% {
+    border-color: rgba(16, 185, 129, 0.2);
+  }
+  50% {
+    border-color: rgba(16, 185, 129, 0.45);
+  }
+}
+
+.ui-panel--master-confirm {
+  animation: gentle-panel-pulse-green 2s ease-in-out infinite;
 }

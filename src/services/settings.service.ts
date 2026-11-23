@@ -205,9 +205,14 @@ const normalizeTenantSettings = (input: TenantSettings): TenantSettings => ({
     barcode_scan_quantity: 1,
     allow_sale_without_customer: true,
     rounding_enabled: input.pos?.rounding_enabled ?? false,
-    rounding_rule: input.pos?.rounding_rule ?? "none",
+    rounding_rule: input.pos?.rounding_enabled
+      ? (input.pos?.rounding_rule && input.pos.rounding_rule !== "none" ? input.pos.rounding_rule : "10")
+      : (input.pos?.rounding_rule ?? "none"),
     rounding_mode: input.pos?.rounding_mode ?? "nearest",
-    rounding_target: input.pos?.rounding_target ?? "cash_only",
+    rounding_target:
+      (input.pos?.rounding_target as string) === "total" || input.pos?.rounding_target === "all_methods"
+        ? "all_methods"
+        : "cash_only",
     employee_discount_percent: input.pos?.employee_discount_percent ?? 10,
     employee_discount_excluded_categories: input.pos?.employee_discount_excluded_categories ?? [],
   },

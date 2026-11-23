@@ -3,12 +3,13 @@ import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
 import { useToast } from "@/components/ui/useToast";
 import { productsService } from "@/services/products.service";
 import { settingsService } from "@/services/settings.service";
+import { parseScaleBarcode } from "@/services/barcode/scale-barcode.service";
 import { useProductsStore } from "@/features/products/store/products.store";
 import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
 import { PosQuickProductModal } from "@/modules/pos/components/PosQuickProductModal";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import type { PosQuickProductInput } from "@/modules/pos/hooks/usePosSale";
-import type { Employee, Product } from "@/types/entities";
+import type { BarcodeScaleSettings, Employee, Product } from "@/types/entities";
 import { Search, ShoppingBag, Plus, Minus, Trash2, Barcode, Tag, X } from "lucide-react";
 
 interface EmployeeProductConsumptionModalProps {
@@ -35,6 +36,22 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
+const defaultBarcodeScaleSettings: BarcodeScaleSettings = {
+  scale_parser_enabled: false,
+  scale_mode: "total_price",
+  scale_prefix: "20",
+  code_length: 13,
+  plu_start: 3,
+  plu_length: 4,
+  weight_start: 8,
+  weight_length: 5,
+  weight_decimals: 3,
+  amount_start: 7,
+  amount_length: 6,
+  amount_decimals: 2,
+  ean13_enabled: true,
+};
+
 export const EmployeeProductConsumptionModal = ({
   open,
   tenantId,
@@ -57,6 +74,7 @@ export const EmployeeProductConsumptionModal = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isQuickProductModalOpen, setIsQuickProductModalOpen] = useState(false);
   const [quickProductInitialName, setQuickProductInitialName] = useState("");
+  const [scaleSettings, setScaleSettings] = useState<BarcodeScaleSettings>(defaultBarcodeScaleSettings);
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
@@ -99,6 +117,9 @@ export const EmployeeProductConsumptionModal = ({
         const defaultDiscount = tenantSettings?.pos?.employee_discount_percent ?? 10;
         setDiscountPercent(employee.discount_percent ?? defaultDiscount);
         setExcludedCategories(tenantSettings?.pos?.employee_discount_excluded_categories ?? []);
+        if (tenantSettings?.codigos_balanza) {
+          setScaleSettings(tenantSettings.codigos_balanza);
+        }
       })
       .catch(() => {
         toast.error("Error al cargar productos o configuración");
@@ -125,14 +146,15 @@ export const EmployeeProductConsumptionModal = ({
 
   // Agregar al carrito (si la categoría está excluida, arranca destildado sin descuento)
   const addToCart = useCallback(
-    (product: Product) => {
+    (product: Product, quantity: number = 1) => {
       const isExcluded = isCategoryExcluded(product.category);
+      const qtyToAdd = Math.max(0.001, Number(quantity.toFixed(3)));
       setCart((prev) => {
         const existing = prev.find((item) => item.product.id === product.id);
         if (existing) {
           return prev.map((item) =>
             item.product.id === product.id
-              ? { ...item, quantity: Number((item.quantity + 1).toFixed(3)) }
+              ? { ...item, quantity: Number((item.quantity + qtyToAdd).toFixed(3)) }
               : item
           );
         }
@@ -140,7 +162,7 @@ export const EmployeeProductConsumptionModal = ({
           ...prev,
           {
             product,
-            quantity: 1,
+            quantity: qtyToAdd,
             applyDiscount: !isExcluded,
           },
         ];
@@ -149,11 +171,137 @@ export const EmployeeProductConsumptionModal = ({
     [isCategoryExcluded]
   );
 
+  // Helper para buscar producto por PLU de balanza
+  const findProductByPluCode = useCallback(
+    (pluCode: string): Product | null => {
+      const normPlu = pluCode.trim().toLowerCase();
+      const strippedPlu = normPlu.replace(/^0+/, "");
+
+      // 1. Coincidencia por primaryBarcodes
+      for (const [productId, pBarcode] of Object.entries(primaryBarcodes)) {
+        if (!pBarcode) continue;
+        const norm = pBarcode.trim().toLowerCase();
+        if (norm === normPlu || (strippedPlu && norm.replace(/^0+/, "") === strippedPlu)) {
+          const candidate = products.find((p) => p.id === productId);
+          if (candidate) return candidate;
+        }
+      }
+
+      // 2. Coincidencia por código de producto interno
+      return (
+        products.find((p) => {
+          if (!p.code) return false;
+          const norm = p.code.trim().toLowerCase();
+          return norm === normPlu || (strippedPlu && norm.replace(/^0+/, "") === strippedPlu);
+        }) ?? null
+      );
+    },
+    [products, primaryBarcodes]
+  );
+
+  // Procesar código de barras de balanza pesable o importe total
+  const tryProcessScaleBarcode = useCallback(
+    async (rawCode: string): Promise<boolean> => {
+      const term = rawCode.trim();
+      if (!term) return false;
+
+      // Si la balanza no está explícitamente marcada como activa en BD, pero se escanea un EAN-13
+      // estándar que empieza con el prefijo típico (por defecto "20"), activamos el parser
+      const activeScaleSettings: BarcodeScaleSettings = scaleSettings.scale_parser_enabled
+        ? scaleSettings
+        : term.startsWith(scaleSettings.scale_prefix || "20") && term.length === (scaleSettings.code_length || 13)
+        ? { ...scaleSettings, scale_parser_enabled: true }
+        : scaleSettings;
+
+      const parsedScale = parseScaleBarcode(term, activeScaleSettings);
+      if (!parsedScale) return false;
+
+      // Buscar producto por PLU en memoria
+      let scaleProduct = findProductByPluCode(parsedScale.productCode);
+
+      // Si no está en memoria local, fallback remoto
+      if (!scaleProduct && tenantId) {
+        try {
+          let remoteProduct = await productsService.getByBarcode(tenantId, parsedScale.productCode);
+          if (!remoteProduct && parsedScale.productCode.replace(/^0+/, "")) {
+            remoteProduct = await productsService.getByBarcode(
+              tenantId,
+              parsedScale.productCode.replace(/^0+/, "")
+            );
+          }
+          if (remoteProduct && remoteProduct.is_active !== false) {
+            scaleProduct = remoteProduct;
+            setProducts((prev) => {
+              if (prev.some((p) => p.id === remoteProduct.id)) return prev;
+              return [remoteProduct, ...prev];
+            });
+            setPrimaryBarcodes((prev) => ({ ...prev, [remoteProduct.id]: parsedScale.productCode }));
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!scaleProduct || !scaleProduct.is_active) {
+        toast.error(`Código de balanza detectado pero no se encontró producto para PLU "${parsedScale.productCode}"`);
+        return true;
+      }
+
+      const isUnitProduct = scaleProduct.sale_mode === "unit";
+      let detectedQuantity = 1;
+
+      if (isUnitProduct) {
+        if (parsedScale.mode === "weight") {
+          const rawInt = parsedScale.rawWeight ? parseInt(parsedScale.rawWeight, 10) : 0;
+          const decimals = activeScaleSettings.weight_decimals ?? 3;
+          const parsedUnits =
+            rawInt > 0
+              ? rawInt
+              : parsedScale.weight != null
+              ? Math.round(parsedScale.weight * 10 ** decimals)
+              : 1;
+          detectedQuantity = Math.max(1, parsedUnits);
+        } else {
+          detectedQuantity =
+            scaleProduct.price > 0 && parsedScale.totalPrice != null && parsedScale.totalPrice > 0
+              ? Math.max(1, Math.round(parsedScale.totalPrice / scaleProduct.price))
+              : 1;
+        }
+      } else {
+        // Venta por peso (kg / gramos)
+        if (parsedScale.weight != null && parsedScale.weight > 0) {
+          detectedQuantity = Number(parsedScale.weight.toFixed(3));
+        } else if (
+          parsedScale.mode === "total_price" &&
+          parsedScale.totalPrice != null &&
+          parsedScale.totalPrice > 0 &&
+          scaleProduct.price > 0
+        ) {
+          detectedQuantity = Number((parsedScale.totalPrice / scaleProduct.price).toFixed(3));
+        } else {
+          detectedQuantity = 1;
+        }
+      }
+
+      addToCart(scaleProduct, detectedQuantity);
+      const unitLabel = scaleProduct.sale_mode === "weight" ? "kg" : "u.";
+      toast.success(`"${scaleProduct.name}" (${detectedQuantity} ${unitLabel}) agregado`);
+      setSearch("");
+      setIsSearchFocused(false);
+      return true;
+    },
+    [scaleSettings, findProductByPluCode, tenantId, addToCart, toast]
+  );
+
   // Escaneo global de código de barras (con pistola USB sin necesidad de foco en el buscador)
   const handleBarcodeScan = useCallback(
     async (scannedBarcode: string) => {
       const term = scannedBarcode.trim();
       if (!term) return;
+
+      // 0. Verificar si es código de balanza pesable
+      const handledAsScale = await tryProcessScaleBarcode(term);
+      if (handledAsScale) return;
 
       const norm = term.toLowerCase();
       const stripped = norm.replace(/^0+/, "");
@@ -196,7 +344,7 @@ export const EmployeeProductConsumptionModal = ({
         toast.error(`No se encontró producto con código "${scannedBarcode}"`);
       }
     },
-    [products, primaryBarcodes, tenantId, addToCart, toast]
+    [products, primaryBarcodes, tenantId, addToCart, toast, tryProcessScaleBarcode]
   );
 
   // Escucha activa para pistola de código de barras USB
@@ -211,6 +359,10 @@ export const EmployeeProductConsumptionModal = ({
       e.preventDefault();
       const raw = search.trim();
       if (!raw) return;
+
+      // 0. Si el texto ingresado coincide con un código de balanza pesable
+      const handledAsScale = await tryProcessScaleBarcode(raw);
+      if (handledAsScale) return;
 
       const norm = raw.toLowerCase();
       const stripped = norm.replace(/^0+/, "");
@@ -408,7 +560,7 @@ export const EmployeeProductConsumptionModal = ({
 
     try {
       const priceWithoutVat = Number((input.unitPrice / 1.21).toFixed(2));
-      const code = input.code.trim() || null;
+      const code = input.code.trim() || input.barcode.trim() || null;
       const created = await productsService.create(tenantId, {
         code,
         name,

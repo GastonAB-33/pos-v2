@@ -88,6 +88,8 @@ export const formatDisplayReceiptNumber = (receiptNumber: string | null | undefi
 export const formatDisplayNotes = (notes: string | null | undefined): string => {
   if (!notes) return "";
   return notes
+    .replace(/\s*\|\s*\[offline:[^\]]+\]/gi, "")
+    .replace(/\[offline:[^\]]+\]/gi, "")
     .replace(/VTA-\d{10,14}-(\d{1,6})/gi, (_, p1) => `VTA-${String(p1).padStart(4, "0")}`)
     .replace(/VTA-\d{6}-(\d{1,6})/gi, (_, p1) => `VTA-${String(p1).padStart(4, "0")}`)
     .replace(/VTA-(\d{10,14})/gi, (_, p1) => `VTA-${String(p1).slice(-4)}`)

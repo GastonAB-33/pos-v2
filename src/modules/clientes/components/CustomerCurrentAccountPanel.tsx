@@ -167,7 +167,6 @@ export const CustomerCurrentAccountPanel = ({
         phone: normalizeOptional(values.phone),
         address: normalizeOptional(values.address),
         observations: currentCustomer.observations,
-        current_balance: currentCustomer.current_balance,
         current_account_enabled: values.currentAccountEnabled,
         current_account_limit: newAccountLimit,
         is_active: currentCustomer.is_active,
@@ -260,7 +259,6 @@ export const CustomerCurrentAccountPanel = ({
         phone: currentCustomer.phone,
         address: currentCustomer.address,
         observations: updatedObservations,
-        current_balance: currentCustomer.current_balance,
         current_account_enabled: currentCustomer.current_account_enabled,
         current_account_limit: currentCustomer.current_account_limit,
         is_active: currentCustomer.is_active,
@@ -321,7 +319,6 @@ export const CustomerCurrentAccountPanel = ({
         phone: currentCustomer.phone,
         address: currentCustomer.address,
         observations: updatedObservations,
-        current_balance: currentCustomer.current_balance,
         current_account_enabled: currentCustomer.current_account_enabled,
         current_account_limit: currentCustomer.current_account_limit,
         is_active: currentCustomer.is_active,
@@ -411,14 +408,14 @@ export const CustomerCurrentAccountPanel = ({
           </span>
           <span
             className={`text-2xl sm:text-3xl font-black tracking-tight ${
-              balance > 0
+              accountSummary.updatedBalance > 0
                 ? "text-rose-600 dark:text-rose-400"
-                : balance < 0
+                : accountSummary.updatedBalance < 0
                 ? "text-blue-600 dark:text-blue-400"
                 : "text-emerald-600 dark:text-emerald-400"
             }`}
           >
-            {currency.format(balance)}
+            {currency.format(accountSummary.updatedBalance)}
           </span>
         </div>
       </div>
@@ -429,7 +426,7 @@ export const CustomerCurrentAccountPanel = ({
             Deuda original
           </p>
           <strong className="block mt-1 text-base sm:text-xl font-bold font-mono text-slate-900 dark:text-slate-100">
-            {currency.format(balance)}
+            {currency.format(accountSummary.accountingBalance)}
           </strong>
         </article>
         <article className="rounded-2xl border border-indigo-200 dark:border-indigo-900/60 bg-indigo-50/50 dark:bg-indigo-950/30 p-3 sm:p-4">

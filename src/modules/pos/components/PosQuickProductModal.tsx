@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import type { PosQuickProductInput } from "@/modules/pos/hooks/usePosSale";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { cn } from "@/utils/cn";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { handleNumericInputFocus } from "@/utils/input-helpers";
 import { masterProductsService, type MasterProduct } from "@/services/master-products.service";
@@ -50,7 +51,7 @@ export const PosQuickProductModal = ({
   submitButtonText,
   initialName,
   initialBarcode,
-  defaultSaveMode = "sale_only",
+  defaultSaveMode = "catalog",
 }: PosQuickProductModalProps) => {
   useBodyScrollLock(open);
   const [saveMode, setSaveMode] = useState<SaveMode>(defaultSaveMode);
@@ -128,6 +129,7 @@ export const PosQuickProductModal = ({
           setMasterMatch(found);
           setName(found.name);
           setCategory(found.category);
+          setCode(clean);
           setSaveMode("catalog");
           setErrorMessage(null);
           // Autofoco inmediato en precio de venta ya que el resto viene precompletado
@@ -203,6 +205,7 @@ export const PosQuickProductModal = ({
 
   const quantityLabel = saleMode === "weight" ? "Cantidad a vender (gramos)" : "Cantidad a vender";
   const priceLabel = saleMode === "weight" ? "Precio venta (por kg)" : "Precio venta";
+  const isMasterPreloaded = Boolean(masterMatch);
 
   if (!open) return null;
 
@@ -210,6 +213,8 @@ export const PosQuickProductModal = ({
     const quantityValue = parsePositive(quantity);
     const normalizedQuantity = saleMode === "weight" ? gramsToKg(quantityValue) : quantityValue;
     const stockValue = normalizedQuantity > 0 ? normalizedQuantity : 1;
+    const cleanBarcode = barcode.trim();
+    const cleanCode = code.trim() || cleanBarcode;
 
     return {
       name: name.trim(),
@@ -219,9 +224,12 @@ export const PosQuickProductModal = ({
       unitPrice: parsePositive(unitPrice),
       costPrice: 0,
       stock: stockValue,
-      code: code.trim(),
-      barcode: barcode.trim(),
+      code: cleanCode,
+      barcode: cleanBarcode,
       favorite: false,
+      brand: masterMatch?.brand || null,
+      subcategory: masterMatch?.subcategory || null,
+      imageUrl: masterMatch?.image_url || null,
     };
   };
 
@@ -455,9 +463,21 @@ export const PosQuickProductModal = ({
 
           <div className="grid gap-3 sm:grid-cols-2">
             {/* Nombre del producto (ancho completo) */}
-            <div className="sm:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                Nombre <span className="text-rose-500">*</span>
+            <div className={cn(
+              "sm:col-span-2 rounded-xl transition-all",
+              isMasterPreloaded
+                ? "bg-amber-500/[0.03] dark:bg-amber-500/[0.04] border border-amber-500/25 dark:border-amber-500/20 p-2.5 rounded-xl"
+                : ""
+            )}>
+              <label className="mb-1 flex items-center justify-between text-sm font-medium text-slate-700 dark:text-slate-200">
+                <span>
+                  Nombre <span className="text-rose-500">*</span>
+                </span>
+                {isMasterPreloaded && (
+                  <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-amber-700 dark:text-amber-400/90 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                    ⚡ Autocompletado del Catálogo Global
+                  </span>
+                )}
               </label>
               <input
                 ref={nameInputRef}
@@ -466,7 +486,7 @@ export const PosQuickProductModal = ({
                   setName(event.target.value);
                   setErrorMessage(null);
                 }}
-                className="ui-input"
+                className={cn("ui-input", isMasterPreloaded && "ui-input--master-prefilled")}
                 placeholder="Nombre del producto..."
                 autoComplete="off"
                 autoCorrect="off"
@@ -478,9 +498,21 @@ export const PosQuickProductModal = ({
 
             {/* Categoría: SOLO visible en modo "Guardar en el sistema" */}
             {saveMode === "catalog" ? (
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Categoría <span className="text-rose-500">*</span>
+              <div className={cn(
+                "rounded-xl transition-all",
+                isMasterPreloaded
+                  ? "bg-amber-500/[0.03] dark:bg-amber-500/[0.04] border border-amber-500/25 dark:border-amber-500/20 p-2.5 rounded-xl"
+                  : ""
+              )}>
+                <label className="mb-1 flex items-center justify-between text-sm font-medium text-slate-700 dark:text-slate-200">
+                  <span>
+                    Categoría <span className="text-rose-500">*</span>
+                  </span>
+                  {isMasterPreloaded && (
+                    <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-amber-700 dark:text-amber-400/90 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                      ⚡ Autocompletada
+                    </span>
+                  )}
                 </label>
                 <input
                   ref={categoryInputRef}
@@ -491,7 +523,7 @@ export const PosQuickProductModal = ({
                     setErrorMessage(null);
                   }}
                   placeholder="Seleccionar o escribir categoría..."
-                  className="ui-input"
+                  className={cn("ui-input", isMasterPreloaded && "ui-input--master-prefilled")}
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -520,7 +552,10 @@ export const PosQuickProductModal = ({
             ) : null}
 
             {/* Tipo de venta */}
-            <div>
+            <div className={cn(
+              "rounded-xl transition-all",
+              isMasterPreloaded ? "p-2.5" : ""
+            )}>
               <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Tipo de venta</label>
               <select
                 ref={saleModeSelectRef}
@@ -535,9 +570,21 @@ export const PosQuickProductModal = ({
 
             {/* Códigos de barra e interno según el modo */}
             {saveMode === "sale_only" ? (
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Código de barras <span className="text-xs text-slate-400 font-normal dark:text-slate-400">(opcional)</span>
+              <div className={cn(
+                "rounded-xl transition-all",
+                isMasterPreloaded
+                  ? "bg-amber-500/[0.03] dark:bg-amber-500/[0.04] border border-amber-500/25 dark:border-amber-500/20 p-2.5 rounded-xl"
+                  : ""
+              )}>
+                <label className="mb-1 flex items-center justify-between text-sm font-medium text-slate-700 dark:text-slate-200">
+                  <span>
+                    Código de barras <span className="text-xs text-slate-400 font-normal dark:text-slate-400">(opcional)</span>
+                  </span>
+                  {isMasterPreloaded && (
+                    <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-amber-700 dark:text-amber-400/90 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                      ⚡ Escaneado
+                    </span>
+                  )}
                 </label>
                 <input
                   ref={barcodeInputRef}
@@ -559,14 +606,26 @@ export const PosQuickProductModal = ({
                     }
                   }}
                   placeholder="Opcional o escaneado"
-                  className="ui-input"
+                  className={cn("ui-input", isMasterPreloaded && "ui-input--master-prefilled")}
                 />
               </div>
             ) : (
               <>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                    Código de barras <span className="text-xs text-slate-400 font-normal dark:text-slate-400">(opcional)</span>
+                <div className={cn(
+                  "rounded-xl transition-all",
+                  isMasterPreloaded
+                    ? "bg-amber-500/[0.03] dark:bg-amber-500/[0.04] border border-amber-500/25 dark:border-amber-500/20 p-2.5 rounded-xl"
+                    : ""
+                )}>
+                  <label className="mb-1 flex items-center justify-between text-sm font-medium text-slate-700 dark:text-slate-200">
+                    <span>
+                      Código de barras <span className="text-xs text-slate-400 font-normal dark:text-slate-400">(opcional)</span>
+                    </span>
+                    {isMasterPreloaded && (
+                      <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-amber-700 dark:text-amber-400/90 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                        ⚡ Escaneado
+                      </span>
+                    )}
                   </label>
                   <input
                     ref={barcodeInputRef}
@@ -588,11 +647,14 @@ export const PosQuickProductModal = ({
                       }
                     }}
                     placeholder="Opcional o escaneado"
-                    className="ui-input"
+                    className={cn("ui-input", isMasterPreloaded && "ui-input--master-prefilled")}
                   />
                 </div>
 
-                <div>
+                <div className={cn(
+                  "rounded-xl transition-all",
+                  isMasterPreloaded ? "p-2.5" : ""
+                )}>
                   <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
                     Código interno <span className="text-xs text-slate-400 font-normal dark:text-slate-400">(opcional)</span>
                   </label>
@@ -614,9 +676,21 @@ export const PosQuickProductModal = ({
               </>
             )}
 
-            {/* Cantidad a vender */}
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">{quantityLabel}</label>
+            {/* Cantidad a vender (unidades o peso a confirmar) */}
+            <div className={cn(
+              "rounded-xl transition-all",
+              isMasterPreloaded
+                ? "bg-emerald-500/[0.03] dark:bg-emerald-500/[0.04] border border-emerald-500/25 dark:border-emerald-500/20 p-2.5 rounded-xl ui-panel--master-confirm"
+                : ""
+            )}>
+              <label className="mb-1 flex items-center justify-between text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <span>{quantityLabel}</span>
+                {isMasterPreloaded && (
+                  <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-700 dark:text-emerald-400/90 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    ● Confirmar unidades
+                  </span>
+                )}
+              </label>
               <input
                 ref={quantityInputRef}
                 type="number"
@@ -629,7 +703,7 @@ export const PosQuickProductModal = ({
                     isNew: false,
                   })
                 }
-                className="ui-input"
+                className={cn("ui-input", isMasterPreloaded && "ui-input--master-confirm")}
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
@@ -638,10 +712,22 @@ export const PosQuickProductModal = ({
               />
             </div>
 
-            {/* Precio venta */}
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                {priceLabel} <span className="text-rose-500">*</span>
+            {/* Precio venta (a confirmar) */}
+            <div className={cn(
+              "rounded-xl transition-all",
+              isMasterPreloaded
+                ? "bg-emerald-500/[0.03] dark:bg-emerald-500/[0.04] border border-emerald-500/25 dark:border-emerald-500/20 p-2.5 rounded-xl ui-panel--master-confirm"
+                : ""
+            )}>
+              <label className="mb-1 flex items-center justify-between text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <span>
+                  {priceLabel} <span className="text-rose-500">*</span>
+                </span>
+                {isMasterPreloaded && (
+                  <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-700 dark:text-emerald-400/90 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    ● Confirmar precio
+                  </span>
+                )}
               </label>
               <input
                 ref={unitPriceInputRef}
@@ -660,7 +746,7 @@ export const PosQuickProductModal = ({
                   })
                 }
                 placeholder="0.00"
-                className="ui-input"
+                className={cn("ui-input", isMasterPreloaded && "ui-input--master-confirm")}
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"

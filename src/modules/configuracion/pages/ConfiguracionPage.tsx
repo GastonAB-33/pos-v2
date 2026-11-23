@@ -1223,7 +1223,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                     </label>
                     <select
                       className="ui-input"
-                      value={draft.pos.rounding_rule || "10"}
+                      value={(draft.pos.rounding_rule as string) === "1" ? "integer" : (draft.pos.rounding_rule || "10")}
                       onChange={(e) =>
                         updateSection("pos", {
                           rounding_rule: e.target.value as PosRoundingRule,
@@ -1231,10 +1231,12 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                       }
                       disabled={!canWriteConfiguracion}
                     >
-                      <option value="1">Al entero ($1) — Sin centavos</option>
+                      <option value="integer">Al entero ($1) — Sin centavos</option>
                       <option value="10">A decenas ($10) — Recomendado efectivo</option>
                       <option value="50">A múltiplos de $50</option>
                       <option value="100">A múltiplos de $100</option>
+                      <option value="500">A múltiplos de $500</option>
+                      <option value="1000">A múltiplos de $1000</option>
                     </select>
                   </div>
 
@@ -1264,7 +1266,7 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                     </label>
                     <select
                       className="ui-input"
-                      value={draft.pos.rounding_target || "total"}
+                      value={draft.pos.rounding_target === "cash_only" ? "cash_only" : "all_methods"}
                       onChange={(e) =>
                         updateSection("pos", {
                           rounding_target: e.target.value as PosRoundingTarget,
@@ -1272,8 +1274,8 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                       }
                       disabled={!canWriteConfiguracion}
                     >
-                      <option value="total">Solo al Total Final del Ticket</option>
-                      <option value="each_item">A cada producto individualmente</option>
+                      <option value="all_methods">En todos los medios de pago</option>
+                      <option value="cash_only">Solo en pagos en efectivo</option>
                     </select>
                   </div>
                 </div>

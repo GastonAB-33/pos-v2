@@ -546,7 +546,7 @@ export const PosCart = ({
                             event.currentTarget.blur();
                           }
                         }}
-                        className="h-7 w-14 rounded-lg border border-slate-300 bg-white text-center text-xs font-bold text-slate-900 focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        className={cn("h-7 rounded-lg border border-slate-300 bg-white text-center text-xs font-bold text-slate-900 focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none", item.sale_mode === "weight" ? "w-11" : "w-8")}
                         disabled={disabled || !canWrite}
                       />
                       <button
@@ -574,20 +574,20 @@ export const PosCart = ({
                         type="button"
                         onClick={() => onOpenItemPromoModal(item as PosCartItemComputed)}
                         disabled={disabled || !canWrite}
-                        aria-label={`Promoción o descuento para ${item.name}`}
+                        aria-label={`Descuento para ${item.name}`}
                         className={cn(
                           "rounded-lg border px-1.5 py-0.5 text-[11px] font-semibold transition cursor-pointer flex items-center gap-1",
                           item.manual_discount || item.manual_promotion
                             ? "border-emerald-400 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 font-bold"
                             : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
                         )}
-                        title="Aplicar promoción o descuento a este producto"
+                        title="Aplicar descuento a este producto"
                       >
                         <BadgePercent
                           size={11}
                           className={item.manual_discount || item.manual_promotion ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}
                         />
-                        <span>Promo</span>
+                        <span>Descuento</span>
                       </button>
                     ) : null}
                     {!item.is_returnable_package_item && (

@@ -86,6 +86,19 @@ export const BarcodeScannerModal = ({
     };
 
     const start = async () => {
+      const isSecure =
+        typeof window === "undefined" ||
+        window.isSecureContext ||
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1";
+
+      if (!isSecure) {
+        setError(
+          "INSECURE_CONTEXT: Los celulares bloquean la cámara en conexiones HTTP (IP local). Para usarla, accedé mediante HTTPS o habilitá la IP en chrome://flags/#unsafely-treat-insecure-origin-as-secure."
+        );
+        return;
+      }
+
       if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
         setError("Este dispositivo no soporta cámara en navegador.");
         return;
@@ -95,14 +108,29 @@ export const BarcodeScannerModal = ({
       setError(null);
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 },
-          },
-          audio: false,
-        });
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1280, max: 1920 },
+              height: { ideal: 720, max: 1080 },
+            },
+            audio: false,
+          });
+        } catch {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: "environment" },
+              audio: false,
+            });
+          } catch {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: false,
+            });
+          }
+        }
 
         if (!active) {
           stream.getTracks().forEach((track) => track.stop());
@@ -157,10 +185,13 @@ export const BarcodeScannerModal = ({
 
         timerRef.current = window.setTimeout(scanFrame, 200);
       } catch (err) {
+        console.error("Error al iniciar cámara:", err);
         if (err instanceof DOMException && (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")) {
           setError("Permiso de cámara denegado. Asegurate de habilitar el permiso de cámara en el navegador.");
         } else if (err instanceof DOMException && (err.name === "NotFoundError" || err.name === "DevicesNotFoundError")) {
           setError("No se detectó ninguna cámara en este dispositivo.");
+        } else if (err instanceof DOMException && (err.name === "NotReadableError" || err.name === "TrackStartError")) {
+          setError("La cámara está siendo utilizada por otra aplicación o pestaña del navegador.");
         } else {
           setError("No se pudo acceder a la cámara. Verificá permisos.");
         }
@@ -201,7 +232,22 @@ export const BarcodeScannerModal = ({
               Este navegador no soporta detección automática nativa de códigos.
             </p>
           ) : null}
-          {error ? <p className="text-xs text-red-600 dark:text-red-400">{error}</p> : null}
+          {error ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-300 space-y-1">
+              <p className="font-semibold">
+                {error.startsWith("INSECURE_CONTEXT:") ? "Conexión HTTP en Teléfono Móvil" : "Error de Cámara"}
+              </p>
+              <p>{error.replace("INSECURE_CONTEXT: ", "")}</p>
+              {error.startsWith("INSECURE_CONTEXT:") && (
+                <div className="mt-2 p-2 rounded-lg bg-white/70 dark:bg-slate-900/80 text-[11px] font-mono text-slate-700 dark:text-slate-300 space-y-1">
+                  <p className="font-sans font-semibold text-slate-800 dark:text-slate-200">En Chrome para Android:</p>
+                  <p>1. Ingresá a <span className="text-blue-600 dark:text-sky-400 select-all">chrome://flags/#unsafely-treat-insecure-origin-as-secure</span></p>
+                  <p>2. Agregá la URL actual de tu servidor local.</p>
+                  <p>3. Activá (Enabled) y reiniciá el navegador.</p>
+                </div>
+              )}
+            </div>
+          ) : null}
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/60">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">

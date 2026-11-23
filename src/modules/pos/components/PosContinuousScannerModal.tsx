@@ -164,6 +164,7 @@ export const PosContinuousScannerModal = ({
   const [manualBarcode, setManualBarcode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  const [retryTrigger, setRetryTrigger] = useState(0);
 
   // Estado de feedback visual
   const [feedbackState, setFeedbackState] = useState<"idle" | "success" | "error">("idle");
@@ -300,8 +301,21 @@ export const PosContinuousScannerModal = ({
     };
 
     const start = async () => {
+      const isSecure =
+        typeof window === "undefined" ||
+        window.isSecureContext ||
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1";
+
+      if (!isSecure) {
+        setError(
+          "INSECURE_CONTEXT: Los celulares bloquean la cámara en conexiones HTTP (IP local). Para usarla, accedé mediante HTTPS o habilitá la IP en chrome://flags/#unsafely-treat-insecure-origin-as-secure."
+        );
+        return;
+      }
+
       if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-        setError("Este navegador o dispositivo no tiene acceso a la cámara.");
+        setError("Este navegador o dispositivo no tiene soporte para acceder a la cámara.");
         return;
       }
 
@@ -309,14 +323,29 @@ export const PosContinuousScannerModal = ({
       setError(null);
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: facingMode },
-            width: { ideal: 1280, max: 1920 },
-            height: { ideal: 720, max: 1080 },
-          },
-          audio: false,
-        });
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: facingMode },
+              width: { ideal: 1280, max: 1920 },
+              height: { ideal: 720, max: 1080 },
+            },
+            audio: false,
+          });
+        } catch (firstErr) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: facingMode },
+              audio: false,
+            });
+          } catch {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: false,
+            });
+          }
+        }
 
         if (!active) {
           stream.getTracks().forEach((track) => track.stop());
@@ -393,6 +422,8 @@ export const PosContinuousScannerModal = ({
           setError("Permiso de cámara bloqueado o denegado. Tocá el candado o ícono de ajustes en la barra del navegador para permitir la cámara.");
         } else if (err instanceof DOMException && (err.name === "NotFoundError" || err.name === "DevicesNotFoundError")) {
           setError("No se detectó ninguna cámara disponible en este dispositivo.");
+        } else if (err instanceof DOMException && (err.name === "NotReadableError" || err.name === "TrackStartError")) {
+          setError("La cámara está siendo utilizada por otra aplicación o pestaña del navegador.");
         } else {
           setError("No se pudo acceder a la cámara. Verificá los permisos de tu navegador.");
         }
@@ -407,7 +438,7 @@ export const PosContinuousScannerModal = ({
       active = false;
       stopAll();
     };
-  }, [detectorCtor, facingMode, open, processBarcode]);
+  }, [detectorCtor, facingMode, open, processBarcode, retryTrigger]);
 
   if (!open) return null;
 
@@ -587,9 +618,38 @@ export const PosContinuousScannerModal = ({
           )}
 
           {error && (
-            <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-sm p-4 flex flex-col items-center justify-center text-center gap-2 z-30">
-              <AlertCircle size={32} className="text-rose-400 mb-1" />
-              <p className="text-xs font-semibold text-rose-300 max-w-xs">{error}</p>
+            <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-sm p-4 flex flex-col items-center justify-center text-center gap-3 z-30 overflow-y-auto">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <AlertCircle size={28} />
+              </div>
+              <div className="max-w-xs space-y-1.5">
+                <h4 className="text-sm font-bold text-white">
+                  {error.startsWith("INSECURE_CONTEXT:") ? "Conexión HTTP en Teléfono" : "Aviso de Cámara"}
+                </h4>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {error.replace("INSECURE_CONTEXT: ", "")}
+                </p>
+              </div>
+              {error.startsWith("INSECURE_CONTEXT:") && (
+                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px] text-slate-400 text-left max-w-xs space-y-1">
+                  <p className="font-semibold text-amber-300">¿Cómo habilitar en pruebas locales?</p>
+                  <p>1. En Chrome en el celular ingresá a: <code className="text-sky-300 select-all">chrome://flags/#unsafely-treat-insecure-origin-as-secure</code></p>
+                  <p>2. Agregá la URL actual (ej: <code className="text-sky-300 select-all">{typeof window !== "undefined" ? window.location.origin : ""}</code>)</p>
+                  <p>3. Cambiá a Enabled y reiniciá Chrome.</p>
+                </div>
+              )}
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    setRetryTrigger((prev) => prev + 1);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition cursor-pointer"
+                >
+                  Reintentar
+                </button>
+              </div>
             </div>
           )}
         </div>

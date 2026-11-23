@@ -8,7 +8,7 @@ export type SidebarTheme = "auto" | "dark" | "light";
 export type UiDensity = "standard" | "compact";
 export type UiFontSize = "compact" | "normal" | "large" | "extra-large";
 export type PosWindowMode = "same_tab" | "new_window" | "smart_pos";
-export type UiToastType = "success" | "error" | "info";
+export type UiToastType = "success" | "error" | "info" | "warning";
 
 export interface UiToast {
   id: string;
