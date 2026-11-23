@@ -57,7 +57,7 @@ const toServiceInput = (
   email: normalizeEmpty(values.email),
   address: normalizeEmpty(values.address),
   observations: normalizeEmpty(values.observations),
-  current_balance: options?.currentBalance ?? 0,
+  ...(options?.currentBalance !== undefined ? { current_balance: options.currentBalance } : {}),
   is_active: options?.isActive ?? true,
 });
 
@@ -103,7 +103,10 @@ export const useCustomersCrud = (tenantId: string | null, userId: string | null)
 
     setIsSubmitting(true);
     try {
-      const created = await customersService.create(tenantId, toServiceInput(values));
+      const created = await customersService.create(tenantId, {
+        ...toServiceInput(values),
+        current_balance: 0,
+      });
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "clientes",
@@ -142,7 +145,7 @@ export const useCustomersCrud = (tenantId: string | null, userId: string | null)
         toServiceInput(values, {
           existingCode: existing.code,
           isActive: existing.is_active,
-          currentBalance: existing.current_balance,
+
         })
       );
       await auditService.createSafe(tenantId, {

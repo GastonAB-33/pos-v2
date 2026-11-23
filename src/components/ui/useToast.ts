@@ -18,6 +18,10 @@ export const useToast = () => {
     (message: string, durationMs = 8000) => show("error", message, durationMs),
     [show]
   );
+  const warning = useCallback(
+    (message: string, durationMs = 7000) => show("warning", message, durationMs),
+    [show]
+  );
   const info = useCallback(
     (message: string, durationMs = 6000) => show("info", message, durationMs),
     [show]
@@ -28,8 +32,9 @@ export const useToast = () => {
       show,
       success,
       error,
+      warning,
       info,
     }),
-    [error, info, show, success]
+    [error, info, show, success, warning]
   );
 };

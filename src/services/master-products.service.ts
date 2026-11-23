@@ -27,6 +27,54 @@ export const STANDARD_RETAIL_CATEGORIES = [
   "Bazar y Varios",
 ] as const;
 
+/**
+ * Sanitiza textos con posibles caracteres corruptos (mojibake)
+ * provenientes de conversiones erróneas CP850/UTF-8 en catálogos importados.
+ */
+export function cleanCatalogText(str: string): string {
+  if (!str || typeof str !== "string") return str;
+
+  let res = str;
+
+  // 1. Palabras específicas con ambigüedad de ├ü (que puede ser ú, ü o á)
+  res = res.replace(/Tarag├üi/g, "Taragüí");
+  res = res.replace(/Az├ücar/g, "Azúcar");
+  res = res.replace(/H├ümedas/g, "Húmedas");
+  res = res.replace(/At├ün/g, "Atún");
+  res = res.replace(/Psta├æa/g, "Pestaña");
+
+  // 2. Correcciones de eñes (ñ y Ñ)
+  res = res.replace(/├▒/g, "ñ");
+  // ├æ al inicio de palabra -> Ñ (ej: ├æoquis -> Ñoquis)
+  res = res.replace(/(^|[^a-zA-ZáéíóúÁÉÍÓÚñÑ])├æ/g, "$1Ñ");
+  // ├æ dentro de una palabra -> ñ (ej: Ba├æo -> Baño)
+  res = res.replace(/├æ/g, "ñ");
+
+  // 3. Vocales acentuadas
+  res = res.replace(/├®/g, "é");
+  res = res.replace(/├ë/g, "é");
+  res = res.replace(/├ì/g, "í");
+  res = res.replace(/├¡/g, "í");
+  res = res.replace(/├í/g, "á");
+  res = res.replace(/├ü/g, "á");
+  res = res.replace(/├ôn/g, "ón");
+  res = res.replace(/├ô/g, "ó");
+  res = res.replace(/├│/g, "ó");
+  res = res.replace(/├║/g, "ú");
+
+  return res;
+}
+
+export function cleanMasterProduct(item: MasterProduct): MasterProduct {
+  return {
+    ...item,
+    name: cleanCatalogText(item.name),
+    brand: item.brand ? cleanCatalogText(item.brand) : null,
+    category: cleanCatalogText(item.category),
+    subcategory: item.subcategory ? cleanCatalogText(item.subcategory) : null,
+  };
+}
+
 // In-memory cache de alto rendimiento para evitar peticiones repetidas a Supabase
 const memoryCache = new Map<string, MasterProduct | null>();
 
@@ -63,7 +111,8 @@ export const masterProductsService = {
         return null;
       }
 
-      const product = (data as MasterProduct) || null;
+      const rawProduct = (data as MasterProduct) || null;
+      const product = rawProduct ? cleanMasterProduct(rawProduct) : null;
       memoryCache.set(cleanBarcode, product);
       return product;
     } catch (err) {
@@ -84,10 +133,20 @@ export const masterProductsService = {
     }
 
     try {
+      // Reemplazar caracteres especiales y acentos por '_' en SQL para que coincida
+      // tanto si la base de datos tiene tilde/eñe normal como si aún tiene mojibake
+      const flexibleQuery = cleanQuery
+        .replace(/[áÁàÀ]/g, "_")
+        .replace(/[éÉèÈ]/g, "_")
+        .replace(/[íÍìÌ]/g, "_")
+        .replace(/[óÓòÒ]/g, "_")
+        .replace(/[úÚùÙüÜ]/g, "_")
+        .replace(/[ñÑ]/g, "_");
+
       const { data, error } = await supabase
         .from("master_products")
         .select("barcode, name, brand, category, subcategory, unit, image_url, is_verified")
-        .ilike("name", `%${cleanQuery}%`)
+        .ilike("name", `%${flexibleQuery}%`)
         .order("is_verified", { ascending: false })
         .limit(limit);
 
@@ -96,7 +155,9 @@ export const masterProductsService = {
         return [];
       }
 
-      const results = (data as MasterProduct[]) || [];
+      const rawResults = (data as MasterProduct[]) || [];
+      const results = rawResults.map(cleanMasterProduct);
+
       // Cachear individualmente por código de barras para búsquedas posteriores inmediatas
       for (const item of results) {
         if (item.barcode) {

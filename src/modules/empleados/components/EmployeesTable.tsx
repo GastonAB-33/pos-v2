@@ -300,7 +300,6 @@ export const EmployeesTable = ({
               <tr>
                 <th className="py-3.5 px-4">Código / Nombre</th>
                 <th className="py-3.5 px-4">Documento</th>
-                <th className="py-3.5 px-4">Puesto</th>
                 <th className="py-3.5 px-4">Sueldo Base</th>
                 <th className="py-3.5 px-4" title="Saldo negativo total: Cuenta corriente + Adelantos pendientes de descuento">
                   Saldo Total (Deuda)
@@ -342,6 +341,7 @@ export const EmployeesTable = ({
                           </span>
                           <span className="text-[11px] text-slate-400 font-mono">
                             {employee.code}
+                            {employee.position ? ` • ${employee.position}` : ""}
                             {employee.phone ? ` • ${employee.phone}` : ""}
                           </span>
                         </div>
@@ -354,8 +354,6 @@ export const EmployeesTable = ({
                       </span>
                       {employee.document_number}
                     </td>
-
-                    <td className="py-3 px-4 font-medium">{employee.position}</td>
 
                     <td className="py-3 px-4 font-semibold text-slate-900 dark:text-slate-100 font-mono">
                       {currency.format(employee.base_salary || 0)}

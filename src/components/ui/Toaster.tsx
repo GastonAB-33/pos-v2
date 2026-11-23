@@ -9,8 +9,9 @@ interface ToastItemProps {
 
 const ToastItem = ({ toast, onClose }: ToastItemProps) => {
   useEffect(() => {
-    // Duración predeterminada mayor: 6s para éxito/info, 8s para errores
-    const defaultDuration = toast.type === "error" ? 8000 : 6000;
+    // Duración predeterminada: 6s éxito/info, 7s advertencia/catálogo global, 8s errores
+    const defaultDuration =
+      toast.type === "error" ? 8000 : toast.type === "warning" ? 7000 : 6000;
     const duration = toast.durationMs ?? defaultDuration;
 
     const timeout = window.setTimeout(() => {
@@ -22,28 +23,41 @@ const ToastItem = ({ toast, onClose }: ToastItemProps) => {
 
   const isSuccess = toast.type === "success";
   const isError = toast.type === "error";
+  const isWarning = toast.type === "warning";
 
-  const IconComp = isSuccess ? CheckCircle2 : isError ? AlertTriangle : Info;
+  const IconComp = isSuccess ? CheckCircle2 : isError ? AlertTriangle : isWarning ? AlertTriangle : Info;
 
-  const titleText = isSuccess ? "Operación exitosa" : isError ? "Atención / Error" : "Notificación";
+  const titleText = isSuccess
+    ? "Operación exitosa"
+    : isError
+      ? "Atención / Error"
+      : isWarning
+        ? "Catálogo Global / Aviso"
+        : "Notificación";
 
   const cardStyle = isSuccess
     ? "ui-toast-card--success"
     : isError
       ? "ui-toast-card--error"
-      : "ui-toast-card--info";
+      : isWarning
+        ? "ui-toast-card--warning"
+        : "ui-toast-card--info";
 
   const iconStyle = isSuccess
     ? "ui-toast-icon--success"
     : isError
       ? "ui-toast-icon--error"
-      : "ui-toast-icon--info";
+      : isWarning
+        ? "ui-toast-icon--warning"
+        : "ui-toast-icon--info";
 
   const accentBar = isSuccess
     ? "bg-emerald-500"
     : isError
       ? "bg-red-500"
-      : "bg-sky-500";
+      : isWarning
+        ? "bg-amber-500"
+        : "bg-sky-500";
 
   return (
     <article

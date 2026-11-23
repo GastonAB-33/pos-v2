@@ -511,7 +511,7 @@ export const useCurrentAccount = (
 
     setIsLoading(true);
     try {
-      const [freshCustomer, list, currentBalance, openSession, methods, activeBankAccounts, activeOriginBanks, activeInstallmentPlans] = await Promise.all([
+      const [freshCustomer, list, _currentBalance, openSession, methods, activeBankAccounts, activeOriginBanks, activeInstallmentPlans] = await Promise.all([
         customersService.getById(tenantId, customer.id),
         currentAccountsService.getByCustomer(tenantId, customer.id),
         currentAccountsService.getCustomerBalance(tenantId, customer.id),
@@ -682,7 +682,23 @@ export const useCurrentAccount = (
       const fifoResult = calculatePendingDebtsFIFO(list, nextSaleDetailsById, customerRule);
 
       setMovements(list);
-      setBalance(currentBalance);
+      const trueLedgerBalance = fifoResult.accountingBalance;
+
+      // Auto-reconciliación preventiva: si el balance acumulado en la ficha del cliente
+      // difiere de la suma real de movimientos contables del libro mayor, sincronizamos
+      // inmediatamente la base de datos para garantizar consistencia total e impedir desfasajes.
+      if (
+        effectiveCustomer &&
+        Math.abs((effectiveCustomer.current_balance ?? 0) - trueLedgerBalance) > 0.009
+      ) {
+        void customersService.update(tenantId, effectiveCustomer.id, {
+          current_balance: trueLedgerBalance,
+        }).catch((err) => {
+          console.warn("[useCurrentAccount] No se pudo auto-reconciliar current_balance:", err);
+        });
+      }
+
+      setBalance(trueLedgerBalance);
       setPaymentMethods(availableMethods);
       setBankAccounts(
         [...activeBankAccounts].sort((a, b) => a.bank_name.localeCompare(b.bank_name))

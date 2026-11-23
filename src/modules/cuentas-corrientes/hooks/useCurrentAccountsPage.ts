@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { customersService } from "@/services/customers.service";
 import { parseCustomerPackageDebts } from "@/utils/returnable-packages";
-import type { Customer } from "@/types/entities";
+import type { Customer, CurrentAccountMovement } from "@/types/entities";
+import { currentAccountsService } from "@/services/current-accounts.service";
 
 type FeedbackType = "success" | "error";
 
@@ -11,6 +12,16 @@ interface CurrentAccountsPageFeedback {
 }
 
 export type CurrentAccountsFilterMode = "all" | "debt" | "packages" | "both" | "zero";
+
+const normalizeMovementAmount = (
+  type: CurrentAccountMovement["type"],
+  amount: number
+): number => {
+  const absAmount = Math.abs(amount);
+  if (type === "debt") return absAmount;
+  if (type === "payment") return -absAmount;
+  return amount;
+};
 
 export const useCurrentAccountsPage = (
   tenantId: string | null,
@@ -37,8 +48,42 @@ export const useCurrentAccountsPage = (
     setIsLoading(true);
 
     try {
-      const rows = await customersService.getAllByTenant(tenantId);
-      const sorted = [...rows].sort((a, b) => a.full_name.localeCompare(b.full_name, "es"));
+      const [rows, movements] = await Promise.all([
+        customersService.getAllByTenant(tenantId),
+        currentAccountsService.getAllByTenant(tenantId).catch(() => [] as CurrentAccountMovement[]),
+      ]);
+
+      const ledgerBalancesByCustomerId = new Map<string, number>();
+      for (const movement of movements) {
+        if (!movement.customer_id) continue;
+        const delta = normalizeMovementAmount(movement.type, movement.amount);
+        const prev = ledgerBalancesByCustomerId.get(movement.customer_id) ?? 0;
+        ledgerBalancesByCustomerId.set(
+          movement.customer_id,
+          Number((prev + delta).toFixed(2))
+        );
+      }
+
+      const reconciledRows = rows.map((c) => {
+        const hasLedger = ledgerBalancesByCustomerId.has(c.id);
+        const authoritativeBalance = hasLedger
+          ? (ledgerBalancesByCustomerId.get(c.id) ?? 0)
+          : (c.current_balance ?? 0);
+
+        if (hasLedger && Math.abs((c.current_balance ?? 0) - authoritativeBalance) > 0.009) {
+          void customersService
+            .update(tenantId, c.id, { current_balance: authoritativeBalance })
+            .catch((err) => {
+              console.warn(`[useCurrentAccountsPage] Error al auto-reconciliar cliente ${c.id}:`, err);
+            });
+        }
+
+        return {
+          ...c,
+          current_balance: authoritativeBalance,
+        };
+      });
+      const sorted = [...reconciledRows].sort((a, b) => a.full_name.localeCompare(b.full_name, "es"));
       setCustomers(sorted);
 
       const normalizedInitialCustomerId = initialCustomerId?.trim() || null;
