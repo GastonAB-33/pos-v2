@@ -17,6 +17,7 @@ import type {
   MercadoPagoSettings,
   PosSettings,
   StockSettings,
+  StoreSettings,
   SystemSettings,
   TenantSettings,
   TenantSettingsSectionKey,
@@ -170,6 +171,42 @@ const createDefaultSystemSettings = (): SystemSettings => ({
   mercado_pago: createDefaultMercadoPagoSettings(),
 });
 
+export const createDefaultStoreSettings = (): StoreSettings => ({
+  is_enabled: true,
+  store_name: "",
+  store_description: "Catálogo online y pedidos directos por WhatsApp",
+  banner_url: null,
+  logo_url: null,
+  whatsapp_phone: "",
+  social_instagram: "",
+  categories_mode: "all",
+  featured_categories: [],
+  navigation_mode: "categories",
+  custom_lists: [],
+  only_show_listed_products: false,
+  hide_out_of_stock: false,
+  allow_out_of_stock_orders: false,
+  price_list_id: null,
+  delivery_mode: "both",
+  delivery_cost_type: "free",
+  delivery_cost_amount: 0,
+  delivery_free_threshold: 0,
+  delivery_min_order: 0,
+  delivery_zones_notes: "",
+  takeaway_address: "",
+  takeaway_instructions: "",
+  down_payment_policy: "none",
+  down_payment_percent: 50,
+  payment_instructions: "",
+  bank_name: "",
+  bank_alias: "",
+  bank_cbu: "",
+  bank_account_holder: "",
+  schedule_active: false,
+  schedule_text: "",
+  allow_orders_outside_hours: true,
+});
+
 type TenantSettingsMutable = Omit<
   TenantSettings,
   "id" | "tenant_id" | "created_at" | "updated_at"
@@ -178,6 +215,25 @@ type TenantSettingsMutable = Omit<
 export type TenantSettingsUpdateInput = Partial<{
   [K in keyof TenantSettingsMutable]: Partial<TenantSettingsMutable[K]>;
 }>;
+
+const getTiendaStorageBackup = (tenantId?: string): Partial<StoreSettings> | null => {
+  if (typeof window === "undefined" || !tenantId) return null;
+  try {
+    const raw = window.localStorage.getItem(`pos-v2-tienda-${tenantId}`);
+    return raw ? (JSON.parse(raw) as Partial<StoreSettings>) : null;
+  } catch {
+    return null;
+  }
+};
+
+const saveTiendaStorageBackup = (tenantId: string, tienda?: Partial<StoreSettings>) => {
+  if (typeof window === "undefined" || !tenantId || !tienda) return;
+  try {
+    window.localStorage.setItem(`pos-v2-tienda-${tenantId}`, JSON.stringify(tienda));
+  } catch {
+    // Ignorar excepciones de almacenamiento
+  }
+};
 
 const createDefaultSettingsInput = (): CreateEntityInput<TenantSettings> => ({
   negocio: createDefaultBusinessSettings(),
@@ -188,6 +244,7 @@ const createDefaultSettingsInput = (): CreateEntityInput<TenantSettings> => ({
   codigos_balanza: createDefaultBarcodeScaleSettings(),
   apariencia: createDefaultAppearanceSettings(),
   sistema: createDefaultSystemSettings(),
+  tienda: createDefaultStoreSettings(),
 });
 
 const normalizeTenantSettings = (input: TenantSettings): TenantSettings => ({
@@ -316,6 +373,12 @@ const normalizeTenantSettings = (input: TenantSettings): TenantSettings => ({
       ...(input.sistema?.mercado_pago ?? {}),
     },
   },
+  tienda: {
+    ...createDefaultStoreSettings(),
+    ...(getTiendaStorageBackup(input.tenant_id) ?? {}),
+    ...(((input.sistema as unknown as Record<string, unknown> | undefined)?.tienda as Partial<StoreSettings>) ?? {}),
+    ...(input.tienda ?? {}),
+  },
 });
 
 const mergeSettingsPayload = (
@@ -394,6 +457,11 @@ const mergeSettingsPayload = (
       ...(patch.sistema?.mercado_pago ?? {}),
     },
   },
+  tienda: {
+    ...createDefaultStoreSettings(),
+    ...(current.tienda ?? {}),
+    ...(patch.tienda ?? {}),
+  },
 });
 
 const upsertTenantSettings = async (
@@ -413,23 +481,57 @@ const upsertTenantSettings = async (
     return crud.create(tenantId, input);
   }
 
+  if (input.tienda) {
+    saveTiendaStorageBackup(tenantId, input.tienda);
+  }
+
+  // Asegurar que tienda también se guarde dentro de sistema.tienda (columna JSONB existente en Supabase)
+  const safeInput = {
+    ...input,
+    sistema: {
+      ...input.sistema,
+      tienda: input.tienda,
+    },
+  };
+
   const timestamp = nowIso();
-  const row = {
+  let row: Record<string, unknown> = {
     id: preferredId ?? `settings-${tenantId}`,
     tenant_id: tenantId,
-    ...input,
+    ...safeInput,
     created_at: timestamp,
     updated_at: timestamp,
   };
 
-  const firstAttempt = await supabase
+  let firstAttempt = await supabase
     .from("tenant_settings")
     .upsert(row, { onConflict: "id" })
     .select()
     .single();
 
+  // Si la columna 'tienda' aún no existe como columna de primer nivel en Supabase (error 42703)
+  if (
+    firstAttempt.error &&
+    firstAttempt.error.code === "42703" &&
+    (firstAttempt.error.message?.toLowerCase().includes("tienda") ||
+      String(firstAttempt.error.details || "").toLowerCase().includes("tienda"))
+  ) {
+    const { tienda: _removed, ...rowWithoutTienda } = row;
+    row = rowWithoutTienda;
+
+    firstAttempt = await supabase
+      .from("tenant_settings")
+      .upsert(row, { onConflict: "id" })
+      .select()
+      .single();
+  }
+
   if (!firstAttempt.error) {
-    return firstAttempt.data as TenantSettings;
+    const res = firstAttempt.data as TenantSettings;
+    if (!res.tienda && input.tienda) {
+      res.tienda = input.tienda;
+    }
+    return normalizeTenantSettings(res);
   }
 
   const conflictText = `${firstAttempt.error.message ?? ""} ${firstAttempt.error.details ?? ""}`.toLowerCase();
@@ -448,19 +550,39 @@ const upsertTenantSettings = async (
 
   if (existingByTenant.error) throw existingByTenant.error;
 
-  const retryRow = {
+  let retryRow: Record<string, unknown> = {
     ...row,
     id: existingByTenant.data?.id ?? row.id,
   };
 
-  const retryAttempt = await supabase
+  let retryAttempt = await supabase
     .from("tenant_settings")
     .upsert(retryRow, { onConflict: "id" })
     .select()
     .single();
 
+  if (
+    retryAttempt.error &&
+    retryAttempt.error.code === "42703" &&
+    (retryAttempt.error.message?.toLowerCase().includes("tienda") ||
+      String(retryAttempt.error.details || "").toLowerCase().includes("tienda"))
+  ) {
+    const { tienda: _removed2, ...retryWithoutTienda } = retryRow;
+    retryRow = retryWithoutTienda;
+
+    retryAttempt = await supabase
+      .from("tenant_settings")
+      .upsert(retryRow, { onConflict: "id" })
+      .select()
+      .single();
+  }
+
   if (retryAttempt.error) throw retryAttempt.error;
-  return retryAttempt.data as TenantSettings;
+  const retryRes = retryAttempt.data as TenantSettings;
+  if (!retryRes.tienda && input.tienda) {
+    retryRes.tienda = input.tienda;
+  }
+  return normalizeTenantSettings(retryRes);
 };
 
 const readOrCreateTenantSettings = async (tenantId: string): Promise<TenantSettings> => {

@@ -35,6 +35,7 @@ import { MisConsultasPage } from "@/modules/sistema/pages/MisConsultasPage";
 import { CentroSoportePage } from "@/modules/sistema/pages/CentroSoportePage";
 import { AltaComercioPage } from "@/modules/sistema/pages/AltaComercioPage";
 import { EmpleadosPage } from "@/modules/empleados/pages/EmpleadosPage";
+import { MiTiendaAdminPage } from "@/modules/tienda/pages/MiTiendaAdminPage";
 
 const MediosPagoRedirect = () =>
   React.createElement(Navigate, {
@@ -64,6 +65,7 @@ export const moduleRoutes: ModuleRouteItem[] = [
   { path: routePaths.reportes, Component: ReportesPage, requiredPermission: { module: "reportes", level: "read" } },
   { path: routePaths.auditoria, Component: AuditoriaPage, requiredPermission: { module: "auditoria", level: "read" } },
   { path: routePaths.configuracion, Component: ConfiguracionPage, requiredPermission: { module: "configuracion", level: "read" } },
+  { path: routePaths.miTienda, Component: MiTiendaAdminPage, requiredPermission: { module: "configuracion", level: "read" } },
   { path: routePaths.empleados, Component: EmpleadosPage, requiredPermission: { module: "empleados", level: "read" } },
   { path: "/empleados", Component: EmpleadosPage, requiredPermission: { module: "empleados", level: "read" } },
   { path: routePaths.configuracionAgenda, Component: ConfiguracionAgendaPage, requiredPermission: { module: "configuracion", level: "read" } },

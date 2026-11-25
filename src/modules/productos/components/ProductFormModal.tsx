@@ -8,8 +8,10 @@ import { VoiceDictationButton } from "@/components/form/VoiceDictationButton";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { ProductImageEditorModal } from "@/modules/productos/components/ProductImageEditorModal";
 import { ReturnablePackagesModal } from "@/modules/productos/components/ReturnablePackagesModal";
-import { Camera, Package, Sparkles } from "lucide-react";
+import { Camera, Check, Package, Sparkles } from "lucide-react";
 import { masterProductsService, type MasterProduct } from "@/services/master-products.service";
+import { settingsService } from "@/services/settings.service";
+import type { StoreCatalogList } from "@/types/entities";
 import {
   computePricingForward,
   computePricingReverse,
@@ -67,6 +69,8 @@ const createBaseDefaults = (): ProductFormValues => ({
   returnablePackageName: "",
   returnablePackagePrice: 0,
   trackStock: true,
+  publicadoWeb: true,
+  destacadoWeb: false,
 });
 
 const createDefaults = (): ProductFormModalValues => ({
@@ -74,6 +78,8 @@ const createDefaults = (): ProductFormModalValues => ({
   favorito: false,
   trackStock: true,
   estadoActivo: true,
+  publicadoWeb: true,
+  destacadoWeb: false,
   imagenFile: null,
   imagenEliminada: false,
 });
@@ -82,6 +88,8 @@ const productFormModalSchema = productFormSchema.extend({
   favorito: z.boolean().optional().default(false),
   trackStock: z.boolean().default(true),
   estadoActivo: z.boolean(),
+  publicadoWeb: z.boolean().default(true),
+  destacadoWeb: z.boolean().default(false),
 });
 
 const normalizeToUniqueSorted = (values: string[]): string[] => {
@@ -293,6 +301,8 @@ export const ProductFormModal = ({
       favorito: product.favorito,
       trackStock: isStockTrackingEnabled(product.entity?.description),
       estadoActivo: product.activo,
+      publicadoWeb: product.publicadoWeb ?? true,
+      destacadoWeb: product.destacadoWeb ?? false,
       imagenUrl: product.imagenUrl,
       imagenFile: null,
       imagenEliminada: false,
@@ -323,6 +333,29 @@ export const ProductFormModal = ({
   const isReturnable = watch("isReturnable");
   const { tenantId } = useTenant();
   const { packages: tenantPackages } = useTenantReturnablePackages(tenantId);
+  const [storeCustomLists, setStoreCustomLists] = useState<StoreCatalogList[]>([]);
+  const [selectedListIds, setSelectedListIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const productId = product?.entity?.id;
+    if (!open || !tenantId || mode !== "edit" || !productId) {
+      setStoreCustomLists([]);
+      setSelectedListIds([]);
+      return;
+    }
+    void settingsService.getByTenant(tenantId).then((res) => {
+      if (!active) return;
+      const lists = res.tienda?.custom_lists ?? [];
+      setStoreCustomLists(lists);
+      setSelectedListIds(
+        lists.filter((l) => l.product_ids.includes(productId)).map((l) => l.id)
+      );
+    }).catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [open, tenantId, mode, product?.entity?.id]);
 
   const imagenPreview = useMemo(() => {
     if (localPreviewUrl) return localPreviewUrl;
@@ -402,6 +435,10 @@ export const ProductFormModal = ({
         if (!currentSub && found.subcategory) {
           setValue("subcategoria", found.subcategory, { shouldDirty: true, shouldValidate: true });
           setLocalSubcategories((prev) => normalizeToUniqueSorted([...prev, found.subcategory || ""]));
+        }
+        const currentImg = getValues("imagenUrl")?.trim() ?? "";
+        if (!currentImg && found.image_url) {
+          setValue("imagenUrl", found.image_url, { shouldDirty: true, shouldValidate: true });
         }
       }
     });
@@ -608,6 +645,22 @@ export const ProductFormModal = ({
       imagenFile: imageDraftFile,
       imagenEliminada: imageRemoved,
     });
+
+    const editedProductId = product?.entity?.id;
+    if (mode === "edit" && editedProductId && tenantId && storeCustomLists.length > 0) {
+      const nextLists = storeCustomLists.map((list) => {
+        const shouldInclude = selectedListIds.includes(list.id);
+        const alreadyIncludes = list.product_ids.includes(editedProductId);
+        if (shouldInclude && !alreadyIncludes) {
+          return { ...list, product_ids: [...list.product_ids, editedProductId] };
+        }
+        if (!shouldInclude && alreadyIncludes) {
+          return { ...list, product_ids: list.product_ids.filter((id) => id !== editedProductId) };
+        }
+        return list;
+      });
+      void settingsService.updateSection(tenantId, "tienda", { custom_lists: nextLists }).catch(() => {});
+    }
 
     // Retroalimentar el Catálogo Maestro Global de forma colaborativa y no bloqueante
     if (values.codigoBarras?.trim() && values.nombre?.trim() && values.categoria?.trim()) {
@@ -990,9 +1043,20 @@ export const ProductFormModal = ({
               <div>
                 <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">Fotografía</h4>
               </div>
-              <div className="mt-3 flex h-60 items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-950/40">
+              <div
+                className={cn(
+                  "mt-3 flex h-60 items-center justify-center overflow-hidden rounded-2xl transition-colors",
+                  imagenPreview
+                    ? "border border-slate-200/90 bg-white p-2.5 dark:border-slate-700/80 dark:bg-slate-950"
+                    : "border-2 border-dashed border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-950/40"
+                )}
+              >
                 {imagenPreview ? (
-                  <img src={imagenPreview} alt="Foto del producto" className="h-full w-full object-cover" />
+                  <img
+                    src={imagenPreview}
+                    alt="Foto del producto"
+                    className="h-full w-full object-contain"
+                  />
                 ) : (
                   <span className="px-3 text-center text-xs text-slate-500 dark:text-slate-400">Sin imagen cargada</span>
                 )}
@@ -1328,6 +1392,76 @@ export const ProductFormModal = ({
                 </span>
               </label>
             </div>
+          </div>
+
+          <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-slate-50/70 p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-950/40 min-w-0 overflow-hidden">
+            <h4 className="mb-3 text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <span>Mi Tienda Online (Catálogo Web)</span>
+              <span className="rounded-full bg-blue-100 dark:bg-blue-900/60 px-2.5 py-0.5 text-[10px] font-bold text-blue-700 dark:text-blue-300">
+                Público
+              </span>
+            </h4>
+            <div className="grid gap-3 sm:grid-cols-2 min-w-0">
+              <label className="flex items-center justify-between rounded-xl sm:rounded-2xl border border-slate-200/90 bg-white p-3.5 text-sm text-slate-700 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 shadow-xs cursor-pointer min-w-0">
+                <div className="pr-2">
+                  <span className="font-semibold text-slate-900 dark:text-slate-100 block">Publicar en Mi Tienda</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Visible en tu catálogo compartido</span>
+                </div>
+                <span className="relative inline-flex h-6 w-11 shrink-0 items-center">
+                  <input type="checkbox" className="peer sr-only" {...register("publicadoWeb")} disabled={disabled} />
+                  <span className="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-blue-600 peer-disabled:opacity-50 dark:bg-slate-700" />
+                  <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+                </span>
+              </label>
+
+              <label className="flex items-center justify-between rounded-xl sm:rounded-2xl border border-slate-200/90 bg-white p-3.5 text-sm text-slate-700 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 shadow-xs cursor-pointer min-w-0">
+                <div className="pr-2">
+                  <span className="font-semibold text-slate-900 dark:text-slate-100 block">Destacado en portada</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Aparece en la sección de ofertas</span>
+                </div>
+                <span className="relative inline-flex h-6 w-11 shrink-0 items-center">
+                  <input type="checkbox" className="peer sr-only" {...register("destacadoWeb")} disabled={disabled} />
+                  <span className="h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-amber-500 peer-disabled:opacity-50 dark:bg-slate-700" />
+                  <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition peer-checked:translate-x-5" />
+                </span>
+              </label>
+            </div>
+
+            {mode === "edit" && storeCustomLists.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-slate-200/80 dark:border-slate-800">
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 block mb-2">
+                  Listas personalizadas de Mi Tienda:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {storeCustomLists.map((list) => {
+                    const isSelected = selectedListIds.includes(list.id);
+                    return (
+                      <button
+                        key={list.id}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() =>
+                          setSelectedListIds((prev) =>
+                            prev.includes(list.id)
+                              ? prev.filter((id) => id !== list.id)
+                              : [...prev, list.id]
+                          )
+                        }
+                        className={cn(
+                          "rounded-full px-3 py-1 text-xs font-semibold border transition cursor-pointer flex items-center gap-1.5",
+                          isSelected
+                            ? "bg-blue-600 text-white border-blue-600 shadow-2xs"
+                            : "bg-white text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                        )}
+                      >
+                        {isSelected && <Check size={12} />}
+                        <span>{list.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           </div>

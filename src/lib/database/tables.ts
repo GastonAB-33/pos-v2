@@ -40,6 +40,9 @@ export const dbTables = {
 
   // Preparado para evolucion futura de ventas/pagos.
   sale_payments: "sale_payments",
+
+  // E-commerce y Pedidos Web (Mi Tienda)
+  store_orders: "store_orders",
 } as const;
 
 export type DbTableName = (typeof dbTables)[keyof typeof dbTables];
@@ -80,6 +83,7 @@ export const tenantScopedTables = [
   dbTables.employee_current_account_movements,
   dbTables.employee_salary_payments,
   dbTables.sale_payments,
+  dbTables.store_orders,
 ] as const;
 
 export type TenantScopedTableName = (typeof tenantScopedTables)[number];
@@ -88,7 +92,7 @@ export const tableDefinitions: Record<DbTableName, readonly string[]> = {
   tenants: ["id", "legal_name", "trade_name", "slug", "cuit", "is_active", "created_at", "updated_at"],
   permission_profiles: ["id", "tenant_id", "name", "description", "is_active", "permissions", "created_at", "updated_at"],
   users: ["id", "tenant_id", "email", "username", "full_name", "role_code", "permission_profile_id", "is_active", "created_at", "updated_at"],
-  products: ["id", "tenant_id", "code", "name", "image_url", "brand", "supplier", "description", "price", "cost_price", "stock_current", "stock_min", "stock_max", "category", "subcategory", "sale_mode", "currency_code", "price_without_vat", "vat_percent", "profit_percent", "is_favorite", "is_active", "created_at", "updated_at"],
+  products: ["id", "tenant_id", "code", "name", "image_url", "brand", "supplier", "description", "price", "cost_price", "stock_current", "stock_min", "stock_max", "category", "subcategory", "sale_mode", "currency_code", "price_without_vat", "vat_percent", "profit_percent", "is_favorite", "is_active", "is_published_web", "is_featured_web", "created_at", "updated_at"],
   product_barcodes: ["id", "tenant_id", "product_id", "barcode", "is_primary", "created_at", "updated_at"],
   customers: ["id", "tenant_id", "code", "full_name", "document_type", "document_number", "fiscal_business_name", "fiscal_address", "fiscal_condition", "price_list_id", "email", "phone", "address", "observations", "current_balance", "current_account_enabled", "current_account_limit", "current_account_pricing_mode", "current_account_surcharge_percent", "current_account_surcharge_amount", "current_account_pricing_updated_at", "is_active", "created_at", "updated_at"],
   suppliers: ["id", "tenant_id", "code", "name", "phone", "email", "address", "observations", "current_balance", "is_active", "created_at", "updated_at"],
@@ -110,7 +114,7 @@ export const tableDefinitions: Record<DbTableName, readonly string[]> = {
   invoices: ["id", "tenant_id", "sale_id", "customer_id", "document_type", "document_number", "issue_date", "customer_snapshot", "items_snapshot", "subtotal", "tax_total", "total", "status", "arca_status", "arca_reference", "arca_message", "notes", "created_at", "updated_at"],
   credit_notes: ["id", "tenant_id", "invoice_id", "sale_id", "customer_id", "document_number", "issue_date", "reason", "subtotal", "tax_total", "total", "status", "arca_status", "arca_reference", "notes", "created_at", "updated_at"],
   audit_logs: ["id", "tenant_id", "user_id", "module", "action", "entity_type", "entity_id", "description", "metadata", "created_at"],
-  tenant_settings: ["id", "tenant_id", "negocio", "pos", "stock", "caja", "facturacion", "codigos_balanza", "apariencia", "sistema", "created_at", "updated_at"],
+  tenant_settings: ["id", "tenant_id", "negocio", "pos", "stock", "caja", "facturacion", "codigos_balanza", "apariencia", "sistema", "tienda", "created_at", "updated_at"],
   stock_movements: ["id", "tenant_id", "product_id", "movement_type", "quantity", "reference_type", "reference_id", "notes", "created_by", "created_at", "updated_at"],
   cash_sessions: ["id", "tenant_id", "branch_id", "opened_by_user_id", "closed_by_user_id", "status", "opened_at", "closed_at", "opening_amount", "closing_amount", "expected_closing_amount", "closing_difference", "notes", "created_at", "updated_at"],
   cash_movements: ["id", "tenant_id", "cash_session_id", "movement_type", "amount", "currency_code", "reference_type", "reference_id", "notes", "created_by", "created_at", "updated_at"],
@@ -122,4 +126,5 @@ export const tableDefinitions: Record<DbTableName, readonly string[]> = {
   employee_current_account_movements: ["id", "tenant_id", "employee_id", "sale_id", "type", "amount", "balance_after", "category", "notes", "created_by", "created_at", "updated_at"],
   employee_salary_payments: ["id", "tenant_id", "employee_id", "period", "gross_amount", "deductions_amount", "current_account_discount_applied", "bonuses_amount", "net_amount_paid", "payment_method_code", "payment_date", "notes", "created_by", "payment_type", "advances_discount_applied", "created_at", "updated_at"],
   sale_payments: ["id", "tenant_id", "sale_id", "payment_method_code", "provider", "provider_code", "amount", "currency_code", "status", "provider_status", "provider_reference", "provider_metadata", "external_reference", "metadata", "created_at", "updated_at"],
+  store_orders: ["id", "tenant_id", "order_number", "customer_name", "customer_phone", "customer_address", "delivery_mode", "delivery_cost", "subtotal", "total", "down_payment_required", "remaining_balance", "payment_status", "order_status", "notes", "items", "created_at", "updated_at"],
 };

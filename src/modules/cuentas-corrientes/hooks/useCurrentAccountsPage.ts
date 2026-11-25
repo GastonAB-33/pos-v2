@@ -13,6 +13,9 @@ interface CurrentAccountsPageFeedback {
 
 export type CurrentAccountsFilterMode = "all" | "debt" | "packages" | "both" | "zero";
 
+export type CustomerSortColumn = "name" | "contact" | "status" | "balance";
+export type CustomerSortDirection = "asc" | "desc";
+
 const normalizeMovementAmount = (
   type: CurrentAccountMovement["type"],
   amount: number
@@ -33,6 +36,19 @@ export const useCurrentAccountsPage = (
   );
   const [search, setSearch] = useState("");
   const [filterMode, setFilterMode] = useState<CurrentAccountsFilterMode>("debt");
+  const [sortColumn, setSortColumn] = useState<CustomerSortColumn>("name");
+  const [sortDirection, setSortDirection] = useState<CustomerSortDirection>("asc");
+
+  const handleSort = useCallback((column: CustomerSortColumn) => {
+    setSortColumn((prevCol) => {
+      if (prevCol === column) {
+        setSortDirection((prevDir) => (prevDir === "asc" ? "desc" : "asc"));
+        return prevCol;
+      }
+      setSortDirection(column === "balance" || column === "status" ? "desc" : "asc");
+      return column;
+    });
+  }, []);
   const [isLoading, setIsLoading] = useState(Boolean(tenantId));
   const [feedback, setFeedback] = useState<CurrentAccountsPageFeedback | null>(null);
 
@@ -126,7 +142,7 @@ export const useCurrentAccountsPage = (
   const filteredCustomers = useMemo(() => {
     const normalized = search.trim().toLowerCase();
 
-    return customers.filter((customer) => {
+    const filtered = customers.filter((customer) => {
       const balance = customer.current_balance ?? 0;
       const hasDebt = balance > 0;
       const pkgInfo = customerPackagesMap.get(customer.id);
@@ -150,7 +166,39 @@ export const useCurrentAccountsPage = (
 
       return haystack.includes(normalized);
     });
-  }, [customers, customerPackagesMap, filterMode, search]);
+
+    return [...filtered].sort((a, b) => {
+      let comparison = 0;
+
+      if (sortColumn === "name") {
+        comparison = a.full_name.localeCompare(b.full_name, "es", { sensitivity: "base" });
+      } else if (sortColumn === "contact") {
+        const contactA = (a.phone || a.email || a.document_number || "").toLowerCase();
+        const contactB = (b.phone || b.email || b.document_number || "").toLowerCase();
+        comparison = contactA.localeCompare(contactB, "es");
+      } else if (sortColumn === "status") {
+        const pkgA = customerPackagesMap.get(a.id)?.count ?? 0;
+        const pkgB = customerPackagesMap.get(b.id)?.count ?? 0;
+        if (pkgA !== pkgB) {
+          comparison = pkgA - pkgB;
+        } else {
+          const balA = a.current_balance ?? 0;
+          const balB = b.current_balance ?? 0;
+          comparison = balA - balB;
+        }
+      } else if (sortColumn === "balance") {
+        const balA = a.current_balance ?? 0;
+        const balB = b.current_balance ?? 0;
+        comparison = balA - balB;
+      }
+
+      if (comparison === 0 && sortColumn !== "name") {
+        comparison = a.full_name.localeCompare(b.full_name, "es", { sensitivity: "base" });
+      }
+
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+  }, [customers, customerPackagesMap, filterMode, search, sortColumn, sortDirection]);
 
   const totalDebt = useMemo(() => {
     return customers.reduce((sum, c) => {
@@ -219,6 +267,11 @@ export const useCurrentAccountsPage = (
     setSearch,
     filterMode,
     setFilterMode,
+    sortColumn,
+    setSortColumn,
+    sortDirection,
+    setSortDirection,
+    handleSort,
     totalDebt,
     customersWithDebtCount,
     customersWithPackagesCount,

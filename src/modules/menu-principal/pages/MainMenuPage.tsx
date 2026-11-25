@@ -130,6 +130,22 @@ const quickActions: QuickActionItem[] = [
       dot: "bg-rose-500",
     },
   },
+  {
+    label: "Mi Tienda Online",
+    category: "Catálogo web y pedidos",
+    badge: "E-COMMERCE",
+    to: routePaths.miTienda,
+    icon: Store,
+    actionText: "Gestionar tienda",
+    theme: {
+      iconBox:
+        "bg-indigo-50 text-indigo-600 border-indigo-100 dark:bg-indigo-950/60 dark:text-indigo-400 dark:border-indigo-900/40",
+      badge:
+        "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800",
+      footerText: "text-indigo-600 dark:text-indigo-400",
+      dot: "bg-indigo-500",
+    },
+  },
 ];
 
 export const MainMenuPage = () => {

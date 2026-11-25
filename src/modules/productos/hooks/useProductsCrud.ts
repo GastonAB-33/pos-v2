@@ -136,6 +136,8 @@ const toServiceInput = (
     vat_percent: roundPercent(values.porcentajeIva),
     profit_percent: roundPercent(values.porcentajeGanancia),
     is_active: options?.isActive ?? true,
+    is_published_web: values.publicadoWeb ?? true,
+    is_featured_web: values.destacadoWeb ?? false,
   };
 };
 

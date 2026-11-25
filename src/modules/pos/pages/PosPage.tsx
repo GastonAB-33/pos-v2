@@ -17,6 +17,14 @@ import { getEditableDocumentNumber } from "@/modules/configuracion/hooks/useEnti
 import { CashOpenForm } from "@/modules/caja/components/CashOpenForm";
 import { serializeCloseSnapshot, type CashCloseSnapshot } from "@/modules/caja/hooks/useCashModule";
 import { ReceiptTicketPanel } from "@/modules/comprobantes/components/ReceiptTicketPanel";
+import { WhatsAppIcon } from "@/components/brand/WhatsAppIcon";
+import { WhatsAppPhonePromptModal } from "@/components/ui/WhatsAppPhonePromptModal";
+import {
+  formatWhatsAppTicket,
+  cleanPhoneForWhatsApp,
+  openWhatsAppChat,
+} from "@/utils/whatsapp-voucher.utils";
+import type { BusinessSettings } from "@/types/entities";
 import { PosCartDiscountModal } from "@/modules/pos/components/PosCartDiscountModal";
 import { PosCartItemEditModal } from "@/modules/pos/components/PosCartItemEditModal";
 import { PosCheckoutPanel } from "@/modules/pos/components/PosCheckoutPanel";
@@ -249,6 +257,18 @@ export const PosPage = () => {
   const [receiptsSearchTerm, setReceiptsSearchTerm] = useState("");
   const [isLoadingReceipts, setIsLoadingReceipts] = useState(false);
   const [receiptModal, setReceiptModal] = useState<PosReceiptModalState | null>(null);
+  const [wspPromptState, setWspPromptState] = useState<{
+    isOpen: boolean;
+    phone: string;
+    message: string;
+    recipientName: string;
+  }>({
+    isOpen: false,
+    phone: "",
+    message: "",
+    recipientName: "",
+  });
+  const [posBusinessSettings, setPosBusinessSettings] = useState<BusinessSettings | null>(null);
   const [printMenuReceiptId, setPrintMenuReceiptId] = useState<string | null>(null);
   const [customerModalState, setCustomerModalState] = useState<PosCustomerModalState | null>(null);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
@@ -1249,6 +1269,49 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
       });
     },
     []
+  );
+
+  useEffect(() => {
+    if (!tenantId) return;
+    settingsService
+      .getByTenant(tenantId)
+      .then((s) => {
+        if (s?.negocio) {
+          setPosBusinessSettings(s.negocio);
+        }
+      })
+      .catch(() => {});
+  }, [tenantId]);
+
+  const handleSendRecentReceiptWhatsApp = useCallback(
+    (item: PosRecentReceiptItem) => {
+      const msg = formatWhatsAppTicket(item.receipt, item.invoice, posBusinessSettings);
+      const customer = item.invoice?.customer_id
+        ? customers.find((c) => c.id === item.invoice?.customer_id)
+        : customers.find(
+            (c) =>
+              c.full_name.trim().toLowerCase() ===
+              (item.receipt.customer_name ?? "").trim().toLowerCase()
+          );
+      const cleanPhone = cleanPhoneForWhatsApp(customer?.phone);
+      const recipientName =
+        item.receipt.customer_name ||
+        item.invoice?.customer_snapshot?.business_name ||
+        item.invoice?.customer_snapshot?.full_name ||
+        "Cliente";
+
+      if (cleanPhone && cleanPhone.length >= 8) {
+        openWhatsAppChat(cleanPhone, msg);
+      } else {
+        setWspPromptState({
+          isOpen: true,
+          phone: customer?.phone || "",
+          message: msg,
+          recipientName,
+        });
+      }
+    },
+    [customers, posBusinessSettings]
   );
 
   const buildCustomerModalInitialValues = useCallback(
@@ -2494,6 +2557,15 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
                           <div className="flex items-center gap-1.5 shrink-0 ml-auto">
                             <button
                               type="button"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:hover:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800/80 transition cursor-pointer"
+                              title="Enviar comprobante por WhatsApp"
+                              onClick={() => handleSendRecentReceiptWhatsApp(item)}
+                            >
+                              <WhatsAppIcon className="h-3.5 w-3.5 fill-current text-emerald-600 dark:text-emerald-400" />
+                              <span>WhatsApp</span>
+                            </button>
+                            <button
+                              type="button"
                               className="ui-btn-ghost px-2.5 py-1 text-xs font-semibold"
                               onClick={() => openReceiptModal(item, "ticket")}
                             >
@@ -2649,6 +2721,19 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
             toastSuccess("Promoción quitada del producto");
           }
         }}
+      />
+
+      <WhatsAppPhonePromptModal
+        isOpen={wspPromptState.isOpen}
+        onClose={() =>
+          setWspPromptState((prev) => ({ ...prev, isOpen: false }))
+        }
+        onConfirm={(phone) => {
+          setWspPromptState((prev) => ({ ...prev, isOpen: false }));
+          openWhatsAppChat(phone, wspPromptState.message);
+        }}
+        defaultPhone={wspPromptState.phone}
+        recipientName={wspPromptState.recipientName}
       />
     </div>
   );

@@ -13,13 +13,22 @@ import {
   Sunset,
   Moon,
 } from "lucide-react";
-import type { CashSession } from "@/types/entities";
+import type { BusinessSettings, CashSession } from "@/types/entities";
 import { parseCloseSnapshot } from "@/modules/caja/hooks/useCashModule";
 import {
   getShiftLabel,
   formatLocalTime,
   type ShiftPeriod,
 } from "@/modules/caja/utils/cash-date.utils";
+import { useTenant } from "@/features/tenant/hooks/useTenant";
+import { settingsService } from "@/services/settings.service";
+import { WhatsAppIcon } from "@/components/brand/WhatsAppIcon";
+import { WhatsAppPhonePromptModal } from "@/components/ui/WhatsAppPhonePromptModal";
+import {
+  cleanPhoneForWhatsApp,
+  formatWhatsAppCashClose,
+  openWhatsAppChat,
+} from "@/utils/whatsapp-voucher.utils";
 
 interface CashSessionCloseDetailModalProps {
   isOpen: boolean;
@@ -44,9 +53,22 @@ export const CashSessionCloseDetailModal = ({
   onClose,
   usersById,
 }: CashSessionCloseDetailModalProps) => {
+  const { tenantId } = useTenant();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     session?.id ?? null
   );
+  const [businessSettings, setBusinessSettings] = useState<BusinessSettings | null>(null);
+  const [wspPromptState, setWspPromptState] = useState<{
+    isOpen: boolean;
+    phone: string;
+    message: string;
+    recipientName: string;
+  }>({
+    isOpen: false,
+    phone: "",
+    message: "",
+    recipientName: "",
+  });
 
   useEffect(() => {
     if (session?.id) {
@@ -120,6 +142,51 @@ export const CashSessionCloseDetailModal = ({
         return <Sunset size={12} className="text-orange-500" />;
       case "night":
         return <Moon size={12} className="text-indigo-400" />;
+    }
+  };
+
+  useEffect(() => {
+    const tid = activeSession?.tenant_id || tenantId;
+    if (!tid) return;
+    settingsService
+      .getByTenant(tid)
+      .then((s) => {
+        if (s?.negocio) setBusinessSettings(s.negocio);
+      })
+      .catch(() => {});
+  }, [activeSession?.tenant_id, tenantId]);
+
+  const handleSendCloseWhatsApp = () => {
+    const cashier =
+      usersById[activeSession.closed_by_user_id || activeSession.opened_by_user_id] ??
+      openedByUser ??
+      "Cajero/a";
+
+    const msg = formatWhatsAppCashClose({
+      sessionNumber: activeSession.id.slice(-6).toUpperCase(),
+      cashierName: cashier,
+      openedAt: activeSession.opened_at,
+      closedAt: activeSession.closed_at || new Date().toISOString(),
+      openingAmount: activeSession.opening_amount,
+      totalSales: Math.max(0, expectedAmount - activeSession.opening_amount),
+      cashExpected: expectedAmount,
+      cashCounted: realAmount,
+      cashDifference: difference,
+      userNotes: cleanNotes || null,
+      businessName:
+        businessSettings?.trade_name || businessSettings?.legal_name || "Comercio",
+    });
+
+    const ownerPhone = cleanPhoneForWhatsApp(businessSettings?.phone);
+    if (ownerPhone && ownerPhone.length >= 8) {
+      openWhatsAppChat(ownerPhone, msg);
+    } else {
+      setWspPromptState({
+        isOpen: true,
+        phone: businessSettings?.phone || "",
+        message: msg,
+        recipientName: "Titular / Administrador",
+      });
     }
   };
 
@@ -480,7 +547,17 @@ export const CashSessionCloseDetailModal = ({
         </div>
 
         {/* Footer */}
-        <footer className="shrink-0 px-5 py-3.5 border-t border-slate-100 dark:border-slate-800 flex justify-end bg-slate-50/50 dark:bg-slate-800/40">
+        <footer className="shrink-0 px-5 py-3.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2 bg-slate-50/50 dark:bg-slate-800/40">
+          <button
+            type="button"
+            onClick={handleSendCloseWhatsApp}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition cursor-pointer shadow-xs active:scale-95"
+            title="Enviar reporte de cierre por WhatsApp al titular"
+          >
+            <WhatsAppIcon className="h-3.5 w-3.5 fill-current" />
+            <span>Enviar Cierre por WhatsApp</span>
+          </button>
+
           <button
             type="button"
             onClick={onClose}
@@ -490,6 +567,19 @@ export const CashSessionCloseDetailModal = ({
           </button>
         </footer>
       </div>
+
+      <WhatsAppPhonePromptModal
+        isOpen={wspPromptState.isOpen}
+        onClose={() => setWspPromptState((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={(phone) => {
+          setWspPromptState((prev) => ({ ...prev, isOpen: false }));
+          openWhatsAppChat(phone, wspPromptState.message);
+        }}
+        title="Enviar Cierre de Caja"
+        subtitle="Ingresá el número de WhatsApp del titular o administrador del negocio."
+        defaultPhone={wspPromptState.phone}
+        recipientName={wspPromptState.recipientName}
+      />
     </div>
   );
 };

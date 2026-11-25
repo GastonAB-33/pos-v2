@@ -7,12 +7,27 @@ import { useAuthStore } from "@/features/auth/store/auth.store";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { CustomerCurrentAccountPanel } from "@/modules/clientes/components/CustomerCurrentAccountPanel";
-import { useCurrentAccountsPage } from "@/modules/cuentas-corrientes/hooks/useCurrentAccountsPage";
+import {
+  useCurrentAccountsPage,
+  type CustomerSortColumn,
+  type CustomerSortDirection,
+} from "@/modules/cuentas-corrientes/hooks/useCurrentAccountsPage";
 import { PosCustomerModal, type PosCustomerModalValues } from "@/modules/pos/components/PosCustomerModal";
+import { WhatsAppIcon } from "@/components/brand/WhatsAppIcon";
+import { WhatsAppPhonePromptModal } from "@/components/ui/WhatsAppPhonePromptModal";
 import { customersService } from "@/services/customers.service";
 import { auditService } from "@/services/audit.service";
+import { bankAccountsService } from "@/services/bank-accounts.service";
+import { currentAccountsService } from "@/services/current-accounts.service";
+import { settingsService } from "@/services/settings.service";
 import { posCustomerProfilesService } from "@/services/pos-customer-profiles.service";
 import { formatCustomerDocument } from "@/modules/configuracion/hooks/useEntityRequirements";
+import type { Customer } from "@/types/entities";
+import {
+  cleanPhoneForWhatsApp,
+  formatWhatsAppDebtStatement,
+  openWhatsAppChat,
+} from "@/utils/whatsapp-voucher.utils";
 import { cn } from "@/utils/cn";
 import {
   Users,
@@ -29,6 +44,9 @@ import {
   X,
   SlidersHorizontal,
   FilterX,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -82,6 +100,17 @@ export const CuentasCorrientesPage = () => {
   const [panelRefreshKey, setPanelRefreshKey] = useState(0);
   const [isFiltersModalOpen, setIsFiltersModalOpen] = useState(false);
   const [isSubmittingCustomer, setIsSubmittingCustomer] = useState(false);
+  const [wspPromptState, setWspPromptState] = useState<{
+    isOpen: boolean;
+    phone: string;
+    message: string;
+    recipientName: string;
+  }>({
+    isOpen: false,
+    phone: "",
+    message: "",
+    recipientName: "",
+  });
 
   const initialCustomerId = searchParams.get("customerId") ?? searchParams.get("clienteId");
 
@@ -95,6 +124,11 @@ export const CuentasCorrientesPage = () => {
     setSearch,
     filterMode,
     setFilterMode,
+    sortColumn,
+    setSortColumn,
+    sortDirection,
+    setSortDirection,
+    handleSort,
     totalDebt,
     customersWithDebtCount,
     customersWithPackagesCount,
@@ -120,6 +154,93 @@ export const CuentasCorrientesPage = () => {
     const appMain = document.querySelector(".app-main");
     if (appMain) appMain.scrollTop = 0;
   }, [selectedCustomer?.id]);
+
+  const renderSortIcon = (column: CustomerSortColumn) => {
+    if (sortColumn === column) {
+      return sortDirection === "asc" ? (
+        <ArrowUp className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0 transition-transform" />
+      ) : (
+        <ArrowDown className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0 transition-transform" />
+      );
+    }
+    return (
+      <ArrowUpDown className="h-3.5 w-3.5 text-slate-400/50 dark:text-slate-500/50 group-hover:text-slate-600 dark:group-hover:text-slate-300 shrink-0 transition-colors" />
+    );
+  };
+
+  const handleSendCustomerWhatsApp = async (customer: Customer) => {
+    if (!tenantId) return;
+    try {
+      // 1. Obtener movimientos recientes de cuenta corriente
+      let lastMovements: Array<{
+        date: string;
+        description: string;
+        amount: number;
+        type: string;
+      }> = [];
+
+      try {
+        const movements = await currentAccountsService.getByCustomer(tenantId, customer.id);
+        lastMovements = movements.slice(-5).reverse().map((m) => ({
+          date: new Date(m.created_at).toLocaleDateString("es-AR"),
+          description: m.notes || (m.type === "payment" ? "Pago recibido" : ""),
+          amount: Math.abs(m.amount),
+          type: m.type,
+        }));
+      } catch (movErr) {
+        console.warn("No se pudieron cargar movimientos para WhatsApp:", movErr);
+      }
+
+      // 2. Obtener cuentas bancarias activas para informar datos de pago
+      let bankAlias: string | null = null;
+      let bankCbu: string | null = null;
+      let bankName: string | null = null;
+      try {
+        const banks = await bankAccountsService.getActiveByTenant(tenantId);
+        const preferredBank = banks.find((b) => b.alias || b.cbu) || banks[0];
+        if (preferredBank) {
+          bankAlias = preferredBank.alias ?? null;
+          bankCbu = preferredBank.cbu ?? null;
+          bankName = preferredBank.bank_name ?? null;
+        }
+      } catch (bankErr) {
+        console.warn("No se pudieron cargar cuentas bancarias para WhatsApp:", bankErr);
+      }
+
+      // 3. Obtener datos de la empresa
+      let businessName = "Comercio";
+      try {
+        const settings = await settingsService.getByTenant(tenantId);
+        businessName = settings?.negocio?.trade_name || settings?.negocio?.legal_name || "Comercio";
+      } catch {}
+
+      const message = formatWhatsAppDebtStatement({
+        customerName: customer.full_name,
+        currentBalance: customer.current_balance ?? 0,
+        creditLimit: customer.current_account_limit,
+        lastMovements,
+        businessName,
+        bankAlias,
+        bankCbu,
+        bankName,
+      });
+
+      const clean = cleanPhoneForWhatsApp(customer.phone);
+      if (clean && clean.length >= 8) {
+        openWhatsAppChat(clean, message);
+      } else {
+        setWspPromptState({
+          isOpen: true,
+          phone: customer.phone || "",
+          message,
+          recipientName: customer.full_name,
+        });
+      }
+    } catch (err) {
+      console.error("Error al preparar mensaje de WhatsApp para cuenta corriente:", err);
+      toast.error("No se pudo generar el mensaje para WhatsApp.");
+    }
+  };
 
   const handleCreateCustomerSubmit = async (values: PosCustomerModalValues) => {
     if (!tenantId) return;
@@ -239,6 +360,16 @@ export const CuentasCorrientesPage = () => {
                 <span>Editar</span>
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={() => void handleSendCustomerWhatsApp(selectedCustomer)}
+              className="inline-flex items-center gap-1.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-xs active:scale-95 transition-all cursor-pointer"
+              title="Enviar resumen de cuenta por WhatsApp"
+            >
+              <WhatsAppIcon className="h-4 w-4 fill-current" />
+              <span>Enviar por WhatsApp</span>
+            </button>
 
             <button
               type="button"
@@ -601,25 +732,146 @@ export const CuentasCorrientesPage = () => {
                 {/* 1. DESKTOP VIEW: TABLA TRADICIONAL (hidden md:block)           */}
                 {/* ============================================================== */}
                 <div className="hidden md:block rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900 overflow-hidden">
-                  <header className="px-4 py-3 border-b border-slate-200/80 dark:border-slate-800 flex justify-between items-center bg-slate-50/90 dark:bg-slate-800/70">
+                  <header className="px-4 py-3 border-b border-slate-200/80 dark:border-slate-800 flex flex-wrap justify-between items-center gap-2 bg-slate-50/90 dark:bg-slate-800/70">
                     <div>
                       <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
                         Catálogo de Cuentas de Clientes
                       </h3>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400">
                         {filteredCustomers.length} {filteredCustomers.length === 1 ? "cliente listado" : "clientes listados"}
+                        <span>
+                          {" "}• Orden:{" "}
+                          <strong className="text-slate-700 dark:text-slate-300">
+                            {sortColumn === "name" && (sortDirection === "asc" ? "Cliente (A-Z)" : "Cliente (Z-A)")}
+                            {sortColumn === "balance" && (sortDirection === "desc" ? "Saldo (Mayor a menor)" : "Saldo (Menor a mayor)")}
+                            {sortColumn === "contact" && (sortDirection === "asc" ? "Contacto (A-Z)" : "Contacto (Z-A)")}
+                            {sortColumn === "status" && (sortDirection === "desc" ? "Envases / Deuda (Mayor a menor)" : "Envases / Deuda (Menor a mayor)")}
+                          </strong>
+                        </span>
                       </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                        <span className="hidden sm:inline text-[11px] font-medium">Ordenar:</span>
+                        <select
+                          value={`${sortColumn}_${sortDirection}`}
+                          onChange={(e) => {
+                            const [col, dir] = e.target.value.split("_") as [CustomerSortColumn, CustomerSortDirection];
+                            setSortColumn(col);
+                            setSortDirection(dir);
+                          }}
+                          className="px-2.5 py-1 text-xs rounded-xl border border-slate-200/90 bg-white dark:border-slate-700/80 dark:bg-slate-800 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium cursor-pointer"
+                        >
+                          <option value="name_asc">Cliente: A - Z</option>
+                          <option value="name_desc">Cliente: Z - A</option>
+                          <option value="balance_desc">Saldo: Mayor a menor ($$)</option>
+                          <option value="balance_asc">Saldo: Menor a mayor ($)</option>
+                          <option value="status_desc">Envases / Deuda: Mayor a menor</option>
+                          <option value="status_asc">Envases / Deuda: Menor a mayor</option>
+                          <option value="contact_asc">Contacto: A - Z</option>
+                          <option value="contact_desc">Contacto: Z - A</option>
+                        </select>
+                      </div>
                     </div>
                   </header>
 
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-50/90 dark:bg-slate-800/70 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200/80 dark:border-slate-800">
+                      <thead className="bg-slate-50/90 dark:bg-slate-800/70 text-[11px] font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-300 border-b border-slate-200/80 dark:border-slate-800 select-none">
                         <tr>
-                          <th className="py-3 px-4">Cliente</th>
-                          <th className="py-3 px-4">Contacto</th>
-                          <th className="py-3 px-4">Estado y Envases</th>
-                          <th className="py-3 px-4 text-right">Saldo Actual</th>
+                          <th
+                            scope="col"
+                            onClick={() => handleSort("name")}
+                            className={cn(
+                              "py-3 px-4 cursor-pointer transition-colors group",
+                              sortColumn === "name"
+                                ? "text-blue-600 dark:text-blue-400 font-bold bg-blue-50/60 dark:bg-blue-950/30"
+                                : "hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+                            )}
+                            title={
+                              sortColumn === "name"
+                                ? sortDirection === "asc"
+                                  ? "Ordenado A-Z. Clic para ordenar Z-A"
+                                  : "Ordenado Z-A. Clic para ordenar A-Z"
+                                : "Clic para ordenar por Cliente (A-Z)"
+                            }
+                          >
+                            <div className="inline-flex items-center gap-1.5">
+                              <span>Cliente</span>
+                              {renderSortIcon("name")}
+                            </div>
+                          </th>
+
+                          <th
+                            scope="col"
+                            onClick={() => handleSort("contact")}
+                            className={cn(
+                              "py-3 px-4 cursor-pointer transition-colors group",
+                              sortColumn === "contact"
+                                ? "text-blue-600 dark:text-blue-400 font-bold bg-blue-50/60 dark:bg-blue-950/30"
+                                : "hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+                            )}
+                            title={
+                              sortColumn === "contact"
+                                ? sortDirection === "asc"
+                                  ? "Ordenado A-Z. Clic para ordenar Z-A"
+                                  : "Ordenado Z-A. Clic para ordenar A-Z"
+                                : "Clic para ordenar por Contacto"
+                            }
+                          >
+                            <div className="inline-flex items-center gap-1.5">
+                              <span>Contacto</span>
+                              {renderSortIcon("contact")}
+                            </div>
+                          </th>
+
+                          <th
+                            scope="col"
+                            onClick={() => handleSort("status")}
+                            className={cn(
+                              "py-3 px-4 cursor-pointer transition-colors group",
+                              sortColumn === "status"
+                                ? "text-blue-600 dark:text-blue-400 font-bold bg-blue-50/60 dark:bg-blue-950/30"
+                                : "hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+                            )}
+                            title={
+                              sortColumn === "status"
+                                ? sortDirection === "desc"
+                                  ? "Ordenado por mayores pendientes primero. Clic para invertir"
+                                  : "Ordenado por menores pendientes primero. Clic para invertir"
+                                : "Clic para ordenar por Estado y Envases"
+                            }
+                          >
+                            <div className="inline-flex items-center gap-1.5">
+                              <span>Estado y Envases</span>
+                              {renderSortIcon("status")}
+                            </div>
+                          </th>
+
+                          <th
+                            scope="col"
+                            onClick={() => handleSort("balance")}
+                            className={cn(
+                              "py-3 px-4 text-right cursor-pointer transition-colors group",
+                              sortColumn === "balance"
+                                ? "text-blue-600 dark:text-blue-400 font-bold bg-blue-50/60 dark:bg-blue-950/30"
+                                : "hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+                            )}
+                            title={
+                              sortColumn === "balance"
+                                ? sortDirection === "desc"
+                                  ? "Ordenado de mayor a menor saldo. Clic para menor a mayor"
+                                  : "Ordenado de menor a mayor saldo. Clic para mayor a menor"
+                                : "Clic para ordenar por Saldo Actual (de mayor a menor)"
+                            }
+                          >
+                            <div className="inline-flex items-center justify-end gap-1.5 w-full">
+                              <span>Saldo Actual</span>
+                              {renderSortIcon("balance")}
+                            </div>
+                          </th>
+
                           <th className="py-3 px-4 text-center">Acción</th>
                         </tr>
                       </thead>
@@ -698,17 +950,33 @@ export const CuentasCorrientesPage = () => {
                               </td>
 
                               <td className="py-3 px-4 text-center whitespace-nowrap">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedCustomerId(cust.id);
-                                  }}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200/90 bg-white text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
-                                >
-                                  <span>Ver cuenta</span>
-                                  <ArrowRight size={13} />
-                                </button>
+                                <div className="inline-flex items-center gap-1.5 justify-center">
+                                  {cust.current_balance > 0 ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        void handleSendCustomerWhatsApp(cust);
+                                      }}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-xl text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:hover:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800/80 transition cursor-pointer"
+                                      title="Enviar estado de cuenta por WhatsApp"
+                                    >
+                                      <WhatsAppIcon className="h-3.5 w-3.5 fill-current text-emerald-600 dark:text-emerald-400" />
+                                      <span>Cobrar</span>
+                                    </button>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedCustomerId(cust.id);
+                                    }}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-200/90 bg-white text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+                                  >
+                                    <span>Ver cuenta</span>
+                                    <ArrowRight size={13} />
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           );
@@ -809,6 +1077,20 @@ export const CuentasCorrientesPage = () => {
                           </div>
 
                           <div className="flex items-center gap-1.5 shrink-0">
+                            {cust.current_balance > 0 ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleSendCustomerWhatsApp(cust);
+                                }}
+                                className="!rounded-full h-9 w-9 inline-flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-500/25 active:scale-95 transition-all cursor-pointer"
+                                title="Enviar cobranza por WhatsApp"
+                                aria-label="Enviar cobranza por WhatsApp"
+                              >
+                                <WhatsAppIcon className="h-4 w-4 fill-current" />
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               onClick={(e) => {
@@ -977,7 +1259,43 @@ export const CuentasCorrientesPage = () => {
                 })}
               </div>
 
-              <div className="flex items-center justify-between gap-2 border-t border-slate-200/80 pt-3 dark:border-slate-800">
+              <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                    Criterio de ordenamiento
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {[
+                      { col: "balance" as const, dir: "desc" as const, label: "Saldo: Mayor a menor ($$)" },
+                      { col: "balance" as const, dir: "asc" as const, label: "Saldo: Menor a mayor ($)" },
+                      { col: "name" as const, dir: "asc" as const, label: "Cliente: A - Z" },
+                      { col: "name" as const, dir: "desc" as const, label: "Cliente: Z - A" },
+                      { col: "status" as const, dir: "desc" as const, label: "Envases: Mayor a menor" },
+                      { col: "contact" as const, dir: "asc" as const, label: "Contacto: A - Z" },
+                    ].map((s) => {
+                      const isActive = sortColumn === s.col && sortDirection === s.dir;
+                      return (
+                        <button
+                          key={`${s.col}_${s.dir}`}
+                          type="button"
+                          onClick={() => {
+                            setSortColumn(s.col);
+                            setSortDirection(s.dir);
+                          }}
+                          className={cn(
+                            "p-2.5 rounded-xl border text-left font-medium transition cursor-pointer",
+                            isActive
+                              ? "border-blue-500 bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-200 font-bold"
+                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-750"
+                          )}
+                        >
+                          {s.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 border-t border-slate-200/80 pt-3 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => {
@@ -1013,6 +1331,17 @@ export const CuentasCorrientesPage = () => {
             onSubmit={handleCreateCustomerSubmit}
           />
         )}
+
+        <WhatsAppPhonePromptModal
+          isOpen={wspPromptState.isOpen}
+          onClose={() => setWspPromptState((prev) => ({ ...prev, isOpen: false }))}
+          onConfirm={(phone) => {
+            setWspPromptState((prev) => ({ ...prev, isOpen: false }));
+            openWhatsAppChat(phone, wspPromptState.message);
+          }}
+          defaultPhone={wspPromptState.phone}
+          recipientName={wspPromptState.recipientName}
+        />
       </div>
     </div>
   );

@@ -424,12 +424,17 @@ export const PosProductList = ({
                   }}
                 >
                   {/* Imagen y badges */}
-                  <div className="relative mb-2.5 flex h-28 w-full items-center justify-center overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800">
+                  <div className={cn(
+                    "relative mb-2.5 flex h-28 w-full items-center justify-center overflow-hidden rounded-xl transition-colors",
+                    product.image_url
+                      ? "bg-white p-1.5 dark:bg-slate-950/60 border border-slate-100 dark:border-slate-800/80"
+                      : "bg-slate-100 dark:bg-slate-800"
+                  )}>
                     {product.image_url ? (
                       <img
                         src={product.image_url}
                         alt={product.name}
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain"
                         loading="lazy"
                       />
                     ) : (

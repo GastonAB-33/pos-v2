@@ -53,6 +53,8 @@ const defaultValues: ProductFormValues = {
   returnablePackageName: "",
   returnablePackagePrice: 0,
   trackStock: true,
+  publicadoWeb: true,
+  destacadoWeb: false,
 };
 
 export const ProductForm = ({

@@ -10,3 +10,4 @@ dist
 outputs/
 tmp/
 supabase/.temp/
+tools/catalog-images/cache/

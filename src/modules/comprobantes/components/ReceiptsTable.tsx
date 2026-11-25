@@ -4,6 +4,7 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { WhatsAppIcon } from "@/components/brand/WhatsAppIcon";
 import type { Receipt } from "@/types/entities";
 import { formatDisplayReceiptNumber, formatDisplaySaleNumber } from "@/utils/voucher-format.utils";
 
@@ -13,6 +14,7 @@ interface ReceiptsTableProps {
   canGenerateInvoice?: boolean;
   generating?: boolean;
   onGenerateInvoice?: (receipt: Receipt) => void;
+  onShareWhatsApp?: (receipt: Receipt) => void;
 }
 
 const columnHelper = createColumnHelper<Receipt>();
@@ -29,6 +31,7 @@ export const ReceiptsTable = ({
   canGenerateInvoice,
   generating,
   onGenerateInvoice,
+  onShareWhatsApp,
 }: ReceiptsTableProps) => {
   const columns = [
     columnHelper.accessor("receipt_number", {
@@ -72,7 +75,7 @@ export const ReceiptsTable = ({
       id: "actions",
       header: "Accion",
       cell: (info) => (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full transition dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 active:scale-95 cursor-pointer"
@@ -80,6 +83,18 @@ export const ReceiptsTable = ({
           >
             Ver detalle
           </button>
+
+          {onShareWhatsApp ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:hover:bg-emerald-950/80 border border-emerald-200 dark:border-emerald-800/80 rounded-full transition active:scale-95 cursor-pointer"
+              title="Compartir por WhatsApp"
+              onClick={() => onShareWhatsApp(info.row.original)}
+            >
+              <WhatsAppIcon className="h-3.5 w-3.5 fill-current text-emerald-600 dark:text-emerald-400" />
+              <span>WhatsApp</span>
+            </button>
+          ) : null}
 
           {canGenerateInvoice && onGenerateInvoice ? (
             <button
@@ -197,7 +212,7 @@ export const ReceiptsTable = ({
                 </span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full transition dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 active:scale-95 cursor-pointer"
@@ -205,6 +220,18 @@ export const ReceiptsTable = ({
                 >
                   Ver detalle
                 </button>
+
+                {onShareWhatsApp ? (
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center h-7 px-2.5 text-xs font-semibold !rounded-full text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800/80 dark:bg-emerald-950/40 dark:text-emerald-400 transition cursor-pointer active:scale-95 gap-1"
+                    title="Compartir por WhatsApp"
+                    onClick={() => onShareWhatsApp(receipt)}
+                  >
+                    <WhatsAppIcon className="h-3.5 w-3.5 fill-current text-emerald-600 dark:text-emerald-400" />
+                    <span>WhatsApp</span>
+                  </button>
+                ) : null}
 
                 {canGenerateInvoice && onGenerateInvoice ? (
                   <button

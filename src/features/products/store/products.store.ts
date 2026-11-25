@@ -4,6 +4,7 @@ import { priceListsService } from "@/services/price-lists.service";
 import { productsService } from "@/services/products.service";
 import type { PriceList, Product, ProductBarcode } from "@/types/entities";
 import { storageKeys } from "@/utils/local-storage";
+import { resolveProductImageUrl } from "@/utils/product-image.utils";
 
 const normalizeBarcode = (value: string | null | undefined): string =>
   (value ?? "").trim().replace(/\s+/g, "");
@@ -116,8 +117,17 @@ export const useProductsStore = create<ProductsCatalogState>()(
         }
       }
 
+      // Herencia inteligente (Opción B): los productos sin foto propia heredan automáticamente
+      // la foto oficial del Catálogo Maestro Global de Cloudflare R2 sin tocar otros datos del tenant.
+      const enrichedProducts = list.map((product) => {
+        if (product.image_url && product.image_url.trim()) return product;
+        const barcode = barcodeMap[product.id] || product.code;
+        const inheritedUrl = resolveProductImageUrl(null, barcode);
+        return inheritedUrl ? { ...product, image_url: inheritedUrl } : product;
+      });
+
       set({
-        products: sortByName(list),
+        products: sortByName(enrichedProducts),
         allBarcodes: activeBarcodes,
         primaryBarcodes: barcodeMap,
         priceLists: lists.sort((a, b) => a.name.localeCompare(b.name)),
@@ -138,7 +148,11 @@ export const useProductsStore = create<ProductsCatalogState>()(
 
   upsertProduct: (product: Product) => {
     set((state) => {
-      const safeProduct = { ...product };
+      const barcode = state.primaryBarcodes[product.id] || product.code;
+      const safeProduct = {
+        ...product,
+        image_url: resolveProductImageUrl(product.image_url, barcode),
+      };
       const withoutCurrent = state.products.filter((item) => item.id !== safeProduct.id);
       return {
         products: sortByName([...withoutCurrent, safeProduct]),

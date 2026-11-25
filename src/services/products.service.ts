@@ -6,6 +6,7 @@ import {
   type UpdateEntityInput,
 } from "@/services/base/tenant-crud.service";
 import { isMockDataProvider } from "@/services/config/data-provider";
+import { isR2MerchantAssetUrl, r2StorageService } from "@/services/r2-storage.service";
 import type { Product, ProductBarcode } from "@/types/entities";
 
 const crud = new TenantCrudService<Product>(dbTables.products);
@@ -401,6 +402,13 @@ export const productsService = {
       return fileToDataUrl(optimizedFile);
     }
 
+    // 1. Priorizar Cloudflare R2 (Zero Egress) vía Edge Function segura
+    const r2Url = await r2StorageService.uploadImage("productos", optimizedFile);
+    if (r2Url) {
+      return r2Url;
+    }
+
+    // 2. Fallback automático a Supabase Storage si R2 aún no está desplegado
     const normalizedExt = (optimizedFile.name.split(".").pop() ?? "jpg").toLowerCase();
     const extension = ["jpg", "jpeg", "png", "webp"].includes(normalizedExt) ? normalizedExt : "jpg";
     const path = `${tenantId}/${productId}/${Date.now()}-${Math.random()
@@ -423,6 +431,11 @@ export const productsService = {
 
   deleteProductImageByUrl: async (publicUrl: string | null | undefined): Promise<void> => {
     if (!publicUrl || isMockDataProvider) return;
+
+    if (isR2MerchantAssetUrl(publicUrl)) {
+      await r2StorageService.deleteMerchantImage(publicUrl);
+      return;
+    }
 
     const path = extractStoragePathFromPublicUrl(publicUrl);
     if (!path) return;

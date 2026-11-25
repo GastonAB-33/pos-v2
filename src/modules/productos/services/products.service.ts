@@ -5,6 +5,7 @@ import type { Product as ProductEntity } from "@/types/entities";
 import type { Product, ProductAuditEntry, ProductViewModel } from "@/modules/productos/types/product.types";
 import { DEFAULT_IVA_PERCENT, roundMoney, roundPercent } from "@/modules/productos/utils/product-pricing";
 import { isStockTrackingEnabled } from "@/utils/stock-tracking";
+import { resolveProductImageUrl } from "@/utils/product-image.utils";
 
 const normalizeText = (value: string | null | undefined): string => value?.trim() ?? "";
 
@@ -135,11 +136,12 @@ export const mapEntityToProductViewModel = (
   const precioSinIva = resolvePriceWithoutVat(product);
   const porcentajeIva = roundPercent(product.vat_percent ?? DEFAULT_IVA_PERCENT);
   const porcentajeGanancia = resolveProfitPercent(product, precioSinIva);
+  const resolvedImage = resolveProductImageUrl(product.image_url, barcode || product.code);
 
   return {
     entity: product,
     barcode: barcode ?? "",
-    imagenUrl: product.image_url ?? "",
+    imagenUrl: resolvedImage ?? "",
     nombre: product.name,
     codigoProducto: product.code ?? "",
     codigoBarras: barcode ?? "",
@@ -156,6 +158,8 @@ export const mapEntityToProductViewModel = (
     favorito: product.is_favorite,
     activo: product.is_active,
     trackStock: isStockTrackingEnabled(product.description),
+    publicadoWeb: product.is_published_web ?? true,
+    destacadoWeb: product.is_featured_web ?? false,
   };
 };
 
@@ -168,7 +172,7 @@ export const mapEntityToProduct = (
   return {
     id: product.id,
     tenant_id: product.tenant_id,
-    imagen_url: product.image_url ?? "",
+    imagen_url: vm.imagenUrl,
     nombre: vm.nombre,
     codigo_barras: vm.codigoBarras,
     codigo_producto: vm.codigoProducto,

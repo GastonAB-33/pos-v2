@@ -10,6 +10,7 @@ import { LoginPage } from "@/modules/usuarios/pages/LoginPage";
 import { UnauthorizedPage } from "@/modules/usuarios/pages/UnauthorizedPage";
 import { PrivacyPolicyPage } from "@/modules/legal/pages/PrivacyPolicyPage";
 import { TermsConditionsPage } from "@/modules/legal/pages/TermsConditionsPage";
+import { StorefrontPage } from "@/modules/tienda/pages/StorefrontPage";
 import { isTenantMatchingInput, normalizeTenantSlug } from "@/utils/tenant-slug";
 
 const RootRedirect = () => {
@@ -66,6 +67,9 @@ export const AppRouter = () => {
       {/* 1.1 Cumplimiento normativo y privacidad pública */}
       <Route path={routePaths.privacidad} element={<PrivacyPolicyPage />} />
       <Route path={routePaths.terminos} element={<TermsConditionsPage />} />
+
+      {/* 1.2 Mi Tienda (E-commerce / Catálogo Digital Público Compartible) */}
+      <Route path="/tienda/:tenantSlug" element={<StorefrontPage />} />
 
       {/* 2. Acceso y autenticación */}
       <Route path={routePaths.login} element={<LoginPage />} />

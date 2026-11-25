@@ -29,6 +29,8 @@ export const productFormSchema = z.object({
   returnablePackageName: z.string().optional().or(z.literal("")),
   returnablePackagePrice: z.coerce.number().min(0).optional(),
   trackStock: z.boolean().default(true),
+  publicadoWeb: z.boolean().default(true),
+  destacadoWeb: z.boolean().default(false),
 });
 
 export type ProductFormValues = z.infer<typeof productFormSchema>;

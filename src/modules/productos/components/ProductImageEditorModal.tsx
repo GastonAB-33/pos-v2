@@ -161,7 +161,7 @@ export const ProductImageEditorModal = ({
               ref={canvasRef}
               width={OUTPUT_SIZE}
               height={OUTPUT_SIZE}
-              className="h-[300px] w-[300px] rounded-2xl border border-slate-200 bg-white object-cover shadow-xs"
+              className="h-[300px] w-[300px] rounded-2xl border border-slate-200 bg-white object-contain shadow-xs"
             />
           </div>
 

@@ -4,13 +4,22 @@ import { QRCodeSVG } from "qrcode.react";
 import { useTenant } from "@/features/tenant/hooks/useTenant";
 import { settingsService } from "@/services/settings.service";
 import { invoicesService } from "@/services/invoices.service";
+import { customersService } from "@/services/customers.service";
 import { ArcaInvoiceSheet, type ArcaInvoiceCopy } from "@/components/arca/ArcaInvoiceSheet";
+import { WhatsAppIcon } from "@/components/brand/WhatsAppIcon";
+import { WhatsAppPhonePromptModal } from "@/components/ui/WhatsAppPhonePromptModal";
 import type { BusinessSettings, FacturacionSettings, Invoice, Receipt } from "@/types/entities";
 import {
   formatDisplaySaleNumber,
   formatDisplayReceiptNumber,
   formatDisplayNotes,
 } from "@/utils/voucher-format.utils";
+import {
+  formatWhatsAppTicket,
+  formatWhatsAppInvoice,
+  cleanPhoneForWhatsApp,
+  openWhatsAppChat,
+} from "@/utils/whatsapp-voucher.utils";
 
 interface ReceiptTicketPanelProps {
   receipt: Receipt;
@@ -141,6 +150,9 @@ export const ReceiptTicketPanel = ({
   const [activeTab, setActiveTab] = useState<"ticket" | "invoice">(
     mode === "invoice" ? "invoice" : "ticket"
   );
+  const [customerPhone, setCustomerPhone] = useState<string>("");
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+  const [pendingWhatsAppMessage, setPendingWhatsAppMessage] = useState("");
 
   useEffect(() => {
     if (invoice !== undefined) {
@@ -153,6 +165,19 @@ export const ReceiptTicketPanel = ({
       .then((invList) => setLoadedInvoice(invList && invList.length > 0 ? invList[0] : null))
       .catch(() => setLoadedInvoice(null));
   }, [tenantId, receipt.sale_id, invoice]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    const custId = loadedInvoice?.customer_id;
+    if (custId) {
+      customersService
+        .getById(tenantId, custId)
+        .then((c) => {
+          if (c?.phone) setCustomerPhone(c.phone);
+        })
+        .catch(() => {});
+    }
+  }, [tenantId, loadedInvoice?.customer_id]);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -201,6 +226,29 @@ export const ReceiptTicketPanel = ({
     link.download = `Factura_${resolvedInvoice.document_type}_${resolvedInvoice.document_number}.txt`;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleSendTicketWhatsApp = () => {
+    const message = formatWhatsAppTicket(receipt, resolvedInvoice, businessSettings);
+    const cleanPhone = cleanPhoneForWhatsApp(customerPhone);
+    if (cleanPhone && cleanPhone.length >= 8) {
+      openWhatsAppChat(cleanPhone, message);
+    } else {
+      setPendingWhatsAppMessage(message);
+      setIsWhatsAppModalOpen(true);
+    }
+  };
+
+  const handleSendInvoiceWhatsApp = () => {
+    if (!resolvedInvoice) return;
+    const message = formatWhatsAppInvoice(resolvedInvoice, facturacionSettings, businessSettings);
+    const cleanPhone = cleanPhoneForWhatsApp(customerPhone);
+    if (cleanPhone && cleanPhone.length >= 8) {
+      openWhatsAppChat(cleanPhone, message);
+    } else {
+      setPendingWhatsAppMessage(message);
+      setIsWhatsAppModalOpen(true);
+    }
   };
 
   return (
@@ -378,6 +426,15 @@ export const ReceiptTicketPanel = ({
               </button>
               <button
                 type="button"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                disabled={isLoadingDetail}
+                onClick={handleSendTicketWhatsApp}
+              >
+                <WhatsAppIcon className="h-3.5 w-3.5 fill-current" />
+                <span>Enviar por WhatsApp</span>
+              </button>
+              <button
+                type="button"
                 className="ui-btn-ghost flex items-center gap-1.5 text-xs disabled:opacity-50"
                 disabled={isLoadingDetail}
                 onClick={downloadTicket}
@@ -423,7 +480,7 @@ export const ReceiptTicketPanel = ({
             </div>
 
             {/* BOTONES DE IMPRESIÓN Y DESCARGA */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 className="ui-btn-primary flex items-center gap-1.5 text-xs disabled:opacity-50"
@@ -431,6 +488,15 @@ export const ReceiptTicketPanel = ({
                 onClick={printDocument}
               >
                 <Printer size={14} /> Imprimir Factura / PDF
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
+                disabled={isLoadingDetail}
+                onClick={handleSendInvoiceWhatsApp}
+              >
+                <WhatsAppIcon className="h-3.5 w-3.5 fill-current" />
+                <span>Enviar por WhatsApp</span>
               </button>
               <button
                 type="button"
@@ -482,6 +548,23 @@ export const ReceiptTicketPanel = ({
           ) : null}
         </div>
       ) : null}
+
+      <WhatsAppPhonePromptModal
+        isOpen={isWhatsAppModalOpen}
+        onClose={() => setIsWhatsAppModalOpen(false)}
+        onConfirm={(phone) => {
+          setIsWhatsAppModalOpen(false);
+          setCustomerPhone(phone);
+          openWhatsAppChat(phone, pendingWhatsAppMessage);
+        }}
+        defaultPhone={customerPhone}
+        recipientName={
+          receipt.customer_name ||
+          resolvedInvoice?.customer_snapshot?.business_name ||
+          resolvedInvoice?.customer_snapshot?.full_name ||
+          "Cliente"
+        }
+      />
     </article>
   );
 };
