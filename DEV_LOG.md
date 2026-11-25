@@ -18,6 +18,22 @@ Este documento es la **fuente única de verdad y memoria compartida** entre dife
 
 ## 📋 Registro Histórico de Cambios
 
+### [2026-11-25] - Fix Badge "Pendiente precios" en Historial de Compras
+* **Zona:** `src/modules/compras/components/PurchasesHistoryTable.tsx`
+* **Objetivo:** Evitar que el badge de estado `Pendiente precios` (y los demás badges de estado de compra) se parta en dos líneas superpuestas dentro de la tabla.
+* **Cambios:**
+  * Se agregó `inline-flex items-center whitespace-nowrap` a los badges de `renderStatusBadge` (`Pendiente precios`, `Confirmada`, `Devolución parcial`, `Devuelta total`).
+* **Próximos pasos:** Verificado con `npx tsc --noEmit` sin errores.
+
+
+### [2026-11-25] - Fix RLS de Lectura del Propio Perfil en `permission_profiles`
+* **Zona:** `docs/sql/042_allow_own_permission_profile_select.sql`
+* **Objetivo:** Permitir que cualquier usuario autenticado (como `Cajera` u otros perfiles sin acceso al módulo `usuarios`) pueda leer su propio `permission_profiles` asignado al iniciar sesión.
+* **Cambios:**
+  * Se actualizó la política `permission_profiles_select_own_tenant` para permitir `SELECT` cuando `public.can_read_module('usuarios')` sea verdadero **o** cuando el perfil coincida con `u.permission_profile_id` del usuario autenticado (`auth.uid()`).
+* **Próximos pasos:** Ejecutar el SQL en Supabase SQL Editor.
+
+
 ### [2026-11-25] - Respeto Estricto de Perfil de Permisos y Badge de Perfil en Topbar
 * **Zona:** `src/features/auth/store/auth.store.ts`, `src/components/layout/Topbar.tsx`
 * **Objetivo:** Corregir el bypass en el frontend donde usuarios con `role_code = 'owner' | 'admin'` veían módulos no autorizados (`Usuarios`, `Estadísticas`, `% Ganancia` en Compras) al cambiarse a un perfil restringido (ej. `Cajera`), y mostrar visiblemente el perfil activo en el menú de usuario.
