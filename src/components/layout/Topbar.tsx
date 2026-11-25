@@ -151,6 +151,7 @@ export const Topbar = () => {
   const location = useLocation();
   const toast = useToast();
   const user = useAuthStore((state) => state.user);
+  const permissionProfileName = useAuthStore((state) => state.permissionProfileName);
   const clearSession = useAuthStore((state) => state.clearSession);
   const { tenant, tenantId } = useTenant();
   const {
@@ -1101,6 +1102,9 @@ export const Topbar = () => {
             <span className={connectionBadgeClass}>{connectionLabel}</span>
             {totalPendingCount > 0 ? <span className="ui-badge ui-badge--info">Pendientes: {totalPendingCount}</span> : null}
             {isInstalled ? <span className="ui-badge ui-badge--info">App instalada</span> : null}
+            <span className="ml-auto inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-700 dark:border-indigo-500/40 dark:bg-indigo-950/60 dark:text-indigo-300">
+              Perfil: {user?.permissionProfileName || permissionProfileName || "Sin perfil"}
+            </span>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
