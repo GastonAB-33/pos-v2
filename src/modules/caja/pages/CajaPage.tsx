@@ -199,8 +199,12 @@ export const CajaPage = () => {
     return isPrivilegedRole || isPrivilegedProfile || hasPrivilegedPermissions;
   }, [user, canRead, canWrite]);
 
+  const hasBlindClosePermission = useMemo(() => {
+    return Boolean(canRead("caja_cierre_ciego") || canWrite("caja_cierre_ciego"));
+  }, [canRead, canWrite]);
+
   const isBlindModeActive = Boolean(
-    cashSettings.blind_cash_closing && (!canRevealBlindCash || !revealBlindAmounts)
+    hasBlindClosePermission && (!canRevealBlindCash || !revealBlindAmounts)
   );
 
   const dailySession = useMemo(
@@ -469,7 +473,7 @@ export const CajaPage = () => {
           </button>
 
           {/* Botón Píldora Revelar / Ocultar A Ciegas */}
-          {cashSettings.blind_cash_closing && canRevealBlindCash && (
+          {(hasBlindClosePermission || cashSettings.blind_cash_closing) && canRevealBlindCash && (
             <button
               type="button"
               onClick={() => setRevealBlindAmounts((prev) => !prev)}
@@ -1002,7 +1006,7 @@ export const CajaPage = () => {
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
               {(currentSession || closingSessionSnapshot) ? (
                 <>
-                  {!cashSettings.blind_cash_closing && !isCashClosed && (
+                  {!isBlindModeActive && !isCashClosed && (
                     <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-lg border border-slate-200/70 dark:border-slate-700">
                       <div>
                         <span className="text-slate-500 dark:text-slate-400 text-[11px]">Cobros por venta:</span>
@@ -1038,7 +1042,7 @@ export const CajaPage = () => {
                     expectedCashBalance={closingSummarySnapshot?.expectedCashBalance ?? currentSessionSummary.expectedCashBalance}
                     expectedFullBalance={closingSummarySnapshot?.expectedFullBalance ?? currentSessionSummary.expectedFullBalance}
                     reconciliationMode={cashSettings.cash_reconciliation_mode ?? "cash_only"}
-                    blindMode={cashSettings.blind_cash_closing ?? false}
+                    blindMode={isBlindModeActive}
                     initialNotes={closingSessionSnapshot?.notes ?? currentSession?.notes}
                     onUpdateNotes={updateSessionNotes}
                     onSubmit={async (values) => {

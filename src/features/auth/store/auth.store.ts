@@ -156,6 +156,10 @@ export const useAuthStore = create<AuthStore>()(
 
       hasPermission: (module, level = "read") => {
         const user = get().user;
+        if (module === "caja_cierre_ciego") {
+          const profile = get().permissionProfile;
+          return hasModulePermission(profile, { module, level });
+        }
         if (user?.role === "admin" || user?.role === "owner") return true;
         const profile = get().permissionProfile;
         return hasModulePermission(profile, { module, level });

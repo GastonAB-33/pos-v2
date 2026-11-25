@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Camera,
+  Scale,
   Download,
   FilterX,
   MoreVertical,
@@ -80,7 +81,8 @@ export const ProductFilters = ({
     (filters.category ? 1 : 0) +
     (filters.subcategory ? 1 : 0) +
     (filters.supplier ? 1 : 0) +
-    (filters.searchScope && filters.searchScope !== "all" ? 1 : 0);
+    (filters.searchScope && filters.searchScope !== "all" ? 1 : 0) +
+    (filters.saleMode && filters.saleMode !== "all" ? 1 : 0);
 
   return (
     <div className="product-toolbar space-y-4">
@@ -286,6 +288,34 @@ export const ProductFilters = ({
               ) : null}
             </button>
 
+            {/* Botón Rápido Solo Pesables (Fiambrería / Balanza) */}
+            <button
+              type="button"
+              onClick={() =>
+                onFiltersChange({
+                  saleMode: filters.saleMode === "weight" ? "all" : "weight",
+                })
+              }
+              className={cn(
+                "flex items-center justify-center gap-1.5 rounded-xl sm:rounded-2xl border px-3 sm:px-3.5 py-2 text-xs sm:text-sm font-medium transition-all cursor-pointer shrink-0",
+                filters.saleMode === "weight"
+                  ? "border-emerald-500 bg-emerald-50 text-emerald-800 dark:border-emerald-500/70 dark:bg-emerald-950/70 dark:text-emerald-200 font-bold shadow-xs"
+                  : "border-slate-200/80 bg-slate-50/70 text-slate-700 hover:bg-slate-100 dark:border-slate-700/80 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:bg-slate-800"
+              )}
+              title="Filtrar solo productos pesables (fiambrería, carnicería, balanza)"
+            >
+              <Scale
+                size={15}
+                className={
+                  filters.saleMode === "weight"
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-slate-500 dark:text-slate-400"
+                }
+              />
+              <span className="hidden min-[480px]:inline">Solo pesables</span>
+              <span className="inline min-[480px]:hidden">Pesables</span>
+            </button>
+
             {/* Botón Limpiar Filtros */}
             {(filters.search || activeAdvancedFiltersCount > 0) ? (
               <button
@@ -359,6 +389,23 @@ export const ProductFilters = ({
                   className="text-blue-600 hover:text-blue-900 dark:text-blue-400 rounded-full"
                   onClick={() => onFiltersChange({ supplier: "" })}
                   aria-label="Quitar filtro de proveedor"
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ) : null}
+
+            {filters.saleMode && filters.saleMode !== "all" ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950 dark:text-emerald-200">
+                <Scale size={12} className="text-emerald-600 dark:text-emerald-400" />
+                <span>
+                  Modalidad: <strong>{filters.saleMode === "weight" ? "Solo pesables (fiambrería / balanza)" : "Solo por unidad"}</strong>
+                </span>
+                <button
+                  type="button"
+                  className="text-emerald-600 hover:text-emerald-900 dark:text-emerald-400 rounded-full"
+                  onClick={() => onFiltersChange({ saleMode: "all" })}
+                  aria-label="Quitar filtro de modalidad de venta"
                 >
                   <X size={12} />
                 </button>
@@ -507,6 +554,24 @@ export const ProductFilters = ({
                   )}
                 </select>
               </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  Modalidad de venta
+                </label>
+                <select
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 cursor-pointer focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100"
+                  value={filters.saleMode ?? "all"}
+                  onChange={(event) =>
+                    onFiltersChange({ saleMode: event.target.value as "all" | "weight" | "unit" })
+                  }
+                  aria-label="Filtrar por modalidad de venta"
+                >
+                  <option value="all">Todas las modalidades (unitarios y pesables)</option>
+                  <option value="weight">⚖️ Solo pesables (fiambrería / balanza / kg)</option>
+                  <option value="unit">📦 Solo por unidad</option>
+                </select>
+              </div>
             </div>
 
             <div className="flex items-center justify-between border-t border-slate-200 pt-3 dark:border-slate-800">
@@ -514,7 +579,7 @@ export const ProductFilters = ({
                 type="button"
                 className="rounded-xl border border-slate-200 px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
                 onClick={() => {
-                  onFiltersChange({ category: "", subcategory: "", supplier: "", searchScope: "all" });
+                  onFiltersChange({ category: "", subcategory: "", supplier: "", searchScope: "all", saleMode: "all" });
                 }}
                 disabled={activeAdvancedFiltersCount === 0}
               >

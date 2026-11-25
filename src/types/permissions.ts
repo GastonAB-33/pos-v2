@@ -23,11 +23,15 @@ export const createDefaultPermissionProfile = (): PermissionProfile => {
   return profile;
 };
 
-const createFullPermissionProfile = (): PermissionProfile => {
+export const createFullPermissionProfile = (): PermissionProfile => {
   const profile = createDefaultPermissionProfile();
 
   for (const module of appModules) {
-    profile[module] = { read: true, write: true };
+    if (module === "caja_cierre_ciego") {
+      profile[module] = { read: false, write: false };
+    } else {
+      profile[module] = { read: true, write: true };
+    }
   }
 
   return profile;

@@ -29,6 +29,7 @@ export interface ProductFiltersState {
   category: string;
   subcategory: string;
   supplier: string;
+  saleMode?: "all" | "weight" | "unit";
 }
 
 export interface ProductAuditEntry {

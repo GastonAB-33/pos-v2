@@ -269,7 +269,7 @@ const configTabs: ConfigTabDefinition[] = [
   { id: "pos", label: "Punto de Venta", icon: ShoppingCart, description: "Comportamiento de cobro y redondeo" },
   { id: "empleados", label: "Empleados y Cta. Cte.", icon: Users, description: "Descuento en compras y categorías excluidas" },
   { id: "apariencia", label: "Apariencia y Letra", icon: Palette, description: "Tema y tamaño de letra/interfaz" },
-  { id: "caja", label: "Caja y Tesorería", icon: Wallet, description: "Reglas de control y arqueo a ciegas" },
+  { id: "caja", label: "Caja y Tesorería", icon: Wallet, description: "Reglas de control y movimientos de caja" },
   { id: "stock", label: "Stock e Inventario", icon: Package, description: "Alertas, compras y envases retornables" },
   { id: "facturacion", label: "Facturación & ARCA", icon: FileText, description: "Emisión electrónica oficial y certificados" },
   { id: "contableCatalogos", label: "Medios de Pago", icon: CreditCard, description: "Cobros, recargos/descuentos y planes de cuotas" },
@@ -1522,26 +1522,18 @@ export const ConfiguracionPage = ({ scope = "all" }: ConfiguracionPageProps) => 
                 </div>
               </label>
 
-              {/* Cierre de caja a ciegas */}
-              <label className="flex items-start gap-3 rounded-2xl border border-slate-200/90 bg-white p-4 text-sm font-medium text-slate-800 shadow-2xs dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 cursor-pointer hover:border-slate-300 dark:hover:border-slate-600 transition">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
-                  checked={draft.caja.blind_cash_closing ?? false}
-                  onChange={(event) =>
-                    updateSection("caja", { blind_cash_closing: event.target.checked })
-                  }
-                  disabled={!canWriteConfiguracion}
-                />
+              {/* Información: Cierre de caja a ciegas por usuario */}
+              <div className="flex items-start gap-3 rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 text-sm text-slate-700 shadow-2xs dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300">
+                <ShieldCheck className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <span className="font-bold text-slate-900 dark:text-slate-100 block">
-                    Cierre de caja a ciegas
+                    Cierre de caja a ciegas por usuario
                   </span>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    El cajero no ve las ventas ni el efectivo esperado al cerrar. Debe contar billetes por denominación ($100 a $20.000) y los totales se revelan recién tras confirmar el cierre.
+                    El arqueo a ciegas se configura individualmente por perfil de usuario desde el módulo de <strong>Usuarios y Permisos</strong>.
                   </p>
                 </div>
-              </label>
+              </div>
             </div>
           </div>
         </div>
