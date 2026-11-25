@@ -55,6 +55,14 @@ export const defaultSystemModuleGroups: SystemModuleGroup[] = [
         writeDescription: "Registrar extracciones de efectivo, retiros, adelantos y entradas manuales",
       },
       {
+        module: "caja_cierre_ciego",
+        label: "Cierre de Caja a Ciegas",
+        description: "Regla de arqueo ciego para cajeros: oculta las ventas y saldo esperado, obligando al usuario a contar billetes a ciegas al cerrar turno",
+        readDescription: "Aplica cierre a ciegas obligatorio (oculta importes previos al cierre)",
+        writeDescription: "Aplica cierre a ciegas obligatorio (oculta importes previos al cierre)",
+        isSpecialAction: true,
+      },
+      {
         module: "promociones",
         label: "Promociones y Descuentos",
         description: "Configuración de promociones comerciales, 2x1, combos y descuentos por volumen",

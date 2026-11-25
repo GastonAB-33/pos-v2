@@ -19,6 +19,7 @@ const defaultFilters: ProductFiltersState = {
   category: "",
   subcategory: "",
   supplier: "",
+  saleMode: "all",
 };
 
 export const useProducts = (tenantId: string | null, userId: string | null) => {
@@ -100,6 +101,9 @@ export const useProducts = (tenantId: string | null, userId: string | null) => {
         if (filters.subcategory && product.subcategoria !== filters.subcategory) return false;
         if (filters.supplier && product.proveedor !== filters.supplier) return false;
       }
+
+      if (filters.saleMode === "weight" && product.saleMode !== "weight") return false;
+      if (filters.saleMode === "unit" && product.saleMode !== "unit") return false;
 
       return true;
     });

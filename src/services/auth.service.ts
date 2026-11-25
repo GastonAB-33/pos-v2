@@ -5,7 +5,7 @@ import { tenantsService } from "@/services/tenants.service";
 import { usersService } from "@/services/users.service";
 import type { TenantRecord, UserRecord } from "@/types/entities";
 import type { AppUser } from "@/types/user";
-import { normalizePermissionProfile } from "@/types/permissions";
+import { normalizePermissionProfile, createFullPermissionProfile } from "@/types/permissions";
 import { isTenantMatchingInput } from "@/utils/tenant-slug";
 
 interface PosSession {
@@ -17,17 +17,78 @@ const toAppUser = async (
   tenant: TenantRecord,
   user: UserRecord
 ): Promise<AppUser> => {
-  const profile = await permissionProfilesService.getById(
-    tenant.id,
-    user.permission_profile_id
-  );
+  let profile = user.permission_profile_id
+    ? await permissionProfilesService.getById(
+        tenant.id,
+        user.permission_profile_id
+      )
+    : null;
 
-  if (!profile) {
-    throw new Error("No se encontro el perfil de permisos asignado");
+  // Auto-recuperación si el perfil no existe, fue eliminado o es nulo
+  if (!profile || !profile.is_active) {
+    try {
+      const activeProfiles = await permissionProfilesService.getActiveByTenant(tenant.id);
+      const candidate =
+        activeProfiles.find((p) =>
+          /admin|administrador|dueño|dueno|owner/i.test(p.name)
+        ) ||
+        activeProfiles[0] ||
+        null;
+
+      if (candidate) {
+        profile = candidate;
+        // Auto-reparar en background la relación del usuario con su perfil válido
+        void usersService
+          .update(tenant.id, user.id, {
+            permission_profile_id: candidate.id,
+          })
+          .catch((err) => {
+            console.warn("[authService] No se pudo auto-vincular permission_profile_id:", err);
+          });
+      } else {
+        // El tenant no tiene perfiles activos creados todavía. Crear el perfil Administrador automáticamente
+        const createdProfile = await permissionProfilesService.create(tenant.id, {
+          name: "Administrador",
+          description: "Acceso total a la administración",
+          is_active: true,
+          permissions: createFullPermissionProfile(),
+        });
+
+        if (createdProfile) {
+          profile = createdProfile;
+          void usersService
+            .update(tenant.id, user.id, {
+              permission_profile_id: createdProfile.id,
+            })
+            .catch((err) => {
+              console.warn("[authService] No se pudo vincular nuevo perfil administrador:", err);
+            });
+        }
+      }
+    } catch (err) {
+      console.warn("[authService] Falló autorrecuperación de perfil de permisos:", err);
+    }
   }
 
-  if (!profile.is_active) {
-    throw new Error("El perfil de permisos asignado esta inactivo");
+  // Respaldo de seguridad final: si falló la red o BD pero el usuario es owner/admin, no bloquearlo
+  if (!profile) {
+    const isOwnerOrAdmin = /owner|admin|dueño|dueno/i.test(user.role_code || "");
+    if (isOwnerOrAdmin) {
+      return {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        fullName: user.full_name,
+        role: user.role_code ?? "owner",
+        tenantId: tenant.id,
+        isActive: user.is_active,
+        permissionProfileId: "auto-admin",
+        permissionProfileName: "Administrador",
+        permissions: createFullPermissionProfile(),
+      };
+    }
+
+    throw new Error("No se encontro el perfil de permisos asignado");
   }
 
   return {

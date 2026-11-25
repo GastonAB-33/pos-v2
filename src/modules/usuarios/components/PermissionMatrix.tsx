@@ -127,6 +127,9 @@ export const PermissionMatrix = ({
 
     const next: PermissionProfile = { ...normalized };
     for (const item of groupModules) {
+      if (item.module === "caja_cierre_ciego" && access !== "none") {
+        continue;
+      }
       next[item.module] = {
         ...next[item.module],
         ...accessMap[access],
@@ -273,51 +276,84 @@ export const PermissionMatrix = ({
                         ) : null}
                       </div>
 
-                      {/* Selector de Tres Estados de Permiso: Sin acceso | Solo Lectura | Acceso Total */}
-                      <div className="grid grid-cols-3 gap-1 shrink-0 rounded-xl bg-slate-100 p-1 dark:border dark:border-slate-700/80 dark:bg-slate-800 w-full sm:w-auto">
-                        <button
-                          type="button"
-                          className={cn(
-                            "rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-semibold transition-all text-center leading-tight flex items-center justify-center cursor-pointer",
-                            access === "none"
-                              ? "bg-white text-slate-900 shadow-2xs dark:bg-slate-700 dark:text-white"
-                              : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                          )}
-                          onClick={() => setSingleAccess(item.module, "none")}
-                          disabled={disabled}
-                          title="Sin acceso al módulo"
-                        >
-                          Sin acceso
-                        </button>
-                        <button
-                          type="button"
-                          className={cn(
-                            "rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-semibold transition-all text-center leading-tight flex items-center justify-center cursor-pointer",
-                            access === "read"
-                              ? "bg-blue-600 text-white shadow-2xs shadow-blue-500/25"
-                              : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-                          )}
-                          onClick={() => setSingleAccess(item.module, "read")}
-                          disabled={disabled}
-                          title="Acceso solo lectura / consulta"
-                        >
-                          Solo Lectura
-                        </button>
-                        <button
-                          type="button"
-                          className={cn(
-                            "rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-semibold transition-all text-center leading-tight flex items-center justify-center cursor-pointer",
-                            access === "write"
-                              ? "bg-emerald-600 text-white shadow-2xs shadow-emerald-500/25"
-                              : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-                          )}
-                          onClick={() => setSingleAccess(item.module, "write")}
-                          disabled={disabled}
-                          title="Acceso total: crear, editar y guardar"
-                        >
-                          Acceso Total
-                        </button>
-                      </div>
+                      {/* Selector de Permiso: Arqueo visible vs Cierre a ciegas para caja_cierre_ciego, o selector de tres estados estándar */}
+                      {item.module === "caja_cierre_ciego" ? (
+                        <div className="grid grid-cols-2 gap-1 shrink-0 rounded-xl bg-slate-100 p-1 dark:border dark:border-slate-700/80 dark:bg-slate-800 w-full sm:w-auto">
+                          <button
+                            type="button"
+                            className={cn(
+                              "rounded-lg px-2.5 py-1.5 text-[11px] sm:text-xs font-semibold transition-all text-center leading-tight flex items-center justify-center cursor-pointer",
+                              access === "none"
+                                ? "bg-white text-slate-900 shadow-2xs dark:bg-slate-700 dark:text-white"
+                                : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                            )}
+                            onClick={() => setSingleAccess(item.module, "none")}
+                            disabled={disabled}
+                            title="Arqueo visible estándar: el usuario visualiza los saldos esperados y cobros"
+                          >
+                            Arqueo visible
+                          </button>
+                          <button
+                            type="button"
+                            className={cn(
+                              "rounded-lg px-2.5 py-1.5 text-[11px] sm:text-xs font-semibold transition-all text-center leading-tight flex items-center justify-center cursor-pointer",
+                              access !== "none"
+                                ? "bg-amber-600 text-white shadow-2xs shadow-amber-500/25"
+                                : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                            )}
+                            onClick={() => setSingleAccess(item.module, "write")}
+                            disabled={disabled}
+                            title="Cierre a ciegas obligatorio: se ocultan los importes y ventas antes del cierre"
+                          >
+                            A ciegas (Obligatorio)
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-3 gap-1 shrink-0 rounded-xl bg-slate-100 p-1 dark:border dark:border-slate-700/80 dark:bg-slate-800 w-full sm:w-auto">
+                          <button
+                            type="button"
+                            className={cn(
+                              "rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-semibold transition-all text-center leading-tight flex items-center justify-center cursor-pointer",
+                              access === "none"
+                                ? "bg-white text-slate-900 shadow-2xs dark:bg-slate-700 dark:text-white"
+                                : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                            )}
+                            onClick={() => setSingleAccess(item.module, "none")}
+                            disabled={disabled}
+                            title="Sin acceso al módulo"
+                          >
+                            Sin acceso
+                          </button>
+                          <button
+                            type="button"
+                            className={cn(
+                              "rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-semibold transition-all text-center leading-tight flex items-center justify-center cursor-pointer",
+                              access === "read"
+                                ? "bg-blue-600 text-white shadow-2xs shadow-blue-500/25"
+                                : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                            )}
+                            onClick={() => setSingleAccess(item.module, "read")}
+                            disabled={disabled}
+                            title="Acceso solo lectura / consulta"
+                          >
+                            Solo Lectura
+                          </button>
+                          <button
+                            type="button"
+                            className={cn(
+                              "rounded-lg px-2 py-1.5 text-[11px] sm:text-xs font-semibold transition-all text-center leading-tight flex items-center justify-center cursor-pointer",
+                              access === "write"
+                                ? "bg-emerald-600 text-white shadow-2xs shadow-emerald-500/25"
+                                : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                            )}
+                            onClick={() => setSingleAccess(item.module, "write")}
+                            disabled={disabled}
+                            title="Acceso total: crear, editar y guardar"
+                          >
+                            Acceso Total
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

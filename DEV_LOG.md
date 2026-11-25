@@ -18,6 +18,64 @@ Este documento es la **fuente única de verdad y memoria compartida** entre dife
 
 ## 📋 Registro Histórico de Cambios
 
+### [2026-11-25] - Auto-recuperación de Perfil de Permisos en Login y Script SQL La25
+* **Zona:** `src/services/auth.service.ts`, `src/lib/supabase/client.ts`, `docs/sql/041_fix_la25_user_and_permissions.sql`
+* **Objetivo:** Resolver el error bloqueante *"No se encontro el perfil de permisos asignado"* al iniciar sesión (particularmente con `ale.97.28+la25@gmail.com` en tenant `La25`), implementando auto-sanación en el frontend y un script SQL de reparación en Supabase.
+* **Cambios:**
+  * **Servicio de Autenticación (`src/services/auth.service.ts`):**
+    * Se actualizó la resolución de `toAppUser`: si `user.permission_profile_id` es nulo o apunta a un perfil inexistente/inactivo, ahora busca automáticamente los perfiles activos del tenant (`Administrador` o primer perfil disponible).
+    * Auto-asigna el perfil y repara la columna `permission_profile_id` en `public.users` en Supabase de forma asíncrona.
+    * Si el comercio no tuviera ningún perfil creado, crea automáticamente el perfil `Administrador` con permisos completos (`createFullPermissionProfile()`).
+    * Respaldo en memoria: para usuarios con rol `owner` o `admin`, si la persistencia en DB fallase temporalmente, se les otorga acceso en memoria con permisos totales para evitar que queden bloqueados.
+  * **Script de Reparación SQL (`docs/sql/041_fix_la25_user_and_permissions.sql`):**
+    * Vincula inequívocamente al usuario de Auth `ale.97.28+la25@gmail.com` con el tenant `La25`.
+    * Garantiza la existencia del perfil `Administrador` activo con todos los módulos habilitados.
+    * Actualiza `public.users` asignando `role_code = 'owner'`, `permission_profile_id` y `is_active = true`.
+* **Próximos pasos:** El usuario puede ejecutar el script SQL en Supabase para sincronizar la base de datos de inmediato. Build verificado con éxito.
+
+
+### [2026-11-25] - Filtro de Solo Pesables en Módulo de Productos (Fiambrería y Balanza)
+* **Zona:** `src/modules/productos/`
+* **Objetivo:** Permitir filtrar el catálogo de productos para mostrar exclusivamente productos pesables (fraccionables por balanza / kg / gramos) o unitarios, facilitando la búsqueda y operación rápida en secciones como fiambrería, carnicería y verdulería.
+* **Cambios:**
+  * **Tipos (`src/modules/productos/types/product.types.ts`):**
+    * Se extendió `ProductFiltersState` con el campo `saleMode?: "all" | "weight" | "unit"`.
+  * **Hook de Filtrado (`src/modules/productos/hooks/useProducts.ts`):**
+    * En `defaultFilters` se inicializó `saleMode: "all"`.
+    * En `filteredProducts` se agregó la regla estricta: si `filters.saleMode === "weight"`, se muestran exclusivamente productos con `saleMode === "weight"`; si `filters.saleMode === "unit"`, solo unitarios.
+  * **Componente de Filtros (`src/modules/productos/components/ProductFilters.tsx`):**
+    * **Modal de Filtros Avanzados:** Se incorporó el campo *"Modalidad de venta"* con opciones: *"Todas las modalidades"*, *"⚖️ Solo pesables (fiambrería / balanza / kg)"* y *"📦 Solo por unidad"*.
+    * **Acceso Rápido en Toolbar:** Se agregó un botón interactivo *"Solo pesables"* con ícono de balanza (`Scale`) junto al botón de filtros avanzados, permitiendo activar y desactivar este filtro con un solo clic.
+    * **Chip de Filtro Activo:** Cuando el filtro está activo, se muestra el chip correspondiente con botón de remoción rápida.
+    * **Contador de Filtros:** Se actualizó `activeAdvancedFiltersCount` para contabilizar la modalidad seleccionada.
+* **Próximos pasos:** Ninguno pendiente; verificado con `npm run build` sin errores de compilación ni tipos.
+
+### [2026-11-25] - Migración de Cierre de Caja a Ciegas a Permiso Individual de Usuarios
+* **Zona:** `src/types/modules.ts`, `src/types/permissions.ts`, `src/features/auth/store/auth.store.ts`, `src/modules/usuarios/constants/module-groups.ts`, `src/modules/usuarios/components/PermissionMatrix.tsx`, `src/modules/caja/pages/CajaPage.tsx`, `src/modules/configuracion/pages/ConfiguracionPage.tsx`, `src/modules/usuarios/hooks/useUsersModule.ts`
+* **Objetivo:** Desvincular el cierre de caja a ciegas de la configuración global de sucursal/sistema y convertirlo en un permiso granular asignable por rol/perfil de usuario (para obligar a arqueo ciego únicamente a cajeros u operadores designados).
+* **Cambios:**
+  * **Módulo de Permisos (`src/types/modules.ts` y `src/types/permissions.ts`):**
+    * Se añadió el submódulo `"caja_cierre_ciego"` (`"Cierre de Caja a Ciegas"`) a `appModules` y `appModuleLabels`.
+    * En `createFullPermissionProfile`, se estableció por defecto `{ read: false, write: false }` para `caja_cierre_ciego`, garantizando que administradores y dueños no queden forzados a cierre ciego al tener permisos totales.
+    * En `auth.store.ts`, se ajustó `hasPermission` para que `caja_cierre_ciego` siempre evalúe el perfil específico del usuario en lugar de otorgar `true` automáticamente a roles `admin`/`owner`.
+  * **Matriz de Permisos (`PermissionMatrix.tsx` y `module-groups.ts`):**
+    * Se integró `caja_cierre_ciego` en el grupo de módulos *Punto de Venta y Mostrador* con selector intuitivo de dos estados: `[ Arqueo visible ]` vs `[ A ciegas (Obligatorio) ]`.
+    * Se excluyó de la asignación masiva de grupo para evitar que el botón "Acceso Total" fuerce el cierre ciego a usuarios privilegiados.
+  * **Caja Diaria (`src/modules/caja/pages/CajaPage.tsx`):**
+    * Se calcula reactivamente `hasBlindClosePermission = Boolean(canRead("caja_cierre_ciego") || canWrite("caja_cierre_ciego"))`.
+    * `isBlindModeActive` y el prop `blindMode` del modal `CashCloseForm` ahora se rigen por los permisos del usuario activo, permitiendo que usuarios con permisos privilegiados (o sin la restricción asignada) vean los saldos esperados y el desglose de ingresos.
+  * **Configuración del Sistema (`ConfiguracionPage.tsx`):**
+    * Se retiró el checkbox global de sucursal en la pestaña *Caja y Tesorería* y se reemplazó por una tarjeta informativa que redirige la administración del arqueo ciego al módulo de *Usuarios y Permisos*.
+* **Próximos pasos:** Ninguno; verificado mediante `npm run build` sin errores.
+
+
+* **Zona:** `vercel.json`
+* **Objetivo:** Permitir la carga de fotografías de productos, logos y banners alojados en Cloudflare R2 (`https://cdn.jireh.cloud` y `https://*.r2.dev`) dentro de producción (`https://app.jireh.cloud`), tanto en el sistema (POS / Productos) como en **Mi Tienda**.
+* **Causa Identificada:** La cabecera `Content-Security-Policy` (`img-src`) en `vercel.json` no incluía `https://cdn.jireh.cloud` ni `https://*.r2.dev`, provocando que Chrome bloqueara todas las imágenes del catálogo maestro en producción mientras en `localhost` funcionaban con normalidad.
+* **Cambios:**
+  * Se agregaron `https://cdn.jireh.cloud` y `https://*.r2.dev` a la directiva `img-src` en `vercel.json`.
+* **Próximos pasos:** Hacer commit y push a `main` para disparar el redespliegue en Vercel.
+
 ### [2026-11-25] - Simplificación del Detalle de Movimientos en Resumen WhatsApp de Cuenta Corriente
 * **Zona:** `src/utils/whatsapp-voucher.utils.ts`, `src/modules/cuentas-corrientes/pages/CuentasCorrientesPage.tsx`
 * **Objetivo:** Eliminar los números internos de venta (ej: `VTA-1794669984018-8669`) y textos automáticos de split (`(Parcial cta. cte.)`) del mensaje de WhatsApp enviado a clientes, dejando las líneas limpias con fecha y monto (o descripción manual útil si la hubiera).
