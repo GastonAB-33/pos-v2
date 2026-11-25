@@ -144,6 +144,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       contableCatalogos: true,
       codigos_balanza: true,
       sistema: true,
+      tienda: true,
     },
   },
   agenda: {
@@ -162,6 +163,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       contableCatalogos: true,
       codigos_balanza: true,
       sistema: true,
+      tienda: true,
     },
   },
   catalogo: {
@@ -180,6 +182,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       contableCatalogos: true,
       codigos_balanza: true,
       sistema: true,
+      tienda: true,
     },
   },
   analisis: {
@@ -198,6 +201,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       contableCatalogos: true,
       codigos_balanza: true,
       sistema: true,
+      tienda: true,
     },
   },
   sistema: {
@@ -216,6 +220,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       contableCatalogos: true,
       codigos_balanza: true,
       sistema: true,
+      tienda: true,
     },
   },
   contable: {
@@ -234,6 +239,7 @@ const configuracionScopePresets: Record<ConfiguracionModuleScope, ConfiguracionS
       contableCatalogos: true,
       codigos_balanza: true,
       sistema: true,
+      tienda: true,
     },
   },
 };

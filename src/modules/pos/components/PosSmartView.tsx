@@ -529,7 +529,21 @@ export const PosSmartView = ({
                         : "border-transparent hover:bg-slate-100 dark:hover:bg-slate-800/70"
                     )}
                   >
-                    <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      {prod.image_url ? (
+                        <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-slate-200/90 bg-white p-0.5 dark:border-slate-700/80 dark:bg-slate-900">
+                          <img
+                            src={prod.image_url}
+                            alt={prod.name}
+                            className="h-full w-full object-contain"
+                            loading="lazy"
+                            onError={(e) => {
+                              (e.currentTarget.parentElement as HTMLElement).style.display = "none";
+                            }}
+                          />
+                        </div>
+                      ) : null}
+                      <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <p
                           className={cn(
@@ -560,6 +574,7 @@ export const PosSmartView = ({
                           : prod.category}{" "}
                         {barcode ? `| Barcode: ${barcode}` : ""}
                       </p>
+                    </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-xs sm:text-sm font-bold text-blue-600 dark:text-sky-400">

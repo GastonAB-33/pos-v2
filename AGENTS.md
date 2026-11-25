@@ -28,3 +28,10 @@ When performing any Git operation (staging, commit, push):
 3. **Active Zone Inquiry**: Whenever a commit or push is requested, check `git status -s`. If changes exist in more than one zone (`landing/`, `crm-admin/`, `src/`), explicitly ask the user which platform/section the commit belongs to before staging.
 4. **Selective Staging**: Stage exclusively the files corresponding to the chosen zone (`git add landing/`, `git add crm-admin/`, etc.).
 5. **Pre-Push Verification**: Before running `git push`, show the user the exact commits and branch that will be sent to the remote repository, and request final confirmation.
+
+## Mandatory Living Context & Activity Log (DEV_LOG.md)
+1. **Mandatory Documentation Rule**: Every time an agent implements a feature, bugfix, refactor, or configuration change in the repository, the agent **MUST** log the change in [DEV_LOG.md](file:///DEV_LOG.md) before concluding the task or requesting a commit.
+2. **Context Persistence Protocol**:
+   - `DEV_LOG.md` is the single source of truth for cross-machine and cross-session memory between different computers and chats.
+   - When starting work in any session or after a `git pull`, agents must inspect `DEV_LOG.md` to pick up recent context, architectural decisions, and pending tasks.
+   - Each log entry must record: Date (YYYY-MM-DD), Zone (`src/`, `crm-admin/`, `landing/`, etc.), Goal, Key changes implemented, and Next pending steps.

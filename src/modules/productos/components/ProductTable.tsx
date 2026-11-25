@@ -152,16 +152,38 @@ export const ProductTable = ({
                 </span>
               </div>
 
-              {/* Fila Media: Nombre del producto y código opcional */}
-              <div className="min-w-0">
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 leading-snug line-clamp-2">
-                  {product.nombre}
-                </h3>
-                {product.codigoProducto ? (
-                  <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
-                    Código: {product.codigoProducto}
-                  </p>
+              {/* Fila Media: Nombre del producto, imagen y código opcional */}
+              <div className="flex items-start gap-3 min-w-0">
+                {product.imagenUrl ? (
+                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-slate-200/80 bg-white p-0.5 shadow-2xs dark:border-slate-700/80 dark:bg-slate-800">
+                    <img
+                      src={product.imagenUrl}
+                      alt={product.nombre}
+                      className="h-full w-full object-contain"
+                      loading="lazy"
+                      onError={(e) => {
+                        (e.currentTarget.parentElement as HTMLElement).style.display = "none";
+                      }}
+                    />
+                  </div>
                 ) : null}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 leading-snug line-clamp-2">
+                      {product.nombre}
+                    </h3>
+                    {product.publicadoWeb ? (
+                      <span className="inline-flex items-center rounded-md bg-blue-50 px-1.5 py-0.2 text-[9.5px] font-bold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60">
+                        Web
+                      </span>
+                    ) : null}
+                  </div>
+                  {product.codigoProducto ? (
+                    <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+                      Código: {product.codigoProducto}
+                    </p>
+                  ) : null}
+                </div>
               </div>
 
               {/* Fila Inferior: PRECIO FINAL y botones circulares de acción */}
@@ -326,10 +348,39 @@ export const ProductTable = ({
                     />
                   </td>
                   <td className="px-3.5 py-3">
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">{product.nombre}</p>
-                    {product.codigoProducto ? (
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Código: {product.codigoProducto}</p>
-                    ) : null}
+                    <div className="flex items-center gap-3">
+                      {product.imagenUrl ? (
+                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-slate-200/80 bg-white p-0.5 shadow-2xs dark:border-slate-700/80 dark:bg-slate-800">
+                          <img
+                            src={product.imagenUrl}
+                            alt={product.nombre}
+                            className="h-full w-full object-contain"
+                            loading="lazy"
+                            onError={(e) => {
+                              (e.currentTarget.parentElement as HTMLElement).style.display = "none";
+                            }}
+                          />
+                        </div>
+                      ) : null}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-semibold text-slate-900 dark:text-slate-100">{product.nombre}</p>
+                          {product.publicadoWeb ? (
+                            <span className="inline-flex items-center rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/60" title="Publicado en Mi Tienda">
+                              Web
+                            </span>
+                          ) : null}
+                          {product.destacadoWeb ? (
+                            <span className="inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/60" title="Destacado en portada">
+                              ★
+                            </span>
+                          ) : null}
+                        </div>
+                        {product.codigoProducto ? (
+                          <p className="text-xs text-slate-500 dark:text-slate-400">Código: {product.codigoProducto}</p>
+                        ) : null}
+                      </div>
+                    </div>
                   </td>
                   <td className="px-3.5 py-3 text-slate-700 dark:text-slate-300">
                     <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700 border border-slate-200/60 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700/60">

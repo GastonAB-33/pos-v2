@@ -372,9 +372,20 @@ export const PosQuickProductModal = ({
         {masterMatch && (
           <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-2xl bg-blue-50/90 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/80 p-3 text-xs text-blue-950 dark:text-blue-100 min-w-0 overflow-hidden">
             <div className="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-xs mt-0.5 sm:mt-0">
-                <Sparkles size={14} />
-              </div>
+              {masterMatch.image_url ? (
+                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-blue-200 bg-white p-0.5 shadow-2xs dark:border-blue-800 dark:bg-slate-900">
+                  <img
+                    src={masterMatch.image_url}
+                    alt={masterMatch.name}
+                    className="h-full w-full object-contain"
+                    loading="lazy"
+                  />
+                </div>
+              ) : (
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white shadow-xs mt-0.5 sm:mt-0">
+                  <Sparkles size={14} />
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-blue-800 dark:text-blue-300">
                   ¡Producto encontrado en el Catálogo Maestro Global!
@@ -469,31 +480,45 @@ export const PosQuickProductModal = ({
                 ? "bg-amber-500/[0.03] dark:bg-amber-500/[0.04] border border-amber-500/25 dark:border-amber-500/20 p-2.5 rounded-xl"
                 : ""
             )}>
-              <label className="mb-1 flex items-center justify-between text-sm font-medium text-slate-700 dark:text-slate-200">
-                <span>
-                  Nombre <span className="text-rose-500">*</span>
-                </span>
-                {isMasterPreloaded && (
-                  <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-amber-700 dark:text-amber-400/90 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
-                    ⚡ Autocompletado del Catálogo Global
-                  </span>
+              <div className="flex items-start gap-3">
+                {masterMatch?.image_url && (
+                  <div className="hidden sm:flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-slate-200/90 bg-white p-1 shadow-2xs dark:border-slate-700 dark:bg-slate-800 overflow-hidden">
+                    <img
+                      src={masterMatch.image_url}
+                      alt={name || "Producto"}
+                      className="h-full w-full object-contain"
+                      loading="lazy"
+                    />
+                  </div>
                 )}
-              </label>
-              <input
-                ref={nameInputRef}
-                value={name}
-                onChange={(event) => {
-                  setName(event.target.value);
-                  setErrorMessage(null);
-                }}
-                className={cn("ui-input", isMasterPreloaded && "ui-input--master-prefilled")}
-                placeholder="Nombre del producto..."
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                data-lpignore="true"
-              />
+                <div className="flex-1 min-w-0">
+                  <label className="mb-1 flex items-center justify-between text-sm font-medium text-slate-700 dark:text-slate-200">
+                    <span>
+                      Nombre <span className="text-rose-500">*</span>
+                    </span>
+                    {isMasterPreloaded && (
+                      <span className="inline-flex items-center gap-1 text-[10.5px] font-bold text-amber-700 dark:text-amber-400/90 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                        ⚡ Autocompletado del Catálogo Global
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    ref={nameInputRef}
+                    value={name}
+                    onChange={(event) => {
+                      setName(event.target.value);
+                      setErrorMessage(null);
+                    }}
+                    className={cn("ui-input", isMasterPreloaded && "ui-input--master-prefilled")}
+                    placeholder="Nombre del producto..."
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    data-lpignore="true"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Categoría: SOLO visible en modo "Guardar en el sistema" */}

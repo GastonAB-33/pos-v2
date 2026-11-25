@@ -91,4 +91,8 @@ export type {
   BankAccountMovement,
   BankAccountMovementType,
   BankAccountMovementOriginType,
+  StoreSettings,
+  StoreCatalogList,
+  StoreOrder,
+  StoreOrderItem,
 } from "@/types/entities/mvp.entities";

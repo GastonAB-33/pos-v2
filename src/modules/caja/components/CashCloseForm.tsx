@@ -20,6 +20,16 @@ import {
   handleNumericInputBlur,
   parseNumericField,
 } from "@/utils/input-helpers";
+import { useTenant } from "@/features/tenant/hooks/useTenant";
+import { settingsService } from "@/services/settings.service";
+import { WhatsAppIcon } from "@/components/brand/WhatsAppIcon";
+import { WhatsAppPhonePromptModal } from "@/components/ui/WhatsAppPhonePromptModal";
+import type { BusinessSettings } from "@/types/entities";
+import {
+  cleanPhoneForWhatsApp,
+  formatWhatsAppCashClose,
+  openWhatsAppChat,
+} from "@/utils/whatsapp-voucher.utils";
 
 interface CashCloseFormProps {
   disabled?: boolean;
@@ -79,6 +89,29 @@ export const CashCloseForm = ({
   const [postCloseNotes, setPostCloseNotes] = useState<string>(defaultCleanNotes);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [notesSavedMessage, setNotesSavedMessage] = useState<string | null>(null);
+  const { tenantId } = useTenant();
+  const [businessSettings, setBusinessSettings] = useState<BusinessSettings | null>(null);
+  const [wspPromptState, setWspPromptState] = useState<{
+    isOpen: boolean;
+    phone: string;
+    message: string;
+    recipientName: string;
+  }>({
+    isOpen: false,
+    phone: "",
+    message: "",
+    recipientName: "",
+  });
+
+  useEffect(() => {
+    if (!tenantId) return;
+    settingsService
+      .getByTenant(tenantId)
+      .then((s) => {
+        if (s?.negocio) setBusinessSettings(s.negocio);
+      })
+      .catch(() => {});
+  }, [tenantId]);
 
   useEffect(() => {
     if (initialNotes) {
@@ -242,6 +275,41 @@ export const CashCloseForm = ({
       }
     } finally {
       setIsSavingNotes(false);
+    }
+  };
+
+  const handleSendCloseWhatsApp = () => {
+    if (!closeResult) return;
+    const session = closeResult.session;
+    const msg = formatWhatsAppCashClose({
+      sessionNumber: session?.id ? session.id.slice(-6).toUpperCase() : "TURNO",
+      cashierName: "Cajero/a",
+      openedAt: session?.opened_at || new Date().toISOString(),
+      closedAt: session?.closed_at || new Date().toISOString(),
+      openingAmount: session?.opening_amount ?? 0,
+      totalSales:
+        closeResult.salePaymentsTotal ||
+        closeResult.totalIncomes ||
+        closeResult.cashSalesTotal ||
+        0,
+      cashExpected: closeResult.expectedAmount,
+      cashCounted: closeResult.realAmount,
+      cashDifference: closeResult.difference,
+      userNotes: postCloseNotes.trim() || closeResult.userNotes || null,
+      businessName:
+        businessSettings?.trade_name || businessSettings?.legal_name || "Comercio",
+    });
+
+    const ownerPhone = cleanPhoneForWhatsApp(businessSettings?.phone);
+    if (ownerPhone && ownerPhone.length >= 8) {
+      openWhatsAppChat(ownerPhone, msg);
+    } else {
+      setWspPromptState({
+        isOpen: true,
+        phone: businessSettings?.phone || "",
+        message: msg,
+        recipientName: "Titular / Administrador",
+      });
     }
   };
 
@@ -427,7 +495,17 @@ export const CashCloseForm = ({
           </div>
         </div>
 
-        <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+        <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={handleSendCloseWhatsApp}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition cursor-pointer shadow-xs active:scale-95"
+            title="Enviar reporte de cierre por WhatsApp al titular"
+          >
+            <WhatsAppIcon className="h-4 w-4 fill-current" />
+            <span>Enviar Cierre al Dueño por WhatsApp</span>
+          </button>
+
           <button
             type="button"
             onClick={async () => {
@@ -445,6 +523,19 @@ export const CashCloseForm = ({
             Finalizar y volver a caja
           </button>
         </div>
+
+        <WhatsAppPhonePromptModal
+          isOpen={wspPromptState.isOpen}
+          onClose={() => setWspPromptState((prev) => ({ ...prev, isOpen: false }))}
+          onConfirm={(phone) => {
+            setWspPromptState((prev) => ({ ...prev, isOpen: false }));
+            openWhatsAppChat(phone, wspPromptState.message);
+          }}
+          title="Enviar Cierre de Caja"
+          subtitle="Ingresá el número de WhatsApp del titular o administrador del negocio."
+          defaultPhone={wspPromptState.phone}
+          recipientName={wspPromptState.recipientName}
+        />
       </div>
     );
   }

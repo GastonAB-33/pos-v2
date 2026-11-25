@@ -33,6 +33,8 @@ export const routePaths = {
   misConsultas: "/sistema/mis-consultas",
   configuracionContable: "/contable/configuracion",
   usuarios: "/usuarios",
+  miTienda: "/mi-tienda",
+  tiendaPublica: "/tienda/:tenantSlug",
   unauthorized: "/unauthorized",
   privacidad: "/privacidad",
   terminos: "/terminos",

@@ -61,6 +61,8 @@ export interface Product extends TenantScopedEntity {
   vat_percent?: number | null;
   profit_percent?: number | null;
   is_active: boolean;
+  is_published_web?: boolean;
+  is_featured_web?: boolean;
 }
 
 export interface ProductBarcode extends TenantScopedEntity {
@@ -656,6 +658,76 @@ export interface MercadoPagoSettings {
   force_unavailable: boolean;
 }
 
+export interface StoreCatalogList {
+  id: string;
+  name: string;
+  icon?: string;
+  product_ids: string[];
+}
+
+export interface StoreSettings {
+  is_enabled: boolean;
+  store_name: string;
+  store_description: string;
+  banner_url: string | null;
+  logo_url: string | null;
+  whatsapp_phone: string;
+  social_instagram: string;
+  categories_mode: "all" | "custom";
+  featured_categories: string[];
+  navigation_mode?: "categories" | "lists";
+  custom_lists?: StoreCatalogList[];
+  only_show_listed_products?: boolean;
+  hide_out_of_stock: boolean;
+  allow_out_of_stock_orders: boolean;
+  price_list_id: string | null;
+  delivery_mode: "takeaway_only" | "delivery_only" | "both";
+  delivery_cost_type: "free" | "fixed" | "custom";
+  delivery_cost_amount: number;
+  delivery_free_threshold: number;
+  delivery_min_order: number;
+  delivery_zones_notes: string;
+  takeaway_address: string;
+  takeaway_instructions: string;
+  down_payment_policy: "none" | "partial_percent" | "full_100";
+  down_payment_percent: number;
+  payment_instructions: string;
+  bank_name: string;
+  bank_alias: string;
+  bank_cbu: string;
+  bank_account_holder: string;
+  schedule_active: boolean;
+  schedule_text: string;
+  allow_orders_outside_hours: boolean;
+}
+
+export interface StoreOrderItem {
+  product_id: string;
+  name: string;
+  quantity: number;
+  unit_price: number;
+  subtotal: number;
+  sale_mode: "unit" | "weight";
+  image_url?: string | null;
+}
+
+export interface StoreOrder extends TenantScopedEntity {
+  order_number: number;
+  customer_name: string;
+  customer_phone: string;
+  customer_address: string | null;
+  delivery_mode: "takeaway" | "delivery";
+  delivery_cost: number;
+  subtotal: number;
+  total: number;
+  down_payment_required: number;
+  remaining_balance: number;
+  payment_status: "pending" | "partial_paid" | "paid";
+  order_status: "new" | "confirmed" | "preparing" | "ready" | "delivered" | "cancelled";
+  notes: string | null;
+  items: StoreOrderItem[];
+}
+
 export interface TenantSettings extends TenantScopedEntity {
   negocio: BusinessSettings;
   pos: PosSettings;
@@ -665,6 +737,7 @@ export interface TenantSettings extends TenantScopedEntity {
   codigos_balanza: BarcodeScaleSettings;
   apariencia: AppearanceSettings;
   sistema: SystemSettings;
+  tienda: StoreSettings;
 }
 
 export type TenantSettingsSectionKey =
@@ -675,7 +748,8 @@ export type TenantSettingsSectionKey =
   | "facturacion"
   | "codigos_balanza"
   | "apariencia"
-  | "sistema";
+  | "sistema"
+  | "tienda";
 
 export interface FiscalCustomerSnapshot {
   customer_id: string | null;

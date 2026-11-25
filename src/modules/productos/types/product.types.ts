@@ -67,4 +67,6 @@ export interface ProductViewModel {
   favorito: boolean;
   activo: boolean;
   trackStock: boolean;
+  publicadoWeb: boolean;
+  destacadoWeb: boolean;
 }

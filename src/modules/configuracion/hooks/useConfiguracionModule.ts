@@ -27,6 +27,7 @@ const sectionLabel: Record<TenantSettingsSectionKey, string> = {
   codigos_balanza: "Codigos de barras y balanza",
   apariencia: "Apariencia",
   sistema: "Sistema",
+  tienda: "Mi Tienda",
 };
 
 const sanitizeSectionAuditValues = (
@@ -82,6 +83,7 @@ export const useConfiguracionModule = (
     codigos_balanza: false,
     apariencia: false,
     sistema: false,
+    tienda: false,
   });
   const [feedback, setFeedback] = useState<ConfigFeedback | null>(null);
 

@@ -1,11 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, RefreshCw, Search, X } from "lucide-react";
 import { usePermissions } from "@/features/auth/hooks/usePermissions";
 import { ReceiptTicketPanel } from "@/modules/comprobantes/components/ReceiptTicketPanel";
 import { ReceiptsTable } from "@/modules/comprobantes/components/ReceiptsTable";
+import { WhatsAppPhonePromptModal } from "@/components/ui/WhatsAppPhonePromptModal";
 import { useReceiptsModule } from "@/modules/comprobantes/hooks/useReceiptsModule";
+import { customersService } from "@/services/customers.service";
+import { invoicesService } from "@/services/invoices.service";
 import { receiptsService } from "@/services/receipts.service";
-import type { Receipt } from "@/types/entities";
+import { settingsService } from "@/services/settings.service";
+import type { BusinessSettings, Receipt } from "@/types/entities";
+import {
+  cleanPhoneForWhatsApp,
+  formatWhatsAppTicket,
+  openWhatsAppChat,
+} from "@/utils/whatsapp-voucher.utils";
 
 export interface ComprobantesViewProps {
   tenantId: string;
@@ -43,6 +52,73 @@ export const ComprobantesView = ({
 
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [businessSettings, setBusinessSettings] = useState<BusinessSettings | null>(null);
+  const [wspPromptState, setWspPromptState] = useState<{
+    isOpen: boolean;
+    phone: string;
+    message: string;
+    recipientName: string;
+  }>({
+    isOpen: false,
+    phone: "",
+    message: "",
+    recipientName: "",
+  });
+
+  useEffect(() => {
+    if (!tenantId) return;
+    settingsService
+      .getByTenant(tenantId)
+      .then((s) => {
+        if (s?.negocio) setBusinessSettings(s.negocio);
+      })
+      .catch(() => {});
+  }, [tenantId]);
+
+  const handleShareWhatsApp = async (receipt: Receipt) => {
+    let fullReceipt = receipt;
+    if (!receipt.items || receipt.items.length === 0) {
+      try {
+        const fetched = await receiptsService.getById(tenantId, receipt.id);
+        if (fetched) fullReceipt = fetched;
+      } catch (err) {
+        console.warn("No se pudo cargar detalle completo para WhatsApp:", err);
+      }
+    }
+
+    let invoice = null;
+    if (fullReceipt.sale_id) {
+      try {
+        const invList = await invoicesService.getBySaleId(tenantId, fullReceipt.sale_id);
+        if (invList && invList.length > 0) invoice = invList[0];
+      } catch {}
+    }
+
+    const message = formatWhatsAppTicket(fullReceipt, invoice, businessSettings);
+    let phone = "";
+    if (fullReceipt.customer_name) {
+      try {
+        const custs = await customersService.getAllByTenant(tenantId);
+        const match = custs.find(
+          (c) =>
+            c.full_name.trim().toLowerCase() === (fullReceipt.customer_name ?? "").trim().toLowerCase()
+        );
+        if (match?.phone) phone = match.phone;
+      } catch {}
+    }
+
+    const clean = cleanPhoneForWhatsApp(phone);
+    if (clean && clean.length >= 8) {
+      openWhatsAppChat(clean, message);
+    } else {
+      setWspPromptState({
+        isOpen: true,
+        phone: phone || "",
+        message,
+        recipientName: fullReceipt.customer_name || "Cliente",
+      });
+    }
+  };
 
   const handleGenerateInvoice = async (receipt: Receipt) => {
     const success = await generateInvoiceFromReceipt(receipt);
@@ -173,6 +249,7 @@ export const ComprobantesView = ({
           canGenerateInvoice={canWriteFacturacion}
           generating={isSubmitting}
           onGenerateInvoice={handleGenerateInvoice}
+          onShareWhatsApp={handleShareWhatsApp}
         />
       )}
 
@@ -238,6 +315,17 @@ export const ComprobantesView = ({
           </div>
         </div>
       ) : null}
+
+      <WhatsAppPhonePromptModal
+        isOpen={wspPromptState.isOpen}
+        onClose={() => setWspPromptState((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={(phone) => {
+          setWspPromptState((prev) => ({ ...prev, isOpen: false }));
+          openWhatsAppChat(phone, wspPromptState.message);
+        }}
+        defaultPhone={wspPromptState.phone}
+        recipientName={wspPromptState.recipientName}
+      />
     </div>
   );
 };
