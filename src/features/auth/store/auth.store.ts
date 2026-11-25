@@ -160,7 +160,8 @@ export const useAuthStore = create<AuthStore>()(
           const profile = get().permissionProfile;
           return hasModulePermission(profile, { module, level });
         }
-        if (user?.role === "admin" || user?.role === "owner") return true;
+        const permissionProfileId = get().permissionProfileId;
+        if (!permissionProfileId && (user?.role === "admin" || user?.role === "owner")) return true;
         const profile = get().permissionProfile;
         return hasModulePermission(profile, { module, level });
       },

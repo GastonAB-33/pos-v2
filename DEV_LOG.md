@@ -18,6 +18,17 @@ Este documento es la **fuente única de verdad y memoria compartida** entre dife
 
 ## 📋 Registro Histórico de Cambios
 
+### [2026-11-25] - Respeto Estricto de Perfil de Permisos y Badge de Perfil en Topbar
+* **Zona:** `src/features/auth/store/auth.store.ts`, `src/components/layout/Topbar.tsx`
+* **Objetivo:** Corregir el bypass en el frontend donde usuarios con `role_code = 'owner' | 'admin'` veían módulos no autorizados (`Usuarios`, `Estadísticas`, `% Ganancia` en Compras) al cambiarse a un perfil restringido (ej. `Cajera`), y mostrar visiblemente el perfil activo en el menú de usuario.
+* **Cambios:**
+  * **Store de Auth (`src/features/auth/store/auth.store.ts`):**
+    * Se actualizó `hasPermission`: el bypass por rol `admin`/`owner` ahora solo aplica cuando el usuario no tiene `permissionProfileId` asignado. Si tiene un perfil asignado, se evalúan estrictamente los permisos reales de ese perfil en todos los módulos (alineado con RLS de Supabase).
+  * **Menú de Usuario (`src/components/layout/Topbar.tsx`):**
+    * Se agregó un badge pill (`Perfil: <nombre del perfil>`) en la parte superior derecha del popover de usuario para visualizar rápidamente qué perfil de permisos está activo.
+* **Próximos pasos:** Verificado con `npx tsc --noEmit` sin errores.
+
+
 ### [2026-11-25] - Auto-recuperación de Perfil de Permisos en Login y Script SQL La25
 * **Zona:** `src/services/auth.service.ts`, `src/lib/supabase/client.ts`, `docs/sql/041_fix_la25_user_and_permissions.sql`
 * **Objetivo:** Resolver el error bloqueante *"No se encontro el perfil de permisos asignado"* al iniciar sesión (particularmente con `ale.97.28+la25@gmail.com` en tenant `La25`), implementando auto-sanación en el frontend y un script SQL de reparación en Supabase.
