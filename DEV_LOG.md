@@ -18,6 +18,23 @@ Este documento es la **fuente única de verdad y memoria compartida** entre dife
 
 ## 📋 Registro Histórico de Cambios
 
+### [2026-11-25] - Ocultar Botón "Revelar" en Cierre de Caja a Ciegas
+* **Zona:** `src/modules/caja/pages/CajaPage.tsx`
+* **Objetivo:** Impedir que los usuarios con el permiso de `caja_cierre_ciego` vean o puedan usar el botón **Revelar** en Caja Diaria, y verificar el flujo de resumen post-cierre.
+* **Cambios:**
+  * Se actualizó `CajaPage.tsx` para que, cuando `hasBlindClosePermission` es verdadero, `isBlindModeActive` permanezca siempre activo y el botón **Revelar** no se renderice.
+  * Se verificó en `CashCloseForm.tsx` y `CajaPage.tsx` que al confirmar el cierre se mantiene abierto el modal con el resumen post-cierre (Esperado, Contado, Diferencia) en modo solo lectura sobre los montos y habilitando únicamente el campo de **Observaciones / Justificación de cierre** (`onUpdateNotes`).
+* **Próximos pasos:** Verificado con `npx tsc --noEmit` sin errores.
+
+
+### [2026-11-25] - Permitir Cerrar Venta con Enter Aunque Quede Texto en Buscador POS
+* **Zona:** `src/modules/pos/pages/PosPage.tsx`
+* **Objetivo:** Desbloquear el atajo `Enter` para abrir el cobro en el POS cuando el usuario ya salió del buscador (foco y desplegable cerrados), aunque haya quedado texto residual escrito en `#pos-search-input`.
+* **Cambios:**
+  * En `handleCheckoutEnter` (`src/modules/pos/pages/PosPage.tsx`), se eliminó la condición `searchInput.value.trim() !== ""` de `isSearchActive`, manteniendo únicamente la verificación de foco activo (`document.activeElement === searchInput`) o panel abierto (`[data-search-open="true"]`).
+* **Próximos pasos:** Verificado con `npx tsc --noEmit` sin errores.
+
+
 ### [2026-11-25] - Fix Badge "Pendiente precios" en Historial de Compras
 * **Zona:** `src/modules/compras/components/PurchasesHistoryTable.tsx`
 * **Objetivo:** Evitar que el badge de estado `Pendiente precios` (y los demás badges de estado de compra) se parta en dos líneas superpuestas dentro de la tabla.
