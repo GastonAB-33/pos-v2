@@ -5,6 +5,7 @@ import {
   LockOpen,
   Banknote,
   RotateCcw,
+  Clock,
 } from "lucide-react";
 import {
   openCashSchema,
@@ -23,6 +24,8 @@ interface CashOpenFormProps {
   onSubmit: (values: OpenCashValues) => Promise<void>;
   onCancel?: () => void;
   isModal?: boolean;
+  allowDeferredOpening?: boolean;
+  mode?: "open" | "complete_deferred";
 }
 
 const currency = new Intl.NumberFormat("es-AR", {
@@ -39,6 +42,8 @@ export const CashOpenForm = ({
   defaultOpeningAmount = 0,
   onSubmit,
   onCancel,
+  allowDeferredOpening = false,
+  mode = "open",
 }: CashOpenFormProps) => {
   const [billCounts, setBillCounts] = useState<Record<number, number>>({
     20000: 0,
@@ -64,6 +69,7 @@ export const CashOpenForm = ({
     handleSubmit,
     reset,
     setValue,
+    getValues,
     formState: { errors },
   } = useForm<OpenCashValues>({
     resolver: zodResolver(openCashSchema),
@@ -185,6 +191,11 @@ export const CashOpenForm = ({
 
   return (
     <form className="space-y-2.5" onSubmit={handleSubmit(submit)} autoComplete="off">
+      {mode === "complete_deferred" && (
+        <div className="rounded-xl border border-amber-300/80 bg-amber-50/90 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/70 dark:bg-amber-950/50 dark:text-amber-200">
+          Cont? todo el efectivo f?sico que ten?s ahora en el caj?n. El sistema descontar? autom?ticamente el efectivo neto ingresado desde la apertura para calcular tu fondo inicial real.
+        </div>
+      )}
       {/* Banner Superior Informativo de Apertura */}
       <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 flex items-start justify-between gap-3">
         <div className="flex items-start gap-2.5">
@@ -497,7 +508,7 @@ export const CashOpenForm = ({
       </div>
 
       {/* BOTONES DE ABAJO */}
-      <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+      <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
         {onCancel && (
           <button
             type="button"
@@ -508,13 +519,31 @@ export const CashOpenForm = ({
             Cancelar
           </button>
         )}
+        {mode === "open" && allowDeferredOpening && (
+          <button
+            type="button"
+            onClick={() =>
+              void onSubmit({
+                openingAmount: 0,
+                notes: getValues("notes")?.trim() || "",
+                deferredOpening: true,
+              })
+            }
+            disabled={disabled || !canWrite}
+            className="h-9 inline-flex items-center justify-center gap-1.5 px-4 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 dark:border-amber-700/80 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/60 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+            title="Abrir caja en $0 para atender r?pido y cargar el conteo inicial m?s tarde"
+          >
+            <Clock className="h-3.5 w-3.5 shrink-0" />
+            <span>Posponer conteo ($0)</span>
+          </button>
+        )}
         <button
           type="submit"
           className="h-9 inline-flex items-center justify-center gap-1.5 px-5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 rounded-xl transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
           disabled={disabled || !canWrite}
         >
           <LockOpen className="h-3.5 w-3.5 shrink-0" />
-          <span>Confirmar y abrir caja</span>
+          <span>{mode === "complete_deferred" ? "Guardar conteo inicial" : "Confirmar y abrir caja"}</span>
         </button>
       </div>
     </form>

@@ -114,6 +114,7 @@ export const CajaPage = () => {
   const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
   const [isShiftPopoverOpen, setIsShiftPopoverOpen] = useState(false);
   const [isBillsPopoverOpen, setIsBillsPopoverOpen] = useState(false);
+  const [isDeferredOpeningModalOpen, setIsDeferredOpeningModalOpen] = useState(false);
 
   const {
     currentSession,
@@ -142,6 +143,8 @@ export const CajaPage = () => {
     reload,
     openCash,
     closeCash,
+    isDeferredOpeningPending,
+    completeDeferredOpening,
     updateSessionNotes,
   } = useCashModule(tenantId, user?.id ?? null);
 
@@ -199,12 +202,14 @@ export const CajaPage = () => {
     return isPrivilegedRole || isPrivilegedProfile || hasPrivilegedPermissions;
   }, [user, canRead, canWrite]);
 
+  const canDeferCashOpening = canRead("caja_apertura_diferida") || canWrite("caja_apertura_diferida");
+
   const hasBlindClosePermission = useMemo(() => {
     return Boolean(canRead("caja_cierre_ciego") || canWrite("caja_cierre_ciego"));
   }, [canRead, canWrite]);
 
   const isBlindModeActive = Boolean(
-    Boolean(hasBlindClosePermission || (cashSettings.blind_cash_closing && (!canRevealBlindCash || !revealBlindAmounts)))
+    Boolean(hasBlindClosePermission)
   );
 
   const dailySession = useMemo(
@@ -255,10 +260,10 @@ export const CajaPage = () => {
     : "-";
 
   useEffect(() => {
-    if (isCloseCashModalOpen && !currentSession) {
+    if (isCloseCashModalOpen && !currentSession && !closingSessionSnapshot && !isCashClosed) {
       setIsCloseCashModalOpen(false);
     }
-  }, [currentSession, isCloseCashModalOpen]);
+  }, [currentSession, isCloseCashModalOpen, closingSessionSnapshot, isCashClosed]);
 
   useEffect(() => {
     if (isOpenCashModalOpen && currentSession) {
@@ -473,7 +478,7 @@ export const CajaPage = () => {
           </button>
 
           {/* Botón Píldora Revelar / Ocultar A Ciegas */}
-          {!hasBlindClosePermission && cashSettings.blind_cash_closing && canRevealBlindCash && (
+          {false && canRevealBlindCash && (
             <button
               type="button"
               onClick={() => setRevealBlindAmounts((prev) => !prev)}
@@ -583,6 +588,24 @@ export const CajaPage = () => {
               </span>
             )}
 
+      {isDeferredOpeningPending && currentSession && canWriteCaja && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-3 rounded-2xl border border-amber-300/90 bg-amber-50/90 dark:border-amber-700/80 dark:bg-amber-950/50 shadow-xs">
+          <div className="flex items-start sm:items-center gap-2.5">
+            <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+            <div className="text-xs text-amber-900 dark:text-amber-200">
+              <span className="font-bold">Conteo inicial de apertura pendiente:</span> La caja inici? en $0 para atender r?pido. Cuando cuentes el efectivo f?sico del caj?n, cargalo ac? y descontaremos autom?ticamente las ventas previas.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsDeferredOpeningModalOpen(true)}
+            className="shrink-0 inline-flex items-center justify-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 px-3.5 py-2 text-xs font-bold text-white shadow-xs transition active:scale-95 cursor-pointer"
+          >
+            <Clock className="h-3.5 w-3.5" />
+            <span>Completar conteo inicial</span>
+          </button>
+        </div>
+      )}
             {dailySession && (
               <div className="text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0">
                 <span className="hidden sm:inline text-slate-300 dark:text-slate-600">•</span>
@@ -972,6 +995,7 @@ export const CajaPage = () => {
                 canWrite={canWriteCaja}
                 disabled={isSubmitting}
                 defaultOpeningAmount={cashSettings.default_opening_amount}
+                allowDeferredOpening={canDeferCashOpening}
                 onSubmit={async (values) => {
                   await openCash(values);
                   setIsOpenCashModalOpen(false);
@@ -983,6 +1007,38 @@ export const CajaPage = () => {
         </div>
       )}
 
+      {/* MODAL: Completar Conteo Inicial Diferido */}
+      {isDeferredOpeningModalOpen && currentSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="w-full max-w-lg max-h-[94vh] flex flex-col bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+            <header className="shrink-0 px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/70 dark:bg-slate-800/60">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <h3 className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                  Completar Conteo Inicial de Caja
+                </h3>
+              </div>
+              <ModalCloseButton onClick={() => setIsDeferredOpeningModalOpen(false)} />
+            </header>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              <CashOpenForm
+                canWrite={canWriteCaja}
+                disabled={isSubmitting}
+                defaultOpeningAmount={0}
+                mode="complete_deferred"
+                onSubmit={async (values) => {
+                  const ok = await completeDeferredOpening(values);
+                  if (ok) {
+                    setIsDeferredOpeningModalOpen(false);
+                  }
+                }}
+                onCancel={() => setIsDeferredOpeningModalOpen(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
       {/* MODAL: Cierre de Caja */}
       {isCloseCashModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-3">
@@ -1035,6 +1091,21 @@ export const CajaPage = () => {
                     </div>
                   )}
 
+                  {isDeferredOpeningPending && (
+                    <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700/80 dark:bg-amber-950/60 dark:text-amber-200">
+                      <span>Ten?s pendiente cargar el conteo inicial de apertura. Te recomendamos completarlo antes de cerrar para que el arqueo cuadre.</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCloseCashModalOpen(false);
+                          setIsDeferredOpeningModalOpen(true);
+                        }}
+                        className="shrink-0 rounded-lg bg-amber-600 hover:bg-amber-700 px-3 py-1.5 text-[11px] font-bold text-white cursor-pointer"
+                      >
+                        Completar conteo primero
+                      </button>
+                    </div>
+                  )}
                   <CashCloseForm
                     canWrite={canWriteCaja}
                     disabled={isSubmitting}

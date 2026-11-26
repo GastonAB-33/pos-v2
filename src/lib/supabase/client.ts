@@ -15,41 +15,21 @@ const runtimeConfig =
         anonKey: "public-anon-key",
       };
 
-const authLockQueues = new Map<string, Promise<unknown>>();
-
 /**
- * Serializes auth token operations in-memory per lock key, avoiding browser
- * Web Locks API steal/AbortError races across concurrent requests or tabs.
+ * Bypasses browser Web Locks API (`navigator.locks`) and avoids re-entrant
+ * queue deadlocks when `onAuthStateChange` callbacks run during `signInWithPassword`.
  */
-const safeInMemoryAuthLock = async <R>(
-  name: string,
+const noOpAuthLock = async <R>(
+  _name: string,
   _acquireTimeout: number,
   fn: () => Promise<R>
-): Promise<R> => {
-  const previous = authLockQueues.get(name) ?? Promise.resolve();
-  let release!: () => void;
-  const current = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const chained = previous.catch(() => undefined).then(() => current);
-  authLockQueues.set(name, chained);
-
-  await previous.catch(() => undefined);
-  try {
-    return await fn();
-  } finally {
-    release();
-    if (authLockQueues.get(name) === chained) {
-      authLockQueues.delete(name);
-    }
-  }
-};
+): Promise<R> => await fn();
 
 export const supabase = createClient(runtimeConfig.url, runtimeConfig.anonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    lock: safeInMemoryAuthLock,
+    lock: noOpAuthLock,
   },
 });

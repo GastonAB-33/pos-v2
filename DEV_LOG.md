@@ -18,6 +18,35 @@ Este documento es la **fuente única de verdad y memoria compartida** entre dife
 
 ## 📋 Registro Histórico de Cambios
 
+### [2026-11-26] - Fix Cierre Prematuro del Modal de Resumen Post-Cierre en Caja Diaria
+* **Zona:** `src/modules/caja/pages/CajaPage.tsx`
+* **Objetivo:** Evitar que el modal de cierre de caja se cierre automáticamente al completarse el cierre, permitiendo ver el detalle (Exacto/Faltante/Sobrante) y escribir la aclaración post-cierre.
+* **Cambios:**
+  * En `CajaPage.tsx`, el `useEffect` que vigilaba `isCloseCashModalOpen && !currentSession` cerraba el modal apenas `closeCash` dejaba `currentSession = null`. Ahora también verifica `!closingSessionSnapshot && !isCashClosed`, manteniendo el modal abierto hasta que el usuario finalice desde la pantalla de resumen.
+* **Próximos pasos:** Verificado con `npx tsc --noEmit` sin errores.
+
+
+### [2026-11-26] - Apertura Diferida de Caja ("Posponer Conteo de Apertura") con Permiso por Usuario
+* **Zona:** `src/types/modules.ts`, `src/modules/usuarios/constants/module-groups.ts`, `src/modules/caja/schemas/cash.schemas.ts`, `src/modules/caja/hooks/useCashModule.ts`, `src/modules/caja/components/CashOpenForm.tsx`, `src/modules/caja/pages/CajaPage.tsx`, `src/modules/pos/pages/PosPage.tsx`
+* **Objetivo:** Permitir a usuarios autorizados abrir la caja diaria en `$0` cuando hay demanda en mostrador y cargar el conteo físico inicial más tarde, descontando automáticamente el efectivo neto ingresado en el turno para que el arqueo cuadre exactamente.
+* **Cambios:**
+  * **Permiso granular (`caja_apertura_diferida`):** Agregado a `appModules`, `appModuleLabels` y `module-groups.ts` (*Punto de Venta y Mostrador*). Los perfiles sin este permiso no ven ni pueden usar la función.
+  * **Formulario de apertura (`CashOpenForm.tsx`):** Se agregó el botón **"Posponer conteo ($0)"** (solo visible con permiso) y el modo `complete_deferred` para contar el efectivo físico posterior.
+  * **Lógica contable (`useCashModule.ts` & `PosPage.tsx`):** Al posponer, se crea la sesión con `opening_amount = 0` y `deferredOpeningPending: true` en el snapshot. Al completar el conteo (`completeDeferredOpening`), calcula `opening_amount = contado - (cashIncomes - cashExpenses)`, actualiza billetes/monedas, registra auditoría (`complete_deferred_opening`) y asienta el fondo inicial en Caja General si corresponde.
+  * **Caja Diaria (`CajaPage.tsx`):** Muestra un banner destacado con acceso directo a **"Completar conteo inicial"** mientras esté pendiente, y avisa dentro del modal de cierre si se intenta cerrar sin haber cargado el conteo inicial.
+* **Próximos pasos:** Verificado con `npx tsc --noEmit` sin errores.
+
+
+### [2026-11-26] - Fix Deadlock Infinito ("Ingresando...") en Login Supabase Auth
+* **Zona:** `src/lib/supabase/client.ts`, `src/features/auth/hooks/useAuthSessionSync.ts`, `src/modules/caja/pages/CajaPage.tsx`
+* **Objetivo:** Resolver el cuelgue infinito en `"Ingresando..."` al iniciar sesión desde `/login`.
+* **Cambios:**
+  * **Causa raíz:** `safeInMemoryAuthLock` serializaba operaciones de auth por clave de token, pero `supabase.auth.signInWithPassword` dispara `onAuthStateChange("SIGNED_IN")` **antes** de liberar el lock, y `useAuthSessionSync` llamaba a `getStoredPosSession()` → `supabase.auth.getSession()` dentro de ese callback, generando un deadlock reentrante.
+  * **`src/lib/supabase/client.ts`:** Se reemplazó `safeInMemoryAuthLock` por `noOpAuthLock` (evita tanto el error de `navigator.locks` como cualquier deadlock reentrante).
+  * **`src/features/auth/hooks/useAuthSessionSync.ts`:** Se volvió síncrono el callback de `onAuthStateChange` difiriendo la rehidratación con `window.setTimeout(..., 150)` fuera del ciclo de notificación de Supabase Auth.
+* **Próximos pasos:** Verificado con `npx tsc --noEmit` sin errores.
+
+
 ### [2026-11-25] - Optimización de Velocidad al Confirmar Venta POS (Inserción en Lote)
 * **Zona:** `src/services/base/tenant-crud.service.ts`, `src/services/sales.service.ts`, `src/services/stock.service.ts`, `src/modules/pos/hooks/usePosSale.ts`
 * **Objetivo:** Reducir la demora al confirmar una venta en el POS eliminando las múltiples peticiones HTTP individuales por cada producto del carrito.
