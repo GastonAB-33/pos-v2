@@ -204,7 +204,7 @@ export const CajaPage = () => {
   }, [canRead, canWrite]);
 
   const isBlindModeActive = Boolean(
-    hasBlindClosePermission && (!canRevealBlindCash || !revealBlindAmounts)
+    Boolean(hasBlindClosePermission || (cashSettings.blind_cash_closing && (!canRevealBlindCash || !revealBlindAmounts)))
   );
 
   const dailySession = useMemo(
@@ -473,7 +473,7 @@ export const CajaPage = () => {
           </button>
 
           {/* Botón Píldora Revelar / Ocultar A Ciegas */}
-          {(hasBlindClosePermission || cashSettings.blind_cash_closing) && canRevealBlindCash && (
+          {!hasBlindClosePermission && cashSettings.blind_cash_closing && canRevealBlindCash && (
             <button
               type="button"
               onClick={() => setRevealBlindAmounts((prev) => !prev)}

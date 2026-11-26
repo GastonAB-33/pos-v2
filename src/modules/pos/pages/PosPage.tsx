@@ -1681,7 +1681,7 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
       // "SI TENGO EL BUSCADOR ABIERTO NO DEBERIA ABRIR EL MODAL DE PAGO HASTA QUE SALGA DEL BUSCADOR"
       const searchInput = document.getElementById("pos-search-input") as HTMLInputElement | null;
       const isSearchActive = Boolean(
-        (searchInput && (document.activeElement === searchInput || searchInput.value.trim() !== "")) ||
+        (searchInput && document.activeElement === searchInput) ||
         document.querySelector('[data-search-open="true"]')
       );
       if (isSearchActive) return;
