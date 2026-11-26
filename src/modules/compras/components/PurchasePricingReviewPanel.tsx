@@ -5,7 +5,6 @@ import {
   Camera,
   Check,
   DollarSign,
-  Info,
   Save,
   Tag,
   User,
@@ -31,6 +30,7 @@ interface EditableReviewItem {
   productName: string;
   currentCatalogStock: number;
   currentCatalogPrice: number;
+  previousCatalogCost: number;
   // Campos del empleado (resaltados en amarillo y editables por el admin)
   quantity: number;
   bonifiedQuantity: number;
@@ -69,10 +69,6 @@ export const PurchasePricingReviewPanel = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Estados rápidos en bloque
-  const [bulkProfitPercent, setBulkProfitPercent] = useState<string>("");
-  const [bulkVatPercent, setBulkVatPercent] = useState<string>("");
-
   const photos = useMemo(
     () => parseInvoicePhotos(purchase.invoice_photo_url),
     [purchase.invoice_photo_url]
@@ -85,6 +81,7 @@ export const PurchasePricingReviewPanel = ({
       const unitCost = item.unit_cost;
       const currentCatalogPrice = item.sale_price ?? item.product?.price ?? 0;
       const currentCatalogStock = item.product?.stock_current ?? 0;
+      const previousCatalogCost = item.product?.cost_price ?? 0;
 
       // Alícuota inicial: guardada en el ítem, o la del catálogo, o 21% por defecto
       const vatPercent =
@@ -123,6 +120,7 @@ export const PurchasePricingReviewPanel = ({
         productName: item.product_name_snapshot,
         currentCatalogStock,
         currentCatalogPrice,
+        previousCatalogCost,
         quantity: item.quantity,
         bonifiedQuantity: item.bonified_quantity || 0,
         unitCost: item.unit_cost,
@@ -245,47 +243,6 @@ export const PurchasePricingReviewPanel = ({
         return {
           ...item,
           vatPercent: safeVat,
-          newSalePrice: Number(forward.precioFinal.toFixed(2)),
-          priceWithoutVat: Number(forward.precioSinIva.toFixed(2)),
-        };
-      })
-    );
-  };
-
-  // Acciones en bloque
-  const handleApplyBulkProfit = () => {
-    const p = parseFloat(bulkProfitPercent);
-    if (isNaN(p) || p < 0) return;
-    setItems((prev) =>
-      prev.map((item) => {
-        const forward = computePricingForward({
-          precioCosto: item.unitCost,
-          porcentajeGanancia: p,
-          porcentajeIva: item.vatPercent,
-        });
-        return {
-          ...item,
-          profitPercent: p,
-          newSalePrice: Number(forward.precioFinal.toFixed(2)),
-          priceWithoutVat: Number(forward.precioSinIva.toFixed(2)),
-        };
-      })
-    );
-  };
-
-  const handleApplyBulkVat = () => {
-    const v = parseFloat(bulkVatPercent);
-    if (isNaN(v) || v < 0) return;
-    setItems((prev) =>
-      prev.map((item) => {
-        const forward = computePricingForward({
-          precioCosto: item.unitCost,
-          porcentajeGanancia: item.profitPercent,
-          porcentajeIva: v,
-        });
-        return {
-          ...item,
-          vatPercent: v,
           newSalePrice: Number(forward.precioFinal.toFixed(2)),
           priceWithoutVat: Number(forward.precioSinIva.toFixed(2)),
         };
@@ -494,70 +451,6 @@ export const PurchasePricingReviewPanel = ({
           </div>
         </div>
 
-        <div className="mt-2.5 flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300">
-          <Info className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
-          <p>
-            Los datos cargados por el empleado están <strong>resaltados en amarillo suave</strong>. Puedes corregir cualquier dato si hubo un error en la carga (cantidades, costos, descuentos) y completar las alícuotas de IVA y márgenes de ganancia definitivos.
-          </p>
-        </div>
-      </div>
-
-      {/* 3. Barra de Acciones Globales Rápidas (Margen global e IVA global) */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900 shadow-2xs">
-        <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
-          Ajustes en bloque ({items.length} productos):
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Margen global:</span>
-            <div className="relative w-24">
-              <input
-                type="number"
-                min="0"
-                step="1"
-                placeholder="35"
-                value={bulkProfitPercent}
-                onChange={(e) => setBulkProfitPercent(e.target.value)}
-                className="w-full h-8 rounded-lg border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900 text-xs px-2 pr-6 text-right font-bold text-slate-900 dark:text-slate-100 outline-none focus:border-brand-500"
-              />
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none">
-                %
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={handleApplyBulkProfit}
-              disabled={!bulkProfitPercent}
-              className="h-8 px-2.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 cursor-pointer"
-            >
-              Aplicar
-            </button>
-          </div>
-
-          <div className="flex items-center gap-1.5 pl-3 border-l border-slate-200 dark:border-slate-800">
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">IVA global:</span>
-            <select
-              value={bulkVatPercent}
-              onChange={(e) => setBulkVatPercent(e.target.value)}
-              className="h-8 rounded-lg border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900 text-xs px-2 font-bold text-slate-900 dark:text-slate-100 outline-none focus:border-brand-500 cursor-pointer"
-            >
-              <option value="">Seleccionar</option>
-              <option value="21">21% General</option>
-              <option value="10.5">10.5% Alimentos</option>
-              <option value="0">0% Exento</option>
-              <option value="27">27% Especial</option>
-            </select>
-            <button
-              type="button"
-              onClick={handleApplyBulkVat}
-              disabled={!bulkVatPercent}
-              className="h-8 px-2.5 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40 transition dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 cursor-pointer"
-            >
-              Aplicar
-            </button>
-          </div>
-        </div>
       </div>
 
       {error && (
@@ -579,6 +472,9 @@ export const PurchasePricingReviewPanel = ({
                 ? ((item.newSalePrice - item.currentCatalogPrice) / item.currentCatalogPrice) * 100
                 : null;
             const netMargin = Math.max(0, item.priceWithoutVat - item.unitCost);
+            const unitCostDiff = item.unitCost - item.previousCatalogCost;
+            const hasCostDiff = Math.abs(unitCostDiff) > 0.001 && item.previousCatalogCost > 0;
+            const costPctDiff = item.previousCatalogCost > 0 ? (unitCostDiff / item.previousCatalogCost) * 100 : 0;
 
             return (
               <article
@@ -644,7 +540,7 @@ export const PurchasePricingReviewPanel = ({
                         </label>
                         <input
                           type="number"
-                          step="0.01"
+                          step="any"
                           min="0"
                           value={item.unitCost}
                           onChange={(e) => handleItemFieldChange(index, "unitCost", e.target.value)}
@@ -674,7 +570,7 @@ export const PurchasePricingReviewPanel = ({
                         </label>
                         <input
                           type="number"
-                          step="0.5"
+                          step="any"
                           min="0"
                           max="100"
                           value={item.discountPercent}
@@ -684,8 +580,26 @@ export const PurchasePricingReviewPanel = ({
                       </div>
                     </div>
 
-                    <div className="mt-2 flex items-center justify-between text-xs text-amber-900 dark:text-amber-200 pt-1 border-t border-amber-200/60 dark:border-amber-900/50">
-                      <span>Subtotal: {currency.format(grossLineTotal)}</span>
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900 dark:text-amber-200 pt-1 border-t border-amber-200/60 dark:border-amber-900/50">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>Subtotal: {currency.format(grossLineTotal)}</span>
+                        {hasCostDiff ? (
+                          <span
+                            className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-bold ${
+                              unitCostDiff > 0
+                                ? "border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-300"
+                                : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/50 dark:text-emerald-300"
+                            }`}
+                            title={`Costo anterior: ${currency.format(item.previousCatalogCost)} | Diferencia: ${currency.format(unitCostDiff)}`}
+                          >
+                            <span>Costo antes: {currency.format(item.previousCatalogCost)}</span>
+                            <span>
+                              ({unitCostDiff > 0 ? "+" : ""}
+                              {costPctDiff.toFixed(1)}% {unitCostDiff > 0 ? "?" : "?"})
+                            </span>
+                          </span>
+                        ) : null}
+                      </div>
                       <span className="font-bold">Total a pagar: {currency.format(lineTotal)}</span>
                     </div>
                   </div>
@@ -739,7 +653,7 @@ export const PurchasePricingReviewPanel = ({
                         <div className="relative">
                           <input
                             type="number"
-                            step="0.5"
+                            step="any"
                             min="0"
                             value={item.profitPercent}
                             onChange={(e) => handleProfitChange(index, e.target.value)}
@@ -762,7 +676,7 @@ export const PurchasePricingReviewPanel = ({
                           </span>
                           <input
                             type="number"
-                            step="0.01"
+                            step="any"
                             min="0"
                             value={item.newSalePrice}
                             onChange={(e) => handleSalePriceChange(index, e.target.value)}
@@ -786,19 +700,19 @@ export const PurchasePricingReviewPanel = ({
         </div>
 
         {/* 5. Footer con Resumen de Factura y Botones Finales */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-4 text-xs font-semibold text-slate-700 dark:text-slate-300">
-            <div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3 overflow-hidden">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-4 text-xs font-semibold text-slate-700 dark:text-slate-300 shrink-0">
+            <div className="whitespace-nowrap">
               <span className="text-slate-400 font-normal block text-[11px]">Subtotal neto:</span>
               <span>{currency.format(calculatedSubtotal)}</span>
             </div>
             {vatTotal > 0 && (
-              <div className="pl-3 border-l border-slate-200 dark:border-slate-800">
+              <div className="pl-3 border-l border-slate-200 dark:border-slate-800 whitespace-nowrap">
                 <span className="text-slate-400 font-normal block text-[11px]">IVA compras:</span>
                 <span>+{currency.format(vatTotal)}</span>
               </div>
             )}
-            <div className="pl-3 border-l border-slate-200 dark:border-slate-800">
+            <div className="pl-3 border-l border-slate-200 dark:border-slate-800 whitespace-nowrap">
               <span className="text-slate-400 font-normal block text-[11px]">Total de la compra:</span>
               <span className="text-base font-black text-slate-900 dark:text-slate-100">
                 {currency.format(calculatedTotal)}
@@ -806,12 +720,12 @@ export const PurchasePricingReviewPanel = ({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-end gap-2 min-w-0">
             <button
               type="button"
               onClick={onBack}
               disabled={isSubmitting}
-              className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer disabled:opacity-50"
+              className="h-10 inline-flex items-center justify-center whitespace-nowrap rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition cursor-pointer disabled:opacity-50"
             >
               Volver sin guardar
             </button>
@@ -819,9 +733,9 @@ export const PurchasePricingReviewPanel = ({
               type="button"
               onClick={handleSaveProgress}
               disabled={isSubmitting || disabled}
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/50 px-4 py-2.5 text-xs font-bold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition shadow-2xs cursor-pointer disabled:opacity-50"
+              className="h-10 inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/50 px-4 text-xs font-bold text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/60 transition shadow-2xs cursor-pointer disabled:opacity-50"
             >
-              <Save className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <Save className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <span>
                 {isSubmitting ? "Guardando..." : "Guardar progreso y volver"}
               </span>
@@ -829,9 +743,9 @@ export const PurchasePricingReviewPanel = ({
             <button
               type="submit"
               disabled={isSubmitting || disabled}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-black text-white hover:bg-emerald-500 active:scale-98 transition shadow-md cursor-pointer disabled:opacity-50"
+              className="h-10 inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-emerald-600 px-5 text-xs font-black text-white hover:bg-emerald-500 active:scale-98 transition shadow-md cursor-pointer disabled:opacity-50"
             >
-              <Check className="h-4 w-4" />
+              <Check className="h-4 w-4 shrink-0" />
               <span>
                 {isSubmitting
                   ? "Confirmando y actualizando precios..."

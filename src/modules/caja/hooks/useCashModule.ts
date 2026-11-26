@@ -78,7 +78,6 @@ export interface CashCloseSnapshot {
   realAmount?: number;
   difference?: number;
   reconciliationMode?: "cash_only" | "full";
-  reconciliationMode?: "cash_only" | "full";
   userNotes?: string;
   deferredOpeningPending?: boolean;
   deferredOpeningCompletedAt?: string;
@@ -488,6 +487,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         openingAmount: 0,
         incomes: 0,
         expenses: 0,
+        cashIncomes: 0,
+        cashExpenses: 0,
         expectedBalance: 0,
         expectedCashBalance: 0,
         expectedFullBalance: 0,
@@ -500,6 +501,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         openingAmount: currentSession.opening_amount,
         incomes: 0,
         expenses: 0,
+        cashIncomes: 0,
+        cashExpenses: 0,
         expectedBalance: currentSession.opening_amount,
         expectedCashBalance: currentSession.opening_amount,
         expectedFullBalance: currentSession.opening_amount,
@@ -510,6 +513,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       openingAmount: currentSummary.openingAmount,
       incomes: currentSummary.incomes,
       expenses: currentSummary.expenses,
+      cashIncomes: currentSummary.cashIncomes,
+      cashExpenses: currentSummary.cashExpenses,
       expectedBalance: currentSummary.expectedBalance,
       expectedCashBalance: currentSummary.expectedCashBalance,
       expectedFullBalance: currentSummary.expectedFullBalance,

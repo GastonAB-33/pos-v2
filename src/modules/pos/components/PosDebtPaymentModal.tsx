@@ -145,10 +145,7 @@ export const PosDebtPaymentModal = ({
   // Filtrado de clientes para el buscador
   const filteredCustomers = useMemo(() => {
     const q = customerSearch.trim().toLowerCase();
-    if (!q) {
-      // Mostrar primero los que tienen deuda
-      return [...customers].sort((a, b) => (b.current_balance ?? 0) - (a.current_balance ?? 0)).slice(0, 30);
-    }
+    if (!q) return [];
     return customers
       .filter((c) => {
         const name = (c.full_name || "").toLowerCase();
@@ -536,41 +533,43 @@ export const PosDebtPaymentModal = ({
                       ) : null}
                     </div>
 
-                    <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 divide-y divide-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:divide-slate-800/60">
-                      {filteredCustomers.length ? (
-                        filteredCustomers.map((c) => {
-                          const cDebt = Number(c.current_balance ?? 0);
-                          return (
-                            <button
-                              key={c.id}
-                              type="button"
-                              onClick={() => handleSelectCustomer(c)}
-                              className="flex w-full items-center justify-between p-2 text-left text-xs hover:bg-slate-50 dark:hover:bg-slate-800/70 rounded-lg transition cursor-pointer"
-                            >
-                              <div className="truncate mr-2">
-                                <span className="font-semibold text-slate-900 dark:text-slate-100 block truncate">
-                                  {c.full_name}
-                                </span>
-                                <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                                  {c.document_number ? `Doc: ${c.document_number}` : c.code}
-                                </span>
-                              </div>
-                              <span
-                                className={`text-xs font-bold shrink-0 ${
-                                  cDebt > 0
-                                    ? "text-rose-600 dark:text-rose-400"
-                                    : "text-emerald-600 dark:text-emerald-400"
-                                }`}
+                    {customerSearch.trim().length > 0 ? (
+                      <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 divide-y divide-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:divide-slate-800/60">
+                        {filteredCustomers.length ? (
+                          filteredCustomers.map((c) => {
+                            const cDebt = Number(c.current_balance ?? 0);
+                            return (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => handleSelectCustomer(c)}
+                                className="flex w-full items-center justify-between p-2 text-left text-xs hover:bg-slate-50 dark:hover:bg-slate-800/70 rounded-lg transition cursor-pointer"
                               >
-                                {cDebt > 0 ? `Debe ${currency.format(cDebt)}` : "Al día ($0)"}
-                              </span>
-                            </button>
-                          );
-                        })
-                      ) : (
-                        <p className="p-3 text-center text-xs text-slate-400">No se encontraron clientes</p>
-                      )}
-                    </div>
+                                <div className="truncate mr-2">
+                                  <span className="font-semibold text-slate-900 dark:text-slate-100 block truncate">
+                                    {c.full_name}
+                                  </span>
+                                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    {c.document_number ? `Doc: ${c.document_number}` : c.code}
+                                  </span>
+                                </div>
+                                <span
+                                  className={`text-xs font-bold shrink-0 ${
+                                    cDebt > 0
+                                      ? "text-rose-600 dark:text-rose-400"
+                                      : "text-emerald-600 dark:text-emerald-400"
+                                  }`}
+                                >
+                                  {cDebt > 0 ? `Debe ${currency.format(cDebt)}` : "Al día ($0)"}
+                                </span>
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <p className="p-3 text-center text-xs text-slate-400">No se encontraron clientes</p>
+                        )}
+                      </div>
+                    ) : null}
 
                     {activeCustomer && (
                       <button
@@ -887,42 +886,44 @@ export const PosDebtPaymentModal = ({
                           />
                         </div>
 
-                        <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 divide-y divide-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:divide-slate-800/60">
-                          {filteredCustomers.length ? (
-                            filteredCustomers.map((c) => {
-                              const cDebts = parseCustomerPackageDebts(c.observations);
-                              const totalEnvases = Object.values(cDebts).reduce((acc, v) => acc + v, 0);
-                              return (
-                                <button
-                                  key={c.id}
-                                  type="button"
-                                  onClick={() => handleSelectCustomer(c)}
-                                  className="flex w-full items-center justify-between p-2 text-left text-xs hover:bg-slate-50 dark:hover:bg-slate-800/70 rounded-lg transition cursor-pointer"
-                                >
-                                  <div className="truncate mr-2">
-                                    <span className="font-semibold text-slate-900 dark:text-slate-100 block truncate">
-                                      {c.full_name}
-                                    </span>
-                                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                                      {c.document_number ? `Doc: ${c.document_number}` : c.code}
-                                    </span>
-                                  </div>
-                                  <span
-                                    className={`text-xs font-bold shrink-0 ${
-                                      totalEnvases > 0
-                                        ? "text-purple-600 dark:text-purple-400"
-                                        : "text-slate-400"
-                                    }`}
+                        {customerSearch.trim().length > 0 ? (
+                          <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 divide-y divide-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:divide-slate-800/60">
+                            {filteredCustomers.length ? (
+                              filteredCustomers.map((c) => {
+                                const cDebts = parseCustomerPackageDebts(c.observations);
+                                const totalEnvases = Object.values(cDebts).reduce((acc, v) => acc + v, 0);
+                                return (
+                                  <button
+                                    key={c.id}
+                                    type="button"
+                                    onClick={() => handleSelectCustomer(c)}
+                                    className="flex w-full items-center justify-between p-2 text-left text-xs hover:bg-slate-50 dark:hover:bg-slate-800/70 rounded-lg transition cursor-pointer"
                                   >
-                                    {totalEnvases > 0 ? `Debe ${totalEnvases} envases` : "Sin deuda de envases"}
-                                  </span>
-                                </button>
-                              );
-                            })
-                          ) : (
-                            <p className="p-3 text-center text-xs text-slate-400">No se encontraron clientes</p>
-                          )}
-                        </div>
+                                    <div className="truncate mr-2">
+                                      <span className="font-semibold text-slate-900 dark:text-slate-100 block truncate">
+                                        {c.full_name}
+                                      </span>
+                                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                                        {c.document_number ? `Doc: ${c.document_number}` : c.code}
+                                      </span>
+                                    </div>
+                                    <span
+                                      className={`text-xs font-bold shrink-0 ${
+                                        totalEnvases > 0
+                                          ? "text-purple-600 dark:text-purple-400"
+                                          : "text-slate-400"
+                                      }`}
+                                    >
+                                      {totalEnvases > 0 ? `Debe ${totalEnvases} envases` : "Sin deuda de envases"}
+                                    </span>
+                                  </button>
+                                );
+                              })
+                            ) : (
+                              <p className="p-3 text-center text-xs text-slate-400">No se encontraron clientes</p>
+                            )}
+                          </div>
+                        ) : null}
                       </div>
                     )}
                   </div>

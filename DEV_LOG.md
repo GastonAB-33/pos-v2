@@ -18,6 +18,79 @@ Este documento es la **fuente única de verdad y memoria compartida** entre dife
 
 ## 📋 Registro Histórico de Cambios
 
+### [2026-11-26] - Eliminación de Columna Detalle/Concepto y Scroll Lateral en Cuenta Corriente Empleados
+* **Zona:** `src/modules/empleados/components/EmployeeCurrentAccountPanel.tsx`
+* **Objetivo:** Eliminar la columna "Detalle / Concepto" en la tabla de cuenta corriente de empleados y suprimir el contenedor de scroll horizontal para que la tabla se ajuste al 100% de la pantalla sin desbordes.
+* **Cambios:**
+  * Se removió la columna `Detalle / Concepto` tanto del encabezado como de las filas de la tabla de movimientos.
+  * Se eliminó el contenedor `overflow-x-auto`, dejando la tabla directamente contenida dentro del panel redondeado `ui-table-wrap`.
+  * La columna **`Ticket`** centraliza el acceso al comprobante mediante el botón interactivo **`[ 📄 Ver ticket ]`**, y en movimientos manuales sin ticket (pagos o ajustes) muestra la observación compacta.
+  * Se compactó el padding de filas a `py-2.5 px-3` para un ajuste óptimo en cualquier resolución.
+* **Próximos pasos:** Validado con `npm run build` sin errores.
+
+### [2026-11-26] - Eliminación Total de Scroll Lateral en Tabla de Empleados
+* **Zona:** `src/modules/empleados/components/EmployeesTable.tsx`
+* **Objetivo:** Eliminar el scroll horizontal en la tabla de empleados en resoluciones de escritorio y laptops, logrando que todas las columnas (incluyendo Estado y Acciones) entren de forma visible y fluida al 100% del ancho disponible.
+* **Cambios:**
+  * Se removió el contenedor envolvente `overflow-x-auto`, alineándolo con la arquitectura de `CustomersTable` y `SuppliersTable`.
+  * Se compactó el padding horizontal de columnas a `py-2.5 px-2.5 xl:px-3.5` reduciendo más de 80px de ancho innecesario.
+  * En la columna `Código / Nombre`, se agregó `min-w-0 flex-1 truncate` al nombre y subtexto (código, puesto), evitando que puestos largos estiren la celda desmedidamente.
+  * En `Saldo Total`, se acortó el título de columna a `"Saldo Total"` y se reordenó el límite de crédito pactado (`Lím: $X`) debajo del badge de saldo para evitar que empuje horizontalmente.
+  * En `Acciones`, se mantuvieron los botones pill y circular optimizados para encajar perfectamente sin desborde.
+* **Próximos pasos:** Validado con compilación Vite/TypeScript exitosa (`code 0`).
+
+### [2026-11-26] - Ocultar Listado de Clientes en Cobro de Cta. Cte. hasta Escribir Búsqueda
+* **Zona:** `src/modules/pos/components/PosDebtPaymentModal.tsx`
+* **Objetivo:** Evitar mostrar la lista completa de clientes al abrir el modal de **Cobro de Cuenta Corriente** (y **Devolución de Envases**), mostrando coincidencias únicamente cuando el usuario comienza a escribir.
+* **Cambios:**
+  * En `filteredCustomers` (`PosDebtPaymentModal.tsx`), si `customerSearch` está vacío ahora devuelve `[]`.
+  * El contenedor de resultados solo se renderiza cuando `customerSearch.trim().length > 0` (en ambas pestañas del modal).
+* **Próximos pasos:** Verificado con `npx tsc --noEmit` sin errores.
+
+
+### [2026-11-26] - Modal Emergente de Ticket en Cuenta Corriente Empleados
+* **Zona:** `src/modules/empleados/components/EmployeeCurrentAccountPanel.tsx`, `src/modules/empleados/components/EmployeeProductConsumptionModal.tsx`
+* **Objetivo:** Reemplazar el volcado de texto crudo con el detalle de productos en la columna "Detalle / Concepto" de cuenta corriente por una visualización limpia y un botón "Ver ticket" que abre un modal emergente con el comprobante completo, idéntico al funcionamiento de Cuenta Corriente Clientes.
+* **Cambios:**
+  * **Parser Inteligente y Retrocompatible (`EmployeeCurrentAccountPanel.tsx`):**
+    * Se implementó `parseEmployeeTicket` para extraer los ítems, cantidades, precios unitarios, subtotales, descuentos y totales de retiros de mercadería tanto desde el formato de texto histórico (`Retiro de mercadería: Xkg PRODUCTO ($ Y)...`) como desde el nuevo bloque estructurado `TICKET_JSON`.
+    * Soporta también movimientos vinculados a ventas (`sale_id`) cargando la venta con `salesService.getByIds`.
+  * **Tabla de Cuenta Corriente (`EmployeeCurrentAccountPanel.tsx`):**
+    * En `Detalle / Concepto`, ahora se muestra únicamente un concepto limpio: `"Retiro de mercadería (X productos)"` y la nota aclaratoria si existiese, evitando el desborde horizontal de texto.
+    * Se añadió la columna **`Ticket`** con el botón interactivo **`[ 📄 Ver ticket ]`** (idéntico a Clientes).
+  * **Modal Emergente de Ticket (`EmployeeCurrentAccountPanel.tsx`):**
+    * Al hacer clic en "Ver ticket", se despliega un modal emergente centrado con backdrop blur con el detalle completo del comprobante: fecha/hora, empleado, operación en cuenta corriente, tabla desglosada de productos (nombre, cantidad, precio unitario, subtotal de línea, bonificaciones/sin descuento), subtotal bruto, descuentos aplicados y total adeudado.
+  * **Modal de Retiro de Mercadería (`EmployeeProductConsumptionModal.tsx`):**
+    * Al registrar consumos, se almacena un concepto limpio junto a la metadata estructurada `TICKET_JSON` en `notes` para garantizar precisión total a futuro.
+* **Próximos pasos:** Validado con `npm run build` sin errores.
+
+### [2026-11-26] - Refactor UI Módulo de Empleados: Menú Desplegable de Acciones, Wrap de Turno y Pago de Sueldo Simplificado
+* **Zona:** `src/modules/empleados/components/EmployeesTable.tsx`, `src/modules/empleados/components/EmployeeDetailView.tsx`, `src/modules/empleados/components/SalaryPaymentModal.tsx`
+* **Objetivo:** Optimizar el espacio visual en la tabla de empleados agrupando acciones secundarias en un menú desplegable de 3 puntos, solucionar el corte de texto en "Fuera de turno", renombrar "Liquidar Sueldo" a "Pagar Sueldo" y simplificar el modal de pago de haberes eliminando el campo manual de período.
+* **Cambios:**
+  * **Tabla de Empleados (`EmployeesTable.tsx`):**
+    * Se integraron los 3 botones de acción (Editar legajo, Activar/Desactivar empleado, Eliminar empleado) dentro de un menú desplegable moderno de 3 puntos (`MoreVertical`) tanto en la vista escritorio como en las tarjetas móviles.
+    * Se mantiene visible el botón principal `[ 👤 Ver Ficha ]` directamente en la columna de acciones.
+    * Se solucionó el corte vertical del texto "Fuera de turno" aplicando `whitespace-nowrap` a las cabeceras de columna y a la celda del turno hoy, añadiendo además el icono de reloj para mayor claridad visual.
+    * Menú con posicionamiento inteligente que se despliega hacia arriba en las últimas filas para evitar solapamientos o desbordes de tabla.
+  * **Ficha de Empleado (`EmployeeDetailView.tsx`):**
+    * Se renombró el botón de acción principal de `Liquidar Sueldo` a `Pagar Sueldo`.
+  * **Modal de Pago de Sueldo (`SalaryPaymentModal.tsx`):**
+    * Se eliminó el campo de entrada manual `Período Liquidado *` de la interfaz para mayor agilidad y simplicidad, manteniendo la generación automática del período en el payload (`getCurrentMonthPeriod()`) para total compatibilidad con el backend.
+    * Se actualizó el botón de confirmación a `Confirmar Pago de Sueldo`.
+* **Próximos pasos:** Validado con compilación de Vite y TypeScript.
+
+### [2026-11-26] - UI Minimalista y Variación de Costo en Aprobación de Compras
+* **Zona:** `src/modules/compras/components/PurchasePricingReviewPanel.tsx`
+* **Objetivo:** Simplificar la pantalla de aprobación de precios de compras eliminando el cartel informativo amarillo y el panel de ajustes en bloque, e incorporar el indicador de variación de costo (rojo/verde) en cada producto igual que en la carga de compra.
+* **Cambios:**
+  * Se eliminó el mensaje informativo amarillo y el panel de *Ajustes en bloque* (`Margen global` / `IVA global`).
+  * Se agregó `previousCatalogCost` (`item.product?.cost`) por producto y el badge compacto inferior **`Costo antes: $X (+Y.Y% ▲ / -Y.Y% ▼)`** en rojo si subió o verde si bajó.
+  * Se alineó el footer de resumen y botones (`Volver sin guardar`, `Guardar progreso y volver`, `Confirmar Precios y Finalizar Compra`) en una sola fila uniforme sin saltos desordenados.
+  * Se cambió `step="0.5"` / `step="0.01"` a `step="any"` en los inputs numéricos de `PurchasePricingReviewPanel.tsx` y `PurchasePricingConfirmationModal.tsx` para permitir porcentajes de ganancia, descuentos, costos y precios con cualquier decimal (ej. `36.4%`).
+* **Próximos pasos:** Verificado con `npx tsc --noEmit` sin errores.
+
+
 ### [2026-11-26] - Fix Cierre Prematuro del Modal de Resumen Post-Cierre en Caja Diaria
 * **Zona:** `src/modules/caja/pages/CajaPage.tsx`
 * **Objetivo:** Evitar que el modal de cierre de caja se cierre automáticamente al completarse el cierre, permitiendo ver el detalle (Exacto/Faltante/Sobrante) y escribir la aclaración post-cierre.

@@ -395,15 +395,15 @@ export const EmployeeDetailView = ({
                 </button>
               )}
 
-              {/* Liquidar Sueldo */}
+              {/* Pagar Sueldo */}
               <button
                 type="button"
                 onClick={() => setSalaryPaymentModalOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition cursor-pointer active:scale-[0.98]"
-                title="Registrar liquidación formal de haberes o sueldo"
+                title="Registrar pago de haberes o sueldo del empleado"
               >
                 <Receipt size={14} />
-                <span>Liquidar Sueldo</span>
+                <span>Pagar Sueldo</span>
               </button>
 
               {/* Fichar Ingreso/Egreso */}

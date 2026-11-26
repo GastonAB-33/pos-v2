@@ -6,8 +6,10 @@ import {
   RefreshCw,
   User,
   ShoppingBag,
+  FileText,
+  Calendar,
 } from "lucide-react";
-import type { Employee, EmployeeCurrentAccountCategory, PaymentMethod, BankAccount } from "@/types/entities";
+import type { Employee, EmployeeCurrentAccountCategory, PaymentMethod, BankAccount, EmployeeCurrentAccountMovement } from "@/types/entities";
 import { useEmployeeCurrentAccount } from "@/modules/empleados/hooks/useEmployeeCurrentAccount";
 import { EmployeeManualMovementModal } from "@/modules/empleados/components/EmployeeManualMovementModal";
 import { EmployeeProductConsumptionModal } from "@/modules/empleados/components/EmployeeProductConsumptionModal";
@@ -15,6 +17,123 @@ import { EmployeeSmartDebtModal } from "@/modules/empleados/components/EmployeeS
 import { EmployeeSmartPaymentModal } from "@/modules/empleados/components/EmployeeSmartPaymentModal";
 import { paymentMethodsService } from "@/services/payment-methods.service";
 import { bankAccountsService } from "@/services/bank-accounts.service";
+import { salesService } from "@/services/sales.service";
+import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { formatDisplaySaleNumber, formatDisplayReceiptNumber } from "@/utils/voucher-format.utils";
+
+export interface EmployeeTicketItem {
+  product_name: string;
+  quantity: number;
+  unit?: string;
+  unit_price: number;
+  line_total: number;
+  no_discount?: boolean;
+}
+
+export interface EmployeeTicketDetail {
+  items: EmployeeTicketItem[];
+  subtotal?: number | null;
+  discountAmount?: number | null;
+  discountPercent?: number | null;
+  total?: number | null;
+  customNotes?: string | null;
+  saleNumber?: string | null;
+  receiptNumber?: string | null;
+}
+
+function parseArNumber(val: string): number {
+  if (!val) return 0;
+  val = val.trim();
+  if (val.includes(",") && val.includes(".")) {
+    return parseFloat(val.replace(/\./g, "").replace(",", "."));
+  }
+  if (val.includes(",")) {
+    return parseFloat(val.replace(",", "."));
+  }
+  return parseFloat(val);
+}
+
+function parseEmployeeTicket(notes: string | null | undefined, fallbackAmount = 0): EmployeeTicketDetail | null {
+  if (!notes) return null;
+
+  // 1. Verificar si tiene JSON embebido estructurado
+  const jsonMatch = notes.match(/(?:<!--\s*TICKET_JSON:|\s*\[TICKET_JSON:)\s*(.*?)(?:\s*-->|\s*\])/s);
+  if (jsonMatch && jsonMatch[1]) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1]);
+      return {
+        items: parsed.items || [],
+        subtotal: parsed.subtotal != null ? parsed.subtotal : null,
+        discountAmount: parsed.discountAmount != null ? parsed.discountAmount : null,
+        discountPercent: parsed.discountPercent != null ? parsed.discountPercent : null,
+        total: parsed.total != null ? parsed.total : fallbackAmount,
+        customNotes: parsed.customNotes || null,
+      };
+    } catch {}
+  }
+
+  // 2. Parser inteligente de notas históricas ("Retiro de mercadería: ...")
+  if (!notes.includes("Retiro de mercader")) return null;
+
+  const normalized = notes.replace(/[▪•]/g, "•");
+  const [itemsPart, ...restParts] = normalized.split("•");
+  const cleanItemsStr = itemsPart.replace(/^Retiro de mercader[íi]a:\s*/i, "").trim();
+
+  const itemRegex = /([\d.,]+)\s*(kg|x|u\.?)\s+([^()]+)\s+\(\$\s*([\d.,]+)(?:\s*\[([^\]]+)\])?\)/gi;
+  const items: EmployeeTicketItem[] = [];
+  let m;
+  while ((m = itemRegex.exec(cleanItemsStr)) !== null) {
+    const qty = parseArNumber(m[1]);
+    const unit = m[2].toLowerCase();
+    const name = m[3].trim();
+    const lineTotal = parseArNumber(m[4]);
+    const unitPrice = qty > 0 ? Number((lineTotal / qty).toFixed(2)) : lineTotal;
+    items.push({
+      product_name: name,
+      quantity: qty,
+      unit,
+      unit_price: unitPrice,
+      line_total: lineTotal,
+      no_discount: !!m[5],
+    });
+  }
+
+  if (items.length === 0) return null;
+
+  let subtotal: number | null = null;
+  let discountAmount: number | null = null;
+  let discountPercent: number | null = null;
+  let total: number | null = fallbackAmount || null;
+  let customNotes: string | null = null;
+
+  for (const part of restParts) {
+    const p = part.trim();
+    if (p.startsWith("Subtotal:")) {
+      const matchSub = p.match(/Subtotal:\s*\$\s*([\d.,]+)/i);
+      if (matchSub) subtotal = parseArNumber(matchSub[1]);
+    } else if (p.startsWith("Descuento")) {
+      const matchDisc = p.match(/Descuento\s*(?:\(([\d.,]+)%\))?:\s*-?\$\s*([\d.,]+)/i);
+      if (matchDisc) {
+        discountPercent = matchDisc[1] ? parseArNumber(matchDisc[1]) : null;
+        discountAmount = parseArNumber(matchDisc[2]);
+      }
+    } else if (p.startsWith("Total adeudado:")) {
+      const matchTot = p.match(/Total adeudado:\s*\$\s*([\d.,]+)/i);
+      if (matchTot) total = parseArNumber(matchTot[1]);
+    } else if (p.startsWith("Nota:")) {
+      customNotes = p.replace(/^Nota:\s*/i, "").trim();
+    }
+  }
+
+  return {
+    items,
+    subtotal: subtotal || (discountAmount ? (total || fallbackAmount) + discountAmount : null),
+    discountAmount,
+    discountPercent,
+    total: total || fallbackAmount,
+    customNotes,
+  };
+}
 
 interface EmployeeCurrentAccountPanelProps {
   tenantId: string;
@@ -83,6 +202,11 @@ export const EmployeeCurrentAccountPanel = ({
   const [smartPaymentOpen, setSmartPaymentOpen] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [selectedTicket, setSelectedTicket] = useState<{
+    movement: EmployeeCurrentAccountMovement;
+    ticket: EmployeeTicketDetail;
+  } | null>(null);
+  const [salesById, setSalesById] = useState<Record<string, any>>({});
 
   useEffect(() => {
     if (!tenantId) return;
@@ -104,6 +228,40 @@ export const EmployeeCurrentAccountPanel = ({
     registerPayment,
     registerAdjustment,
   } = useEmployeeCurrentAccount(tenantId, employee, userId);
+
+  useEffect(() => {
+    if (!tenantId || movements.length === 0) return;
+    const saleIds = Array.from(new Set(movements.map((m) => m.sale_id).filter(Boolean))) as string[];
+    if (saleIds.length === 0) return;
+
+    salesService.getByIds(tenantId, saleIds).then((sales) => {
+      const map: Record<string, any> = {};
+      sales.forEach((s) => {
+        map[s.id] = s;
+      });
+      setSalesById(map);
+    }).catch(() => {});
+  }, [tenantId, movements]);
+
+  const getMovementTicket = (mov: EmployeeCurrentAccountMovement): EmployeeTicketDetail | null => {
+    if (mov.sale_id && salesById[mov.sale_id]) {
+      const s = salesById[mov.sale_id];
+      return {
+        items: (s.items || []).map((it: any) => ({
+          product_name: it.product_name,
+          quantity: it.quantity,
+          unit: "u",
+          unit_price: it.unit_price,
+          line_total: it.subtotal,
+        })),
+        total: s.total,
+        saleNumber: s.sale_number,
+        receiptNumber: s.receipt_number,
+        customNotes: s.notes || null,
+      };
+    }
+    return parseEmployeeTicket(mov.notes, mov.amount);
+  };
 
   const hasDebt = balance > 0;
   const hasCredit = balance < 0;
@@ -271,7 +429,7 @@ export const EmployeeCurrentAccountPanel = ({
 
       {/* Tabla de Movimientos Históricos de la Cuenta Corriente */}
       <div className="overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-200/90 bg-slate-50/90 px-5 py-3 dark:border-slate-800 dark:bg-slate-800/70 flex items-center justify-between">
+        <div className="border-b border-slate-200/90 bg-slate-50/90 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/70 flex items-center justify-between">
           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
             Historial de Movimientos de Cuenta Corriente
           </h4>
@@ -280,103 +438,120 @@ export const EmployeeCurrentAccountPanel = ({
           </span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="border-b border-slate-200/90 bg-slate-50/70 font-semibold uppercase tracking-wider text-slate-600 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-300">
+        <table className="w-full text-left text-xs">
+          <thead className="border-b border-slate-200/90 bg-slate-50/70 font-semibold uppercase tracking-wider text-slate-600 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-300">
+            <tr>
+              <th className="py-2.5 px-3 whitespace-nowrap">Fecha y Hora</th>
+              <th className="py-2.5 px-3 whitespace-nowrap">Operación</th>
+              <th className="py-2.5 px-3 whitespace-nowrap">Categoría</th>
+              <th className="py-2.5 px-3 text-center whitespace-nowrap">Ticket</th>
+              <th className="py-2.5 px-3 whitespace-nowrap">Registrado por</th>
+              <th className="py-2.5 px-3 text-right whitespace-nowrap">Importe</th>
+              <th className="py-2.5 px-3 text-right whitespace-nowrap">Saldo Posterior</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-700 dark:text-slate-300">
+            {movements.length === 0 ? (
               <tr>
-                <th className="py-3 px-4">Fecha y Hora</th>
-                <th className="py-3 px-4">Operación</th>
-                <th className="py-3 px-4">Categoría</th>
-                <th className="py-3 px-4">Detalle / Concepto</th>
-                <th className="py-3 px-4">Registrado por</th>
-                <th className="py-3 px-4 text-right">Importe</th>
-                <th className="py-3 px-4 text-right">Saldo Posterior</th>
+                <td colSpan={7} className="py-10 text-center text-slate-500 dark:text-slate-400 font-medium">
+                  No hay movimientos registrados para este empleado.
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-700 dark:text-slate-300">
-              {movements.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-10 text-center text-slate-500 dark:text-slate-400 font-medium">
-                    No hay movimientos registrados para este empleado.
-                  </td>
-                </tr>
-              ) : (
-                movements.map((mov) => {
-                  const isDebt = mov.type === "debt";
-                  const isPayment = mov.type === "payment";
-                  const catInfo = categoryLabels[mov.category] || categoryLabels.other;
+            ) : (
+              movements.map((mov) => {
+                const isDebt = mov.type === "debt";
+                const isPayment = mov.type === "payment";
+                const catInfo = categoryLabels[mov.category] || categoryLabels.other;
+                const ticketData = getMovementTicket(mov);
+                const plainNote = mov.notes ? mov.notes.replace(/<!--.*?-->/g, "").trim() : "";
 
-                  return (
-                    <tr
-                      key={mov.id}
-                      className="transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
-                    >
-                      <td className="py-3.5 px-4 font-mono text-[11px] text-slate-500 dark:text-slate-400">
-                        {new Date(mov.created_at).toLocaleString("es-AR")}
-                      </td>
+                return (
+                  <tr
+                    key={mov.id}
+                    className="transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
+                  >
+                    <td className="py-2.5 px-3 font-mono text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                      {new Date(mov.created_at).toLocaleString("es-AR")}
+                    </td>
 
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                            isDebt
-                              ? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
-                              : isPayment
-                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                              : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
-                          }`}
-                        >
-                          {isDebt ? "Deuda" : isPayment ? "Pago" : "Ajuste"}
-                        </span>
-                      </td>
-
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${catInfo.color}`}
-                        >
-                          {catInfo.label}
-                        </span>
-                      </td>
-
-                      <td className="py-3.5 px-4 text-slate-800 dark:text-slate-200 font-medium">
-                        {mov.notes || "-"}
-                      </td>
-
-                      <td className="py-3.5 px-4 text-xs whitespace-nowrap">
-                        {mov.created_by ? (
-                          <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
-                            <User size={13} className="text-slate-400 shrink-0" />
-                            <span className="truncate max-w-[130px]" title={usersById[mov.created_by] || mov.created_by}>
-                              {usersById[mov.created_by] || mov.created_by}
-                            </span>
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">-</span>
-                        )}
-                      </td>
-
-                      <td
-                        className={`py-3.5 px-4 text-right font-bold font-mono ${
+                    <td className="py-2.5 px-3 whitespace-nowrap">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                           isDebt
-                            ? "text-rose-600 dark:text-rose-400"
+                            ? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
                             : isPayment
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-blue-600 dark:text-blue-400"
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                            : "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
                         }`}
                       >
-                        {isDebt ? "+" : isPayment ? "-" : ""}
-                        {currency.format(mov.amount)}
-                      </td>
+                        {isDebt ? "Deuda" : isPayment ? "Pago" : "Ajuste"}
+                      </span>
+                    </td>
 
-                      <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900 dark:text-slate-100">
-                        {currency.format(mov.balance_after)}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                    <td className="py-2.5 px-3 whitespace-nowrap">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${catInfo.color}`}
+                      >
+                        {catInfo.label}
+                      </span>
+                    </td>
+
+                    {/* Columna Ticket con botón Ver ticket o nota si no tiene ticket */}
+                    <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                      {ticketData ? (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTicket({ movement: mov, ticket: ticketData })}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 transition-all cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 active:scale-95"
+                          title="Ver detalle del comprobante de retiro de mercadería"
+                        >
+                          <FileText size={13} className="text-blue-600 dark:text-blue-400" />
+                          <span>Ver ticket</span>
+                        </button>
+                      ) : plainNote ? (
+                        <span className="text-slate-600 dark:text-slate-300 text-xs truncate max-w-[140px] inline-block" title={plainNote}>
+                          {plainNote}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-xs">-</span>
+                      )}
+                    </td>
+
+                    <td className="py-2.5 px-3 text-xs whitespace-nowrap">
+                      {mov.created_by ? (
+                        <span className="inline-flex items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
+                          <User size={13} className="text-slate-400 shrink-0" />
+                          <span className="truncate max-w-[130px]" title={usersById[mov.created_by] || mov.created_by}>
+                            {usersById[mov.created_by] || mov.created_by}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
+                    </td>
+
+                    <td
+                      className={`py-2.5 px-3 text-right font-bold font-mono whitespace-nowrap ${
+                        isDebt
+                          ? "text-rose-600 dark:text-rose-400"
+                          : isPayment
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-blue-600 dark:text-blue-400"
+                      }`}
+                    >
+                      {isDebt ? "+" : isPayment ? "-" : ""}
+                      {currency.format(mov.amount)}
+                    </td>
+
+                    <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                      {currency.format(mov.balance_after)}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
 
       {manualModalOpen && (
@@ -426,6 +601,146 @@ export const EmployeeCurrentAccountPanel = ({
           onSubmit={handleProductSubmit}
         />
       )}
+
+      {/* Modal Emergente de Ticket (Idéntico a Cuenta Corriente Clientes) */}
+      {selectedTicket ? (
+        <section className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="relative z-10 w-full max-w-2xl rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900 max-h-[90vh] flex flex-col">
+            {/* Cabecera */}
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200/80 pb-3 dark:border-slate-800 shrink-0">
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
+                  <span>Detalle de Ticket / Retiro de Mercadería</span>
+                </h3>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 mt-1">
+                  <span>
+                    Empleado: <strong className="text-slate-700 dark:text-slate-300">{employee.full_name} ({employee.code})</strong>
+                  </span>
+                  {selectedTicket.ticket.saleNumber && (
+                    <span>
+                      • Venta: <strong className="text-slate-700 dark:text-slate-300">{formatDisplaySaleNumber(selectedTicket.ticket.saleNumber)}</strong>
+                    </span>
+                  )}
+                  {selectedTicket.ticket.receiptNumber && (
+                    <span>
+                      • Ticket: <strong className="text-slate-700 dark:text-slate-300">{formatDisplayReceiptNumber(selectedTicket.ticket.receiptNumber)}</strong>
+                    </span>
+                  )}
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                    {new Date(selectedTicket.movement.created_at).toLocaleString("es-AR")}
+                  </span>
+                </div>
+
+                {/* Pago / Operación */}
+                <div className="flex flex-wrap items-center gap-1.5 mt-2.5 text-xs">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    Operación:
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300">
+                    <span className="text-indigo-600 dark:text-indigo-400">Retiro a Cuenta Corriente:</span>
+                    <strong className="font-mono text-indigo-900 dark:text-indigo-100">
+                      {currency.format(selectedTicket.movement.amount)}
+                    </strong>
+                  </span>
+                </div>
+              </div>
+              <ModalCloseButton label="Cerrar ticket" onClick={() => setSelectedTicket(null)} />
+            </div>
+
+            {/* Contenido con scroll */}
+            <div className="flex-1 overflow-y-auto space-y-3 py-3 pr-1">
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Productos del comprobante
+              </p>
+              <div className="overflow-x-auto rounded-xl border border-slate-200/90 dark:border-slate-800">
+                <table className="min-w-full text-xs sm:text-sm">
+                  <thead className="bg-slate-50/90 dark:bg-slate-800/80 text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-200 border-b border-slate-200/80 dark:border-slate-800">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Producto</th>
+                      <th className="px-3 py-2 text-right">Cantidad</th>
+                      <th className="px-3 py-2 text-right">Precio unitario</th>
+                      <th className="px-3 py-2 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+                    {selectedTicket.ticket.items.map((item, idx) => (
+                      <tr key={`${item.product_name}-${idx}`} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                        <td className="px-3 py-2 font-medium">
+                          {item.product_name}
+                          {item.no_discount && (
+                            <span className="ml-1 text-[10px] text-amber-600 dark:text-amber-400 font-semibold">[sin desc.]</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 font-mono text-right">
+                          {item.quantity.toLocaleString("es-AR")} {item.unit || ""}
+                        </td>
+                        <td className="px-3 py-2 font-mono text-right">{currency.format(item.unit_price)}</td>
+                        <td className="px-3 py-2 font-bold font-mono text-right">{currency.format(item.line_total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-50/90 dark:bg-slate-800/80 border-t border-slate-200/90 dark:border-slate-800 font-bold">
+                    {selectedTicket.ticket.discountAmount != null && selectedTicket.ticket.discountAmount > 0 && (
+                      <>
+                        <tr>
+                          <td colSpan={3} className="px-3 py-1.5 text-right text-xs text-slate-500 dark:text-slate-400">
+                            Subtotal bruto:
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-mono text-xs text-slate-700 dark:text-slate-300">
+                            {currency.format(
+                              selectedTicket.ticket.subtotal ||
+                                selectedTicket.movement.amount + selectedTicket.ticket.discountAmount
+                            )}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td colSpan={3} className="px-3 py-1.5 text-right text-xs text-emerald-600 dark:text-emerald-400">
+                            Descuento empleado
+                            {selectedTicket.ticket.discountPercent
+                              ? ` (${selectedTicket.ticket.discountPercent}%)`
+                              : ""}
+                            :
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-mono text-xs text-emerald-600 dark:text-emerald-400">
+                            -{currency.format(selectedTicket.ticket.discountAmount)}
+                          </td>
+                        </tr>
+                      </>
+                    )}
+                    <tr>
+                      <td colSpan={3} className="px-3 py-2 text-right text-xs uppercase text-slate-600 dark:text-slate-300">
+                        Total Adeudado:
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-sm text-slate-900 dark:text-slate-100">
+                        {currency.format(selectedTicket.ticket.total || selectedTicket.movement.amount)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {selectedTicket.ticket.customNotes && (
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 italic pt-1">
+                  Nota del ticket: {selectedTicket.ticket.customNotes}
+                </p>
+              )}
+            </div>
+
+            {/* Pie del modal */}
+            <div className="flex justify-end pt-3 border-t border-slate-200/80 dark:border-slate-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => setSelectedTicket(null)}
+                className="rounded-xl bg-slate-900 hover:bg-slate-800 px-5 py-2 text-xs font-semibold text-white dark:bg-slate-800 dark:hover:bg-slate-700 transition cursor-pointer active:scale-95"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
     </section>
   );
 };

@@ -627,27 +627,23 @@ export const EmployeeProductConsumptionModal = ({
       }
     }
 
-    const itemsSummary = cart
-      .map(
-        (item) =>
-          `${item.quantity}${item.product.sale_mode === "weight" ? "kg" : "x"} ${item.product.name} (${currency.format(
-            item.product.price * item.quantity
-          )}${!item.applyDiscount ? " [sin desc.]" : ""})`
-      )
-      .join(", ");
+    const structuredTicket = {
+      items: cart.map((item) => ({
+        product_name: item.product.name,
+        quantity: item.quantity,
+        unit: item.product.sale_mode === "weight" ? "kg" : "x",
+        unit_price: item.product.price,
+        line_total: Number((item.product.price * item.quantity).toFixed(2)),
+        no_discount: !item.applyDiscount,
+      })),
+      subtotal: subtotalGross,
+      discountAmount,
+      discountPercent: discountAmount > 0 ? discountPercent : null,
+      total: totalAmount,
+      customNotes: customNotes.trim() || null,
+    };
 
-    const discountSummary =
-      discountAmount > 0
-        ? ` • Subtotal: ${currency.format(subtotalGross)} (Bonif: ${currency.format(
-            eligibleSubtotal
-          )}, Sin desc: ${currency.format(nonEligibleSubtotal)}) • Descuento (${discountPercent}%): -${currency.format(
-            discountAmount
-          )} • Total adeudado: ${currency.format(totalAmount)}`
-        : ` • Total adeudado: ${currency.format(totalAmount)}`;
-
-    const notes = customNotes.trim()
-      ? `Retiro de mercadería: ${itemsSummary}${discountSummary} • Nota: ${customNotes.trim()}`
-      : `Retiro de mercadería: ${itemsSummary}${discountSummary}`;
+    const notes = `Retiro de mercadería (${cart.length} ${cart.length === 1 ? "ítem" : "ítems"})${customNotes.trim() ? ` • Nota: ${customNotes.trim()}` : ""} <!-- TICKET_JSON:${JSON.stringify(structuredTicket)} -->`;
 
     setIsSubmitting(true);
     try {

@@ -223,50 +223,27 @@ export const SalaryPaymentModal = ({
         <form onSubmit={handleSubmit} autoComplete="off" className="flex flex-col flex-1 min-h-0 overflow-hidden">
           {/* Contenido con Scroll */}
           <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4">
-            {/* Ficha Empleado Receptor y Período Liquidado */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
-            <div className="md:col-span-2">
-              {selectedEmployee && (
-                <div className="flex items-center gap-3 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 p-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-100 font-bold text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 text-xs">
-                    {selectedEmployee.full_name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
-                        {selectedEmployee.full_name}
-                      </span>
-                      <span className="font-mono text-[10px] font-semibold text-slate-500 bg-slate-200/60 dark:bg-slate-700 px-2 py-0.5 rounded-md">
-                        {selectedEmployee.code}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                      {selectedEmployee.position || "Personal"} • Sueldo base: {currency.format(selectedEmployee.base_salary)}
-                    </p>
-                  </div>
+            {/* Ficha Empleado Receptor */}
+            {selectedEmployee && (
+              <div className="flex items-center gap-3 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 p-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-100 font-bold text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 text-xs">
+                  {selectedEmployee.full_name.charAt(0).toUpperCase()}
                 </div>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                Período Liquidado *
-              </label>
-              <input
-                type="text"
-                value={period}
-                onChange={(e) => setPeriod(e.target.value)}
-                placeholder="Ej: 1ra Quincena Octubre 2026"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                data-lpignore="true"
-                className="w-full rounded-xl sm:rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm text-slate-900 dark:text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                required
-              />
-            </div>
-          </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                      {selectedEmployee.full_name}
+                    </span>
+                    <span className="font-mono text-[10px] font-semibold text-slate-500 bg-slate-200/60 dark:bg-slate-700 px-2 py-0.5 rounded-md">
+                      {selectedEmployee.code}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                    {selectedEmployee.position || "Personal"} • Sueldo base: {currency.format(selectedEmployee.base_salary)}
+                  </p>
+                </div>
+              </div>
+            )}
 
           {/* Bloque de Haberes (Base + Bonificaciones) */}
           <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 p-4 space-y-3">
@@ -540,7 +517,7 @@ export const SalaryPaymentModal = ({
               disabled={isSubmitting || parsedGross <= 0}
               className="rounded-xl sm:rounded-2xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 px-5 py-2 text-xs font-bold text-white shadow-xs transition disabled:opacity-50 cursor-pointer active:scale-[0.98]"
             >
-              {isSubmitting ? "Registrando..." : "Confirmar Liquidación de Sueldo"}
+              {isSubmitting ? "Registrando..." : "Confirmar Pago de Sueldo"}
             </button>
           </div>
         </form>
