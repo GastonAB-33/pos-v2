@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { auditService } from "@/services/audit.service";
 import { cashService } from "@/services/cash.service";
 import { productsService } from "@/services/products.service";
@@ -82,9 +82,7 @@ const toProductCreateInput = (values: ProductFormModalValues) => ({
   description: null,
   price: roundAmount(values.precioFinal),
   cost_price: roundAmount(values.precioCosto),
-  cost: roundAmount(values.precioCosto),
   stock_current: roundQty(values.stock),
-  stock: roundQty(values.stock),
   stock_min: null,
   stock_max: null,
   category: values.categoria || "General",
@@ -95,6 +93,33 @@ const toProductCreateInput = (values: ProductFormModalValues) => ({
   vat_percent: roundAmount(values.porcentajeIva),
   profit_percent: roundAmount(values.porcentajeGanancia),
   is_active: values.estadoActivo,
+});
+
+const toOptimisticProduct = (tenantId: string, tempId: string, values: ProductFormModalValues): Product => ({
+  id: tempId,
+  tenant_id: tenantId,
+  code: values.codigoProducto?.trim() || null,
+  name: values.nombre.trim(),
+  image_url: values.imagenUrl?.trim() || null,
+  brand: null,
+  supplier: null,
+  is_favorite: values.favorito ?? false,
+  description: null,
+  price: roundAmount(values.precioFinal),
+  cost_price: roundAmount(values.precioCosto),
+  stock_current: roundQty(values.stock),
+  stock_min: null,
+  stock_max: null,
+  category: values.categoria || "General",
+  subcategory: values.subcategoria?.trim() || null,
+  sale_mode: values.saleMode,
+  currency_code: "ARS",
+  price_without_vat: roundAmount(values.precioSinIva),
+  vat_percent: roundAmount(values.porcentajeIva),
+  profit_percent: roundAmount(values.porcentajeGanancia),
+  is_active: values.estadoActivo,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
 });
 
 export interface PurchaseReviewItemPayload {
@@ -154,6 +179,8 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
   const [purchaseIibbPercent, setPurchaseIibbPercent] = useState<number>(0);
   const [purchaseIibbAmount, setPurchaseIibbAmount] = useState<number>(0);
   const [purchaseExtraTaxAmount, setPurchaseExtraTaxAmount] = useState<number>(0);
+  const pendingProductCreations = useRef<Map<string, Promise<Product | null>>>(new Map());
+  const tempIdToRealIdMap = useRef<Map<string, string>>(new Map());
 
   const clearFeedback = () => setFeedback(null);
 
@@ -525,6 +552,24 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       return null;
     }
 
+    // Si hay productos optimistas creándose en segundo plano, esperar a que finalice su persistencia
+    if (cart.some((item) => item.product_id.startsWith("temp-"))) {
+      const pendingIds = cart
+        .filter((item) => item.product_id.startsWith("temp-"))
+        .map((item) => item.product_id);
+      try {
+        await Promise.all(
+          pendingIds.map((id) => pendingProductCreations.current.get(id)).filter(Boolean)
+        );
+      } catch {
+        setFeedback({
+          type: "error",
+          message: "Uno o más productos nuevos no pudieron guardarse en la base de datos.",
+        });
+        return null;
+      }
+    }
+
     const headerValues: PurchaseHeaderValues = {
       supplierId: headerOrCheckoutValues.supplierId,
       documentType: headerOrCheckoutValues.documentType,
@@ -751,6 +796,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
       });
 
       for (const item of cart) {
+        const resolvedProductId = tempIdToRealIdMap.current.get(item.product_id) || item.product_id;
         const grossLineTotal = roundAmount(item.quantity * item.unit_cost);
         const discountPct = Math.max(0, Math.min(100, item.discount_percent || 0));
         const lineSavings = roundAmount(grossLineTotal * (discountPct / 100));
@@ -759,7 +805,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
 
         await purchasesService.createItem(tenantId, {
           purchase_id: purchase.id,
-          product_id: item.product_id,
+          product_id: resolvedProductId,
           product_name_snapshot: item.name,
           quantity: item.quantity,
           unit_cost: item.unit_cost,
@@ -770,7 +816,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
         });
 
         await stockService.create(tenantId, {
-          product_id: item.product_id,
+          product_id: resolvedProductId,
           movement_type: "purchase",
           quantity: totalIncomingQty,
           reference_type: "purchase",
@@ -781,13 +827,13 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
           created_by: userId,
         });
 
-        const currentProduct = await productsService.getById(tenantId, item.product_id);
+        const currentProduct = await productsService.getById(tenantId, resolvedProductId);
         const currentStock = currentProduct?.stock_current ?? item.stock_current;
         const newStock = roundQty(currentStock + totalIncomingQty);
 
         if (isDoubleConfirmation) {
           // Doble confirmación activada: se actualiza stock e ingreso físico sin alterar precios de venta
-          const updated = await productsService.update(tenantId, item.product_id, {
+          const updated = await productsService.update(tenantId, resolvedProductId, {
             stock_current: newStock,
             stock: newStock,
             cost_price: item.unit_cost > 0 ? item.unit_cost : currentProduct?.cost_price,
@@ -823,7 +869,7 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
             productUpdatePayload.profit_percent = backward.porcentajeGanancia;
           }
 
-          const updated = await productsService.update(tenantId, item.product_id, {
+          const updated = await productsService.update(tenantId, resolvedProductId, {
             ...productUpdatePayload,
             stock: newStock,
             cost: productUpdatePayload.cost_price,
@@ -1561,53 +1607,108 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
   ): Promise<Product | null> => {
     if (!tenantId) return null;
 
-    try {
-      let created = await productsService.create(tenantId, toProductCreateInput(values));
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const optimistic = toOptimisticProduct(tenantId, tempId, values);
 
-      if (values.imagenFile) {
-        const imageUrl = await productsService.uploadProductImage(
-          tenantId,
-          created.id,
-          values.imagenFile
-        );
-        created = (await productsService.update(tenantId, created.id, { image_url: imageUrl })) ?? {
-          ...created,
-          image_url: imageUrl,
-        };
-      }
-
-      await productsService.setPrimaryBarcode(tenantId, created.id, values.codigoBarras ?? "");
-
-      setProducts((current) => [created, ...current.filter((product) => product.id !== created.id)]);
-      if (values.codigoBarras?.trim()) {
-        const refreshedBarcodes = await productsService.getBarcodesByTenant(tenantId);
-        setProductBarcodes(refreshedBarcodes);
-      }
-      addProductToCart(created);
-      useProductsStore.getState().upsertProduct(created);
-
-      await auditService.createSafe(tenantId, {
-        user_id: userId,
-        module: "compras",
-        action: "create_product_from_purchase",
-        entity_type: "product",
-        entity_id: created.id,
-        description: `Producto creado desde compras: ${created.name}`,
-        metadata: {
-          code: created.code,
-          barcode: normalizeBarcode(values.codigoBarras),
-          sale_mode: created.sale_mode,
+    // 1. Inmediatamente agregamos de forma optimista al carrito y al inventario local
+    addProductToCart(optimistic);
+    setProducts((current) => [optimistic, ...current.filter((p) => p.id !== tempId)]);
+    if (values.codigoBarras?.trim()) {
+      setProductBarcodes((prev) => [
+        {
+          id: `temp-bc-${tempId}`,
+          tenant_id: tenantId,
+          product_id: tempId,
+          barcode: values.codigoBarras!.trim(),
+          is_primary: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         },
-      });
-
-      setFeedback({ type: "success", message: `Producto "${created.name}" creado y agregado a la compra` });
-      return created;
-    } catch (error) {
-      const message =
-        error instanceof Error && error.message ? error.message : "No se pudo crear el producto";
-      setFeedback({ type: "error", message });
-      throw error;
+        ...prev,
+      ]);
     }
+
+    // 2. Persistir en Supabase en segundo plano
+    const creationPromise = (async () => {
+      try {
+        let created = await productsService.create(tenantId, toProductCreateInput(values));
+
+        if (values.imagenFile) {
+          const imageUrl = await productsService.uploadProductImage(
+            tenantId,
+            created.id,
+            values.imagenFile
+          );
+          created = (await productsService.update(tenantId, created.id, { image_url: imageUrl })) ?? {
+            ...created,
+            image_url: imageUrl,
+          };
+        }
+
+        await productsService.setPrimaryBarcode(tenantId, created.id, values.codigoBarras ?? "");
+
+        // Registrar mapeo del tempId al UUID real de Supabase
+        tempIdToRealIdMap.current.set(tempId, created.id);
+
+        // Actualizar el carrito con el UUID definitivo preservando ediciones del usuario en la tabla
+        setCart((prev) =>
+          prev.map((item) =>
+            item.product_id === tempId
+              ? {
+                  ...item,
+                  product_id: created.id,
+                  name: created.name,
+                  sale_mode: created.sale_mode,
+                }
+              : item
+          )
+        );
+
+        setProducts((current) => [
+          created,
+          ...current.filter((product) => product.id !== tempId && product.id !== created.id),
+        ]);
+
+        if (values.codigoBarras?.trim()) {
+          const refreshedBarcodes = await productsService.getBarcodesByTenant(tenantId);
+          setProductBarcodes(refreshedBarcodes);
+        }
+
+        useProductsStore.getState().upsertProduct(created);
+
+        await auditService.createSafe(tenantId, {
+          user_id: userId,
+          module: "compras",
+          action: "create_product_from_purchase",
+          entity_type: "product",
+          entity_id: created.id,
+          description: `Producto creado desde compras: ${created.name}`,
+          metadata: {
+            code: created.code,
+            barcode: normalizeBarcode(values.codigoBarras),
+            sale_mode: created.sale_mode,
+          },
+        });
+
+        return created;
+      } catch (error) {
+        // En caso de fallo, retirar el ítem temporal del carrito y de productos
+        setCart((prev) => prev.filter((item) => item.product_id !== tempId));
+        setProducts((current) => current.filter((product) => product.id !== tempId));
+        if (values.codigoBarras?.trim()) {
+          setProductBarcodes((prev) => prev.filter((b) => b.product_id !== tempId));
+        }
+        const message =
+          error instanceof Error && error.message ? error.message : "No se pudo crear el producto";
+        setFeedback({ type: "error", message });
+        throw error;
+      } finally {
+        pendingProductCreations.current.delete(tempId);
+      }
+    })();
+
+    pendingProductCreations.current.set(tempId, creationPromise);
+    return creationPromise;
   };
 
   const createSupplier = async (values: SupplierFormValues): Promise<Supplier | null> => {

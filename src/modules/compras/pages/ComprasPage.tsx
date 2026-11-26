@@ -292,6 +292,7 @@ export const ComprasPage = () => {
     setNewProductPrefill({
       initialBarcode: isBarcodeLike ? trimmed : null,
       initialName: !isBarcodeLike && trimmed ? trimmed : null,
+      initialValues: null,
     });
     setReturnToProductSelectAfterCreate(returnToSelect);
     setIsSelectProductModalOpen(false);
@@ -317,14 +318,14 @@ export const ComprasPage = () => {
       setSearch("");
       setIsSelectProductModalOpen(true);
     }
-    setBackgroundSavingProduct(`Guardando "${productName}" y agregando a la compra...`);
+    setBackgroundSavingProduct(`Guardando "${productName}" en el catálogo...`);
 
     // 2. Guardar en segundo plano de forma no bloqueante
     void createProductAndAddToCart(values)
       .then((created) => {
         setBackgroundSavingProduct(null);
         if (created) {
-          toast.success(`Producto "${created.name}" creado y agregado a la compra`);
+          toast.success(`Producto "${created.name}" guardado en el inventario`);
         }
       })
       .catch((err) => {
@@ -345,14 +346,14 @@ export const ComprasPage = () => {
       setSearch("");
       setIsSelectProductModalOpen(true);
     }
-    setBackgroundSavingProduct(`Guardando "${productName}" y agregando a la compra...`);
+    setBackgroundSavingProduct(`Guardando "${productName}" en el catálogo...`);
 
     // 2. Guardar en segundo plano de forma no bloqueante
     void createProductAndAddToCart(values)
       .then((created) => {
         setBackgroundSavingProduct(null);
         if (created) {
-          toast.success(`Producto "${created.name}" creado y agregado a la compra`);
+          toast.success(`Producto "${created.name}" guardado en el inventario`);
         }
       })
       .catch((err) => {
@@ -620,24 +621,27 @@ export const ComprasPage = () => {
       />
 
       {/* Modal 2: Crear Nuevo Producto desde Cero */}
-      <ProductFormModal
-        open={isProductModalOpen}
-        mode="create"
-        disabled={isSubmitting}
-        categoryOptions={categoryOptions}
-        subcategoryOptions={subcategoryOptions}
-        initialBarcode={newProductPrefill.initialBarcode}
-        initialName={newProductPrefill.initialName}
-        initialValues={newProductPrefill.initialValues}
-        onClose={() => {
-          setIsProductModalOpen(false);
-          setNewProductPrefill({});
-          if (returnToProductSelectAfterCreate) {
-            setIsSelectProductModalOpen(true);
-          }
-        }}
-        onSubmit={handleNewProductSubmit}
-      />
+      {isProductModalOpen && (
+        <ProductFormModal
+          key={`purchase-product-create-${newProductPrefill.initialBarcode ?? newProductPrefill.initialName ?? "manual"}-${Date.now()}`}
+          open={isProductModalOpen}
+          mode="create"
+          disabled={isSubmitting}
+          categoryOptions={categoryOptions}
+          subcategoryOptions={subcategoryOptions}
+          initialBarcode={newProductPrefill.initialBarcode}
+          initialName={newProductPrefill.initialName}
+          initialValues={newProductPrefill.initialValues}
+          onClose={() => {
+            setIsProductModalOpen(false)
+            setNewProductPrefill({});
+            if (returnToProductSelectAfterCreate) {
+              setIsSelectProductModalOpen(true);
+            }
+          }}
+          onSubmit={handleNewProductSubmit}
+        />
+      )}
 
       {/* Modal 3: Crear Nuevo Proveedor */}
       {isSupplierModalOpen ? (

@@ -10,6 +10,7 @@ import { ArrowLeftRight, Camera, Tag, ChevronLeft, ChevronRight, ChevronDown, Do
 import type { Product, Purchase, Supplier } from "@/types/entities";
 import { IconButton } from "@/components/ui/IconButton";
 import { parseInvoicePhotos } from "@/modules/compras/utils/invoice-photos";
+import { PurchaseCostDiffBadge } from "@/modules/compras/components/PurchaseCostDiffBadge";
 import { cn } from "@/utils/cn";
 
 interface PurchaseHistoryRow {
@@ -189,22 +190,6 @@ export const PurchasesHistoryTable = ({
         <span className="font-medium text-slate-800 dark:text-slate-200">{info.getValue()}</span>
       ),
     }),
-    columnHelper.accessor((row) => row.purchase.items?.length ?? 0, {
-      id: "itemsCount",
-      header: "Ítems",
-      cell: (info) => {
-        const items = info.row.original.purchase.items ?? [];
-        const totalUnits = items.reduce(
-          (acc, i) => acc + i.quantity + (i.bonified_quantity || 0),
-          0
-        );
-        return (
-          <span className="text-xs text-slate-600 dark:text-slate-400">
-            {items.length} productos ({totalUnits} u.)
-          </span>
-        );
-      },
-    }),
     columnHelper.accessor((row) => row.purchase.payment_method, {
       id: "paymentMethod",
       header: "Pago",
@@ -242,7 +227,7 @@ export const PurchasesHistoryTable = ({
         const isReturnable = purchase.status === "confirmed" || purchase.status === "partial_return";
 
         return (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 whitespace-nowrap min-w-[170px]">
             {(() => {
               const photos = parseInvoicePhotos(purchase.invoice_photo_url);
               if (!photos.length) return null;
@@ -282,7 +267,7 @@ export const PurchasesHistoryTable = ({
                 title="Entrar a la compra para revisar datos del empleado y fijar precios de venta"
               >
                 <Tag className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                <span>Entrar a la compra</span>
+                <span>Entrar</span>
               </button>
             ) : null}
 
@@ -553,6 +538,9 @@ export const PurchasesHistoryTable = ({
                 (acc, i) => acc + i.quantity + (i.bonified_quantity || 0),
                 0
               );
+              const formattedUnits = Number(totalUnits.toFixed(2)).toLocaleString("es-AR", {
+                maximumFractionDigits: 2,
+              });
               const isReturnable = purchase.status === "confirmed" || purchase.status === "partial_return";
 
               return (
@@ -605,7 +593,7 @@ export const PurchasesHistoryTable = ({
                     <div>
                       <span className="block text-slate-500 dark:text-slate-400 text-[11px]">Productos</span>
                       <span className="font-medium text-slate-700 dark:text-slate-300">
-                        {items.length} prod. ({totalUnits} u.)
+                        {items.length} prod. ({formattedUnits} u.)
                       </span>
                     </div>
                     <div>
@@ -782,7 +770,7 @@ export const PurchasesHistoryTable = ({
       {/* Modal de Detalle de Compra */}
       {selectedPurchase ? (
         <section className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-overlay)] p-2 sm:p-4 backdrop-blur-[1px]">
-          <div className="flex max-h-[92dvh] sm:max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex max-h-[92dvh] sm:max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
             <header className="flex items-start justify-between gap-3 border-b border-slate-200 p-4 sm:px-5 sm:py-4 dark:border-slate-800">
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-wider text-brand-700 dark:text-brand-400">
@@ -924,10 +912,16 @@ export const PurchasesHistoryTable = ({
                         key={item.id}
                         className="flex flex-col gap-1.5 rounded-xl border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-700/80 dark:bg-slate-800/60"
                       >
-                        <div className="min-w-0">
-                          <p className="font-semibold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">
-                            {item.product_name_snapshot}
-                          </p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-semibold text-slate-900 dark:text-slate-100 text-xs sm:text-sm break-words">
+                              {item.product_name_snapshot}
+                            </p>
+                            <PurchaseCostDiffBadge
+                              previousCost={product?.cost_price ?? 0}
+                              currentCost={item.unit_cost}
+                            />
+                          </div>
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                             <span>Cant. pagada: {displayQty.toLocaleString("es-AR")} {unitLabel}</span>
                             {item.bonified_quantity ? (

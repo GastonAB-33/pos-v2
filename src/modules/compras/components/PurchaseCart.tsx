@@ -24,6 +24,7 @@ import { matchesProductSearch } from "@/utils/search";
 import type { Product } from "@/types/entities";
 import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
 import { cn } from "@/utils/cn";
+import { PurchaseCostDiffBadge } from "@/modules/compras/components/PurchaseCostDiffBadge";
 
 export interface PurchaseCartItemView {
   product_id: string;
@@ -741,8 +742,18 @@ export const PurchaseCart = ({
               >
                 <div className="flex items-start justify-between gap-2 w-full max-w-full">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <p className="text-xs font-bold text-slate-900 truncate dark:text-slate-100">{item.name}</p>
+                      <PurchaseCostDiffBadge
+                        previousCost={item.previous_cost || 0}
+                        currentCost={item.unit_cost}
+                      />
+                      {item.product_id.startsWith("temp-") && (
+                        <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 animate-pulse">
+                          <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-ping" />
+                          Guardando en catálogo...
+                        </span>
+                      )}
                       {item.sale_mode === "weight" && (
                         <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
                           Pesable (g)

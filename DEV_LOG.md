@@ -18,6 +18,61 @@ Este documento es la **fuente única de verdad y memoria compartida** entre dife
 
 ## 📋 Registro Histórico de Cambios
 
+### [2026-11-26] - Refinamiento de Precios Claros en Compras, Descarte de Duplicación y Corrección de Modal/Tabla de Compras
+* **Zona:** `src/modules/compras/components/` (`PurchaseCostDiffBadge.tsx`, `PurchasePricingReviewPanel.tsx`, `PurchasesHistoryTable.tsx`)
+* **Objetivo:** 
+  1. Corregir el desborde y renderizado en la tabla y modal de detalle de compras del historial.
+  2. Eliminar el tachado (`line-through`) en el precio anterior dentro del badge y del tooltip flotante para que los números se lean con absoluta nitidez.
+  3. Eliminar el badge duplicado innecesario debajo del campo de entrada `PRECIO COSTO` en el panel de revisión de compra, manteniéndolo destacado únicamente en la cabecera del artículo.
+* **Cambios:**
+  * **Badge de Variación de Costo (`PurchaseCostDiffBadge.tsx`):**
+    * Se eliminó el estilo `line-through` y `opacity-75` tanto en el texto inline del badge como en el desglose del tooltip flotante (`strong`), manteniendo colores contrastados y legibles (`text-slate-600 dark:text-slate-300`).
+  * **Panel de Revisión de Precios de Compra (`PurchasePricingReviewPanel.tsx`):**
+    * Se removió la instancia repetida de `<PurchaseCostDiffBadge>` que colgaba apretada en 3 líneas directamente debajo del `<input>` de `PRECIO COSTO`, despejando el bloque de datos del empleado y conservando el indicador destacado en la cabecera superior del producto.
+  * **Tabla y Modal de Detalle de Compras (`PurchasesHistoryTable.tsx`):**
+    * Se eliminó la columna **Ítems** de la tabla principal para evitar sobrecarga de información y asegurar que el resto de las columnas (Fecha/Comprobante, Proveedor, Pago, Estado, Total, Acciones) respiren con amplio espacio horizontal sin generar cortes.
+    * Se condensó el botón de acción a `[ Entrar ]` con protección de ancho mínimo (`whitespace-nowrap min-w-[170px]`) evitando que se corte el extremo derecho de la tabla.
+    * En el modal de detalle de compra (`selectedPurchase`), se amplió el contenedor a `max-w-3xl`, se aplicó `min-w-0 flex-1` y `break-words` a los nombres de los productos para prevenir cualquier desborde o corte lateral en la lista.
+* **Próximos pasos:** Compilación validada con código 0 (`tsc -b && vite build`).
+
+### [2026-11-26] - Indicador Visual de Variación de Precio Costo en Confirmación de Compras (Verde / Rojo / Neutro)
+* **Zona:** `src/modules/compras/components/` (`PurchaseCostDiffBadge.tsx`, `PurchasePricingReviewPanel.tsx`, `PurchasePricingConfirmationModal.tsx`, `PurchasesHistoryTable.tsx`, `PurchaseCart.tsx`)
+* **Objetivo:** Permitir que los usuarios con permisos de confirmación de compra (`compras_doble_confirmacion` / fijación de precios), al entrar a revisar una compra de proveedor, identifiquen al instante y sin sobrecargar la pantalla el comportamiento del precio de costo de cada producto frente a su costo anterior registrado en el catálogo.
+* **Cambios:**
+  * **Nuevo Componente Reutilizable (`PurchaseCostDiffBadge.tsx`):**
+    * **Caso 1 (Precio igual o sin historial previo):** Si el precio de costo se mantuvo idéntico (`Math.abs(diff) < 0.005`) o el producto es nuevo sin costo previo, el badge devuelve `null` de forma limpia (no aparece nada extra, solo se ve el precio normal).
+    * **Caso 2 (Precio bajó):** Muestra un badge con fondo y borde verde (`bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800`) con icono `TrendingDown`, indicando el costo anterior tachado, el nuevo y el porcentaje de baja (`Antes: $X → Nuevo: $Y (-Z%)`).
+    * **Caso 3 (Precio subió):** Muestra un badge con fondo y borde rojo (`bg-red-50 text-red-700 border-red-300 dark:bg-red-950/70 dark:text-red-300 dark:border-red-800`) con icono `TrendingUp`, indicando el costo anterior tachado, el nuevo y el porcentaje de alza (`Antes: $X → Nuevo: $Y (+Z%)`).
+    * **Tooltip Informativo en Hover:** Cada badge cuenta con un tooltip flotante no intrusivo (`group-hover:flex`) que detalla: tipo de variación (subió/bajó), costo anterior en catálogo, costo nuevo del remito y diferencia neta monetaria por unidad (`+$X / -$X`).
+  * **Integración en Pantalla Completa de 2da Confirmación (`PurchasePricingReviewPanel.tsx`):**
+    * Se incorporó el badge en la cabecera de cada artículo junto a su nombre.
+    * En el bloque de datos del empleado, el input de `PRECIO COSTO` ahora reacciona visualmente con borde y fondo suave verde si bajó o rojo si subió, con un microindicador textual inferior (`↑ Subió / ↓ Bajó - Antes: $X`).
+  * **Integración en Modal de Fijación de Precios (`PurchasePricingConfirmationModal.tsx`):**
+    * Se asoció `previousCost` en el estado y se colocó `PurchaseCostDiffBadge` junto a cada producto del listado.
+  * **Integración en Detalle de Compra y Carrito (`PurchasesHistoryTable.tsx`, `PurchaseCart.tsx`):**
+    * En el modal de detalle de compras del historial y en el carrito de compras, los productos exhiben el indicador visual si difiere de su costo de catálogo.
+* **Próximos pasos:** Compilación y empaquetado verificados con éxito (`tsc -b && vite build` -> code 0).
+
+### [2026-11-26] - Alta Inmediata Optimista en Compras y Limpieza Total del Formulario de Productos
+* **Zona:** `src/modules/compras/`, `src/modules/productos/`
+* **Objetivo:** 
+  1. Permitir que al crear un producto nuevo inexistente durante la carga de una compra de proveedor, el producto aparezca de forma **inmediata en el carrito de compras** (optimistic UI) con latencia cero, mientras su guardado y asignación de código se confirman en segundo plano en Supabase.
+  2. Solucionar el problema donde al escanear consecutivamente productos inexistentes para darlos de alta, la ficha del formulario (`ProductFormModal`) retenía los datos del producto anterior en lugar de abrirse completamente limpia con solo el nuevo código escaneado.
+* **Cambios:**
+  * **Optimistic UI en Compras (`usePurchasesModule.ts`):**
+    * En `createProductAndAddToCart`, se genera un producto optimista con ID temporal (`temp-...`) y se inserta instantáneamente en el carrito (`cart`) y en la lista de productos antes de esperar a la red.
+    * En segundo plano, se ejecuta la creación en Supabase (`productsService.create`), la subida de imagen, la asignación de código de barras y la auditoría.
+    * Al retornar el producto persistido, se actualiza el carrito mapeando el `tempId` al UUID real de Supabase manteniendo intactas las cantidades, bonificaciones o costos que el usuario haya editado en la tabla mientras se guardaba.
+    * En `confirmPurchase`, se asegura que si el usuario registra la compra rápidamente mientras aún hay productos optimistas en curso, se espere a la resolución de sus promesas antes de generar los ítems de compra para garantizar la integridad referencial de clave foránea.
+    * Si la creación falla, se remueve el ítem optimista y se notifica con toast de error.
+  * **Indicador Visual en Carrito (`PurchaseCart.tsx`):**
+    * Se incorporó un badge sutil pulsante `[ ◌ Guardando en catálogo... ]` junto al nombre del producto mientras tiene ID temporal, desapareciendo suavemente una vez que Supabase confirma el guardado.
+  * **Limpieza y Reinicio de Ficha de Producto (`ProductFormModal.tsx`, `ComprasPage.tsx`):**
+    * En `ProductFormModal.tsx`, se agregaron `initialBarcode, initialName, initialValues` al array de dependencias del efecto de inicialización y se garantizó la ejecución de `reset(createDefaults())` al cerrarse (`!open`).
+    * En `ComprasPage.tsx`, se envolvió el modal en renderizado condicional (`{isProductModalOpen && <ProductFormModal ... />}`) con una `key` dinámica única por apertura/código, forzando un ciclo de vida limpio y evitando la persistencia de datos previos entre aperturas.
+    * Se forzó `initialValues: null` al abrir el modal desde escaneo o búsqueda para descartar cualquier borrador anterior.
+* **Próximos pasos:** Compilación y typechecking verificados con éxito (`tsc -b && vite build` -> code 0).
+
 ### [2026-11-26] - Eliminación de Columna Detalle/Concepto y Scroll Lateral en Cuenta Corriente Empleados
 * **Zona:** `src/modules/empleados/components/EmployeeCurrentAccountPanel.tsx`
 * **Objetivo:** Eliminar la columna "Detalle / Concepto" en la tabla de cuenta corriente de empleados y suprimir el contenedor de scroll horizontal para que la tabla se ajuste al 100% de la pantalla sin desbordes.

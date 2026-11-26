@@ -239,7 +239,8 @@ export const ProductFormModal = ({
     setImageRemoved(false);
     setLocalPreviewUrl(null);
     setMasterMatch(null);
-  }, [open]);
+    reset(createDefaults());
+  }, [open, reset]);
 
   useEffect(() => {
     setLocalCategories((current) =>
@@ -267,8 +268,8 @@ export const ProductFormModal = ({
         stock: initStock,
         codigoBarras: initialBarcode ? initialBarcode.trim() : (initialValues?.codigoBarras ?? ""),
         nombre: initialName ? initialName.trim() : (initialValues?.nombre ?? ""),
-        categoria: "",
-        subcategoria: "",
+        categoria: initialValues?.categoria ?? "",
+        subcategoria: initialValues?.subcategoria ?? "",
       });
       setCalcMode("forward");
       setPhotoError(null);
@@ -316,7 +317,7 @@ export const ProductFormModal = ({
     setImageDraftFile(null);
     setImageRemoved(false);
     setLocalPreviewUrl(null);
-  }, [open, product, reset]);
+  }, [open, product, reset, initialBarcode, initialName, initialValues]);
 
   const nombre = watch("nombre");
   const saleMode = watch("saleMode");
