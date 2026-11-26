@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import type { Purchase, Supplier } from "@/types/entities";
 import { ModalCloseButton } from "@/components/ui/ModalCloseButton";
+import { PurchaseCostDiffBadge } from "@/modules/compras/components/PurchaseCostDiffBadge";
 import { computePricingForward, computePricingBackward } from "@/modules/productos/utils/product-pricing";
 import type { PurchasePricingItemUpdate } from "@/modules/compras/hooks/usePurchasesModule";
 
@@ -27,6 +28,7 @@ interface EditableItemPricing {
   productName: string;
   incomingQty: number;
   unitCost: number;
+  previousCost: number;
   currentSalePrice: number;
   vatPercent: number;
   profitPercent: number;
@@ -68,6 +70,7 @@ export const PurchasePricingConfirmationModal = ({
     const initialItems: EditableItemPricing[] = purchaseItems.map((item) => {
       const incomingQty = item.quantity + (item.bonified_quantity || 0);
       const unitCost = item.unit_cost;
+      const previousCost = item.product?.cost_price ?? 0;
       const currentSalePrice = item.sale_price ?? item.product?.price ?? 0;
 
       // Alícuota inicial: la del producto si ya existe, o 21% por defecto
@@ -106,6 +109,7 @@ export const PurchasePricingConfirmationModal = ({
         productName: item.product_name_snapshot,
         incomingQty,
         unitCost,
+        previousCost,
         currentSalePrice,
         vatPercent,
         profitPercent,
@@ -401,9 +405,15 @@ export const PurchasePricingConfirmationModal = ({
                           title="Marcar para actualizar precio"
                         />
                         <div className="min-w-0">
-                          <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
-                            {item.productName}
-                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                              {item.productName}
+                            </p>
+                            <PurchaseCostDiffBadge
+                              previousCost={item.previousCost}
+                              currentCost={item.unitCost}
+                            />
+                          </div>
                           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                             <span className="font-medium">
                               Ingresaron: <strong className="text-slate-800 dark:text-slate-200">{item.incomingQty} u.</strong>

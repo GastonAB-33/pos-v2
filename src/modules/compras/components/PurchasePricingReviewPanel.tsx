@@ -13,6 +13,7 @@ import {
 import type { Purchase, Supplier } from "@/types/entities";
 import { computePricingForward, computePricingBackward } from "@/modules/productos/utils/product-pricing";
 import { parseInvoicePhotos } from "@/modules/compras/utils/invoice-photos";
+import { PurchaseCostDiffBadge } from "@/modules/compras/components/PurchaseCostDiffBadge";
 import type { PurchaseReviewConfirmationPayload, PurchaseReviewItemPayload } from "@/modules/compras/hooks/usePurchasesModule";
 
 interface PurchasePricingReviewPanelProps {
@@ -483,13 +484,17 @@ export const PurchasePricingReviewPanel = ({
               >
                 {/* Encabezado del Producto */}
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80 pb-2.5">
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 min-w-0">
                     <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs shrink-0">
                       #{index + 1}
                     </span>
                     <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 truncate">
                       {item.productName}
                     </h3>
+                    <PurchaseCostDiffBadge
+                      previousCost={item.previousCatalogCost}
+                      currentCost={item.unitCost}
+                    />
                   </div>
 
                   <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
@@ -544,7 +549,13 @@ export const PurchasePricingReviewPanel = ({
                           min="0"
                           value={item.unitCost}
                           onChange={(e) => handleItemFieldChange(index, "unitCost", e.target.value)}
-                          className="w-full h-8 rounded-lg border border-amber-300 bg-amber-100/60 dark:border-amber-700 dark:bg-amber-900/40 text-amber-950 dark:text-amber-100 px-2 text-xs font-black text-right outline-none focus:ring-1 focus:ring-amber-500"
+                          className={`w-full h-8 rounded-lg border px-2 text-xs font-black text-right outline-none focus:ring-1 ${
+                            hasCostDiff
+                              ? unitCostDiff > 0
+                                ? "border-red-400 bg-red-50/70 text-red-950 dark:border-red-600 dark:bg-red-950/40 dark:text-red-100 focus:ring-red-500"
+                                : "border-emerald-400 bg-emerald-50/70 text-emerald-950 dark:border-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-100 focus:ring-emerald-500"
+                              : "border-amber-300 bg-amber-100/60 dark:border-amber-700 dark:bg-amber-900/40 text-amber-950 dark:text-amber-100 focus:ring-amber-500"
+                          }`}
                         />
                       </div>
 
