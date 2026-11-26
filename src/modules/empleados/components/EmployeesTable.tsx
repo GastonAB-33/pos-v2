@@ -169,18 +169,6 @@ export const EmployeesTable = ({
                     <span className="hidden sm:inline text-xs font-semibold">Ver Ficha</span>
                   </button>
 
-                  {/* Editar */}
-                  {canWrite && (
-                    <button
-                      type="button"
-                      title="Editar Legajo"
-                      onClick={() => onEdit(employee)}
-                      className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200/80 bg-slate-50/80 text-slate-600 hover:border-slate-300 hover:bg-slate-100 active:scale-95 dark:border-slate-700/80 dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800 transition-all cursor-pointer shrink-0"
-                    >
-                      <Edit2 size={14} />
-                    </button>
-                  )}
-
                   {/* Menú Más Opciones (...) */}
                   {canWrite && (
                     <div className="relative">
@@ -208,6 +196,17 @@ export const EmployeesTable = ({
                             className="absolute right-0 bottom-full mb-2 z-50 w-52 rounded-2xl border border-slate-200/90 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900 animate-in fade-in zoom-in-95 duration-100"
                             onClick={(e) => e.stopPropagation()}
                           >
+                            <button
+                              type="button"
+                              className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
+                              onClick={() => {
+                                setMenuOpenId(null);
+                                onEdit(employee);
+                              }}
+                            >
+                              <Edit2 className="h-4 w-4 text-blue-500" />
+                              Editar empleado
+                            </button>
                             <button
                               type="button"
                               className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
@@ -294,188 +293,214 @@ export const EmployeesTable = ({
       {/* 2. VISTA ESCRITORIO / TABLET: TABLA TRADICIONAL (hidden md:block) */}
       {/* ============================================================== */}
       <div className="hidden md:block ui-table-wrap rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white shadow-xs dark:border-slate-800 dark:bg-slate-900 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="border-b border-slate-200/80 bg-slate-50/90 font-bold uppercase tracking-wider text-slate-600 dark:border-slate-800 dark:bg-slate-800/70 dark:text-slate-200">
-              <tr>
-                <th className="py-3.5 px-4">Código / Nombre</th>
-                <th className="py-3.5 px-4">Documento</th>
-                <th className="py-3.5 px-4">Sueldo Base</th>
-                <th className="py-3.5 px-4" title="Saldo negativo total: Cuenta corriente + Adelantos pendientes de descuento">
-                  Saldo Total (Deuda)
-                </th>
-                <th className="py-3.5 px-4">Turno Hoy</th>
-                <th className="py-3.5 px-4">Estado</th>
-                <th className="py-3.5 px-4 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-700 dark:text-slate-300">
-              {employees.map((employee) => {
-                const activeShift = todayActiveByEmployee.get(employee.id);
-                const ctaCteBalance = employee.current_balance ?? 0;
-                const pendingAdv = pendingAdvancesByEmployee?.get(employee.id) ?? 0;
-                const totalDebt = (ctaCteBalance > 0 ? ctaCteBalance : 0) + pendingAdv;
-                const totalCredit = ctaCteBalance < 0 ? Math.abs(ctaCteBalance) : 0;
-                const netBalance = totalCredit - totalDebt;
-                const hasTotalDebt = netBalance < 0;
-                const hasTotalCredit = netBalance > 0;
+        <table className="w-full text-left text-xs">
+          <thead className="border-b border-slate-200/80 bg-slate-50/90 font-bold uppercase tracking-wider text-slate-600 dark:border-slate-800 dark:bg-slate-800/70 dark:text-slate-200">
+            <tr>
+              <th className="py-2.5 px-3">Código / Nombre</th>
+              <th className="py-2.5 px-2.5 whitespace-nowrap">Documento</th>
+              <th className="py-2.5 px-2.5 whitespace-nowrap">Sueldo Base</th>
+              <th className="py-2.5 px-2.5 whitespace-nowrap" title="Saldo negativo total: Cuenta corriente + Adelantos pendientes de descuento">
+                Saldo Total
+              </th>
+              <th className="py-2.5 px-2.5 whitespace-nowrap">Turno Hoy</th>
+              <th className="py-2.5 px-2.5 whitespace-nowrap">Estado</th>
+              <th className="py-2.5 px-3 text-right whitespace-nowrap">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-slate-700 dark:text-slate-300">
+            {employees.map((employee, index) => {
+              const activeShift = todayActiveByEmployee.get(employee.id);
+              const ctaCteBalance = employee.current_balance ?? 0;
+              const pendingAdv = pendingAdvancesByEmployee?.get(employee.id) ?? 0;
+              const totalDebt = (ctaCteBalance > 0 ? ctaCteBalance : 0) + pendingAdv;
+              const totalCredit = ctaCteBalance < 0 ? Math.abs(ctaCteBalance) : 0;
+              const netBalance = totalCredit - totalDebt;
+              const hasTotalDebt = netBalance < 0;
+              const hasTotalCredit = netBalance > 0;
+              const isDesktopMenuOpen = menuOpenId === `desktop-${employee.id}`;
+              const isBottomRow = index >= employees.length - 2 && employees.length > 2;
 
-                return (
-                  <tr
-                    key={employee.id}
-                    className="transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
-                  >
-                    <td className="py-3 px-4">
+              return (
+                <tr
+                  key={employee.id}
+                  className="transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
+                >
+                  <td className="py-2.5 px-3">
+                    <button
+                      type="button"
+                      onClick={() => onSelectEmployee(employee)}
+                      className="flex items-center gap-2 text-left group cursor-pointer max-w-full min-w-0"
+                      title={`Abrir legajo integral de ${employee.full_name}`}
+                    >
+                      <span className="flex h-7 w-7 xl:h-8 xl:w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 font-bold text-xs xl:text-sm text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 group-hover:scale-105 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/60 transition shadow-2xs">
+                        {employee.full_name.charAt(0).toUpperCase()}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <span className="block font-bold text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition truncate max-w-[130px] lg:max-w-[160px] xl:max-w-[200px]">
+                          {employee.full_name}
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-mono truncate block max-w-[130px] lg:max-w-[160px] xl:max-w-[200px]">
+                          {employee.code}
+                          {employee.position ? ` • ${employee.position}` : ""}
+                        </span>
+                      </div>
+                    </button>
+                  </td>
+
+                  <td className="py-2.5 px-2.5 font-mono whitespace-nowrap text-[11px]">
+                    <span className="uppercase text-slate-500 mr-1 text-[10px]">
+                      {employee.document_type}
+                    </span>
+                    {employee.document_number}
+                  </td>
+
+                  <td className="py-2.5 px-2.5 font-semibold text-slate-900 dark:text-slate-100 font-mono whitespace-nowrap text-xs">
+                    {currency.format(employee.base_salary || 0)}
+                  </td>
+
+                  <td className="py-2.5 px-2.5 whitespace-nowrap">
+                    <div className="flex flex-col gap-0.5">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold font-mono w-fit ${
+                          hasTotalDebt
+                            ? "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900"
+                            : hasTotalCredit
+                            ? "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900"
+                            : "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900"
+                        }`}
+                        title={`Saldo total: ${hasTotalDebt ? `-${currency.format(Math.abs(netBalance))}` : currency.format(netBalance)}${employee.current_account_limit ? ` • Límite pactado: ${currency.format(employee.current_account_limit)}` : ""}`}
+                      >
+                        {hasTotalDebt && <AlertTriangle size={11} />}
+                        {!hasTotalDebt && !hasTotalCredit && <CheckCircle size={11} />}
+                        {hasTotalDebt ? `-${currency.format(Math.abs(netBalance))}` : hasTotalCredit ? `+${currency.format(netBalance)}` : currency.format(0)}
+                      </span>
+                      {pendingAdv > 0 ? (
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          Cta: {currency.format(ctaCteBalance)} • Adel: {currency.format(pendingAdv)}
+                        </span>
+                      ) : employee.current_account_limit ? (
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          Lím: {currency.format(employee.current_account_limit)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </td>
+
+                  {/* Estado de Fichada Hoy */}
+                  <td className="py-2.5 px-2.5 whitespace-nowrap">
+                    {activeShift ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900 animate-pulse">
+                        <Clock size={11} />
+                        <span>En turno ({activeShift.check_in})</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 border border-slate-200/60 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700/60 shadow-2xs">
+                        <Clock size={11} className="text-slate-400" />
+                        <span>Fuera de turno</span>
+                      </span>
+                    )}
+                  </td>
+
+                  <td className="py-2.5 px-2.5 whitespace-nowrap">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                        employee.is_active
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                          : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                      }`}
+                    >
+                      {employee.is_active ? "Activo" : "Inactivo"}
+                    </span>
+                  </td>
+
+                  <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                    <div className="flex items-center justify-end gap-1.5">
+                      {/* Botón Principal: Ver Ficha Píldora */}
                       <button
                         type="button"
+                        title="Ver Ficha Integral del Empleado (Horarios, Cta Cte, Sueldos)"
                         onClick={() => onSelectEmployee(employee)}
-                        className="flex items-center gap-2.5 text-left group cursor-pointer"
-                        title={`Abrir legajo integral de ${employee.full_name}`}
+                        className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/70 dark:text-blue-300 transition cursor-pointer shadow-2xs active:scale-95"
                       >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 font-bold text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 group-hover:scale-105 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/60 transition shadow-2xs">
-                          {employee.full_name.charAt(0).toUpperCase()}
-                        </span>
-                        <div>
-                          <span className="block font-bold text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">
-                            {employee.full_name}
-                          </span>
-                          <span className="text-[11px] text-slate-400 font-mono">
-                            {employee.code}
-                            {employee.position ? ` • ${employee.position}` : ""}
-                            {employee.phone ? ` • ${employee.phone}` : ""}
-                          </span>
-                        </div>
+                        <UserCheck size={12} />
+                        <span>Ver Ficha</span>
                       </button>
-                    </td>
 
-                    <td className="py-3 px-4 font-mono">
-                      <span className="uppercase text-slate-500 mr-1 text-[10px]">
-                        {employee.document_type}
-                      </span>
-                      {employee.document_number}
-                    </td>
-
-                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-slate-100 font-mono">
-                      {currency.format(employee.base_salary || 0)}
-                    </td>
-
-                    <td className="py-3 px-4">
-                      <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold font-mono ${
-                              hasTotalDebt
-                                ? "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900"
-                                : hasTotalCredit
-                                ? "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900"
-                                : "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900"
-                            }`}
-                            title={`Saldo total: ${hasTotalDebt ? `-${currency.format(Math.abs(netBalance))}` : currency.format(netBalance)} (Cta. Corriente: ${currency.format(ctaCteBalance)}${pendingAdv > 0 ? ` + Adelantos pendientes: ${currency.format(pendingAdv)}` : ""})`}
+                      {/* Menú Más Opciones (Editar, Activar/Desactivar, Eliminar) */}
+                      {canWrite && (
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setMenuOpenId(isDesktopMenuOpen ? null : `desktop-${employee.id}`)}
+                            className={cn(
+                              "flex h-7 w-7 items-center justify-center rounded-full border border-slate-200/80 bg-slate-50/80 text-slate-500 hover:border-slate-300 hover:bg-slate-100 active:scale-95 dark:border-slate-700/80 dark:bg-slate-800/60 dark:text-slate-400 dark:hover:bg-slate-800 transition-all cursor-pointer",
+                              isDesktopMenuOpen && "ring-2 ring-blue-500/30"
+                            )}
+                            title="Más opciones del empleado"
+                            aria-label="Más opciones del empleado"
                           >
-                            {hasTotalDebt && <AlertTriangle size={11} />}
-                            {!hasTotalDebt && !hasTotalCredit && <CheckCircle size={11} />}
-                            {hasTotalDebt ? `-${currency.format(Math.abs(netBalance))}` : hasTotalCredit ? `+${currency.format(netBalance)}` : currency.format(0)}
-                          </span>
-                          {employee.current_account_limit ? (
-                            <span className="text-[10px] text-slate-400 font-mono" title="Límite autorizado">
-                              (Lím: {currency.format(employee.current_account_limit)})
-                            </span>
-                          ) : null}
+                            <MoreVertical size={14} />
+                          </button>
+
+                          {isDesktopMenuOpen && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-40 bg-transparent"
+                                onClick={() => setMenuOpenId(null)}
+                                aria-hidden="true"
+                              />
+                              <div
+                                className={cn(
+                                  "absolute right-0 z-50 w-52 rounded-2xl border border-slate-200/90 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900 animate-in fade-in zoom-in-95 duration-100 text-left",
+                                  isBottomRow ? "bottom-full mb-1.5" : "top-full mt-1.5"
+                                )}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  type="button"
+                                  className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
+                                  onClick={() => {
+                                    setMenuOpenId(null);
+                                    onEdit(employee);
+                                  }}
+                                >
+                                  <Edit2 className="h-4 w-4 text-blue-500" />
+                                  Editar empleado
+                                </button>
+                                <button
+                                  type="button"
+                                  className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 text-left transition-colors cursor-pointer"
+                                  onClick={() => {
+                                    setMenuOpenId(null);
+                                    onToggleActive(employee);
+                                  }}
+                                >
+                                  <Power className="h-4 w-4 text-amber-500" />
+                                  {employee.is_active ? "Desactivar empleado" : "Activar empleado"}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40 text-left transition-colors cursor-pointer"
+                                  onClick={() => {
+                                    setMenuOpenId(null);
+                                    onDelete(employee);
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4 text-rose-500" />
+                                  Eliminar empleado
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
-                        {pendingAdv > 0 && (
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            Cta: {currency.format(ctaCteBalance)} • Adel: {currency.format(pendingAdv)}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Estado de Fichada Hoy */}
-                    <td className="py-3 px-4">
-                      {activeShift ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900 animate-pulse">
-                          <Clock size={12} />
-                          En turno ({activeShift.check_in})
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                          Fuera de turno
-                        </span>
                       )}
-                    </td>
-
-                    <td className="py-3 px-4">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                          employee.is_active
-                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                            : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
-                        }`}
-                      >
-                        {employee.is_active ? "Activo" : "Inactivo"}
-                      </span>
-                    </td>
-
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {/* Botón Principal: Ver Ficha Píldora */}
-                        <button
-                          type="button"
-                          title="Ver Ficha Integral del Empleado (Horarios, Cta Cte, Sueldos)"
-                          onClick={() => onSelectEmployee(employee)}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/70 dark:text-blue-300 transition cursor-pointer shadow-2xs active:scale-95"
-                        >
-                          <UserCheck size={13} />
-                          <span>Ver Ficha</span>
-                        </button>
-
-                        {/* Editar */}
-                        {canWrite && (
-                          <button
-                            type="button"
-                            title="Editar Legajo"
-                            onClick={() => onEdit(employee)}
-                            className="!rounded-full h-8 w-8 inline-flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-slate-200 hover:scale-105 transition-all cursor-pointer"
-                          >
-                            <Edit2 size={13} />
-                          </button>
-                        )}
-
-                        {/* Activar/Desactivar */}
-                        {canWrite && (
-                          <button
-                            type="button"
-                            title={employee.is_active ? "Desactivar empleado" : "Activar empleado"}
-                            onClick={() => onToggleActive(employee)}
-                            className={`!rounded-full h-8 w-8 inline-flex items-center justify-center hover:scale-105 transition-all cursor-pointer ${
-                              employee.is_active
-                                ? "text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30"
-                                : "text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-                            }`}
-                          >
-                            <Power size={13} />
-                          </button>
-                        )}
-
-                        {/* Eliminar */}
-                        {canWrite && (
-                          <button
-                            type="button"
-                            title="Eliminar empleado"
-                            onClick={() => onDelete(employee)}
-                            className="!rounded-full h-8 w-8 inline-flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30 hover:scale-105 transition-all cursor-pointer"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );

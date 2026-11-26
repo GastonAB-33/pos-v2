@@ -52,7 +52,7 @@ export const PosCustomerSelectModal = ({
   const filteredCustomers = useMemo(() => {
     const q = query.trim().toLowerCase();
     const active = customers.filter((c) => c.is_active);
-    if (!q) return active.slice(0, 30);
+    if (!q) return [];
 
     return active
       .filter((c) => {
@@ -368,7 +368,17 @@ export const PosCustomerSelectModal = ({
               })
             )
           ) : (
-            filteredCustomers.length === 0 ? (
+            !query.trim() ? (
+            <div className="p-8 text-center">
+              <Search size={28} className="mx-auto mb-2.5 text-slate-400 dark:text-slate-500" />
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                Escribí el nombre, DNI o teléfono del cliente
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Las coincidencias aparecerán automáticamente a medida que escribas.
+              </p>
+            </div>
+          ) : filteredCustomers.length === 0 ? (
             <div className="p-8 text-center">
               <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                 No se encontraron clientes para &quot;{query}&quot;

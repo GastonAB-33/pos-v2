@@ -449,7 +449,7 @@ export const PurchasePricingConfirmationModal = ({
                             <input
                               type="number"
                               min="0"
-                              step="0.5"
+                              step="any"
                               value={item.profitPercent}
                               onChange={(e) => handleProfitChange(index, e.target.value)}
                               disabled={!item.isSelected}

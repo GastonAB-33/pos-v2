@@ -923,6 +923,8 @@ export const PosSmartView = ({
                             }}
                             onKeyDown={(event) => {
                               if (event.key === "Enter") {
+                                event.preventDefault();
+                                event.stopPropagation();
                                 event.currentTarget.blur();
                               }
                             }}

@@ -79,6 +79,10 @@ export interface CashCloseSnapshot {
   difference?: number;
   reconciliationMode?: "cash_only" | "full";
   userNotes?: string;
+  deferredOpeningPending?: boolean;
+  deferredOpeningCompletedAt?: string;
+  deferredOpeningCountedTotal?: number;
+  deferredOpeningNetCashDelta?: number;
 }
 
 export const serializeCloseSnapshot = (
@@ -132,7 +136,12 @@ export interface CashCloseResult {
   salePaymentsTotal: number;
   cashSalesTotal: number;
   totalIncomes: number;
+  reconciliationMode?: "cash_only" | "full";
   userNotes?: string;
+  deferredOpeningPending?: boolean;
+  deferredOpeningCompletedAt?: string;
+  deferredOpeningCountedTotal?: number;
+  deferredOpeningNetCashDelta?: number;
 }
 
 export interface CashBreakdownItem {
@@ -478,6 +487,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         openingAmount: 0,
         incomes: 0,
         expenses: 0,
+        cashIncomes: 0,
+        cashExpenses: 0,
         expectedBalance: 0,
         expectedCashBalance: 0,
         expectedFullBalance: 0,
@@ -490,6 +501,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         openingAmount: currentSession.opening_amount,
         incomes: 0,
         expenses: 0,
+        cashIncomes: 0,
+        cashExpenses: 0,
         expectedBalance: currentSession.opening_amount,
         expectedCashBalance: currentSession.opening_amount,
         expectedFullBalance: currentSession.opening_amount,
@@ -500,6 +513,8 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
       openingAmount: currentSummary.openingAmount,
       incomes: currentSummary.incomes,
       expenses: currentSummary.expenses,
+      cashIncomes: currentSummary.cashIncomes,
+      cashExpenses: currentSummary.cashExpenses,
       expectedBalance: currentSummary.expectedBalance,
       expectedCashBalance: currentSummary.expectedCashBalance,
       expectedFullBalance: currentSummary.expectedFullBalance,
@@ -1117,14 +1132,18 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         return;
       }
 
+      const isDeferred = Boolean(values.deferredOpening);
+      const effectiveOpeningAmount = isDeferred ? 0 : values.openingAmount;
       const openSnapshot: CashCloseSnapshot = {
-        openingBillCounts: values.billCounts,
-        openingCoinsAmount: values.coinsAmount,
+        openingBillCounts: isDeferred ? undefined : values.billCounts,
+        openingCoinsAmount: isDeferred ? undefined : values.coinsAmount,
         userNotes: values.notes?.trim() || "",
+        deferredOpeningPending: isDeferred ? true : undefined,
       };
-      const serializedNotes = values.billCounts
-        ? serializeCloseSnapshot(openSnapshot, values.notes?.trim() || null)
-        : values.notes?.trim() || null;
+      const serializedNotes =
+        values.billCounts || isDeferred
+          ? serializeCloseSnapshot(openSnapshot, values.notes?.trim() || null)
+          : values.notes?.trim() || null;
 
       const createdSession = await cashService.create(tenantId, {
         branch_id: null,
@@ -1133,38 +1152,39 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
         status: "open",
         opened_at: new Date().toISOString(),
         closed_at: null,
-        opening_amount: values.openingAmount,
+        opening_amount: effectiveOpeningAmount,
         closing_amount: null,
         expected_closing_amount: null,
         closing_difference: null,
         notes: serializedNotes,
-        opening_bill_counts: (values.billCounts as Record<string, number>) ?? null,
-        opening_coins_amount: values.coinsAmount ?? null,
+        opening_bill_counts: isDeferred ? null : ((values.billCounts as Record<string, number>) ?? null),
+        opening_coins_amount: isDeferred ? null : (values.coinsAmount ?? null),
       });
       await auditService.createSafe(tenantId, {
         user_id: userId,
         module: "caja",
-        action: "open",
+        action: isDeferred ? "open_deferred" : "open",
         entity_type: "cash_session",
         entity_id: createdSession.id,
-        description: "Apertura de caja",
+        description: isDeferred ? "Apertura de caja con conteo pospuesto ($0)" : "Apertura de caja",
         metadata: {
-          opening_amount: values.openingAmount,
+          opening_amount: effectiveOpeningAmount,
+          deferred_opening: isDeferred,
           notes: values.notes?.trim() || null,
-          bill_counts: values.billCounts,
-          coins_amount: values.coinsAmount,
+          bill_counts: isDeferred ? null : values.billCounts,
+          coins_amount: isDeferred ? null : values.coinsAmount,
         },
       });
 
       offlineService.updateCachedCashSession(tenantId, createdSession);
 
-      if (values.openingAmount > 0) {
+      if (effectiveOpeningAmount > 0) {
         try {
           await generalCashService.createMovement(tenantId, {
             type: "expense",
-            amount: values.openingAmount,
+            amount: effectiveOpeningAmount,
             origin_type: "daily_cash_open",
-            concept: `Fondo inicial para apertura de Caja diaria - Sesión #${createdSession.id.slice(-6)}`,
+            concept: `Fondo inicial para apertura de Caja diaria - Sesi?n #${createdSession.id.slice(-6)}`,
             reference_id: createdSession.id,
             created_by: userId,
           });
@@ -1172,7 +1192,10 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
           console.error("Error al registrar egreso en Caja General al abrir caja:", genCashErr);
         }
       }
-      setFeedback({ type: "success", message: "Caja diaria abierta" });
+      setFeedback({
+        type: "success",
+        message: isDeferred ? "Caja abierta en $0 (conteo inicial pospuesto)" : "Caja diaria abierta",
+      });
       await loadCashData(true);
       setSelectedSessionId(createdSession.id);
     } catch {
@@ -1554,8 +1577,103 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     return movements.filter((m) => m.cash_session_id === currentSession.id);
   }, [currentSession, movements]);
 
+  const isDeferredOpeningPending = Boolean(
+    currentSession &&
+      currentSession.status === "open" &&
+      parseCloseSnapshot(currentSession.notes).snapshot?.deferredOpeningPending
+  );
+
+  const completeDeferredOpening = async (values: OpenCashValues): Promise<boolean> => {
+    if (!tenantId || !userId || !currentSession) {
+      setFeedback({ type: "error", message: "No hay una sesi?n de caja abierta para completar" });
+      return false;
+    }
+    const parsed = parseCloseSnapshot(currentSession.notes);
+    if (!parsed.snapshot?.deferredOpeningPending) {
+      setFeedback({ type: "error", message: "Esta sesi?n no tiene un conteo de apertura pendiente" });
+      return false;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const netCashDelta = Number(
+        (currentSessionSummary.cashIncomes - currentSessionSummary.cashExpenses).toFixed(2)
+      );
+      const computedOpeningAmount = Number(Math.max(0, values.openingAmount - netCashDelta).toFixed(2));
+      const completedAt = new Date().toISOString();
+      const mergedNotes = [parsed.cleanNotes, values.notes?.trim()].filter(Boolean).join(" | ");
+      const nextSnapshot: CashCloseSnapshot = {
+        ...(parsed.snapshot ?? {}),
+        openingBillCounts: values.billCounts,
+        openingCoinsAmount: values.coinsAmount,
+        userNotes: mergedNotes,
+        deferredOpeningPending: false,
+        deferredOpeningCompletedAt: completedAt,
+        deferredOpeningCountedTotal: values.openingAmount,
+        deferredOpeningNetCashDelta: netCashDelta,
+      };
+      const serializedNotes = serializeCloseSnapshot(nextSnapshot, mergedNotes || null);
+
+      const updated = await cashService.update(tenantId, currentSession.id, {
+        opening_amount: computedOpeningAmount,
+        opening_bill_counts: (values.billCounts as Record<string, number>) ?? null,
+        opening_coins_amount: values.coinsAmount ?? null,
+        notes: serializedNotes,
+      });
+      if (updated) {
+        offlineService.updateCachedCashSession(tenantId, updated);
+      }
+
+      await auditService.createSafe(tenantId, {
+        user_id: userId,
+        module: "caja",
+        action: "complete_deferred_opening",
+        entity_type: "cash_session",
+        entity_id: currentSession.id,
+        description: `Conteo inicial diferido completado (Contado: $${values.openingAmount.toFixed(2)} | Neto previo: $${netCashDelta.toFixed(2)} | Apertura real: $${computedOpeningAmount.toFixed(2)})`,
+        metadata: {
+          counted_total: values.openingAmount,
+          net_cash_delta: netCashDelta,
+          computed_opening_amount: computedOpeningAmount,
+          bill_counts: values.billCounts,
+          coins_amount: values.coinsAmount,
+        },
+      });
+
+      if (computedOpeningAmount > 0) {
+        try {
+          await generalCashService.createMovement(tenantId, {
+            type: "expense",
+            amount: computedOpeningAmount,
+            origin_type: "daily_cash_open",
+            concept: `Fondo inicial diferido de Caja diaria - Sesi?n #${currentSession.id.slice(-6)}`,
+            reference_id: currentSession.id,
+            created_by: userId,
+          });
+        } catch (genCashErr) {
+          console.error("Error al registrar egreso en Caja General tras conteo diferido:", genCashErr);
+        }
+      }
+
+      setFeedback({
+        type: "success",
+        message: "Conteo inicial completado y ajustado con las ventas en efectivo previas.",
+      });
+      await loadCashData(true);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo guardar el conteo inicial";
+      setFeedback({ type: "error", message });
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return {
     currentSession,
+    isDeferredOpeningPending,
+    completeDeferredOpening,
     selectedSession,
     selectedSessionId,
     setSelectedSessionId,

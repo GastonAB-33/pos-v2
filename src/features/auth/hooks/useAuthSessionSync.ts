@@ -90,7 +90,7 @@ export const useAuthSessionSync = () => {
     // 2. Suscripción a eventos de ciclo de vida de autenticación de Supabase
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, _session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (!isMounted) return;
 
       if (event === "SIGNED_OUT") {
@@ -99,13 +99,18 @@ export const useAuthSessionSync = () => {
       }
 
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
-        const currentStore = useAuthStore.getState();
-        if (!currentStore.isAuthenticated || !currentStore.user || !currentStore.tenant) {
-          const posSession = await authService.getStoredPosSession();
-          if (posSession && isMounted) {
-            useAuthStore.getState().setSession(posSession);
+        if (!session?.user?.id) return;
+        // Defer outside Supabase auth lock/notification cycle so signInWithPassword never deadlocks.
+        window.setTimeout(async () => {
+          if (!isMounted) return;
+          const currentStore = useAuthStore.getState();
+          if (!currentStore.isAuthenticated || !currentStore.user || !currentStore.tenant) {
+            const posSession = await authService.getStoredPosSession();
+            if (posSession && isMounted) {
+              useAuthStore.getState().setSession(posSession);
+            }
           }
-        }
+        }, 150);
       }
     });
 

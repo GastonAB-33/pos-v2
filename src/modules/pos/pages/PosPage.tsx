@@ -164,6 +164,7 @@ export const PosPage = () => {
   const { canRead, canWrite } = usePermissions();
   const canReadPos = canRead("pos");
   const canWritePos = canWrite("pos");
+  const canDeferCashOpening = canRead("caja_apertura_diferida") || canWrite("caja_apertura_diferida");
   const canWriteCustomers = canWrite("clientes");
   const canWriteProducts = canWrite("productos");
   const { success: toastSuccess, error: toastError, warning: toastWarning } = useToast();
@@ -994,14 +995,18 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
           return;
         }
 
+        const isDeferred = Boolean(values.deferredOpening);
+        const effectiveOpeningAmount = isDeferred ? 0 : values.openingAmount;
         const openSnapshot: CashCloseSnapshot = {
-          openingBillCounts: values.billCounts,
-          openingCoinsAmount: values.coinsAmount,
+          openingBillCounts: isDeferred ? undefined : values.billCounts,
+          openingCoinsAmount: isDeferred ? undefined : values.coinsAmount,
           userNotes: values.notes?.trim() || "",
+          deferredOpeningPending: isDeferred ? true : undefined,
         };
-        const serializedNotes = values.billCounts
-          ? serializeCloseSnapshot(openSnapshot, values.notes?.trim() || null)
-          : values.notes?.trim() || null;
+        const serializedNotes =
+          values.billCounts || isDeferred
+            ? serializeCloseSnapshot(openSnapshot, values.notes?.trim() || null)
+            : values.notes?.trim() || null;
 
         const createdSession = await cashService.create(tenantId, {
           branch_id: null,
@@ -1010,27 +1015,28 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
           status: "open",
           opened_at: new Date().toISOString(),
           closed_at: null,
-          opening_amount: values.openingAmount,
+          opening_amount: effectiveOpeningAmount,
           closing_amount: null,
           expected_closing_amount: null,
           closing_difference: null,
           notes: serializedNotes,
-          opening_bill_counts: (values.billCounts as Record<string, number>) ?? null,
-          opening_coins_amount: values.coinsAmount ?? null,
+          opening_bill_counts: isDeferred ? null : ((values.billCounts as Record<string, number>) ?? null),
+          opening_coins_amount: isDeferred ? null : (values.coinsAmount ?? null),
         });
 
         await auditService.createSafe(tenantId, {
           user_id: resolvedOperatorUserId,
           module: "caja",
-          action: "open",
+          action: isDeferred ? "open_deferred" : "open",
           entity_type: "cash_session",
           entity_id: createdSession.id,
-          description: "Apertura de caja desde POS",
+          description: isDeferred ? "Apertura de caja con conteo pospuesto ($0) desde POS" : "Apertura de caja desde POS",
           metadata: {
-            opening_amount: values.openingAmount,
+            opening_amount: effectiveOpeningAmount,
+            deferred_opening: isDeferred,
             notes: values.notes?.trim() || null,
-            bill_counts: values.billCounts,
-            coins_amount: values.coinsAmount,
+            bill_counts: isDeferred ? null : values.billCounts,
+            coins_amount: isDeferred ? null : values.coinsAmount,
           },
         });
 
@@ -1038,7 +1044,9 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
         offlineService.updateCachedCashSession(tenantId, createdSession);
         setCashGateFeedback(null);
         setHasResolvedCashGate(true);
-        toastSuccess("Caja abierta correctamente.");
+        toastSuccess(
+          isDeferred ? "Caja abierta en $0 (conteo inicial pospuesto)." : "Caja abierta correctamente."
+        );
 
         await Promise.allSettled([reload(), loadRecentReceipts()]);
       } catch {
@@ -2003,6 +2011,7 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
                   canWrite={canWritePos}
                   disabled={isOpeningCashSession || isSubmitting}
                   defaultOpeningAmount={cashDefaultOpeningAmount}
+                  allowDeferredOpening={canDeferCashOpening}
                   onSubmit={handleOpenCashFromPos}
                 />
               ) : (

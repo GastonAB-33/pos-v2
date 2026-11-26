@@ -5,6 +5,7 @@ export const openCashSchema = z.object({
   notes: z.string().max(240, "Maximo 240 caracteres").optional().or(z.literal("")),
   billCounts: z.record(z.coerce.number(), z.number()).optional(),
   coinsAmount: z.number().optional(),
+  deferredOpening: z.boolean().optional(),
 });
 
 export const closeCashSchema = z.object({
@@ -36,4 +37,3 @@ export const cashMovementSchema = z
 export type OpenCashValues = z.infer<typeof openCashSchema>;
 export type CloseCashValues = z.infer<typeof closeCashSchema>;
 export type CashMovementValues = z.infer<typeof cashMovementSchema>;
-

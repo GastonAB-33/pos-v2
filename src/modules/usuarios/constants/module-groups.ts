@@ -63,6 +63,14 @@ export const defaultSystemModuleGroups: SystemModuleGroup[] = [
         isSpecialAction: true,
       },
       {
+        module: "caja_apertura_diferida",
+        label: "Posponer Conteo de Apertura",
+        description: "Permite abrir la caja en $0 para atender rápido y cargar el conteo físico más tarde (descontando automáticamente el efectivo de ventas previas)",
+        readDescription: "Permitir posponer conteo inicial al abrir caja",
+        writeDescription: "Permitir posponer conteo inicial al abrir caja",
+        isSpecialAction: true,
+      },
+      {
         module: "promociones",
         label: "Promociones y Descuentos",
         description: "Configuración de promociones comerciales, 2x1, combos y descuentos por volumen",
