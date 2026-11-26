@@ -3387,132 +3387,120 @@ export const usePosSale = (tenantId: string | null) => {
       }
 
       // 1. Ítems de la venta y movimientos de stock (en paralelo)
-      const itemsAndStockPromise = Promise.all(
-        cart.map(async (item) => {
-          const itemPromise = salesService.createItem(tenantId, {
-            sale_id: sale.id,
+      const saleItemInputs = cart.map((item) => ({
+        sale_id: sale.id,
+        product_id: item.product_id,
+        product_name_snapshot: item.name,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        discount_total: item.promotion_discount_total,
+        tax_total: 0,
+        line_total: item.line_total,
+        metadata: {
+          pricing_snapshot: {
+            base_unit_price: item.base_unit_price,
+            applied_price_list_id: item.price_list_id,
+            applied_price_list_name: item.price_list_name,
+          },
+          promotion_snapshot: item.applied_promotion_snapshot,
+          is_promo_item: Boolean(item.is_promo_item),
+          promo_id: item.promo_id ?? null,
+          promo_code: item.promo_code ?? null,
+          promo_items: item.promo_items ?? null,
+          cart_promotion_snapshot: promotionsResolution.applied_cart_promotion
+            ? ({ ...promotionsResolution.applied_cart_promotion } as Record<string, unknown>)
+            : null,
+          cart_promotion_discount_allocated: item.cart_promotion_discount_total,
+          is_manual_sale_item: item.is_manual_item,
+          is_debt_payment_item: item.is_debt_payment_item ?? false,
+          debt_customer_id: item.debt_customer_id ?? null,
+          returnable: item.returnable_config
+            ? {
+                package_name: item.returnable_config.packageName,
+                package_price: item.returnable_config.packagePrice,
+                status: item.returnable_status ?? "exchange",
+              }
+            : null,
+        },
+      }));
+
+      const stockMovementInputs: Array<{
+        product_id: string;
+        movement_type: "sale";
+        quantity: number;
+        reference_type: "sale";
+        reference_id: string;
+        notes: string;
+        created_by: string;
+      }> = [];
+
+      for (const item of cart) {
+        if (
+          item.is_manual_item ||
+          item.product_id.startsWith("manual-") ||
+          item.product_id.startsWith("temp-") ||
+          item.is_debt_payment_item ||
+          item.product_id.startsWith("debt-") ||
+          item.is_returnable_package_item ||
+          item.product_id.startsWith("returnable-pkg-") ||
+          item.is_package_refund_item ||
+          item.product_id.startsWith("package-refund-")
+        ) {
+          continue;
+        }
+
+        if (item.is_promo_item && item.promo_items?.length) {
+          for (const sub of item.promo_items) {
+            stockMovementInputs.push({
+              product_id: sub.product_id,
+              movement_type: "sale",
+              quantity: roundQty(item.quantity * sub.quantity),
+              reference_type: "sale",
+              reference_id: sale.id,
+              notes: `Venta ${sale.sale_number} (PROMO: ${item.name})`,
+              created_by: resolvedCreatedBy,
+            });
+          }
+        } else if (!item.product_id.startsWith("promo-")) {
+          stockMovementInputs.push({
             product_id: item.product_id,
-            product_name_snapshot: item.name,
+            movement_type: "sale",
             quantity: item.quantity,
-            unit_price: item.unit_price,
-            discount_total: item.promotion_discount_total,
-            tax_total: 0,
-            line_total: item.line_total,
-            metadata: {
-              pricing_snapshot: {
-                base_unit_price: item.base_unit_price,
-                applied_price_list_id: item.price_list_id,
-                applied_price_list_name: item.price_list_name,
-              },
-              promotion_snapshot: item.applied_promotion_snapshot,
-              is_promo_item: Boolean(item.is_promo_item),
-              promo_id: item.promo_id ?? null,
-              promo_code: item.promo_code ?? null,
-              promo_items: item.promo_items ?? null,
-              cart_promotion_snapshot: promotionsResolution.applied_cart_promotion
-                ? ({ ...promotionsResolution.applied_cart_promotion } as Record<string, unknown>)
-                : null,
-              cart_promotion_discount_allocated: item.cart_promotion_discount_total,
-              is_manual_sale_item: item.is_manual_item,
-              is_debt_payment_item: item.is_debt_payment_item ?? false,
-              debt_customer_id: item.debt_customer_id ?? null,
-              returnable: item.returnable_config
-                ? {
-                    package_name: item.returnable_config.packageName,
-                    package_price: item.returnable_config.packagePrice,
-                    status: item.returnable_status ?? "exchange",
-                  }
-                : null,
-            },
+            reference_type: "sale",
+            reference_id: sale.id,
+            notes: `Venta ${sale.sale_number}`,
+            created_by: resolvedCreatedBy,
           });
+        }
+      }
 
-          if (
-            item.is_manual_item ||
-            item.product_id.startsWith("manual-") ||
-            item.product_id.startsWith("temp-") ||
-            item.is_debt_payment_item ||
-            item.product_id.startsWith("debt-") ||
-            item.is_returnable_package_item ||
-            item.product_id.startsWith("returnable-pkg-") ||
-            item.is_package_refund_item ||
-            item.product_id.startsWith("package-refund-")
-          ) {
-            return itemPromise;
-          }
-
-          // Si es un ítem de promoción virtual (pack o combo), registrar movimientos por cada componente
-          if (item.is_promo_item && item.promo_items?.length) {
-            const promoStockPromise = Promise.all(
-              item.promo_items.map(async (sub) => {
-                const deductQty = roundQty(item.quantity * sub.quantity);
-                try {
-                  await stockService.create(tenantId, {
-                    product_id: sub.product_id,
-                    movement_type: "sale",
-                    quantity: deductQty,
-                    reference_type: "sale",
-                    reference_id: sale.id,
-                    notes: `Venta ${sale.sale_number} (PROMO: ${item.name})`,
-                    created_by: resolvedCreatedBy,
-                  });
-                } catch (stockError) {
-                  console.warn(
-                    `[POS] No se pudo asentar movimiento de stock para sub-artículo ${sub.product_id} (${sub.name}) de promo:`,
-                    stockError
-                  );
-                }
-
-                const nextStock = updatedStockByProductId.get(sub.product_id);
-                if (nextStock !== undefined) {
-                  try {
-                    await productsService.updateStock(tenantId, sub.product_id, nextStock);
-                  } catch (stockUpdateError) {
-                    console.warn(
-                      `[POS] No se pudo actualizar stock acumulado para sub-artículo ${sub.product_id}:`,
-                      stockUpdateError
-                    );
-                  }
-                }
-              })
+      const itemsPromise = salesService.createItems(tenantId, saleItemInputs);
+      const stockMovementsPromise = stockMovementInputs.length
+        ? stockService.createMany(tenantId, stockMovementInputs).catch((stockError) => {
+            console.warn(
+              `[POS] No se pudieron asentar movimientos de stock en lote para venta ${sale.sale_number}:`,
+              stockError
             );
-            return Promise.all([itemPromise, promoStockPromise]);
-          }
-          const stockPromise = (async () => {
-            try {
-              return await stockService.create(tenantId, {
-                product_id: item.product_id,
-                movement_type: "sale",
-                quantity: item.quantity,
-                reference_type: "sale",
-                reference_id: sale.id,
-                notes: `Venta ${sale.sale_number}`,
-                created_by: resolvedCreatedBy,
-              });
-            } catch (stockError) {
-              console.warn(
-                `[POS] No se pudo asentar movimiento de stock para producto ${item.product_id} (${item.name}):`,
-                stockError
-              );
-              return null;
-            }
-          })();
-
-          const nextStock = updatedStockByProductId.get(item.product_id) ?? item.stock_available;
-          const updateStockPromise = (async () => {
-            try {
-              return await productsService.updateStock(tenantId, item.product_id, nextStock);
-            } catch (stockUpdateError) {
-              console.warn(
-                `[POS] No se pudo actualizar stock acumulado para producto ${item.product_id} (${item.name}):`,
-                stockUpdateError
-              );
-              return null;
-            }
-          })();
-
-          return Promise.all([itemPromise, stockPromise, updateStockPromise]);
-        })
+            return [];
+          })
+        : Promise.resolve([]);
+      const stockUpdatesPromise = Promise.all(
+        Array.from(updatedStockByProductId.entries()).map(([productId, nextStock]) =>
+          productsService.updateStock(tenantId, productId, nextStock).catch((stockUpdateError) => {
+            console.warn(
+              `[POS] No se pudo actualizar stock acumulado para producto ${productId}:`,
+              stockUpdateError
+            );
+            return null;
+          })
+        )
       );
+
+      const itemsAndStockPromise = Promise.all([
+        itemsPromise,
+        stockMovementsPromise,
+        stockUpdatesPromise,
+      ]);
 
       // 2. Envases adeudados ("owe")
       const returnablesPromise = (async () => {

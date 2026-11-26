@@ -24,6 +24,15 @@ export const stockService = {
     return crud.create(tenantId, payload);
   },
   update: (tenantId: string, id: string, input: UpdateStockMovementInput) => crud.update(tenantId, id, input),
+  createMany: (tenantId: string, inputs: CreateStockMovementInput[]) => {
+    if (!inputs.length) return Promise.resolve([] as StockMovement[]);
+    const payloads = inputs.map((input) => ({
+      ...input,
+      type: input.movement_type,
+      reference: input.reference_id ?? input.reference_type,
+    }));
+    return crud.createMany(tenantId, payloads);
+  },
   delete: (tenantId: string, id: string) => crud.delete(tenantId, id),
 
   getRecentByTenant: (tenantId: string, limit = 300) =>
