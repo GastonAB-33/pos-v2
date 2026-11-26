@@ -599,6 +599,70 @@ export class TenantCrudService<TEntity extends TenantScopedEntity> {
     }
   }
 
+  /**
+   * Batch-inserts multiple tenant-scoped records in a single Supabase request.
+   */
+  async createMany(
+    tenantId: string,
+    inputs: Array<CreateEntityInput<TEntity>>
+  ): Promise<TEntity[]> {
+    if (!inputs.length) return [];
+
+    const createdAt = nowIso();
+    const rows = inputs.map(
+      (input) =>
+        ({
+          ...input,
+          id: generateEntityId(),
+          tenant_id: tenantId,
+          created_at: createdAt,
+          updated_at: createdAt,
+        }) as TEntity
+    );
+
+    if (dataProvider === "mock") {
+      const table = this.getMockRows();
+      table.push(...rows);
+      persistMockDatabase();
+      return rows;
+    }
+
+    const payloads = rows.map(
+      (row) => ({ ...(row as unknown as Record<string, unknown>) })
+    );
+
+    while (true) {
+      try {
+        const data = await this.execWithAuthRetry(async () =>
+          supabase.from(this.tableName).insert(payloads).select("*")
+        );
+        return (data ?? []) as TEntity[];
+      } catch (error) {
+        const missingCol = isMissingColumnError(error);
+        if (missingCol && payloads.some((p) => missingCol in p)) {
+          console.warn(
+            `[TenantCrudService] Columna "${missingCol}" no existe en "${this.tableName}". Reintentando inserción múltiple sin este campo.`
+          );
+          for (const p of payloads) {
+            delete p[missingCol];
+          }
+          continue;
+        }
+
+        if (isMissingTableError(error)) {
+          console.warn(
+            `[TenantCrudService] Tabla "${this.tableName}" no encontrada en Supabase al crear lote. Guardando en almacenamiento local.`
+          );
+          const table = this.getMockRows();
+          table.push(...rows);
+          persistMockDatabase();
+          return rows;
+        }
+        throw error;
+      }
+    }
+  }
+
   async update(tenantId: string, id: string, input: UpdateEntityInput<TEntity>): Promise<TEntity | null> {
     const payload: Record<string, unknown> = {
       ...input,

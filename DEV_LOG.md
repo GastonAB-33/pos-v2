@@ -18,6 +18,32 @@ Este documento es la **fuente única de verdad y memoria compartida** entre dife
 
 ## 📋 Registro Histórico de Cambios
 
+### [2026-11-25] - Optimización de Velocidad al Confirmar Venta POS (Inserción en Lote)
+* **Zona:** `src/services/base/tenant-crud.service.ts`, `src/services/sales.service.ts`, `src/services/stock.service.ts`, `src/modules/pos/hooks/usePosSale.ts`
+* **Objetivo:** Reducir la demora al confirmar una venta en el POS eliminando las múltiples peticiones HTTP individuales por cada producto del carrito.
+* **Cambios:**
+  * Se agregó `createMany` en `TenantCrudService` (`src/services/base/tenant-crud.service.ts`) para insertar lotes en una sola petición a Supabase (con fallback automático para columnas faltantes o tablas en modo mock).
+  * Se agregaron `salesService.createItems` (`src/services/sales.service.ts`) y `stockService.createMany` (`src/services/stock.service.ts`) con deduplicación de productos especiales y fallback automático.
+  * En `confirmSale` (`src/modules/pos/hooks/usePosSale.ts`), los ítems de venta (`sale_items`) y los movimientos de stock (`stock_movements`, incluyendo sub-artículos de promos) ahora se insertan en 2 únicas peticiones por lote en paralelo, y las actualizaciones de `stock_current` se deduplican por `product_id`.
+* **Próximos pasos:** Verificado con `npx tsc --noEmit` sin errores.
+
+
+### [2026-11-25] - Confirmación de Gramos/Cantidad con Enter en Carrito del POS sin Abrir Cobro
+* **Zona:** `src/modules/pos/components/PosSmartView.tsx`, `src/modules/pos/components/PosCart.tsx`
+* **Objetivo:** Evitar que al presionar `Enter` dentro del campo numérico de gramos o cantidad en un ítem del carrito se dispare el atajo global de apertura del modal de cobro (`handleCheckoutEnter`).
+* **Causa Identificada:** Al presionar `Enter`, el `onKeyDown` del input ejecutaba `event.currentTarget.blur()` sin llamar a `event.preventDefault()` ni `event.stopPropagation()`, por lo que al perder el foco antes del burbujeo hacia `window`, `handleCheckoutEnter` en `PosPage.tsx` veía `document.activeElement` fuera de un input y abría el modal de pago.
+* **Cambios:**
+  * Se agregaron `event.preventDefault()` y `event.stopPropagation()` antes de `event.currentTarget.blur()` en los inputs de cantidad/gramos de `PosSmartView.tsx` y `PosCart.tsx`.
+* **Próximos pasos:** Verificado con `npm run build`.
+
+### [2026-11-25] - Búsqueda Obligatoria en Selector de Cliente de Cuenta Corriente (POS)
+* **Zona:** `src/modules/pos/components/PosCustomerSelectModal.tsx`
+* **Objetivo:** Evitar errores al asignar una venta o cuenta corriente en el POS impidiendo que aparezca precargada la lista completa de clientes al abrir el selector.
+* **Cambios:**
+  * `filteredCustomers` ahora retorna un arreglo vacío `[]` cuando el campo de búsqueda está vacío, mostrando coincidencias únicamente cuando el cajero comienza a escribir (nombre, DNI, teléfono o razón social).
+  * Se agregó una vista guía amigable cuando aún no se ingresó texto (*"Escribí el nombre, DNI o teléfono del cliente"*), previniendo también selecciones accidentales al presionar `Enter` sin buscar.
+* **Próximos pasos:** Verificar en `npm run build`.
+
 ### [2026-11-25] - Ocultar Botón "Revelar" en Cierre de Caja a Ciegas
 * **Zona:** `src/modules/caja/pages/CajaPage.tsx`
 * **Objetivo:** Impedir que los usuarios con el permiso de `caja_cierre_ciego` vean o puedan usar el botón **Revelar** en Caja Diaria, y verificar el flujo de resumen post-cierre.

@@ -22,6 +22,85 @@ export const salesService = {
   create: (tenantId: string, input: CreateSaleInput) => salesCrud.create(tenantId, input),
   update: (tenantId: string, id: string, input: UpdateSaleInput) => salesCrud.update(tenantId, id, input),
   delete: (tenantId: string, id: string) => salesCrud.delete(tenantId, id),
+  createItems: async (tenantId: string, inputs: CreateSaleItemInput[]) => {
+    if (!inputs.length) return [];
+
+    const specialProductCache = new Map<string, Promise<string>>();
+    const resolveProductId = async (rawProductId: string): Promise<string> => {
+      if (
+        !rawProductId.startsWith("manual-") &&
+        !rawProductId.startsWith("temp-") &&
+        !rawProductId.startsWith("debt-") &&
+        !rawProductId.startsWith("returnable-pkg-") &&
+        !rawProductId.startsWith("package-refund-")
+      ) {
+        return rawProductId;
+      }
+
+      const specialCode = rawProductId.startsWith("debt-")
+        ? "SISTEMA_COBRO_CTA_CTE"
+        : rawProductId.startsWith("package-refund-")
+        ? "SISTEMA_DEVOLUCION_ENVASE"
+        : rawProductId.startsWith("returnable-pkg-")
+        ? "SISTEMA_COBRO_ENVASE"
+        : "SISTEMA_VENTA_MANUAL";
+      const specialName = rawProductId.startsWith("debt-")
+        ? "Cobro Cuenta Corriente"
+        : rawProductId.startsWith("package-refund-")
+        ? "Devolución de Envase Retornable"
+        : rawProductId.startsWith("returnable-pkg-")
+        ? "Cobro de Envase Retornable"
+        : "Venta Manual / Producto Temporal";
+
+      let pending = specialProductCache.get(specialCode);
+      if (!pending) {
+        pending = productsService
+          .ensureSpecialProduct(tenantId, specialCode, specialName)
+          .then((prod) => prod.id);
+        specialProductCache.set(specialCode, pending);
+      }
+      return pending;
+    };
+
+    const resolvedIds = await Promise.all(
+      inputs.map((input) => resolveProductId(input.product_id))
+    );
+
+    const payloads = inputs.map((input, idx) => ({
+      ...input,
+      product_id: resolvedIds[idx],
+      price: input.unit_price,
+      subtotal: input.line_total,
+      metadata: {
+        ...(input.metadata ?? {}),
+        original_product_id: input.product_id,
+      },
+    }));
+
+    try {
+      return await saleItemsCrud.createMany(tenantId, payloads);
+    } catch (error) {
+      const errorMsg = String(
+        error && typeof error === "object"
+          ? (error as { message?: string; details?: string }).message ?? ""
+          : ""
+      ).toLowerCase();
+      const errorCode = String(
+        error && typeof error === "object" ? (error as { code?: string }).code ?? "" : ""
+      );
+
+      if (
+        errorCode === "23503" ||
+        errorMsg.includes("foreign key") ||
+        errorMsg.includes("violates foreign key")
+      ) {
+        return await Promise.all(
+          inputs.map((item) => salesService.createItem(tenantId, item))
+        );
+      }
+      throw error;
+    }
+  },
   createItem: async (tenantId: string, input: CreateSaleItemInput) => {
     let resolvedProductId = input.product_id;
 
