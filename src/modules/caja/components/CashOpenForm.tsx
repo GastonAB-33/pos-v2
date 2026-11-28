@@ -34,7 +34,7 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
-const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 200, 100] as const;
+const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 200, 100, 50, 20, 10] as const;
 
 export const CashOpenForm = ({
   disabled,
@@ -53,6 +53,9 @@ export const CashOpenForm = ({
     500: 0,
     200: 0,
     100: 0,
+    50: 0,
+    20: 0,
+    10: 0,
   });
   const [coinsAmount, setCoinsAmount] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<"bills" | "direct">("bills");
@@ -193,7 +196,7 @@ export const CashOpenForm = ({
     <form className="space-y-2.5" onSubmit={handleSubmit(submit)} autoComplete="off">
       {mode === "complete_deferred" && (
         <div className="rounded-xl border border-amber-300/80 bg-amber-50/90 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/70 dark:bg-amber-950/50 dark:text-amber-200">
-          Cont? todo el efectivo f?sico que ten?s ahora en el caj?n. El sistema descontar? autom?ticamente el efectivo neto ingresado desde la apertura para calcular tu fondo inicial real.
+          Contá todo el efectivo físico que tenés ahora en el cajón. El sistema descontará automáticamente el efectivo neto ingresado desde la apertura para calcular tu fondo inicial real.
         </div>
       )}
       {/* Banner Superior Informativo de Apertura */}
@@ -274,6 +277,9 @@ export const CashOpenForm = ({
                   500: 0,
                   200: 0,
                   100: 0,
+                  50: 0,
+                  20: 0,
+                  10: 0,
                 });
                 setCoinsAmount(0);
                 setValue("openingAmount", 0);
@@ -531,7 +537,7 @@ export const CashOpenForm = ({
             }
             disabled={disabled || !canWrite}
             className="h-9 inline-flex items-center justify-center gap-1.5 px-4 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 dark:border-amber-700/80 dark:bg-amber-950/50 dark:text-amber-200 dark:hover:bg-amber-900/60 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
-            title="Abrir caja en $0 para atender r?pido y cargar el conteo inicial m?s tarde"
+            title="Abrir caja en $0 para atender rápido y cargar el conteo inicial más tarde"
           >
             <Clock className="h-3.5 w-3.5 shrink-0" />
             <span>Posponer conteo ($0)</span>

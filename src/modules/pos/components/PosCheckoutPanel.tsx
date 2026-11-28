@@ -11,6 +11,7 @@ import {
   Loader2,
   QrCode,
   Receipt,
+  RefreshCw,
   UserCheck,
   Users,
   Wallet,
@@ -86,6 +87,7 @@ interface PosCheckoutPanelProps {
   onApproveMercadoPago: () => void;
   onRejectMercadoPago: () => void;
   onCancelMercadoPago: () => void;
+  onReloadPaymentMethods?: () => Promise<void> | void;
   onClose?: () => void;
   onSubmit: (values: PosCheckoutValues) => Promise<void>;
   arcaEnabled?: boolean;
@@ -169,6 +171,7 @@ export const PosCheckoutPanel = ({
   onApproveMercadoPago: _onApproveMercadoPago,
   onRejectMercadoPago: _onRejectMercadoPago,
   onCancelMercadoPago: _onCancelMercadoPago,
+  onReloadPaymentMethods,
   onClose,
   onSubmit,
   arcaEnabled,
@@ -341,6 +344,7 @@ export const PosCheckoutPanel = ({
   // Métodos de pago con monto confirmado/establecido { [optionId]: boolean }
   const [lockedMethodIds, setLockedMethodIds] = useState<Record<string, boolean>>({});
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [isReloadingMethods, setIsReloadingMethods] = useState(false);
   const [isReadyToSubmit, setIsReadyToSubmit] = useState(false);
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
@@ -1509,7 +1513,36 @@ export const PosCheckoutPanel = ({
           <span className="font-mono">Importe Asignado ($)</span>
         </div>
 
-        {paymentOptions.map((option, idx) => {
+        {paymentOptions.length === 0 ? (
+          <div className="rounded-xl border border-amber-300 dark:border-amber-800/80 bg-amber-50/90 dark:bg-amber-950/40 p-4 text-center space-y-2.5">
+            <div className="flex items-center justify-center gap-2 text-amber-800 dark:text-amber-200 font-bold text-xs">
+              <AlertCircle size={16} className="shrink-0" />
+              <span>No se cargaron los medios de pago</span>
+            </div>
+            <p className="text-[11px] text-amber-700 dark:text-amber-300/90">
+              Hubo una interrupción al obtener los medios de pago. Tu carrito sigue intacto.
+            </p>
+            {onReloadPaymentMethods && (
+              <button
+                type="button"
+                disabled={isReloadingMethods}
+                onClick={async () => {
+                  setIsReloadingMethods(true);
+                  try {
+                    await onReloadPaymentMethods();
+                  } finally {
+                    setIsReloadingMethods(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold px-3.5 py-2 text-xs shadow-xs transition disabled:opacity-50 cursor-pointer"
+              >
+                <RefreshCw size={14} className={isReloadingMethods ? "animate-spin" : ""} />
+                <span>{isReloadingMethods ? "Recargando..." : "Recargar medios de pago"}</span>
+              </button>
+            )}
+          </div>
+        ) : (
+          paymentOptions.map((option, idx) => {
           const isHighlighted = idx === highlightedIndex;
           const assignedVal = allocatedAmounts[option.id] || 0;
           const hasAmount = assignedVal > 0;
@@ -1689,7 +1722,8 @@ export const PosCheckoutPanel = ({
               </div>
             </div>
           );
-        })}
+          })
+        )}
       </div>
 
       {submitError && (

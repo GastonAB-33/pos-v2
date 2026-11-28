@@ -82,6 +82,7 @@ const createDefaultStockSettings = (): StockSettings => ({
   allow_negative_stock: false,
   allow_purchases_profit_margin_adjustment: true,
   purchase_double_confirmation_enabled: false,
+  purchase_auto_confirm_no_price_change: false,
   returnable_packages: [],
 });
 

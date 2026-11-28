@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Barcode,
+  Camera,
   CheckCircle2,
   DollarSign,
   Gift,
@@ -20,11 +21,12 @@ import {
 } from "lucide-react";
 import { handleNumericInputFocus } from "@/utils/input-helpers";
 import { DualRateAmountInput, type RateAmountMode } from "@/components/ui/DualRateAmountInput";
-import { matchesProductSearch } from "@/utils/search";
+import { searchAndRankProducts } from "@/utils/search";
 import type { Product } from "@/types/entities";
 import { useBarcodeScanner } from "@/modules/pos/hooks/useBarcodeScanner";
 import { cn } from "@/utils/cn";
 import { PurchaseCostDiffBadge } from "@/modules/compras/components/PurchaseCostDiffBadge";
+import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 
 export interface PurchaseCartItemView {
   product_id: string;
@@ -139,6 +141,7 @@ export const PurchaseCart = ({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isScanning, setIsScanning] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [notFoundCode, setNotFoundCode] = useState<string | null>(null);
   const [scanFeedback, setScanFeedback] = useState<{
     type: "success" | "error";
@@ -181,25 +184,22 @@ export const PurchaseCart = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Filtrado de productos en vivo
+  // Array de refs para scroll automático en el dropdown de búsqueda con flechitas
+  const resultItemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // Auto-scroll del elemento seleccionado en la lista flotante con teclado
+  useEffect(() => {
+    if (isDropdownOpen && resultItemRefs.current[selectedIndex]) {
+      resultItemRefs.current[selectedIndex]?.scrollIntoView({
+        block: "nearest",
+        behavior: "smooth",
+      });
+    }
+  }, [isDropdownOpen, selectedIndex]);
+
+  // Filtrado y ranking inteligente de productos en vivo (prioriza coincidencias exactas, pesables y palabras directas)
   const searchResults = useMemo(() => {
-    const q = searchQuery.trim();
-    if (!q || !products.length) return [];
-    return products
-      .filter((p) =>
-        matchesProductSearch(
-          {
-            name: p.name,
-            code: p.code,
-            barcodes: barcodesByProductId?.get(p.id) ?? [],
-            category: p.category,
-            subcategory: p.subcategory,
-          },
-          q,
-          "all"
-        )
-      )
-      .slice(0, 8);
+    return searchAndRankProducts(products, searchQuery, "all", barcodesByProductId, 30);
   }, [searchQuery, products, barcodesByProductId]);
 
   const handleSelectProduct = (product: Product) => {
@@ -587,13 +587,16 @@ export const PurchaseCart = ({
                       return (
                         <button
                           key={prod.id}
+                          ref={(el) => {
+                            resultItemRefs.current[index] = el;
+                          }}
                           type="button"
                           onClick={() => handleSelectProduct(prod)}
                           onMouseEnter={() => setSelectedIndex(index)}
                           className={cn(
                             "w-full text-left px-3.5 py-2.5 text-xs flex items-center justify-between gap-3 transition-colors cursor-pointer border-l-4",
                             isHighlighted
-                              ? "bg-blue-50/90 dark:bg-slate-800 text-slate-900 dark:text-white border-blue-600 dark:border-blue-400"
+                              ? "bg-blue-100/90 dark:bg-slate-800 text-slate-900 dark:text-white border-blue-600 dark:border-blue-400 ring-2 ring-blue-500/30"
                               : "bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-800 dark:text-slate-200 border-transparent"
                           )}
                         >
@@ -653,6 +656,19 @@ export const PurchaseCart = ({
             )}
           </div>
 
+          {/* BOTÓN CÁMARA ESCÁNER (SOLO MÓVIL) */}
+          <button
+            type="button"
+            onClick={() => setIsCameraOpen(true)}
+            disabled={disabled || !canWrite || isScanning}
+            title="Escanear código con cámara"
+            aria-label="Escanear código con cámara"
+            className="md:hidden h-10 px-3 inline-flex items-center justify-center gap-1.5 rounded-xl border-2 border-blue-500/40 bg-blue-50/90 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-xs font-bold shadow-2xs transition cursor-pointer shrink-0 active:scale-[0.97] disabled:opacity-50"
+          >
+            <Camera className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <span className="sr-only sm:not-sr-only">Escanear</span>
+          </button>
+
           {/* BOTÓN NUEVO PRODUCTO (LEE AUTOMÁTICAMENTE EL CÓDIGO NO ENCONTRADO) */}
           {onOpenCreateProductModal && (
             <button
@@ -694,6 +710,16 @@ export const PurchaseCart = ({
           </p>
 
           <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsCameraOpen(true)}
+              disabled={disabled || !canWrite || isScanning}
+              className="md:hidden inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold px-3.5 py-2 text-xs shadow-md shadow-blue-500/20 active:scale-[0.97] transition disabled:opacity-50 cursor-pointer"
+            >
+              <Camera className="h-3.5 w-3.5" />
+              Escanear con cámara
+            </button>
+
             <button
               type="button"
               onClick={() => {
@@ -1414,6 +1440,17 @@ export const PurchaseCart = ({
           </div>
         </div>
       </div>
+
+      <BarcodeScannerModal
+        open={isCameraOpen}
+        title="Escanear producto para compra"
+        description="Apuntá la cámara al código de barras del producto."
+        onClose={() => setIsCameraOpen(false)}
+        onDetected={(scannedCode) => {
+          setIsCameraOpen(false);
+          void handleDirectBarcodeScan(scannedCode);
+        }}
+      />
     </section>
   );
 };

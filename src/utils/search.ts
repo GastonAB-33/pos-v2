@@ -133,3 +133,130 @@ export const matchesProductSearch = (
 
   return false;
 };
+
+/**
+ * Calcula un puntaje de relevancia (score) para ordenar productos según la consulta del usuario.
+ * Prioriza coincidencias exactas por nombre, palabras completas (ej: "PAPA" antes que "PAPAS FRITAS"),
+ * códigos exactos, productos pesables/frescos, y penaliza nombres excesivamente largos.
+ */
+export const calculateProductSearchScore = (
+  item: ProductSearchItem & { sale_mode?: string },
+  query: string
+): number => {
+  const normQuery = normalizeSearchQuery(query);
+  if (!normQuery) return 0;
+
+  const normName = normalizeSearchQuery(item.name);
+  const compactQuery = normQuery.replace(/\s+/g, "");
+  const normCode = normalizeSearchQuery(item.code);
+  const compactCode = normCode.replace(/\s+/g, "");
+
+  const allBarcodes = [
+    ...(item.barcode ? [item.barcode] : []),
+    ...(item.barcodes ?? []),
+  ]
+    .map((b) => normalizeSearchQuery(b))
+    .filter(Boolean);
+
+  let score = 0;
+
+  // 1. Coincidencia exacta de código o código de barras (prioridad máxima)
+  if (compactCode && compactCode === compactQuery) {
+    score += 1500;
+  } else if (allBarcodes.some((b) => b === compactQuery || b.replace(/\s+/g, "") === compactQuery)) {
+    score += 1500;
+  } else if (compactCode && compactCode.startsWith(compactQuery)) {
+    score += 1200;
+  } else if (allBarcodes.some((b) => b.startsWith(compactQuery))) {
+    score += 1200;
+  }
+
+  // 2. Coincidencia por Nombre
+  if (normName === normQuery) {
+    // Nombre idéntico exacto: ej. "PAPA" === "PAPA"
+    score += 1000;
+  } else if (normName.startsWith(normQuery + " ") || normName.startsWith(normQuery + "-")) {
+    // Empieza con la palabra exacta: ej. "PAPA NEGRA", "PAPA BLANCA", "PAPA CEPILLADA"
+    score += 850;
+  } else {
+    // Contiene la palabra exacta aislada: ej. "BOLSA DE PAPA CEPILLADA"
+    const wordBoundaryRegex = new RegExp(`(^|\\s|[-_/])${normQuery}(\\s|[-_/]|$)`, "i");
+    if (wordBoundaryRegex.test(normName)) {
+      score += 700;
+    } else if (normName.startsWith(normQuery)) {
+      // Empieza con el prefijo: ej. "PAPAS FRITAS"
+      score += 500;
+    } else if (normName.includes(normQuery)) {
+      // Contiene la subcadena en cualquier parte: ej. "PAN DE PANCHO DE PAPA"
+      score += 300;
+    }
+  }
+
+  // 3. Bonus para productos pesables / frescos cuando la búsqueda coincide con el nombre
+  // (Muchas verduras y frutas se llaman exactamente con 1 sola palabra, ej "PAPA", "CEBOLLA", "TOMATE")
+  if (score > 0 && item.sale_mode === "weight") {
+    score += 150;
+  }
+
+  const categoryNorm = normalizeSearchQuery(item.category);
+  if (score > 0 && (categoryNorm.includes("verdura") || categoryNorm.includes("fruta") || categoryNorm.includes("pesable") || categoryNorm.includes("fresco"))) {
+    score += 100;
+  }
+
+  // 4. Bonus por concisión: nombres más cortos y directos son más relevantes que descripciones largas
+  if (score > 0) {
+    score += Math.max(0, 40 - normName.length);
+  }
+
+  return score;
+};
+
+/**
+ * Filtra y ordena productos por relevancia de búsqueda inteligente.
+ */
+export const searchAndRankProducts = <T extends ProductSearchItem & { id: string; sale_mode?: string }>(
+  items: T[],
+  query: string,
+  scope: ProductSearchScope = "all",
+  barcodesByProductId?: Map<string, string[]>,
+  limit: number = 30
+): T[] => {
+  const rawQuery = query.trim();
+  if (!rawQuery) return [];
+
+  // 1. Filtrar los que coinciden
+  const matching = items.filter((item) => {
+    const barcodes = barcodesByProductId?.get(item.id) ?? (item.barcodes ?? []);
+    return matchesProductSearch(
+      {
+        ...item,
+        barcodes,
+      },
+      rawQuery,
+      scope
+    );
+  });
+
+  // 2. Ordenar por score de relevancia descendente
+  matching.sort((a, b) => {
+    const barcodesA = barcodesByProductId?.get(a.id) ?? (a.barcodes ?? []);
+    const barcodesB = barcodesByProductId?.get(b.id) ?? (b.barcodes ?? []);
+
+    const scoreA = calculateProductSearchScore(
+      { ...a, barcodes: barcodesA },
+      rawQuery
+    );
+    const scoreB = calculateProductSearchScore(
+      { ...b, barcodes: barcodesB },
+      rawQuery
+    );
+
+    if (scoreB !== scoreA) {
+      return scoreB - scoreA;
+    }
+    // Desempate por orden alfabético
+    return a.name.localeCompare(b.name, "es-AR");
+  });
+
+  return matching.slice(0, limit);
+};

@@ -114,6 +114,7 @@ const sidebarGroups: SidebarGroup[] = [
     items: [
       { label: "Productos", to: routePaths.productos, module: "productos" },
       { label: "Stock", to: routePaths.stock, module: "stock" },
+      { label: "Producción y Recetas", to: routePaths.produccion, module: "produccion" },
       { label: "Compras a proveedores", to: routePaths.compras, module: "compras" },
       { label: "Mi Tienda Online", to: routePaths.miTienda, module: "configuracion" },
     ],

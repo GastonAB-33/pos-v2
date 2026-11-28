@@ -114,6 +114,13 @@ export const defaultSystemModuleGroups: SystemModuleGroup[] = [
         readDescription: "Consultar listas de precios habilitadas",
         writeDescription: "Crear, editar y ajustar porcentajes en listas de precios",
       },
+      {
+        module: "produccion",
+        label: "Producción y Recetas",
+        description: "Elaboración de alimentos o insumos propios descontando materia prima del inventario y sumando producto terminado",
+        readDescription: "Consultar recetas, costos y lotes de producción",
+        writeDescription: "Crear/editar recetas, registrar lotes de producción y anular producciones",
+      },
     ],
   },
   {

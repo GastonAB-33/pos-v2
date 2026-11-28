@@ -18,6 +18,77 @@ Este documento es la **fuente única de verdad y memoria compartida** entre dife
 
 ## 📋 Registro Histórico de Cambios
 
+### [2026-11-27] - Atajos de Teclado F2 y Esc en Buscador de Productos (Inventario)
+* **Zona:** `src/modules/productos/components/ProductFilters.tsx`
+* **Objetivo:** Agilizar la búsqueda en el catálogo de Productos permitiendo enfocar el buscador desde cualquier punto de la pantalla con `F2` y limpiar el texto escrito con `Esc`.
+* **Cambios:**
+  * Se agregó `searchInputRef` y un listener global para `F2` (cuando no hay modales abiertos) que enfoca y selecciona el campo de búsqueda.
+  * Se agregó `onKeyDown` en el input de búsqueda para que al presionar `Esc` limpie `filters.search` (o quite el foco si ya estaba vacío).
+  * Se añadió un indicador visual `F2` en escritorio cuando el buscador está vacío.
+* **Próximos pasos:** Verificado con `npm run build`.
+
+### [2026-11-27] - Resiliencia y Recuperación de Medios de Pago en Cobro de Venta (POS)
+* **Zona:** `src/modules/pos/hooks/usePosSale.ts`, `src/modules/pos/components/PosCheckoutPanel.tsx`, `src/modules/pos/pages/PosPage.tsx`
+* **Objetivo:** Evitar que ante una falla transitoria o cuelgue al recargar datos del POS se borren los medios de pago en memoria/snapshot y quede vacío el modal de cobro.
+* **Cambios:**
+  * En `usePosSale.ts` (`loadPosData`), si la consulta de `paymentMethods`, `bankAccounts`, `originBanks`, `installmentPlans`, `customers` o `promotions` falla o devuelve vacío por error de red, se conservan los datos previos en memoria y del snapshot offline (`existingSnapshot`) en lugar de sobrescribirlos con `[]`.
+  * En `PosCheckoutPanel.tsx` y `PosPage.tsx`, cuando `paymentOptions.length === 0`, ahora se muestra un aviso claro con botón **"Recargar medios de pago"** para recuperar los medios sin perder el carrito actual.
+* **Próximos pasos:** Verificado con `npm run build`.
+
+### [2026-11-27] - Ranking Inteligente de Productos en Compras y Navegación Ágil por Teclado en Productos y Proveedores
+* **Zona:** `src/utils/search.ts`, `src/modules/compras/components/PurchaseCart.tsx`, `src/modules/compras/components/PurchaseCheckoutPanel.tsx`, `src/modules/compras/components/PurchaseProductSelectModal.tsx`
+* **Objetivo:**
+  1. Solucionar el problema de búsqueda donde términos cortos y genéricos (ej: *"PAPA"*) quedaban sepultados bajo decenas de productos derivados (snacks, papas fritas, panes) y eran cortados por el límite rígido de 8 resultados sin mostrar el artículo principal de verdulería.
+  2. Implementar navegación ultra-ágil por teclado con flechas (`ArrowDown` / `ArrowUp`) y selección directa con `Enter` tanto al buscar productos en el carrito como al seleccionar proveedores en el panel de facturación.
+* **Cambios:**
+  * **Motor de Relevancia y Ranking (`searchAndRankProducts` en `search.ts`):**
+    * Puntuación ponderada que prioriza: 1º Coincidencia exacta de nombre (`"PAPA"` = score 1000), 2º Inicio de frase (`"PAPA NEGRA"`, `"PAPA BLANCA"` = score 850), 3º Palabra aislada (`"BOLSA DE PAPA"` = score 700), 4º Bonus pesable/fresco (+150 para `weight`/verduras), y 5º Penalización a títulos innecesariamente extensos.
+    * Ampliación de límite de resultados de 8 a 30 con scroll fluido.
+  * **Navegación por Teclado en Carrito de Compras (`PurchaseCart.tsx` y `PurchaseProductSelectModal.tsx`):**
+    * Soporte para `ArrowDown` / `ArrowUp` con desplazamiento automático (`scrollIntoView`) del elemento enfocado y confirmación instantánea con `Enter` sin tocar el mouse.
+  * **Navegación por Teclado en Selector de Proveedor (`PurchaseCheckoutPanel.tsx`):**
+    * Se dotó al buscador de proveedores de navegación por flechas (`↑` / `↓`), auto-scroll al índice activo, selección con `Enter` y fallback para crear nuevo proveedor.
+* **Próximos pasos:** Verificado con `npm run build`.
+
+### [2026-11-27] - Denominaciones de Billetes $50/$20/$10, Modal Explícito de Cierre (Rojo Faltante / Verde Sobrante) y Selector Cash Only / Full
+* **Zona:** `src/modules/caja/` (`CashOpenForm.tsx`, `CashCloseForm.tsx`, `CashSessionCloseDetailModal.tsx`, `CajaPage.tsx`), `src/modules/configuracion/pages/ConfiguracionPage.tsx`
+* **Objetivo:**
+  1. Incorporar denominaciones de billetes de menor valor ($50, $20 y $10) en la herramienta de arqueo y conteo físico tanto de apertura como de cierre de caja.
+  2. Mejorar el modal post-cierre de caja haciéndolo mucho más explícito y de alto contraste: Faltantes destacados en ROJO (`rose`), Sobrantes destacados en VERDE (`emerald`) y Cierres exactos en VERDE, con detalles comparativos del saldo esperado vs contado.
+  3. Exponer en **Configuración › Caja y Tesorería** la selección visual de la modalidad de conciliación de arqueo (`cash_reconciliation_mode`: Solo Efectivo vs Conciliación Total).
+* **Cambios:**
+  * **Denominaciones de Billetes:** Se actualizó `BILL_DENOMINATIONS` agregando `50`, `20` y `10` en `CashOpenForm.tsx`, `CashCloseForm.tsx`, `CashSessionCloseDetailModal.tsx` y `CajaPage.tsx`. Los atajos por teclado, índices y resúmenes se adaptan automáticamente.
+  * **Modal Post-Cierre de Caja:** En `CashCloseForm.tsx` y `CashSessionCloseDetailModal.tsx`, se cambió el color de sobrante de azul a verde esmeralda vibrante (`emerald`), faltantes en rojo (`rose`), y se añadieron textos explicativos detallando el desfase exacto entre efectivo físico recontado y saldo teórico de sistema.
+  * **Selector en Configuración:** En `ConfiguracionPage.tsx` (Sección Caja y Tesorería), se implementó un selector con radio cards para alternar entre *"Solo Efectivo (Cash Only)"* (Recomendado) y *"Conciliación Total (Full)"*, explicando claramente cómo impacta cada modo en los arqueos.
+* **Próximos pasos:** Compilación y verificación con `npm run build`.
+
+### [2026-11-27] - Corrección de Caracteres en Apertura de Caja Diferida y Auditoría de Arqueos (la25)
+* **Zona:** `src/modules/caja/pages/CajaPage.tsx`, `src/modules/caja/components/CashOpenForm.tsx`, `src/modules/caja/hooks/useCashModule.ts`
+* **Objetivo:** 
+  1. Corregir errores tipográficos y caracteres corruptos (`?`) en el banner amarillo de apertura diferida pendiente y en el modal emergente de apertura rápida de caja diaria.
+  2. Diagnosticar las causas operativas de sobrantes y faltantes recurrentes en las cajas diarias del tenant `la25` sin alterar lógica contable ni datos.
+* **Cambios:**
+  * **Corrección de Textos y Tildes:** Se restauraron los textos en español (`inició`, `rápido`, `físico`, `cajón`, `acá`, `automáticamente`, `Tenés`, `Sesión`) en `CajaPage.tsx`, `CashOpenForm.tsx` y `useCashModule.ts`.
+  * **Auditoría Tenant la25:** Se identificó que la combinación de aperturas diferidas ($0) con conteos parciales posteriores genera sobrantes al restar ventas que no estaban contenidas en el conteo, o faltantes si el arqueo se realiza en modalidad `full` sin conciliar comprobantes electrónicos.
+* **Próximos pasos:** Verificado con build y sincronización de rama con origin/main.
+
+### [2026-11-27] - Opción de Autoconfirmar Compras sin Variación de Precio (Doble Confirmación)
+* **Zona:** `src/types/entities/mvp.entities.ts`, `src/services/settings.service.ts`, `src/modules/configuracion/pages/ConfiguracionPage.tsx`, `src/modules/compras/hooks/usePurchasesModule.ts`
+* **Objetivo:** Permitir configurar en **Configuración > Stock e Inventario** la autoconfirmación de compras a proveedores cuando no haya variación en el precio de costo, habilitada únicamente si la doble confirmación está activa (mostrándose borrosa/deshabilitada en caso contrario) y con su tooltip explicativo.
+* **Cambios:**
+  * Se agregó `purchase_auto_confirm_no_price_change?: boolean` en `StockSettings` (`mvp.entities.ts`) con valor por defecto `false` en `settings.service.ts`.
+  * En `ConfiguracionPage.tsx`, debajo de *Carga de compras con doble confirmación*, se incorporó la sub-opción *"Autoconfirmar compras si no hay variación de precio"* con `<InfoTooltip>` explicativo y estilo visual borroso/bloqueado (`blur-[1.2px] opacity-50 pointer-events-none`) cuando la doble confirmación está desactivada.
+  * En `usePurchasesModule.ts`, al registrar una compra con doble confirmación activa y esta opción habilitada, si todos los productos mantienen su costo previo (`Math.abs(unit_cost - previous_cost) < 0.005` y `previous_cost > 0`), la compra se confirma directamente (`status: "confirmed"`) omitiendo la revisión pendiente.
+* **Próximos pasos:** Verificado con `npm run build`.
+
+### [2026-11-27] - Botón de Escáner con Cámara Solo Móvil en Compras a Proveedores
+* **Zona:** `src/modules/compras/components/PurchaseCart.tsx`
+* **Objetivo:** Permitir escanear códigos de barras con la cámara del celular directamente desde el carrito de carga de compras a proveedores, manteniendo el botón oculto en pantallas de escritorio (`md:hidden`).
+* **Cambios:**
+  * Se agregó el botón de cámara escáner (`md:hidden`) junto al buscador superior de `PurchaseCart.tsx` y en el estado vacío del carrito de compras (*"Escanear con cámara"*).
+  * Se integró `BarcodeScannerModal` conectado directamente a `handleDirectBarcodeScan` para agregar el producto a la compra automáticamente o sugerir su alta rápida si no existe.
+* **Próximos pasos:** Verificado con `npm run build`.
+
 ### [2026-11-26] - Refinamiento de Precios Claros en Compras, Descarte de Duplicación y Corrección de Modal/Tabla de Compras
 * **Zona:** `src/modules/compras/components/` (`PurchaseCostDiffBadge.tsx`, `PurchasePricingReviewPanel.tsx`, `PurchasesHistoryTable.tsx`)
 * **Objetivo:** 
@@ -276,6 +347,20 @@ Este documento es la **fuente única de verdad y memoria compartida** entre dife
     * **Chip de Filtro Activo:** Cuando el filtro está activo, se muestra el chip correspondiente con botón de remoción rápida.
     * **Contador de Filtros:** Se actualizó `activeAdvancedFiltersCount` para contabilizar la modalidad seleccionada.
 * **Próximos pasos:** Ninguno pendiente; verificado con `npm run build` sin errores de compilación ni tipos.
+
+### [2026-11-27] - Módulo de Producción y Recetas (Elaboración de Alimentos / Insumos)
+* **Zona:** `src/modules/produccion/`, `src/services/production.service.ts`, `docs/sql/041_production_recipes_schema.sql`, `src/lib/database/tables.ts`, `src/types/`, `src/config/routes.ts`, `src/app/router/module-routes.ts`, `src/components/layout/Sidebar.tsx`, `src/modules/usuarios/constants/module-groups.ts`
+* **Objetivo:** Permitir elaborar alimentos o insumos propios (pizzas, empanadas, viandas, etc.) descontando materia prima del inventario del comercio y sumando el producto terminado al stock, con cálculo automático de costos, márgenes y ganancia por unidad y por tanda.
+* **Cambios:**
+  * **Base de Datos y RLS (`docs/sql/041_production_recipes_schema.sql`):**
+    * Nuevas tablas multi-tenant con RLS: `recipes`, `recipe_items`, `production_orders`.
+  * **Servicio (`src/services/production.service.ts`):**
+    * Conversión automática de unidades (`g` ↔ `kg`, `unit`), cálculo de costo por tanda/unidad, ganancia neta, margen `%` y máximo producible según stock actual de insumos.
+    * Ejecución de lotes híbrida (**Por Unidades** o **Por Tandas**) con descuento de insumos y alta de producto terminado vía `stock_movements`, además de soporte para merma y anulación con reversión completa de stock.
+  * **Interfaz (`src/modules/produccion/`):**
+    * `useProductionModule.ts` optimizado con caché instantáneo de `useProductsStore` (cero re-descarga de catálogo al abrir) y consulta liviana de `sale_items` por `product_id` para calcular unidades vendidas y ganancia real por unidad vendida.
+    * `ProduccionPage.tsx` (KPIs con ventas reales, tabla desktop + tarjetas móviles, sub-recetas, pestañas Recetas e Historial), `RecipeFormModal.tsx` (selector/creación libre de categorías, accesos rápidos por docena, badge `Sub-receta`, desglose de costo base/unitario y simulador de precio/margen) y `ProduceOrderModal.tsx` (selector rápido Por Unidades / Por Tandas, botones rápidos de ½ docena / 1 docena / 2 docenas / +6 / +12 y ganancia por unidad).
+* **Próximos pasos:** Ejecutar el script `docs/sql/041_production_recipes_schema.sql` en Supabase antes de usar en producción remota.
 
 ### [2026-11-25] - Migración de Cierre de Caja a Ciegas a Permiso Individual de Usuarios
 * **Zona:** `src/types/modules.ts`, `src/types/permissions.ts`, `src/features/auth/store/auth.store.ts`, `src/modules/usuarios/constants/module-groups.ts`, `src/modules/usuarios/components/PermissionMatrix.tsx`, `src/modules/caja/pages/CajaPage.tsx`, `src/modules/configuracion/pages/ConfiguracionPage.tsx`, `src/modules/usuarios/hooks/useUsersModule.ts`

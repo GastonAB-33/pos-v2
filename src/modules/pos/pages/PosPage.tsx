@@ -2099,6 +2099,9 @@ const currentAccountSnapshot = useMemo<PosCurrentAccountSnapshot | null>(() => {
               onCancelMercadoPago={() => {
                 void cancelMercadoPagoPayment();
               }}
+              onReloadPaymentMethods={async () => {
+                await reload(true);
+              }}
               onClose={() => {
                 setIsCheckoutModalOpen(false);
                 window.setTimeout(() => {

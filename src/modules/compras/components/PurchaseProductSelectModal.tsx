@@ -13,7 +13,7 @@ import {
 import { BarcodeScannerModal } from "@/components/form/BarcodeScannerModal";
 import { IconButton } from "@/components/ui/IconButton";
 import {
-  matchesProductSearch,
+  searchAndRankProducts,
   PRODUCT_SEARCH_SCOPE_OPTIONS,
   getSearchPlaceholder,
   type ProductSearchScope,
@@ -75,15 +75,33 @@ export const PurchaseProductSelectModal = ({
   >();
   const [isScanning, setIsScanning] = useState(false);
 
+  const [selectedProductIndex, setSelectedProductIndex] = useState(0);
+  const productItemRefs = useRef<(HTMLDivElement | null)[]>([]);
+
   // Autofocus al abrir el modal
   useEffect(() => {
     if (open) {
       setScannerFeedback(undefined);
+      setSelectedProductIndex(0);
       window.setTimeout(() => {
         searchInputRef.current?.focus({ preventScroll: true });
       }, 50);
     }
   }, [open]);
+
+  useEffect(() => {
+    setSelectedProductIndex(0);
+  }, [search, searchScope]);
+
+  // Auto-scroll del producto seleccionado con flechitas
+  useEffect(() => {
+    if (open && productItemRefs.current[selectedProductIndex]) {
+      productItemRefs.current[selectedProductIndex]?.scrollIntoView({
+        block: "nearest",
+        behavior: "smooth",
+      });
+    }
+  }, [open, selectedProductIndex]);
 
   const cartQuantities = useMemo(() => {
     return new Map(
@@ -94,25 +112,9 @@ export const PurchaseProductSelectModal = ({
     );
   }, [cart]);
 
-  // Resultados de búsqueda en vivo con filtro de ámbito (Todos / Solo nombre / Solo código / Solo código de barras)
+  // Resultados de búsqueda en vivo ordenados por ranking inteligente (exactos, pesables y palabras completas)
   const filteredProducts = useMemo(() => {
-    const q = search.trim();
-    if (!q) return [];
-    return products
-      .filter((p) =>
-        matchesProductSearch(
-          {
-            name: p.name,
-            code: p.code,
-            barcodes: barcodesByProductId?.get(p.id) ?? [],
-            category: p.category,
-            subcategory: p.subcategory,
-          },
-          q,
-          searchScope
-        )
-      )
-      .slice(0, 20);
+    return searchAndRankProducts(products, search, searchScope, barcodesByProductId, 30);
   }, [barcodesByProductId, products, search, searchScope]);
 
   if (!open) return null;
@@ -155,9 +157,10 @@ export const PurchaseProductSelectModal = ({
         }
       }
 
-      // 2. Si no fue código exacto pero hay 1 única coincidencia o más, agregar el primero
+      // 2. Si no fue código exacto pero hay coincidencias, agregar el producto seleccionado con flechitas
       if (filteredProducts.length > 0) {
-        handleQuickAdd(filteredProducts[0]);
+        const target = filteredProducts[selectedProductIndex] ?? filteredProducts[0];
+        handleQuickAdd(target);
         setIsScanning(false);
         return;
       }
@@ -237,9 +240,20 @@ export const PurchaseProductSelectModal = ({
                   if (scannerFeedback) setScannerFeedback(undefined);
                 }}
                 onKeyDown={(event) => {
-                  if (event.key !== "Enter") return;
-                  event.preventDefault();
-                  void handleSearchSubmit();
+                  if (event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setSelectedProductIndex((prev) =>
+                      prev < filteredProducts.length - 1 ? prev + 1 : 0
+                    );
+                  } else if (event.key === "ArrowUp") {
+                    event.preventDefault();
+                    setSelectedProductIndex((prev) =>
+                      prev > 0 ? prev - 1 : Math.max(0, filteredProducts.length - 1)
+                    );
+                  } else if (event.key === "Enter") {
+                    event.preventDefault();
+                    void handleSearchSubmit();
+                  }
                 }}
                 placeholder={getSearchPlaceholder(searchScope)}
                 className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-9 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 shadow-xs transition focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:bg-slate-900/90 dark:text-slate-100 dark:placeholder:text-slate-500"
@@ -365,14 +379,23 @@ export const PurchaseProductSelectModal = ({
                 </div>
 
                 <div className="space-y-2">
-                  {filteredProducts.map((product) => {
+                  {filteredProducts.map((product, index) => {
                     const inCartQty = cartQuantities.get(product.id) ?? 0;
+                    const isHighlighted = index === selectedProductIndex;
 
                     return (
                       <div
                         key={product.id}
+                        ref={(el) => {
+                          productItemRefs.current[index] = el;
+                        }}
                         onClick={() => handleQuickAdd(product)}
-                        className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-xs transition hover:border-brand-500 hover:bg-brand-50/20 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800 dark:bg-slate-850 dark:hover:border-brand-500/60 dark:hover:bg-brand-950/20 cursor-pointer"
+                        onMouseEnter={() => setSelectedProductIndex(index)}
+                        className={`flex flex-col gap-2 rounded-xl border p-3 shadow-xs transition sm:flex-row sm:items-center sm:justify-between cursor-pointer border-l-4 ${
+                          isHighlighted
+                            ? "bg-blue-100/90 dark:bg-slate-800 border-blue-600 dark:border-blue-400 ring-2 ring-blue-500/25"
+                            : "border-slate-200 bg-white hover:border-brand-500 hover:bg-brand-50/20 dark:border-slate-800 dark:bg-slate-850 dark:hover:border-brand-500/60 dark:hover:bg-brand-950/20"
+                        }`}
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">

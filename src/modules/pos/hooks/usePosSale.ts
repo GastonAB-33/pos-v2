@@ -732,8 +732,9 @@ export const usePosSale = (tenantId: string | null) => {
 
       try {
         await offlineService.hydrate();
+        const existingSnapshot = offlineService.getPosSnapshot(tenantId);
         if (!isOnline) {
-          const snapshot = offlineService.getPosSnapshot(tenantId);
+          const snapshot = existingSnapshot;
           if (!snapshot) {
             setFeedback({
               type: "error",
@@ -805,27 +806,30 @@ export const usePosSale = (tenantId: string | null) => {
             ? allPriceListsResult.value
             : useProductsStore.getState().priceLists;
         const allCustomers =
-          allCustomersResult.status === "fulfilled" ? allCustomersResult.value : [];
+          allCustomersResult.status === "fulfilled"
+            ? allCustomersResult.value
+            : (existingSnapshot?.customers ?? []);
         const allActivePaymentMethods =
-          allActivePaymentMethodsResult.status === "fulfilled"
+          allActivePaymentMethodsResult.status === "fulfilled" &&
+          allActivePaymentMethodsResult.value.length > 0
             ? allActivePaymentMethodsResult.value
-            : [];
+            : (existingSnapshot?.payment_methods ?? []);
         const allActiveBankAccounts =
           allActiveBankAccountsResult.status === "fulfilled"
             ? allActiveBankAccountsResult.value
-            : [];
+            : (existingSnapshot?.bank_accounts ?? []);
         const allActiveOriginBanks =
           allActiveOriginBanksResult.status === "fulfilled"
             ? allActiveOriginBanksResult.value
-            : [];
+            : (existingSnapshot?.origin_banks ?? []);
         const allActiveInstallmentPlans =
           allActiveInstallmentPlansResult.status === "fulfilled"
             ? allActiveInstallmentPlansResult.value
-            : [];
+            : (existingSnapshot?.installment_plans ?? []);
         const allActivePromotions =
           allActivePromotionsResult.status === "fulfilled"
             ? allActivePromotionsResult.value
-            : [];
+            : (existingSnapshot?.promotions ?? []);
         const tenantSettings =
           tenantSettingsResult.status === "fulfilled" ? tenantSettingsResult.value : null;
         const allEmployees =
@@ -908,15 +912,22 @@ export const usePosSale = (tenantId: string | null) => {
           });
         }
 
-      setCustomers(activeCustomers);
-      setEmployees(allEmployees.filter((emp) => emp.is_active));
-      setPaymentMethods(
-        [...allActivePaymentMethods].sort((a, b) => {
+      setCustomers((prev) =>
+        allCustomers.length > 0 || allCustomersResult.status === "fulfilled" ? activeCustomers : prev
+      );
+      setEmployees((prev) =>
+        allEmployees.length > 0 || allEmployeesResult.status === "fulfilled"
+          ? allEmployees.filter((emp) => emp.is_active)
+          : prev
+      );
+      setPaymentMethods((prev) => {
+        const nextList = allActivePaymentMethods.length > 0 ? allActivePaymentMethods : prev;
+        return [...nextList].sort((a, b) => {
           const priorityDiff = paymentMethodPriority(a) - paymentMethodPriority(b);
           if (priorityDiff !== 0) return priorityDiff;
           return a.name.localeCompare(b.name);
-        })
-      );
+        });
+      });
       setBankAccounts(
         [...allActiveBankAccounts].sort((a, b) => a.bank_name.localeCompare(b.bank_name))
       );

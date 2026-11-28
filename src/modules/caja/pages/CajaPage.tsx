@@ -593,7 +593,7 @@ export const CajaPage = () => {
           <div className="flex items-start sm:items-center gap-2.5">
             <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
             <div className="text-xs text-amber-900 dark:text-amber-200">
-              <span className="font-bold">Conteo inicial de apertura pendiente:</span> La caja inici? en $0 para atender r?pido. Cuando cuentes el efectivo f?sico del caj?n, cargalo ac? y descontaremos autom?ticamente las ventas previas.
+              <span className="font-bold">Conteo inicial de apertura pendiente:</span> La caja inició en $0 para atender rápido. Cuando cuentes el efectivo físico del cajón, cargalo acá y descontaremos automáticamente las ventas previas.
             </div>
           </div>
           <button
@@ -1093,7 +1093,7 @@ export const CajaPage = () => {
 
                   {isDeferredOpeningPending && (
                     <div className="mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700/80 dark:bg-amber-950/60 dark:text-amber-200">
-                      <span>Ten?s pendiente cargar el conteo inicial de apertura. Te recomendamos completarlo antes de cerrar para que el arqueo cuadre.</span>
+                      <span>Tenés pendiente cargar el conteo inicial de apertura. Te recomendamos completarlo antes de cerrar para que el arqueo cuadre.</span>
                       <button
                         type="button"
                         onClick={() => {
@@ -1611,7 +1611,7 @@ export const CajaPage = () => {
               const hasBillBreakdown =
                 billCounts && Object.values(billCounts).some((c) => Number(c) > 0);
 
-              const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 200, 100] as const;
+              const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 200, 100, 50, 20, 10] as const;
               const totalBillsCounted = hasBillBreakdown
                 ? BILL_DENOMINATIONS.reduce(
                     (acc, denom) => acc + denom * (Number(billCounts?.[denom]) || 0),

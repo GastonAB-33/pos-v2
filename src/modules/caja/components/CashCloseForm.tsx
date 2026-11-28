@@ -51,7 +51,7 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
-const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 200, 100] as const;
+const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 200, 100, 50, 20, 10] as const;
 
 export const CashCloseForm = ({
   disabled,
@@ -74,6 +74,9 @@ export const CashCloseForm = ({
     500: 0,
     200: 0,
     100: 0,
+    50: 0,
+    20: 0,
+    10: 0,
   });
   const [coinsAmount, setCoinsAmount] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<"bills" | "direct">(
@@ -318,40 +321,46 @@ export const CashCloseForm = ({
     const diff = closeResult.difference;
     return (
       <div className="space-y-3.5 animate-in fade-in duration-200">
-        {/* Banner Informativo Superior: Faltante / Sobrante / Exacto */}
+        {/* Banner Informativo Superior: Faltante (Rojo) / Sobrante (Verde) / Exacto (Verde) */}
         {diff < 0 ? (
-          <div className="p-4 rounded-2xl bg-rose-50/90 dark:bg-rose-950/40 border-2 border-rose-300 dark:border-rose-700/80 text-center">
-            <div className="inline-flex p-2.5 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300 mb-2">
+          <div className="p-4 rounded-2xl bg-rose-50/95 dark:bg-rose-950/50 border-2 border-rose-400 dark:border-rose-600/80 text-center shadow-xs">
+            <div className="inline-flex p-2.5 rounded-full bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-200 mb-2">
               <AlertCircle className="h-6 w-6" />
             </div>
-            <h3 className="text-base font-bold text-rose-900 dark:text-rose-200">
+            <h3 className="text-base font-bold text-rose-900 dark:text-rose-100">
               Cierre registrado con FALTANTE de caja
             </h3>
-            <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">
-              Faltó <span className="font-bold underline">{currency.format(Math.abs(diff))}</span> respecto al saldo teórico del sistema.
+            <p className="text-sm font-semibold text-rose-700 dark:text-rose-300 mt-1">
+              Faltó <span className="font-extrabold underline text-rose-800 dark:text-rose-200 text-base">{currency.format(Math.abs(diff))}</span> respecto al saldo teórico del sistema.
+            </p>
+            <p className="text-xs text-rose-600 dark:text-rose-400 mt-1">
+              El efectivo contado en el cajón ({currency.format(closeResult.realAmount)}) fue inferior al esperado por el sistema ({currency.format(closeResult.expectedAmount)}).
             </p>
           </div>
         ) : diff > 0 ? (
-          <div className="p-4 rounded-2xl bg-blue-50/90 dark:bg-blue-950/40 border-2 border-blue-300 dark:border-blue-700/80 text-center">
-            <div className="inline-flex p-2.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 mb-2">
+          <div className="p-4 rounded-2xl bg-emerald-50/95 dark:bg-emerald-950/50 border-2 border-emerald-400 dark:border-emerald-600/80 text-center shadow-xs">
+            <div className="inline-flex p-2.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-200 mb-2">
               <TrendingUp className="h-6 w-6" />
             </div>
-            <h3 className="text-base font-bold text-blue-900 dark:text-blue-200">
+            <h3 className="text-base font-bold text-emerald-900 dark:text-emerald-100">
               Cierre registrado con SOBRANTE de caja
             </h3>
-            <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-              Sobró <span className="font-bold underline">+{currency.format(diff)}</span> de dinero a favor en el conteo físico.
+            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300 mt-1">
+              Sobró <span className="font-extrabold underline text-emerald-800 dark:text-emerald-200 text-base">+{currency.format(diff)}</span> de dinero a favor en el conteo físico.
+            </p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+              El efectivo contado en el cajón ({currency.format(closeResult.realAmount)}) superó lo esperado por el sistema ({currency.format(closeResult.expectedAmount)}).
             </p>
           </div>
         ) : (
-          <div className="p-4 rounded-2xl bg-emerald-50/90 dark:bg-emerald-950/40 border-2 border-emerald-300 dark:border-emerald-700/80 text-center">
-            <div className="inline-flex p-2.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 mb-2">
+          <div className="p-4 rounded-2xl bg-emerald-50/95 dark:bg-emerald-950/50 border-2 border-emerald-400 dark:border-emerald-600/80 text-center shadow-xs">
+            <div className="inline-flex p-2.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-200 mb-2">
               <CheckCircle2 className="h-6 w-6" />
             </div>
-            <h3 className="text-base font-bold text-emerald-900 dark:text-emerald-200">
+            <h3 className="text-base font-bold text-emerald-900 dark:text-emerald-100">
               ¡Cierre de caja EXACTO!
             </h3>
-            <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
+            <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1 font-medium">
               El conteo físico de billetes y monedas coincide exactamente con el sistema ($0,00 de diferencia).
             </p>
           </div>
@@ -407,26 +416,32 @@ export const CashCloseForm = ({
             </div>
           </div>
 
-          {/* Tarjeta de Diferencia */}
+          {/* Tarjeta de Diferencia Explícita: Rojo para Faltante, Verde para Sobrante / Exacto */}
           <div
-            className={`p-3.5 rounded-xl border flex items-center justify-between ${
+            className={`p-3.5 rounded-xl border-2 flex items-center justify-between shadow-2xs ${
               diff === 0
-                ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700"
+                ? "bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700"
                 : diff > 0
-                  ? "bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700"
-                  : "bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-700"
+                  ? "bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700"
+                  : "bg-rose-50/90 dark:bg-rose-950/40 border-rose-300 dark:border-rose-700"
             }`}
           >
             <div>
-              <span className="text-xs font-bold block text-slate-800 dark:text-slate-100">
+              <span className={`text-xs font-bold block ${
+                diff === 0
+                  ? "text-emerald-900 dark:text-emerald-200"
+                  : diff > 0
+                    ? "text-emerald-900 dark:text-emerald-200"
+                    : "text-rose-900 dark:text-rose-200"
+              }`}>
                 {diff === 0 ? "Balance: Cierre exacto" : diff > 0 ? "Balance: Sobrante en caja" : "Balance: Faltante en caja"}
               </span>
               <p className="text-[11px] text-slate-600 dark:text-slate-300">
                 {diff === 0
                   ? "El efectivo recontado coincide exactamente con el sistema."
                   : diff > 0
-                    ? `Hay un excedente de ${currency.format(diff)} en el cajón físico.`
-                    : `Hay un faltante de ${currency.format(Math.abs(diff))} respecto al teórico.`}
+                    ? `Hay un excedente a favor de ${currency.format(diff)} en el cajón físico.`
+                    : `Hay un faltante de dinero de ${currency.format(Math.abs(diff))} respecto al teórico.`}
               </p>
             </div>
             <div className="text-right">
@@ -435,13 +450,19 @@ export const CashCloseForm = ({
                   diff === 0
                     ? "text-emerald-700 dark:text-emerald-300"
                     : diff > 0
-                      ? "text-blue-700 dark:text-blue-300"
+                      ? "text-emerald-700 dark:text-emerald-300"
                       : "text-rose-700 dark:text-rose-300"
                 }`}
               >
                 {diff > 0 ? `+${currency.format(diff)}` : currency.format(diff)}
               </span>
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <span className={`block text-[10px] font-bold uppercase tracking-wider ${
+                diff === 0
+                  ? "text-emerald-700 dark:text-emerald-400"
+                  : diff > 0
+                    ? "text-emerald-700 dark:text-emerald-400"
+                    : "text-rose-700 dark:text-rose-400"
+              }`}>
                 {diff === 0 ? "Exacto" : diff > 0 ? "Sobrante" : "Faltante"}
               </span>
             </div>
@@ -650,6 +671,9 @@ export const CashCloseForm = ({
                   500: 0,
                   200: 0,
                   100: 0,
+                  50: 0,
+                  20: 0,
+                  10: 0,
                 });
                 setCoinsAmount(0);
                 setValue("realAmount", 0);
