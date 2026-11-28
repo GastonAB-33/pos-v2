@@ -95,6 +95,9 @@ export const normalizePermissionProfile = (profile: PermissionProfile): Permissi
   if (profile.stock && profile.stock_ajustes_manuales === undefined) {
     base.stock_ajustes_manuales = { ...profile.stock };
   }
+  if (profile.stock && profile.produccion === undefined) {
+    base.produccion = { ...profile.stock };
+  }
 
   // Sincronización bidireccional entre configuracion general y configuracion_sistema
   if (profile.configuracion && !profile.configuracion_sistema) {
@@ -171,6 +174,12 @@ export const hasModulePermission = (
   }
 
   const isScopedConfigModule = requirement.module.startsWith("configuracion_");
+  if (requirement.module === "produccion") {
+    if (profile.produccion?.[level] !== undefined) {
+      return Boolean(profile.produccion[level]);
+    }
+    return Boolean(profile.stock?.[level]);
+  }
   if (!isScopedConfigModule) return false;
 
   // Compatibilidad: si el perfil aun no tiene los permisos nuevos por submodulo

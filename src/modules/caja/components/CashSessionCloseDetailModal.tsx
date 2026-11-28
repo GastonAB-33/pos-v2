@@ -44,7 +44,7 @@ const currency = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 2,
 });
 
-const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 200, 100] as const;
+const BILL_DENOMINATIONS = [20000, 10000, 2000, 1000, 500, 200, 100, 50, 20, 10] as const;
 
 export const CashSessionCloseDetailModal = ({
   isOpen,
@@ -309,7 +309,7 @@ export const CashSessionCloseDetailModal = ({
                 difference === 0
                   ? "bg-emerald-50/60 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800"
                   : difference > 0
-                  ? "bg-blue-50/60 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800"
+                  ? "bg-emerald-50/60 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800"
                   : "bg-rose-50/60 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800"
               }`}
             >
@@ -321,7 +321,7 @@ export const CashSessionCloseDetailModal = ({
                   <AlertCircle
                     className={`h-3.5 w-3.5 ${
                       difference > 0
-                        ? "text-blue-600 dark:text-blue-400"
+                        ? "text-emerald-600 dark:text-emerald-400"
                         : "text-rose-600 dark:text-rose-400"
                     }`}
                   />
@@ -332,13 +332,19 @@ export const CashSessionCloseDetailModal = ({
                   difference === 0
                     ? "text-emerald-700 dark:text-emerald-300"
                     : difference > 0
-                    ? "text-blue-700 dark:text-blue-300"
+                    ? "text-emerald-700 dark:text-emerald-300"
                     : "text-rose-700 dark:text-rose-300"
                 }`}
               >
                 {difference > 0 ? `+${currency.format(difference)}` : currency.format(difference)}
               </p>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5 font-medium">
+              <span className={`text-[10px] block mt-0.5 font-bold uppercase tracking-wider ${
+                difference === 0
+                  ? "text-emerald-700 dark:text-emerald-400"
+                  : difference > 0
+                  ? "text-emerald-700 dark:text-emerald-400"
+                  : "text-rose-700 dark:text-rose-400"
+              }`}>
                 {difference === 0
                   ? "Caja exacta sin diferencias"
                   : difference > 0

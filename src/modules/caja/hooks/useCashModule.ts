@@ -1184,7 +1184,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
             type: "expense",
             amount: effectiveOpeningAmount,
             origin_type: "daily_cash_open",
-            concept: `Fondo inicial para apertura de Caja diaria - Sesi?n #${createdSession.id.slice(-6)}`,
+            concept: `Fondo inicial para apertura de Caja diaria - Sesión #${createdSession.id.slice(-6)}`,
             reference_id: createdSession.id,
             created_by: userId,
           });
@@ -1590,7 +1590,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
     }
     const parsed = parseCloseSnapshot(currentSession.notes);
     if (!parsed.snapshot?.deferredOpeningPending) {
-      setFeedback({ type: "error", message: "Esta sesi?n no tiene un conteo de apertura pendiente" });
+      setFeedback({ type: "error", message: "Esta sesión no tiene un conteo de apertura pendiente" });
       return false;
     }
 
@@ -1646,7 +1646,7 @@ export const useCashModule = (tenantId: string | null, userId: string | null) =>
             type: "expense",
             amount: computedOpeningAmount,
             origin_type: "daily_cash_open",
-            concept: `Fondo inicial diferido de Caja diaria - Sesi?n #${currentSession.id.slice(-6)}`,
+            concept: `Fondo inicial diferido de Caja diaria - Sesión #${currentSession.id.slice(-6)}`,
             reference_id: currentSession.id,
             created_by: userId,
           });

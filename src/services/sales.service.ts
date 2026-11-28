@@ -196,6 +196,11 @@ export const salesService = {
     return saleItemsCrud.query(tenantId, { in: { sale_id: saleIds } });
   },
 
+  getItemsByProductIds: async (tenantId: string, productIds: string[]): Promise<SaleItem[]> => {
+    if (productIds.length === 0) return [];
+    return saleItemsCrud.query(tenantId, { in: { product_id: productIds } });
+  },
+
   // Relacion preparada para medios de pago y futuras integraciones (Mercado Pago/ARCA).
   getPaymentsBySaleId: (tenantId: string, saleId: string) =>
     salePaymentsCrud.query(tenantId, { eq: { sale_id: saleId } }),

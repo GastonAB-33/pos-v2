@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Camera,
@@ -75,7 +75,24 @@ export const ProductFilters = ({
   const [actionsOpen, setActionsOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [filtersModalOpen, setFiltersModalOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   useBodyScrollLock(filtersModalOpen);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "F2") return;
+      if (filtersModalOpen || scannerOpen) return;
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      event.preventDefault();
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+    };
+  }, [filtersModalOpen, scannerOpen]);
 
   const activeAdvancedFiltersCount =
     (filters.category ? 1 : 0) +
@@ -240,9 +257,20 @@ export const ProductFilters = ({
           <div className="flex flex-1 min-w-0 items-center gap-2.5 rounded-xl sm:rounded-2xl border border-slate-200/80 bg-slate-50/60 px-3.5 py-2 shadow-2xs focus-within:border-blue-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/20 dark:border-slate-700/80 dark:bg-slate-800/40 dark:focus-within:bg-slate-900 transition-all">
             <Search className="h-4 w-4 text-slate-400 dark:text-slate-500 shrink-0" aria-hidden="true" />
             <input
+              ref={searchInputRef}
               className="flex-1 min-w-0 border-0 bg-transparent px-1 py-0.5 text-base sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-slate-100 dark:placeholder:text-slate-500"
               value={filters.search}
               onChange={(event) => onFiltersChange({ search: event.target.value })}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  if (filters.search) {
+                    onFiltersChange({ search: "" });
+                  } else {
+                    event.currentTarget.blur();
+                  }
+                }
+              }}
               placeholder={getSearchPlaceholder(filters.searchScope)}
               aria-label="Buscar productos"
             />
@@ -255,7 +283,11 @@ export const ProductFilters = ({
               >
                 <X size={15} />
               </button>
-            ) : null}
+            ) : (
+              <kbd className="hidden md:inline-flex items-center rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-1.5 py-0.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 select-none shrink-0">
+                F2
+              </kbd>
+            )}
             <button
               type="button"
               onClick={() => setScannerOpen(true)}

@@ -532,6 +532,7 @@ export interface StockSettings {
   allow_negative_stock: boolean;
   allow_purchases_profit_margin_adjustment?: boolean;
   purchase_double_confirmation_enabled?: boolean;
+  purchase_auto_confirm_no_price_change?: boolean;
   returnable_packages?: ReturnablePackageType[];
 }
 
@@ -859,6 +860,56 @@ export interface CashMovement extends TenantScopedEntity {
   currency_code: string;
   reference_type: string;
   reference_id: string | null;
+  notes: string | null;
+  created_by?: string | null;
+}
+
+export type RecipeInputUnit = "unit" | "kg" | "g";
+export type RecipeYieldUnit = "unit" | "kg";
+export type ProductionInputMode = "units" | "batches";
+export type ProductionOrderStatus = "completed" | "cancelled";
+
+export interface Recipe extends TenantScopedEntity {
+  product_id: string;
+  name: string;
+  batch_yield: number;
+  yield_unit: RecipeYieldUnit;
+  indirect_cost: number;
+  notes: string | null;
+  is_active: boolean;
+}
+
+export interface RecipeItem extends TenantScopedEntity {
+  recipe_id: string;
+  ingredient_product_id: string;
+  quantity_per_batch: number;
+  input_unit: RecipeInputUnit;
+}
+
+export interface ProductionIngredientSnapshot {
+  ingredient_product_id: string;
+  ingredient_name: string;
+  input_unit: RecipeInputUnit;
+  quantity_used: number;
+  stock_deducted: number;
+  unit_cost: number;
+  total_cost: number;
+}
+
+export interface ProductionOrder extends TenantScopedEntity {
+  recipe_id: string;
+  product_id: string;
+  product_name_snapshot: string;
+  input_mode: ProductionInputMode;
+  batches_count: number;
+  units_produced: number;
+  waste_units: number;
+  total_cost: number;
+  unit_cost: number;
+  estimated_sale_total: number;
+  estimated_profit: number;
+  status: ProductionOrderStatus;
+  ingredients_snapshot: ProductionIngredientSnapshot[];
   notes: string | null;
   created_by?: string | null;
 }

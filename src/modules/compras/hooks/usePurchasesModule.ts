@@ -763,7 +763,19 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
 
       const canAdjustProfitMargin = useAuthStore.getState().hasPermission("compras_margen", "write");
       const tenantSettings = await settingsService.getByTenant(tenantId).catch(() => null);
-      const isDoubleConfirmation = Boolean(tenantSettings?.stock?.purchase_double_confirmation_enabled) || !canAdjustProfitMargin;
+      const isDoubleConfirmationConfigured =
+        Boolean(tenantSettings?.stock?.purchase_double_confirmation_enabled) || !canAdjustProfitMargin;
+      const autoConfirmNoPriceChange = Boolean(
+        tenantSettings?.stock?.purchase_double_confirmation_enabled &&
+          tenantSettings?.stock?.purchase_auto_confirm_no_price_change
+      );
+      const hasAnyPriceVariation = cart.some((item) => {
+        const prevCost = Number(item.previous_cost || 0);
+        if (prevCost <= 0) return true;
+        return Math.abs(item.unit_cost - prevCost) >= 0.005;
+      });
+      const wasAutoConfirmed = isDoubleConfirmationConfigured && autoConfirmNoPriceChange && !hasAnyPriceVariation;
+      const isDoubleConfirmation = isDoubleConfirmationConfigured && !wasAutoConfirmed;
       const initialStatus = isDoubleConfirmation ? "pending_pricing" : "confirmed";
 
       // Generar correlativo humano y ordenado: CP-00001, CP-00002...
@@ -1034,7 +1046,11 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
 
       setFeedback({
         type: "success",
-        message: isDoubleConfirmation ? `Compra ${purchase.purchase_number} registrada correctamente (${methodDesc}). Mercadería ingresada al stock y egreso asentado. Pendiente fijar precios por administración.` : `Compra ${purchase.purchase_number} registrada correctamente (${methodDesc})`,
+        message: isDoubleConfirmation
+          ? `Compra ${purchase.purchase_number} registrada correctamente (${methodDesc}). Mercadería ingresada al stock y egreso asentado. Pendiente fijar precios por administración.`
+          : wasAutoConfirmed
+            ? `Compra ${purchase.purchase_number} autoconfirmada (${methodDesc}) sin variaciones de precio.`
+            : `Compra ${purchase.purchase_number} registrada correctamente (${methodDesc})`,
       });
       clearCart();
       useProductsStore.getState().loadCatalog(tenantId, true).catch(() => {});

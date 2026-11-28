@@ -9,6 +9,7 @@ export const routePaths = {
   clientes: "/clientes",
   cuentasCorrientes: "/cuentas-corrientes",
   stock: "/stock",
+  produccion: "/produccion",
   caja: "/caja",
   cajaGeneral: "/caja-general",
   cuentasCorrientesProveedores: "/cuentas-corrientes-proveedores",

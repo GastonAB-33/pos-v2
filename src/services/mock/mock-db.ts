@@ -37,6 +37,9 @@ import type {
   EmployeeCurrentAccountMovement,
   EmployeeSalaryPayment,
   StoreOrder,
+  Recipe,
+  RecipeItem,
+  ProductionOrder,
 } from "@/types/entities";
 import type { DbTableName } from "@/lib/database/tables";
 
@@ -81,6 +84,9 @@ export interface MockDatabase {
   employee_salary_payments: EmployeeSalaryPayment[];
   sale_payments: SalePayment[];
   store_orders: StoreOrder[];
+  recipes: Recipe[];
+  recipe_items: RecipeItem[];
+  production_orders: ProductionOrder[];
 }
 
 const createEmptyMockDatabase = (): MockDatabase => ({
@@ -122,6 +128,9 @@ const createEmptyMockDatabase = (): MockDatabase => ({
   employee_salary_payments: [],
   sale_payments: [],
   store_orders: [],
+  recipes: [],
+  recipe_items: [],
+  production_orders: [],
 });
 
 const getSafeStorage = (): Storage | null => {

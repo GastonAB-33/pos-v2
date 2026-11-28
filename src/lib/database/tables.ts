@@ -43,6 +43,11 @@ export const dbTables = {
 
   // E-commerce y Pedidos Web (Mi Tienda)
   store_orders: "store_orders",
+
+  // Producción, Recetas y Elaboración
+  recipes: "recipes",
+  recipe_items: "recipe_items",
+  production_orders: "production_orders",
 } as const;
 
 export type DbTableName = (typeof dbTables)[keyof typeof dbTables];
@@ -84,6 +89,9 @@ export const tenantScopedTables = [
   dbTables.employee_salary_payments,
   dbTables.sale_payments,
   dbTables.store_orders,
+  dbTables.recipes,
+  dbTables.recipe_items,
+  dbTables.production_orders,
 ] as const;
 
 export type TenantScopedTableName = (typeof tenantScopedTables)[number];
@@ -127,4 +135,7 @@ export const tableDefinitions: Record<DbTableName, readonly string[]> = {
   employee_salary_payments: ["id", "tenant_id", "employee_id", "period", "gross_amount", "deductions_amount", "current_account_discount_applied", "bonuses_amount", "net_amount_paid", "payment_method_code", "payment_date", "notes", "created_by", "payment_type", "advances_discount_applied", "created_at", "updated_at"],
   sale_payments: ["id", "tenant_id", "sale_id", "payment_method_code", "provider", "provider_code", "amount", "currency_code", "status", "provider_status", "provider_reference", "provider_metadata", "external_reference", "metadata", "created_at", "updated_at"],
   store_orders: ["id", "tenant_id", "order_number", "customer_name", "customer_phone", "customer_address", "delivery_mode", "delivery_cost", "subtotal", "total", "down_payment_required", "remaining_balance", "payment_status", "order_status", "notes", "items", "created_at", "updated_at"],
+  recipes: ["id", "tenant_id", "product_id", "name", "batch_yield", "yield_unit", "indirect_cost", "notes", "is_active", "created_at", "updated_at"],
+  recipe_items: ["id", "tenant_id", "recipe_id", "ingredient_product_id", "quantity_per_batch", "input_unit", "created_at", "updated_at"],
+  production_orders: ["id", "tenant_id", "recipe_id", "product_id", "product_name_snapshot", "input_mode", "batches_count", "units_produced", "waste_units", "total_cost", "unit_cost", "estimated_sale_total", "estimated_profit", "status", "ingredients_snapshot", "notes", "created_by", "created_at", "updated_at"],
 };

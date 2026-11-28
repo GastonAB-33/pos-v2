@@ -26,6 +26,7 @@ import {
 } from "@/modules/compras/schemas/purchase-checkout.schema";
 import { compressImageFile } from "@/utils/image-compression";
 import { parseInvoicePhotos, serializeInvoicePhotos } from "@/modules/compras/utils/invoice-photos";
+import { cn } from "@/utils/cn";
 
 interface PurchaseCheckoutPanelProps {
   suppliers: Supplier[];
@@ -90,6 +91,7 @@ export const PurchaseCheckoutPanel = ({
   const invoicePhotoUrl = watch("invoicePhotoUrl");
   const [supplierSearchText, setSupplierSearchText] = useState("");
   const [isSupplierDropdownOpen, setIsSupplierDropdownOpen] = useState(false);
+  const [selectedSupplierIndex, setSelectedSupplierIndex] = useState(0);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
   const currentPhotos = useMemo(
     () => parseInvoicePhotos(invoicePhotoUrl),
@@ -97,8 +99,24 @@ export const PurchaseCheckoutPanel = ({
   );
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const supplierBoxRef = useRef<HTMLDivElement>(null);
+  const supplierInputRef = useRef<HTMLInputElement>(null);
+  const supplierItemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-scroll del proveedor seleccionado con flechitas
+  useEffect(() => {
+    if (isSupplierDropdownOpen && supplierItemRefs.current[selectedSupplierIndex]) {
+      supplierItemRefs.current[selectedSupplierIndex]?.scrollIntoView({
+        block: "nearest",
+        behavior: "smooth",
+      });
+    }
+  }, [isSupplierDropdownOpen, selectedSupplierIndex]);
+
+  useEffect(() => {
+    setSelectedSupplierIndex(0);
+  }, [supplierSearchText]);
 
   // Encontrar el proveedor actualmente seleccionado en la lista real
   const currentSelectedSupplier = useMemo(
@@ -182,6 +200,39 @@ export const PurchaseCheckoutPanel = ({
     setValue("supplierId", "", { shouldValidate: true });
     setSupplierSearchText("");
     setIsSupplierDropdownOpen(true);
+    setSelectedSupplierIndex(0);
+    window.setTimeout(() => {
+      supplierInputRef.current?.focus();
+    }, 50);
+  };
+
+  const handleSupplierInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!isSupplierDropdownOpen && filteredSuppliers.length > 0) {
+        setIsSupplierDropdownOpen(true);
+      }
+      setSelectedSupplierIndex((prev) =>
+        prev < filteredSuppliers.length - 1 ? prev + 1 : 0
+      );
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelectedSupplierIndex((prev) =>
+        prev > 0 ? prev - 1 : Math.max(0, filteredSuppliers.length - 1)
+      );
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (filteredSuppliers.length > 0) {
+        const target = filteredSuppliers[selectedSupplierIndex] ?? filteredSuppliers[0];
+        handleSelectSupplier(target);
+      } else if (supplierSearchText.trim()) {
+        setIsSupplierDropdownOpen(false);
+        onCreateSupplier(supplierSearchText.trim());
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setIsSupplierDropdownOpen(false);
+    }
   };
 
   // Auto-link si el usuario tipea el nombre exacto de un proveedor existente
@@ -370,12 +421,14 @@ export const PurchaseCheckoutPanel = ({
                   <Search className="h-3.5 w-3.5" />
                 </div>
                 <input
+                  ref={supplierInputRef}
                   type="text"
                   autoComplete="off"
-                  placeholder="Toca para buscar o elegir proveedor..."
+                  placeholder="Toca para buscar o elegir proveedor (↑↓ y Enter)..."
                   value={supplierSearchText}
                   onChange={(e) => handleSearchChange(e.target.value)}
                   onFocus={() => setIsSupplierDropdownOpen(true)}
+                  onKeyDown={handleSupplierInputKeyDown}
                   disabled={disabled || !canWrite}
                   className={`w-full rounded-xl border py-2.5 pl-8 pr-10 text-xs font-medium transition focus:outline-none focus:ring-1 ${
                     errors.supplierId
@@ -419,30 +472,46 @@ export const PurchaseCheckoutPanel = ({
                   </div>
                 ) : (
                   <div className="space-y-1">
-                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                      Toca un proveedor para seleccionarlo:
+                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                      <span>Proveedores ({filteredSuppliers.length})</span>
+                      <span className="font-normal text-slate-500">Usa ↑↓ y Enter para elegir</span>
                     </div>
-                    {filteredSuppliers.map((supplier) => (
-                      <button
-                        key={supplier.id}
-                        type="button"
-                        onClick={() => handleSelectSupplier(supplier)}
-                        className="flex min-h-[44px] w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition hover:bg-slate-100 active:bg-slate-200 dark:text-slate-100 dark:hover:bg-slate-800 dark:active:bg-slate-700"
-                      >
-                        <div className="min-w-0 flex-1 truncate">
-                          <p className="font-semibold text-slate-900 dark:text-slate-100">
-                            {supplier.name}
-                          </p>
-                          <p className="text-[10px] text-slate-400 dark:text-slate-400">
-                            {supplier.tax_id ? `CUIT: ${supplier.tax_id}` : "Sin CUIT"}
-                            {supplier.code ? ` • Cód: ${supplier.code}` : ""}
-                          </p>
-                        </div>
-                        <span className="shrink-0 rounded bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          Elegir
-                        </span>
-                      </button>
-                    ))}
+                    {filteredSuppliers.map((supplier, index) => {
+                      const isHighlighted = index === selectedSupplierIndex;
+                      return (
+                        <button
+                          key={supplier.id}
+                          ref={(el) => {
+                            supplierItemRefs.current[index] = el;
+                          }}
+                          type="button"
+                          onClick={() => handleSelectSupplier(supplier)}
+                          onMouseEnter={() => setSelectedSupplierIndex(index)}
+                          className={cn(
+                            "flex min-h-[44px] w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition cursor-pointer border-l-4",
+                            isHighlighted
+                              ? "bg-blue-100/90 dark:bg-slate-800 text-slate-900 dark:text-white border-blue-600 dark:border-blue-400 ring-2 ring-blue-500/25"
+                              : "border-transparent text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800"
+                          )}
+                        >
+                          <div className="min-w-0 flex-1 truncate">
+                            <p className={cn("font-semibold", isHighlighted ? "text-blue-950 dark:text-white font-bold" : "text-slate-900 dark:text-slate-100")}>
+                              {supplier.name}
+                            </p>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-400">
+                              {supplier.tax_id ? `CUIT: ${supplier.tax_id}` : "Sin CUIT"}
+                              {supplier.code ? ` • Cód: ${supplier.code}` : ""}
+                            </p>
+                          </div>
+                          <span className={cn(
+                            "shrink-0 rounded px-2 py-1 text-[10px] font-bold",
+                            isHighlighted ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                          )}>
+                            Elegir
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
