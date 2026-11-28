@@ -88,7 +88,6 @@ Este documento es la **fuente única de verdad y memoria compartida** entre dife
   * Se agregó el botón de cámara escáner (`md:hidden`) junto al buscador superior de `PurchaseCart.tsx` y en el estado vacío del carrito de compras (*"Escanear con cámara"*).
   * Se integró `BarcodeScannerModal` conectado directamente a `handleDirectBarcodeScan` para agregar el producto a la compra automáticamente o sugerir su alta rápida si no existe.
 * **Próximos pasos:** Verificado con `npm run build`.
-
 ### [2026-11-26] - Refinamiento de Precios Claros en Compras, Descarte de Duplicación y Corrección de Modal/Tabla de Compras
 * **Zona:** `src/modules/compras/components/` (`PurchaseCostDiffBadge.tsx`, `PurchasePricingReviewPanel.tsx`, `PurchasesHistoryTable.tsx`)
 * **Objetivo:** 
