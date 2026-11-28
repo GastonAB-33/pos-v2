@@ -29,7 +29,7 @@ import type { PurchaseReturnPayload } from "@/modules/compras/components/Purchas
 import type { PurchaseCartItemView, PurchaseSummary } from "@/modules/compras/components/PurchaseCart";
 import { toSupplierServiceInput } from "@/modules/proveedores/utils/supplier-input";
 import { computePricingForward, computePricingBackward } from "@/modules/productos/utils/product-pricing";
-import { matchesProductSearch } from "@/utils/search";
+import { searchAndRankProducts } from "@/utils/search";
 
 type FeedbackType = "success" | "error";
 
@@ -220,18 +220,12 @@ export const usePurchasesModule = (tenantId: string | null, userId: string | nul
     const activeProducts = products.filter((product) => product.is_active);
     if (!rawSearch) return activeProducts;
 
-    return activeProducts.filter((product) =>
-      matchesProductSearch(
-        {
-          name: product.name,
-          code: product.code,
-          barcodes: barcodesByProductId.get(product.id) ?? [],
-          category: product.category,
-          subcategory: product.subcategory,
-        },
-        rawSearch,
-        "all"
-      )
+    return searchAndRankProducts(
+      activeProducts,
+      rawSearch,
+      "all",
+      barcodesByProductId,
+      activeProducts.length
     );
   }, [barcodesByProductId, products, search]);
 
